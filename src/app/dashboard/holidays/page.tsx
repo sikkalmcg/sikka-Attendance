@@ -46,6 +46,8 @@ export default function HolidaysPage() {
   const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
   const [festivalName, setFestivalName] = useState("");
   const { toast } = useToast();
+  
+  const currentYear = new Date().getFullYear();
 
   const handleAddHolidays = () => {
     if (!festivalName.trim() || !selectedDates?.length) {
@@ -57,12 +59,15 @@ export default function HolidaysPage() {
       return;
     }
 
-    const newHolidays: Holiday[] = selectedDates.map(date => ({
-      id: Math.random().toString(36).substr(2, 9),
-      date: format(date, "yyyy-MM-dd"),
-      name: festivalName,
-      type: "FESTIVAL"
-    }));
+    const newHolidays: Holiday[] = selectedDates.map(date => {
+      const isSun = checkIfSunday(date);
+      return {
+        id: Math.random().toString(36).substr(2, 9),
+        date: format(date, "yyyy-MM-dd"),
+        name: festivalName,
+        type: isSun ? "WEEKLY_OFF" : "FESTIVAL"
+      };
+    });
 
     setHolidays(prev => [...prev, ...newHolidays].sort((a, b) => a.date.localeCompare(b.date)));
     setFestivalName("");
@@ -107,12 +112,13 @@ export default function HolidaysPage() {
             
             <div className="space-y-2">
               <Label>Select Dates</Label>
-              <div className="border rounded-xl p-2 bg-slate-50/50 flex justify-center">
+              <div className="border rounded-xl p-2 bg-slate-50/50 flex justify-center overflow-hidden">
                 <Calendar
                   mode="multiple"
                   selected={selectedDates}
                   onSelect={setSelectedDates}
                   className="rounded-md border-none"
+                  initialFocus
                 />
               </div>
               <p className="text-[10px] text-muted-foreground italic flex items-center gap-1">
@@ -129,7 +135,7 @@ export default function HolidaysPage() {
         {/* Holiday List */}
         <Card className="lg:col-span-7 shadow-sm border-slate-200 overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-            <CardTitle className="text-lg">Holiday Calendar 2024</CardTitle>
+            <CardTitle className="text-lg">Holiday Calendar {currentYear}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -160,7 +166,7 @@ export default function HolidaysPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={checkIfSunday(h.date) ? "text-amber-600 border-amber-200" : "text-primary border-primary/20"}>
-                          {h.type === "FESTIVAL" ? "Festival" : "Sunday"}
+                          {checkIfSunday(h.date) || h.type === "WEEKLY_OFF" ? "Weekly Off" : "Festival"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -185,7 +191,7 @@ export default function HolidaysPage() {
              </div>
              <p className="text-xs text-slate-600 leading-relaxed">
                <strong>Note:</strong> Sundays are automatically identified by the attendance system. 
-               Registering them here is optional but helpful for planning.
+               Any log on Sunday or listed holidays will be marked as "Work on Holiday".
              </p>
           </div>
         </Card>
