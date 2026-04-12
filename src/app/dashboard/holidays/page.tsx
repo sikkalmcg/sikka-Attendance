@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,21 +35,21 @@ interface Holiday {
   type: "FESTIVAL" | "WEEKLY_OFF";
 }
 
-const INITIAL_HOLIDAYS: Holiday[] = [
-  { id: "1", date: "2024-01-26", name: "Republic Day", type: "FESTIVAL" },
-  { id: "2", date: "2024-08-15", name: "Independence Day", type: "FESTIVAL" },
-  { id: "3", date: "2024-10-02", name: "Gandhi Jayanti", type: "FESTIVAL" },
-  { id: "4", date: "2024-11-01", name: "Diwali", type: "FESTIVAL" },
-];
-
 export default function HolidaysPage() {
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  
+  const INITIAL_HOLIDAYS: Holiday[] = useMemo(() => [
+    { id: "1", date: `${currentYear}-01-26`, name: "Republic Day", type: "FESTIVAL" },
+    { id: "2", date: `${currentYear}-08-15`, name: "Independence Day", type: "FESTIVAL" },
+    { id: "3", date: `${currentYear}-10-02`, name: "Gandhi Jayanti", type: "FESTIVAL" },
+    { id: "4", date: `${currentYear}-11-01`, name: "Diwali", type: "FESTIVAL" },
+  ], [currentYear]);
+
   const [holidays, setHolidays] = useState<Holiday[]>(INITIAL_HOLIDAYS);
   const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
   const [festivalName, setFestivalName] = useState("");
   const { toast } = useToast();
   
-  const currentYear = new Date().getFullYear();
-
   const handleAddHolidays = () => {
     if (!festivalName.trim() || !selectedDates?.length) {
       toast({ 
@@ -124,7 +125,7 @@ export default function HolidaysPage() {
               <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100 mt-2">
                 <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                 <p className="text-[10px] text-slate-600 leading-normal">
-                  You can select multiple dates. Navigation buttons on the sides allow month switching.
+                  You can select multiple dates. Use the navigation arrows to switch months.
                 </p>
               </div>
             </div>
