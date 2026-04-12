@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,17 +14,34 @@ import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock } from "l
 import { formatCurrency } from "@/lib/utils";
 
 const MOCK_VOUCHERS = [
-  { id: "1", voucherNo: "202400001", employee: "Ravi Kumar", amount: 5000, status: "PAID", date: "2024-08-01", paidDate: "2024-08-02" },
-  { id: "2", voucherNo: "202400002", employee: "Anita Singh", amount: 12000, status: "PENDING", date: "2024-08-05" },
+  { id: "1", voucherNo: "20242500001", employee: "Ravi Kumar", amount: 5000, status: "PAID", date: "2024-08-01", paidDate: "2024-08-02" },
+  { id: "2", voucherNo: "20242500002", employee: "Anita Singh", amount: 12000, status: "PENDING", date: "2024-08-05" },
 ];
 
 export default function VouchersPage() {
   const [activeTab, setActiveTab] = useState("create");
+  const [voucherDate, setVoucherDate] = useState(new Date().toISOString().split('T')[0]);
   const { toast } = useToast();
+
+  // Dynamic FY Calculation based on Indian Financial Year (Apr-Mar)
+  const voucherNo = useMemo(() => {
+    const d = new Date(voucherDate);
+    if (isNaN(d.getTime())) return "--------";
+    
+    const month = d.getMonth(); // 0-indexed (3 is April)
+    const year = d.getFullYear();
+    
+    const startYear = month < 3 ? year - 1 : year;
+    const endYear = startYear + 1;
+    const fyPrefix = `${startYear}${(endYear % 100).toString().padStart(2, '0')}`;
+    
+    // Concatenate with a mock serial number for display
+    return `${fyPrefix}00001`;
+  }, [voucherDate]);
 
   const handleCreateVoucher = (e: React.FormEvent) => {
     e.preventDefault();
-    toast({ title: "Voucher Created", description: "Voucher #202400003 has been generated." });
+    toast({ title: "Voucher Created", description: `Voucher #${voucherNo} has been generated.` });
     setActiveTab("payment");
   };
 
@@ -58,11 +75,15 @@ export default function VouchersPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Voucher Number</Label>
-                    <Input value="20242500001" disabled className="bg-slate-100 font-mono font-bold" />
+                    <Input value={voucherNo} disabled className="bg-slate-100 font-mono font-bold" />
                   </div>
                   <div className="space-y-2">
                     <Label>Date</Label>
-                    <Input type="date" defaultValue={new Date().toISOString().split('T')[0]} />
+                    <Input 
+                      type="date" 
+                      value={voucherDate} 
+                      onChange={(e) => setVoucherDate(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Employee</Label>
