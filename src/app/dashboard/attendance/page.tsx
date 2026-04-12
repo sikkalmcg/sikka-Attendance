@@ -6,8 +6,16 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Clock, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { MapPin, Clock, CheckCircle2, AlertTriangle, ShieldCheck, Home, Building2 } from "lucide-react";
 import { calculateDistance } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 // Mock Data
 const MOCK_PLANT = {
@@ -15,14 +23,17 @@ const MOCK_PLANT = {
   name: "Okhla Phase III Plant",
   lat: 28.5355,
   lng: 77.2639,
-  radius: 700 // Updated to 700 meters
+  radius: 700 // 700 meters
 };
+
+export type AttendanceType = "office" | "remote";
 
 export default function AttendancePage() {
   const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [address, setAddress] = useState<string>("Locating...");
   const [isWithinRadius, setIsWithinRadius] = useState<boolean | null>(null);
   const [attendanceStatus, setAttendanceStatus] = useState<"NONE" | "IN" | "OUT">("NONE");
+  const [attendanceType, setAttendanceType] = useState<AttendanceType>("office");
   const [inTime, setInTime] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -35,8 +46,14 @@ export default function AttendancePage() {
           setLocation({ lat, lng });
           
           const distance = calculateDistance(lat, lng, MOCK_PLANT.lat, MOCK_PLANT.lng);
-          setIsWithinRadius(distance <= MOCK_PLANT.radius);
+          const within = distance <= MOCK_PLANT.radius;
+          setIsWithinRadius(within);
           setAddress(`Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`);
+          
+          // If outside radius, default to office but the UI will show the WFH option
+          if (!within) {
+            setAttendanceType("office");
+          }
         },
         (err) => {
           toast({ variant: "destructive", title: "GPS Required", description: "Please enable location to mark attendance." });
@@ -47,19 +64,25 @@ export default function AttendancePage() {
   }, [toast]);
 
   const handleMarkIn = () => {
-    if (!isWithinRadius) {
-      toast({ variant: "destructive", title: "Out of Range", description: "You must be at the plant to mark attendance." });
+    if (attendanceType === "office" && !isWithinRadius) {
+      toast({ variant: "destructive", title: "Out of Range", description: "You must be at the plant to mark Office attendance." });
       return;
     }
     setAttendanceStatus("IN");
     setInTime(new Date().toLocaleTimeString());
-    toast({ title: "Check-in Successful", description: "Your attendance IN has been recorded." });
+    toast({ 
+      title: "Check-in Successful", 
+      description: `Your attendance IN (${attendanceType === 'office' ? 'Office' : 'Work from Home'}) has been recorded.` 
+    });
   };
 
   const handleMarkOut = () => {
     setAttendanceStatus("OUT");
     toast({ title: "Check-out Successful", description: "Your attendance OUT has been recorded." });
   };
+
+  // Enable IN button if within radius (for office) OR if Work from home is selected
+  const canPunchIn = attendanceStatus === "NONE" && (isWithinRadius || attendanceType === "remote");
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -73,7 +96,7 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent className="space-y-8 p-8">
           
-          <div className="flex flex-col items-center space-y-4">
+          <div className="flex flex-col items-center space-y-6">
             <div className={`p-4 rounded-2xl w-full flex items-center justify-between border ${isWithinRadius ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
               <div className="flex items-center gap-3">
                 <MapPin className={isWithinRadius ? 'text-emerald-600' : 'text-rose-600'} />
@@ -86,6 +109,33 @@ export default function AttendancePage() {
                 {isWithinRadius ? 'Verified' : 'Blocked'}
               </Badge>
             </div>
+
+            {/* Attendance Type Selector - Shown if outside radius to allow WFH */}
+            {!isWithinRadius && attendanceStatus === "NONE" && (
+              <div className="w-full space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <Label className="text-sm font-bold flex items-center gap-2">
+                  Attendance Type Required
+                </Label>
+                <Select value={attendanceType} onValueChange={(value: AttendanceType) => setAttendanceType(value)}>
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="office" disabled>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4" /> Office (Locked - Out of Range)
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="remote">
+                      <div className="flex items-center gap-2">
+                        <Home className="w-4 h-4 text-emerald-600" /> Work from Home
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">Since you are outside the 700m radius, you must select 'Work from Home' to mark attendance.</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 w-full">
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
@@ -103,8 +153,8 @@ export default function AttendancePage() {
 
           <div className="space-y-4 pt-4">
             <Button 
-              className="w-full h-16 text-lg font-bold bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200"
-              disabled={attendanceStatus !== "NONE" || !isWithinRadius}
+              className={`w-full h-16 text-lg font-bold shadow-lg ${canPunchIn ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : ''}`}
+              disabled={!canPunchIn}
               onClick={handleMarkIn}
             >
               Punch IN
@@ -112,17 +162,17 @@ export default function AttendancePage() {
             <Button 
               variant="destructive"
               className="w-full h-16 text-lg font-bold shadow-lg shadow-rose-200"
-              disabled={attendanceStatus !== "IN" || !isWithinRadius}
+              disabled={attendanceStatus !== "IN"}
               onClick={handleMarkOut}
             >
               Punch OUT
             </Button>
           </div>
 
-          {!isWithinRadius && (
+          {!isWithinRadius && attendanceType === "office" && (
             <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 text-sm">
               <AlertTriangle className="w-5 h-5 shrink-0" />
-              <p>GPS validation failed. You are not within the allowed {MOCK_PLANT.radius}m radius of the plant. Please contact your Administrator if this is an error.</p>
+              <p>GPS validation failed. You are not within the allowed 700m radius of the plant. Please select "Work from Home" or contact your Administrator if this is an error.</p>
             </div>
           )}
         </CardContent>
