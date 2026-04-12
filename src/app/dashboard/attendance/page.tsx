@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,7 +15,7 @@ const MOCK_PLANT = {
   name: "Okhla Phase III Plant",
   lat: 28.5355,
   lng: 77.2639,
-  radius: 100 // 100 meters
+  radius: 700 // Updated to 700 meters
 };
 
 export default function AttendancePage() {
@@ -67,7 +68,7 @@ export default function AttendancePage() {
           <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
             <ShieldCheck className="text-primary w-6 h-6" />
           </div>
-          <CardTitle className="text-2xl font-bold">Attendance Gateway</CardTitle>
+          <CardTitle className="text-2xl font-bold">Attendance Verification</CardTitle>
           <CardDescription>Sikka Industries & Logistics - {MOCK_PLANT.name}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8 p-8">
@@ -121,7 +122,7 @@ export default function AttendancePage() {
           {!isWithinRadius && (
             <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 text-sm">
               <AlertTriangle className="w-5 h-5 shrink-0" />
-              <p>GPS validation failed. You are not within the allowed {MOCK_PLANT.radius}m radius of the plant. Please contact your supervisor if this is an error.</p>
+              <p>GPS validation failed. You are not within the allowed {MOCK_PLANT.radius}m radius of the plant. Please contact your Administrator if this is an error.</p>
             </div>
           )}
         </CardContent>
