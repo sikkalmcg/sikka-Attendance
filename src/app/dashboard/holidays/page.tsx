@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -17,9 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
-  Calendar as CalendarIcon, 
   Plus, 
-  Trash2, 
   Info,
   PartyPopper,
   Sun
@@ -35,10 +34,10 @@ interface Holiday {
 }
 
 export default function HolidaysPage() {
-  const currentYear = 2025; // Setting to 2025 for actual accurate festival logic
+  const currentYear = 2025; 
   
   const INITIAL_HOLIDAYS: Holiday[] = useMemo(() => [
-    { id: "1", date: `${currentYear}-01-26`, name: "Republic Day", type: "WEEKLY_OFF" }, // Sunday in 2025
+    { id: "1", date: `${currentYear}-01-26`, name: "Republic Day", type: "WEEKLY_OFF" }, 
     { id: "2", date: `${currentYear}-03-14`, name: "Holi", type: "FESTIVAL" },
     { id: "3", date: `${currentYear}-08-15`, name: "Independence Day", type: "FESTIVAL" },
     { id: "4", date: `${currentYear}-08-09`, name: "Raksha Bandhan", type: "FESTIVAL" },
@@ -78,11 +77,6 @@ export default function HolidaysPage() {
     toast({ title: "Holidays Added", description: `${newHolidays.length} holiday(s) registered successfully.` });
   };
 
-  const removeHoliday = (id: string) => {
-    setHolidays(prev => prev.filter(h => h.id !== id));
-    toast({ title: "Removed", description: "Holiday removed from the list." });
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -93,7 +87,6 @@ export default function HolidaysPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Configuration Panel */}
         <Card className="lg:col-span-5 shadow-sm border-slate-200">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -139,7 +132,6 @@ export default function HolidaysPage() {
           </CardContent>
         </Card>
 
-        {/* Holiday List */}
         <Card className="lg:col-span-7 shadow-sm border-slate-200 overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100">
             <CardTitle className="text-lg">Holiday Calendar {currentYear}</CardTitle>
@@ -151,13 +143,12 @@ export default function HolidaysPage() {
                   <TableHead className="font-bold">Date</TableHead>
                   <TableHead className="font-bold">Holiday Name</TableHead>
                   <TableHead className="font-bold">Type</TableHead>
-                  <TableHead className="text-right font-bold">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {holidays.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-12 text-muted-foreground font-medium">
+                    <TableCell colSpan={3} className="text-center py-12 text-muted-foreground font-medium">
                       No holidays scheduled yet.
                     </TableCell>
                   </TableRow>
@@ -175,16 +166,6 @@ export default function HolidaysPage() {
                         <Badge variant="outline" className={checkIfSunday(h.date) || h.type === "WEEKLY_OFF" ? "text-amber-600 border-amber-200" : "text-primary border-primary/20"}>
                           {checkIfSunday(h.date) || h.type === "WEEKLY_OFF" ? "Weekly Off" : "Festival"}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="text-rose-500 hover:text-rose-600 hover:bg-rose-50"
-                          onClick={() => removeHoliday(h.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
