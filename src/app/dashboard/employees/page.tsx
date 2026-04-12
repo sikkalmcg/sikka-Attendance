@@ -20,7 +20,8 @@ import {
   UserPlus, 
   TrendingUp, 
   ArrowDownCircle,
-  Pencil
+  Pencil,
+  Users
 } from "lucide-react";
 import { 
   DropdownMenu, 

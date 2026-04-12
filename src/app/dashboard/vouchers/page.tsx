@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle } from "lucide-react";
+import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 const MOCK_VOUCHERS = [
