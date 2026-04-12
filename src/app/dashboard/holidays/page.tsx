@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -36,14 +35,17 @@ interface Holiday {
 }
 
 export default function HolidaysPage() {
-  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const currentYear = 2025; // Setting to 2025 for actual accurate festival logic
   
   const INITIAL_HOLIDAYS: Holiday[] = useMemo(() => [
-    { id: "1", date: `${currentYear}-01-26`, name: "Republic Day", type: "FESTIVAL" },
-    { id: "2", date: `${currentYear}-08-15`, name: "Independence Day", type: "FESTIVAL" },
-    { id: "3", date: `${currentYear}-10-02`, name: "Gandhi Jayanti", type: "FESTIVAL" },
-    { id: "4", date: `${currentYear}-11-01`, name: "Diwali", type: "FESTIVAL" },
-  ], [currentYear]);
+    { id: "1", date: `${currentYear}-01-26`, name: "Republic Day", type: "WEEKLY_OFF" }, // Sunday in 2025
+    { id: "2", date: `${currentYear}-03-14`, name: "Holi", type: "FESTIVAL" },
+    { id: "3", date: `${currentYear}-08-15`, name: "Independence Day", type: "FESTIVAL" },
+    { id: "4", date: `${currentYear}-08-09`, name: "Raksha Bandhan", type: "FESTIVAL" },
+    { id: "5", date: `${currentYear}-08-16`, name: "Janmashtami", type: "FESTIVAL" },
+    { id: "6", date: `${currentYear}-10-02`, name: "Gandhi Jayanti / Dussehra", type: "FESTIVAL" },
+    { id: "7", date: `${currentYear}-10-20`, name: "Diwali", type: "FESTIVAL" },
+  ].sort((a, b) => a.date.localeCompare(b.date)), [currentYear]);
 
   const [holidays, setHolidays] = useState<Holiday[]>(INITIAL_HOLIDAYS);
   const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
@@ -98,7 +100,7 @@ export default function HolidaysPage() {
               <Plus className="w-5 h-5 text-primary" />
               Add Festival / Holidays
             </CardTitle>
-            <CardDescription>Select one or more dates to mark as holidays.</CardDescription>
+            <CardDescription>Select one or more dates to mark as holidays for {currentYear}.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
@@ -120,6 +122,7 @@ export default function HolidaysPage() {
                   onSelect={setSelectedDates}
                   className="rounded-md"
                   initialFocus
+                  defaultMonth={new Date(currentYear, 0)}
                 />
               </div>
               <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100 mt-2">
@@ -169,7 +172,7 @@ export default function HolidaysPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={checkIfSunday(h.date) ? "text-amber-600 border-amber-200" : "text-primary border-primary/20"}>
+                        <Badge variant="outline" className={checkIfSunday(h.date) || h.type === "WEEKLY_OFF" ? "text-amber-600 border-amber-200" : "text-primary border-primary/20"}>
                           {checkIfSunday(h.date) || h.type === "WEEKLY_OFF" ? "Weekly Off" : "Festival"}
                         </Badge>
                       </TableCell>
