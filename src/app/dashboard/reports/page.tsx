@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -5,9 +6,15 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, Send, FileBarChart2, FileText, Download } from "lucide-react";
+import { Sparkles, Send, FileBarChart2, FileText, Download, FileSpreadsheet, FileJson } from "lucide-react";
 import { naturalLanguageDataSummary } from "@/ai/flows/natural-language-data-summary-flow";
 import { useToast } from "@/hooks/use-toast";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 
 export default function ReportsPage() {
   const [query, setQuery] = useState("");
@@ -19,7 +26,6 @@ export default function ReportsPage() {
     if (!query.trim()) return;
     setLoading(true);
     try {
-      // Mock data strings as if fetched from DB
       const attendanceData = "Employee S001 marked IN at 9 AM, OUT at 5 PM on 2024-07-20. Employee S002 was absent on 2024-07-20.";
       const payrollData = "Employee S001 net salary for July was 50000 INR, PF contribution 6000 INR.";
       
@@ -30,6 +36,10 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExport = (type: string) => {
+    toast({ title: "Export Started", description: `Generating ${type} report for download...` });
   };
 
   return (
@@ -82,11 +92,13 @@ export default function ReportsPage() {
               title="Attendance Export" 
               description="Daily logs, status, and hours by plant." 
               icon={FileBarChart2}
+              onExport={handleExport}
             />
             <ReportCard 
               title="Payroll Summary" 
               description="Cost breakdown, PF/ESIC liabilities." 
               icon={FileText}
+              onExport={handleExport}
             />
           </div>
         </div>
@@ -111,7 +123,7 @@ export default function ReportsPage() {
   );
 }
 
-function ReportCard({ title, description, icon: Icon }: any) {
+function ReportCard({ title, description, icon: Icon, onExport }: any) {
   return (
     <Card className="hover:border-primary transition-all cursor-pointer group border-slate-200">
       <CardContent className="p-6">
@@ -120,10 +132,26 @@ function ReportCard({ title, description, icon: Icon }: any) {
         </div>
         <h3 className="font-bold mb-1">{title}</h3>
         <p className="text-sm text-muted-foreground mb-4">{description}</p>
-        <Button variant="outline" className="w-full">
-          <Download className="w-4 h-4 mr-2" />
-          Generate Report
-        </Button>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full">
+              <Download className="w-4 h-4 mr-2" />
+              Generate Report
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-[200px]">
+            <DropdownMenuItem onClick={() => onExport('PDF')}>
+              <FileText className="w-4 h-4 mr-2 text-rose-500" /> Export as PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onExport('Excel')}>
+              <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-600" /> Export as Excel
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onExport('CSV')}>
+              <FileBarChart2 className="w-4 h-4 mr-2 text-blue-500" /> Export as CSV
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </CardContent>
     </Card>
   );
