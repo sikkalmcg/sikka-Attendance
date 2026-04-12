@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { isSunday, format, parseISO } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -32,4 +33,14 @@ export function formatCurrency(amount: number) {
 export function getMonthYearKey() {
   const d = new Date();
   return `${d.getMonth() + 1}-${d.getFullYear()}`;
+}
+
+export function checkIfSunday(date: Date | string) {
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  return isSunday(d);
+}
+
+export function formatDate(date: Date | string) {
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  return format(d, "PPP");
 }

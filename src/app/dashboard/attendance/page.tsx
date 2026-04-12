@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,8 +5,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Clock, CheckCircle2, AlertTriangle, ShieldCheck, Home, Building2 } from "lucide-react";
-import { calculateDistance } from "@/lib/utils";
+import { MapPin, Clock, CheckCircle2, AlertTriangle, ShieldCheck, Home, Building2, Calendar as CalendarIcon } from "lucide-react";
+import { calculateDistance, checkIfSunday } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -26,6 +25,9 @@ const MOCK_PLANT = {
   radius: 700 // 700 meters
 };
 
+// Mock Holiday Database
+const MOCK_HOLIDAYS = ["2024-01-26", "2024-08-15", "2024-10-02"];
+
 export type AttendanceType = "office" | "remote";
 
 export default function AttendancePage() {
@@ -35,9 +37,17 @@ export default function AttendancePage() {
   const [attendanceStatus, setAttendanceStatus] = useState<"NONE" | "IN" | "OUT">("NONE");
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("office");
   const [inTime, setInTime] = useState<string | null>(null);
+  const [isHoliday, setIsHoliday] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
+    // Check if today is a holiday or Sunday
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const sunday = checkIfSunday(today);
+    const festival = MOCK_HOLIDAYS.includes(todayStr);
+    setIsHoliday(sunday || festival);
+
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -50,7 +60,6 @@ export default function AttendancePage() {
           setIsWithinRadius(within);
           setAddress(`Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`);
           
-          // If outside radius, default to office but the UI will show the WFH option
           if (!within) {
             setAttendanceType("office");
           }
@@ -81,11 +90,24 @@ export default function AttendancePage() {
     toast({ title: "Check-out Successful", description: "Your attendance OUT has been recorded." });
   };
 
-  // Enable IN button if within radius (for office) OR if Work from home is selected
   const canPunchIn = attendanceStatus === "NONE" && (isWithinRadius || attendanceType === "remote");
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
+      {isHoliday && (
+        <Card className="bg-amber-50 border-amber-200 border shadow-none mb-6">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="bg-amber-100 p-2 rounded-lg">
+              <CalendarIcon className="text-amber-600 w-5 h-5" />
+            </div>
+            <div>
+              <p className="font-bold text-amber-900 text-sm">Holiday Today</p>
+              <p className="text-amber-700 text-xs">Attendance is optional today. Any logs will be marked as 'Work on Holiday'.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="shadow-xl border-none">
         <CardHeader className="text-center pb-2">
           <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
@@ -110,7 +132,6 @@ export default function AttendancePage() {
               </Badge>
             </div>
 
-            {/* Attendance Type Selector - Shown if outside radius to allow WFH */}
             {!isWithinRadius && attendanceStatus === "NONE" && (
               <div className="w-full space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
                 <Label className="text-sm font-bold flex items-center gap-2">
