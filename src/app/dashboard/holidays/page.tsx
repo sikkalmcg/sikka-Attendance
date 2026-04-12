@@ -84,7 +84,7 @@ export default function HolidaysPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Holiday Management</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Holiday Management</h1>
           <p className="text-muted-foreground">Schedule festivals and manage plant-wide weekly offs.</p>
         </div>
       </div>
@@ -101,7 +101,7 @@ export default function HolidaysPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="festivalName">Festival / Holiday Name</Label>
+              <Label htmlFor="festivalName" className="font-bold">Festival / Holiday Name</Label>
               <Input 
                 id="festivalName" 
                 placeholder="e.g. Diwali, Holi, Local Fair..." 
@@ -111,22 +111,25 @@ export default function HolidaysPage() {
             </div>
             
             <div className="space-y-2">
-              <Label>Select Dates</Label>
-              <div className="border rounded-xl p-2 bg-slate-50/50 flex justify-center overflow-hidden">
+              <Label className="font-bold">Select Dates</Label>
+              <div className="border rounded-xl p-4 bg-white flex justify-center shadow-sm">
                 <Calendar
                   mode="multiple"
                   selected={selectedDates}
                   onSelect={setSelectedDates}
-                  className="rounded-md border-none"
+                  className="rounded-md"
                   initialFocus
                 />
               </div>
-              <p className="text-[10px] text-muted-foreground italic flex items-center gap-1">
-                <Info className="w-3 h-3" /> Tip: You can select multiple consecutive dates for longer breaks.
-              </p>
+              <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100 mt-2">
+                <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-slate-600 leading-normal">
+                  You can select multiple dates. Navigation buttons on the sides allow month switching.
+                </p>
+              </div>
             </div>
 
-            <Button className="w-full font-bold" onClick={handleAddHolidays}>
+            <Button className="w-full font-bold h-11" onClick={handleAddHolidays}>
               Register Holidays
             </Button>
           </CardContent>
@@ -150,7 +153,7 @@ export default function HolidaysPage() {
               <TableBody>
                 {holidays.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center py-12 text-muted-foreground font-medium">
                       No holidays scheduled yet.
                     </TableCell>
                   </TableRow>
@@ -161,7 +164,7 @@ export default function HolidaysPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {checkIfSunday(h.date) ? <Sun className="w-4 h-4 text-amber-500" /> : <PartyPopper className="w-4 h-4 text-primary" />}
-                          {h.name}
+                          <span className="font-medium">{h.name}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -186,7 +189,7 @@ export default function HolidaysPage() {
             </Table>
           </CardContent>
           <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
-             <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+             <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
                 <Info className="w-4 h-4 text-amber-600" />
              </div>
              <p className="text-xs text-slate-600 leading-relaxed">
