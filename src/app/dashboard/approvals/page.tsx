@@ -36,7 +36,9 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Info
+  Info,
+  Building2,
+  Home
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
@@ -65,9 +67,13 @@ interface AttendanceRecordWithMeta {
   outTime: string | null;
   hours: number;
   status: string;
-  lat: number;
-  lng: number;
-  address: string;
+  attendanceType: 'OFFICE' | 'WFH';
+  inLat: number;
+  inLng: number;
+  inAddress: string;
+  outLat: number;
+  outLng: number;
+  outAddress: string;
   approved: boolean;
   remark?: string;
 }
@@ -81,9 +87,13 @@ const INITIAL_MOCK_DATA: AttendanceRecordWithMeta[] = Array.from({ length: 45 })
   outTime: i % 3 === 0 ? "06:00 PM" : "05:30 PM",
   hours: i % 3 === 0 ? 9.0 : 8.5,
   status: "PRESENT",
-  lat: 28.5355 + (Math.random() - 0.5) * 0.01,
-  lng: 77.2639 + (Math.random() - 0.5) * 0.01,
-  address: "Okhla Industrial Estate, Phase III, New Delhi",
+  attendanceType: i % 4 === 0 ? 'WFH' : 'OFFICE',
+  inLat: 28.5355 + (Math.random() - 0.5) * 0.01,
+  inLng: 77.2639 + (Math.random() - 0.5) * 0.01,
+  inAddress: "Okhla Industrial Estate, Phase III, New Delhi",
+  outLat: 28.5355 + (Math.random() - 0.5) * 0.01,
+  outLng: 77.2639 + (Math.random() - 0.5) * 0.01,
+  outAddress: "Okhla Industrial Estate, Phase III, New Delhi",
   approved: i < 15, // First 15 are approved
   remark: i === 20 ? "Late entry due to rain" : ""
 }));
@@ -212,7 +222,7 @@ export default function ApprovalsPage() {
                 <TableHead className="font-bold">IN / OUT</TableHead>
                 <TableHead className="font-bold">Hours</TableHead>
                 <TableHead className="font-bold">GPS</TableHead>
-                <TableHead className="font-bold">Remark</TableHead>
+                <TableHead className="font-bold">Attendance Type</TableHead>
                 <TableHead className="text-right font-bold">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -258,9 +268,17 @@ export default function ApprovalsPage() {
                       </Button>
                     </TableCell>
                     <TableCell>
-                      <div className="max-w-[150px] truncate text-xs text-muted-foreground" title={rec.remark}>
-                        {rec.remark || "--"}
-                      </div>
+                      <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-tight py-0">
+                        {rec.attendanceType === 'WFH' ? (
+                          <div className="flex items-center gap-1">
+                            <Home className="w-3 h-3" /> WFH
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" /> Office
+                          </div>
+                        )}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -382,24 +400,46 @@ export default function ApprovalsPage() {
 
       {/* Map/GPS Dialog */}
       <Dialog open={isMapDialogOpen} onOpenChange={setIsMapDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>GPS Verification</DialogTitle>
-            <DialogDescription>Verification details for {selectedRecord?.employeeName}.</DialogDescription>
+            <DialogTitle>GPS Verification Details</DialogTitle>
+            <DialogDescription>Full location history for {selectedRecord?.employeeName} on {selectedRecord?.date}.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="aspect-video bg-slate-100 rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200">
-              <MapPin className="w-12 h-12 text-slate-300 mb-2" />
-              <p className="text-sm font-mono text-slate-500">{selectedRecord?.lat.toFixed(6)}, {selectedRecord?.lng.toFixed(6)}</p>
-              <p className="text-xs text-slate-400 mt-1">Satellite Visualization Placeholder</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+            {/* IN Location */}
+            <div className="space-y-4 border rounded-xl p-4 bg-slate-50/50">
+              <div className="flex items-center gap-2 text-primary">
+                <CheckCircle2 className="w-4 h-4" />
+                <h4 className="font-bold text-sm uppercase tracking-wider">Punch IN Location</h4>
+              </div>
+              <div className="aspect-square bg-slate-100 rounded-lg flex flex-col items-center justify-center border border-slate-200">
+                <MapPin className="w-8 h-8 text-primary/40 mb-2" />
+                <p className="text-[10px] font-mono text-slate-500">{selectedRecord?.inLat.toFixed(6)}, {selectedRecord?.inLng.toFixed(6)}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase text-muted-foreground font-bold">Address</Label>
+                <p className="text-xs font-medium leading-relaxed">{selectedRecord?.inAddress}</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-xs uppercase text-muted-foreground font-bold">Logged Address</Label>
-              <p className="text-sm font-semibold">{selectedRecord?.address}</p>
+
+            {/* OUT Location */}
+            <div className="space-y-4 border rounded-xl p-4 bg-slate-50/50">
+              <div className="flex items-center gap-2 text-rose-600">
+                <XCircle className="w-4 h-4" />
+                <h4 className="font-bold text-sm uppercase tracking-wider">Punch OUT Location</h4>
+              </div>
+              <div className="aspect-square bg-slate-100 rounded-lg flex flex-col items-center justify-center border border-slate-200">
+                <MapPin className="w-8 h-8 text-rose-600/40 mb-2" />
+                <p className="text-[10px] font-mono text-slate-500">{selectedRecord?.outLat.toFixed(6)}, {selectedRecord?.outLng.toFixed(6)}</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase text-muted-foreground font-bold">Address</Label>
+                <p className="text-xs font-medium leading-relaxed">{selectedRecord?.outAddress}</p>
+              </div>
             </div>
           </div>
           <DialogFooter>
-            <Button className="w-full" onClick={() => setIsMapDialogOpen(false)}>Close</Button>
+            <Button className="w-full" onClick={() => setIsMapDialogOpen(false)}>Close Verification</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
