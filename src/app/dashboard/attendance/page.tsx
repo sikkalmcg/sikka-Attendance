@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -49,7 +50,7 @@ export default function AttendancePage() {
     // Update clock every minute
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 1000); // Changed to 1s for smoother "Live" feel as requested
+    }, 1000);
     
     return () => clearInterval(timer);
   }, []);
@@ -126,61 +127,61 @@ export default function AttendancePage() {
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12">
-      <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-5xl mx-auto">
-        <div className="h-3 bg-primary" />
-        <CardHeader className="text-center pb-2">
-          <CardTitle className="text-3xl font-bold flex items-center justify-center gap-2">
-            <ShieldCheck className="text-primary w-8 h-8" /> Gateway Check-In
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-4xl mx-auto">
+        <div className="h-2 bg-primary" />
+        <CardHeader className="text-center py-4">
+          <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
+            <ShieldCheck className="text-primary w-6 h-6" /> Gateway Check-In
           </CardTitle>
-          <CardDescription>Sikka Industries & Logistics Secure Portal</CardDescription>
+          <CardDescription className="text-xs">Sikka Industries & Logistics Secure Portal</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-8 p-10">
+        <CardContent className="space-y-6 px-8 pb-8 pt-0">
           
-          {/* High Visibility Clock */}
-          <div className="p-10 rounded-3xl bg-slate-900 text-white flex flex-col items-center justify-center space-y-4 shadow-xl border-4 border-slate-800">
+          {/* High Visibility Clock - Reduced size significantly */}
+          <div className="py-8 px-6 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center space-y-3 shadow-xl border-4 border-slate-800">
             <div className="flex items-center gap-2 text-emerald-400">
-              <Timer className="w-5 h-5 animate-pulse" />
+              <Timer className="w-4 h-4 animate-pulse" />
               <span className="text-[10px] font-black uppercase tracking-[0.2em]">Live System Time</span>
             </div>
             {currentTime ? (
               <div className="text-center">
-                <h2 className="text-7xl font-black tracking-tighter font-mono text-white">
+                <h2 className="text-6xl font-black tracking-tighter font-mono text-white leading-none">
                   {format(currentTime, "HH:mm")}
                 </h2>
-                <p className="text-xl font-bold text-slate-400 mt-2 flex items-center justify-center gap-2">
-                  <Calendar className="w-5 h-5" /> {format(currentTime, "dd-MMMM-yyyy")}
+                <p className="text-lg font-bold text-slate-400 mt-2 flex items-center justify-center gap-2">
+                  <Calendar className="w-4 h-4" /> {format(currentTime, "dd-MMMM-yyyy")}
                 </p>
               </div>
             ) : (
-              <div className="h-20 flex items-center justify-center">
-                <span className="text-slate-500 font-bold">Synchronizing...</span>
+              <div className="h-16 flex items-center justify-center">
+                <span className="text-slate-500 text-sm font-bold">Synchronizing...</span>
               </div>
             )}
-            <div className="pt-4 flex items-center gap-2 text-[10px] text-slate-500 font-mono bg-white/5 px-4 py-1.5 rounded-full border border-white/10">
-              <MapPin className="w-3 h-3" /> {address}
+            <div className="pt-2 flex items-center gap-2 text-[9px] text-slate-500 font-mono bg-white/5 px-3 py-1 rounded-full border border-white/10">
+              <MapPin className="w-2.5 h-2.5" /> {address}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            <div className="p-6 rounded-3xl bg-slate-50 text-center border border-slate-100">
-              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">CURRENT STATUS</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl bg-slate-50 text-center border border-slate-100">
+              <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mb-1">CURRENT STATUS</p>
               <p className={cn(
-                "font-black text-2xl",
+                "font-black text-xl",
                 attendanceStatus === 'IN' ? "text-emerald-600" : attendanceStatus === 'OUT' ? "text-rose-600" : "text-slate-400"
               )}>
                 {attendanceStatus === 'NONE' ? 'STATIONARY' : `LOGGED ${attendanceStatus}`}
               </p>
             </div>
-            <div className="p-6 rounded-3xl bg-slate-50 text-center border border-slate-100">
-              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">LOGGED AT</p>
-              <p className="font-black text-2xl font-mono text-slate-900">{checkInTime || '--:--'}</p>
+            <div className="p-4 rounded-2xl bg-slate-50 text-center border border-slate-100">
+              <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mb-1">LOGGED AT</p>
+              <p className="font-black text-xl font-mono text-slate-900">{checkInTime || '--:--'}</p>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-5">
+          <div className="flex flex-col sm:flex-row gap-4">
             <Button 
-              className="flex-1 h-24 text-2xl font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95" 
+              className="flex-1 h-16 text-xl font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95" 
               disabled={attendanceStatus !== "NONE" || !location} 
               onClick={handleCheckIn}
             >
@@ -188,7 +189,7 @@ export default function AttendancePage() {
             </Button>
             <Button 
               variant="destructive" 
-              className="flex-1 h-24 text-2xl font-black rounded-2xl shadow-lg shadow-rose-200 transition-all active:scale-95" 
+              className="flex-1 h-16 text-xl font-black rounded-xl shadow-lg shadow-rose-200 transition-all active:scale-95" 
               disabled={attendanceStatus !== "IN"} 
               onClick={handleCheckOut}
             >
@@ -198,9 +199,9 @@ export default function AttendancePage() {
         </CardContent>
       </Card>
 
-      <div className="space-y-4">
-        <h3 className="font-bold text-xl flex items-center gap-2"><History className="w-5 h-5 text-slate-400" /> My Attendance History</h3>
-        <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
+      <div className="space-y-4 max-w-6xl mx-auto">
+        <h3 className="font-bold text-lg flex items-center gap-2"><History className="w-5 h-5 text-slate-400" /> My Attendance History</h3>
+        <Card className="rounded-xl overflow-hidden shadow-sm border-slate-200">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
