@@ -38,7 +38,9 @@ import {
   Building2,
   Banknote,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  User,
+  Fingerprint
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -154,11 +156,16 @@ export default function EmployeesPage() {
     let epf = 0, eesic = 0, erpf = 0, eresic = 0;
 
     if (compliance) {
+      // Employee PF: 12% of Basic
       epf = Math.round(basic * STATUTORY_RATES.PF_EMPLOYEE_RATE);
+      // Employer PF: 13% of Basic
       erpf = Math.round(basic * STATUTORY_RATES.PF_EMPLOYER_RATE);
       
+      // ESIC applicable if gross <= threshold (usually 21,000)
       if (gross <= STATUTORY_RATES.ESIC_THRESHOLD) {
+        // Employee ESIC: 0.75% of Gross
         eesic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYEE_RATE);
+        // Employer ESIC: 3.25% of Gross
         eresic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYER_RATE);
       }
     }
@@ -317,7 +324,7 @@ export default function EmployeesPage() {
 
       {/* Registration Modal */}
       <Dialog open={isRegistrationOpen} onOpenChange={(open) => { setIsRegistrationOpen(open); if(!open) { setEditEmployee(null); setFormData({ firmId: "f1", isGovComplianceEnabled: true }); } }}>
-        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0">
+        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
               <ShieldCheck className="w-6 h-6 text-primary" />
@@ -359,7 +366,7 @@ export default function EmployeesPage() {
                     <Input placeholder="Enter full name" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Father's Name</Label>
+                    <Label>Father Name</Label>
                     <Input placeholder="Enter father's name" value={formData.fatherName || ''} onChange={(e) => setFormData({...formData, fatherName: e.target.value})} />
                   </div>
                   <div className="space-y-2">
@@ -368,11 +375,11 @@ export default function EmployeesPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Aadhaar Number *</Label>
-                    <Input placeholder="12-digit number" value={formData.aadhaar || ''} onChange={(e) => setFormData({...formData, aadhaar: e.target.value})} maxLength={14} />
+                    <Input placeholder="12-digit number" value={formData.aadhaar || ''} onChange={(e) => setFormData({...formData, aadhaar: e.target.value})} maxLength={12} />
                   </div>
                   <div className="space-y-2">
                     <Label>PAN Number</Label>
-                    <Input placeholder="ABCDE1234F" className="uppercase" value={formData.pan || ''} onChange={(e) => setFormData({...formData, pan: e.target.value.toUpperCase()})} />
+                    <Input placeholder="AAAAA9999A" className="uppercase" value={formData.pan || ''} onChange={(e) => setFormData({...formData, pan: e.target.value.toUpperCase()})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Joining Date *</Label>
@@ -471,9 +478,47 @@ export default function EmployeesPage() {
                   </div>
                 </div>
                 {formData.isGovComplianceEnabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                    <div className="space-y-2"><Label>PF Account Number</Label><Input value={formData.pfNumber || ''} onChange={(e) => setFormData({...formData, pfNumber: e.target.value})} /></div>
-                    <div className="space-y-2"><Label>ESIC Account Number</Label><Input value={formData.esicNumber || ''} onChange={(e) => setFormData({...formData, esicNumber: e.target.value})} /></div>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                      <div className="space-y-2">
+                        <Label>PF Account Number</Label>
+                        <Input value={formData.pfNumber || ''} onChange={(e) => setFormData({...formData, pfNumber: e.target.value})} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>ESIC Account Number</Label>
+                        <Input value={formData.esicNumber || ''} onChange={(e) => setFormData({...formData, esicNumber: e.target.value})} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 space-y-3">
+                        <h5 className="text-xs font-bold text-emerald-800 flex items-center gap-2"><User className="w-3 h-3" /> Employee Contribution</h5>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-emerald-600 font-bold uppercase">PF (12%)</p>
+                            <p className="text-sm font-bold">{formatCurrency(formData.salary?.employeePF || 0)}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-emerald-600 font-bold uppercase">ESIC (0.75%)</p>
+                            <p className="text-sm font-bold">{formatCurrency(formData.salary?.employeeESIC || 0)}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
+                        <h5 className="text-xs font-bold text-blue-800 flex items-center gap-2"><Building2 className="w-3 h-3" /> Employer Contribution</h5>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-blue-600 font-bold uppercase">PF (13%)</p>
+                            <p className="text-sm font-bold">{formatCurrency(formData.salary?.employerPF || 0)}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-blue-600 font-bold uppercase">ESIC (3.25%)</p>
+                            <p className="text-sm font-bold">{formatCurrency(formData.salary?.employerESIC || 0)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -481,7 +526,7 @@ export default function EmployeesPage() {
           </ScrollArea>
 
           {/* Real-time Footer Stats */}
-          <div className="bg-slate-900 text-white p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900 text-white p-6 grid grid-cols-2 md:grid-cols-4 gap-4 flex-shrink-0">
             <div className="text-center">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gross Salary</p>
               <p className="text-xl font-bold">{formatCurrency(formData.salary?.grossSalary || 0)}</p>
