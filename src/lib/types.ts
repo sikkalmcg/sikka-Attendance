@@ -1,4 +1,3 @@
-
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'HR' | 'EMPLOYEE';
 
 export interface User {
@@ -134,6 +133,20 @@ export interface AttendanceRecord {
   autoCheckout?: boolean;
 }
 
+export interface SalaryPaymentRecord {
+  amount: number;
+  date: string;
+  type: 'BANKING' | 'CASH' | 'CHEQUE';
+  reference: string;
+}
+
+export interface StatutoryPaymentRecord {
+  employeeAmt: number;
+  employerAmt: number;
+  date: string;
+  reference: string;
+}
+
 export interface PayrollRecord {
   id: string;
   employeeId: string;
@@ -153,4 +166,25 @@ export interface PayrollRecord {
   createdAt: string;
   slipNo?: string;
   slipDate?: string;
+
+  // Statutory Liabilties at time of generation
+  pfAmountEmployee: number;
+  pfAmountEmployer: number;
+  esicAmountEmployee: number;
+  esicAmountEmployer: number;
+
+  // Payment Tracking
+  salaryPaidAmount: number;
+  salaryPaidDate?: string;
+  salaryHistory: SalaryPaymentRecord[];
+
+  pfPaidAmountEmployee: number;
+  pfPaidAmountEmployer: number;
+  pfPaidDate?: string;
+  pfHistory: StatutoryPaymentRecord[];
+
+  esicPaidAmountEmployee: number;
+  esicPaidAmountEmployer: number;
+  esicPaidDate?: string;
+  esicHistory: StatutoryPaymentRecord[];
 }

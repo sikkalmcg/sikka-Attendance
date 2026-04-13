@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
@@ -135,6 +134,15 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       const incentiveAmt = Math.round(basic * (incentivePct / 100));
       const holidayWorkingAmt = Math.round((employee.salary.netSalary / currentSummary.totalDays) * currentSummary.holidayWork);
 
+      const earningDays = currentSummary.attendance;
+      const totalDays = currentSummary.totalDays;
+
+      // Scale statutory liabilities based on earning days
+      const pfEmp = Math.round((employee.salary.employeePF / totalDays) * earningDays);
+      const pfEx = Math.round((employee.salary.employerPF / totalDays) * earningDays);
+      const esicEmp = Math.round((employee.salary.employeeESIC / totalDays) * earningDays);
+      const esicEx = Math.round((employee.salary.employerESIC / totalDays) * earningDays);
+
       const newPayrollRecord: PayrollRecord = {
         id: Math.random().toString(36).substr(2, 9),
         employeeId: employee.employeeId,
@@ -150,10 +158,24 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         holidayWorkAmt: holidayWorkingAmt,
         advanceRecovery: advanceRecovery,
         netPayable: estimatedFinalNet,
-        status: 'DRAFT',
+        status: 'FINALIZED', // Auto-finalize for prototype
         createdAt: new Date().toISOString(),
         slipNo: slipNo,
-        slipDate: slipDate
+        slipDate: slipDate,
+
+        pfAmountEmployee: pfEmp,
+        pfAmountEmployer: pfEx,
+        esicAmountEmployee: esicEmp,
+        esicAmountEmployer: esicEx,
+
+        salaryPaidAmount: 0,
+        salaryHistory: [],
+        pfPaidAmountEmployee: 0,
+        pfPaidAmountEmployer: 0,
+        pfHistory: [],
+        esicPaidAmountEmployee: 0,
+        esicPaidAmountEmployer: 0,
+        esicHistory: []
       };
 
       setPayrollRecords(prev => [...prev, newPayrollRecord]);
@@ -168,7 +190,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] -m-6">
-      {/* Header - Reduced padding by 40% */}
+      {/* Header */}
       <div className="p-4 border-b bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
@@ -205,10 +227,8 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         </div>
       </div>
 
-      {/* Main Content */}
       <ScrollArea className="flex-1 bg-slate-50/30">
         <div className="max-w-7xl mx-auto p-6 lg:p-10 space-y-10">
-          {/* Stats Row - 6 Columns */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <StatBox label="ATTENDANCE" value={currentSummary?.attendance || 0} color="text-slate-900" />
             <StatBox label="ABSENT" value={currentSummary?.absent || 0} color="text-rose-600" />
@@ -218,7 +238,6 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
             <StatBox label="ADV. BALANCE" value={formatCurrency(advanceBalance - advanceRecovery)} color="text-rose-500" symbol="₹" />
           </div>
 
-          {/* Earnings & Adjustments Section */}
           <div className="space-y-6">
             <h4 className="text-sm font-bold flex items-center gap-2 border-b pb-3">
               <PlusCircle className="w-4 h-4 text-primary" /> Earnings & Adjustments
@@ -293,7 +312,6 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         </div>
       </ScrollArea>
 
-      {/* Footer - Reduced padding by 40% */}
       <div className="px-6 py-4 bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-center gap-6 border-t border-slate-800">
         <div className="flex gap-10 items-center mr-auto">
           <div className="space-y-1">
