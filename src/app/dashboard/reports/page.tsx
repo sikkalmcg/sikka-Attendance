@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -26,7 +25,7 @@ export default function ReportsPage() {
     if (!query.trim()) return;
     setLoading(true);
     try {
-      const attendanceData = "Employee S001 marked IN at 9 AM, OUT at 5 PM on 2024-07-20. Employee S002 was absent on 2024-07-20.";
+      const attendanceData = "Employee S001 marked IN at 09:00, OUT at 17:00 on 2024-07-20. Employee S002 was absent on 2024-07-20.";
       const payrollData = "Employee S001 net salary for July was 50000 INR, PF contribution 6000 INR.";
       
       const res = await naturalLanguageDataSummary({ query, attendanceData, payrollData });

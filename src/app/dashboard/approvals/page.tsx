@@ -42,13 +42,13 @@ import {
 import { cn } from "@/lib/utils";
 import { ATTENDANCE_RULES } from "@/lib/constants";
 
-// Helper to calculate hours between two time strings
+// Helper to calculate hours between two 24h time strings (HH:mm)
 function calculateHours(inTime: string | null, outTime: string | null): number {
   if (!inTime || !outTime) return 0;
   try {
     const dummyDate = "2024-01-01 ";
-    const start = new Date(dummyDate + inTime.replace(/(AM|PM)/, " $1"));
-    const end = new Date(dummyDate + outTime.replace(/(AM|PM)/, " $1"));
+    const start = new Date(dummyDate + inTime);
+    const end = new Date(dummyDate + outTime);
     const diffMs = end.getTime() - start.getTime();
     if (isNaN(diffMs) || diffMs < 0) return 0;
     return parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
@@ -60,7 +60,6 @@ function calculateHours(inTime: string | null, outTime: string | null): number {
 // Helper to determine status based on hours
 function determineStatus(hours: number): 'PRESENT' | 'ABSENT' | 'HALF_DAY' {
   if (hours <= 0) return 'ABSENT';
-  // Rule: If hours > 3:00 then Present, else Half Day
   if (hours > ATTENDANCE_RULES.PRESENT_THRESHOLD) return 'PRESENT';
   return 'HALF_DAY';
 }
@@ -86,8 +85,8 @@ interface AttendanceRecordWithMeta {
 }
 
 const INITIAL_MOCK_DATA: AttendanceRecordWithMeta[] = Array.from({ length: 45 }).map((_, i) => {
-  const inTime = i % 15 === 0 ? null : "09:00 AM";
-  const outTime = i % 15 === 0 ? null : (i % 8 === 0 ? "11:30 AM" : "06:00 PM"); 
+  const inTime = i % 15 === 0 ? null : "09:00";
+  const outTime = i % 15 === 0 ? null : (i % 8 === 0 ? "11:30" : "18:00"); 
   const hours = calculateHours(inTime, outTime);
   const status = determineStatus(hours);
   
@@ -209,7 +208,7 @@ export default function ApprovalsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold">Attendance Approvals</h1>
-          <p className="text-muted-foreground">Verify and finalize employee attendance logs.</p>
+          <p className="text-muted-foreground">Verify and finalize employee attendance logs (24h Format).</p>
         </div>
       </div>
 
@@ -382,7 +381,7 @@ export default function ApprovalsPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Attendance Times</DialogTitle>
-            <DialogDescription>Adjust IN and OUT times for {selectedRecord?.employeeName}.</DialogDescription>
+            <DialogDescription>Adjust IN and OUT times for {selectedRecord?.employeeName} (Format: HH:mm).</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
@@ -390,6 +389,7 @@ export default function ApprovalsPage() {
                 <Label htmlFor="inTime">IN Time</Label>
                 <Input 
                   id="inTime" 
+                  placeholder="09:00"
                   value={editTimes.in} 
                   onChange={(e) => setEditTimes(prev => ({ ...prev, in: e.target.value }))}
                 />
@@ -398,6 +398,7 @@ export default function ApprovalsPage() {
                 <Label htmlFor="outTime">OUT Time</Label>
                 <Input 
                   id="outTime" 
+                  placeholder="18:00"
                   value={editTimes.out} 
                   onChange={(e) => setEditTimes(prev => ({ ...prev, out: e.target.value }))}
                 />
@@ -409,8 +410,8 @@ export default function ApprovalsPage() {
                 <p className="text-xs text-slate-600 font-bold">Automatic Classification Rules:</p>
               </div>
               <ul className="text-[10px] text-slate-500 list-disc pl-5 space-y-1">
-                <li>Hours ≤ 3:00 → <strong>Half Day</strong></li>
-                <li>Hours &gt; 3:00 → <strong>Present</strong></li>
+                <li>Hours &le; 3:00 &rarr; <strong>Half Day</strong></li>
+                <li>Hours &gt; 3:00 &rarr; <strong>Present</strong></li>
               </ul>
             </div>
           </div>

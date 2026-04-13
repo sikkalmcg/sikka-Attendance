@@ -60,8 +60,8 @@ export default function AttendancePage() {
       employeeId: currentUser.id,
       employeeName: currentUser.fullName,
       date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      inTime: "09:00 AM",
-      outTime: "06:00 PM",
+      inTime: "09:00",
+      outTime: "18:00",
       inPlant: "Okhla Phase III",
       outPlant: "Okhla Phase III",
       hours: 9,
@@ -104,7 +104,7 @@ export default function AttendancePage() {
       return;
     }
     setAttendanceStatus("IN");
-    setCheckInTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    setCheckInTime(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
     toast({ title: "Check-In Successful" });
   };
 
@@ -121,7 +121,7 @@ export default function AttendancePage() {
           <CardTitle className="text-3xl font-bold flex items-center justify-center gap-2">
             <ShieldCheck className="text-primary w-8 h-8" /> Check-In / Check-Out
           </CardTitle>
-          <CardDescription>Sikka Industries Secure Gateway</CardDescription>
+          <CardDescription>Sikka Industries Secure Gateway (24h Clock)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-10">
           <div className={`p-6 rounded-3xl flex items-center justify-between border-2 ${detectedPlant ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
