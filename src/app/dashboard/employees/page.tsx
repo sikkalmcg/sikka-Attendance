@@ -59,7 +59,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, SalaryStructure, Firm } from "@/lib/types";
-import { DEPARTMENTS, DESIGNATIONS, STATUTORY_RATES } from "@/lib/constants";
+import { DEPARTMENTS, DESIGNATIONS } from "@/lib/constants";
 
 const MOCK_FIRMS: Firm[] = [
   { 
@@ -118,10 +118,21 @@ const MOCK_EMPLOYEES: Employee[] = [
   }
 ];
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June", 
-  "July", "August", "September", "October", "November", "December"
-];
+// Generate Effect from Month options in MMM-YYYY format
+const generateMonthOptions = () => {
+  const options = [];
+  const date = new Date();
+  // Show from current month up to next 12 months
+  for (let i = 0; i < 15; i++) {
+    const mmm = date.toLocaleString('en-US', { month: 'short' });
+    const yyyy = date.getFullYear();
+    options.push(`${mmm}-${yyyy}`);
+    date.setMonth(date.getMonth() + 1);
+  }
+  return options;
+};
+
+const MONTH_OPTIONS = generateMonthOptions();
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
@@ -162,7 +173,7 @@ export default function EmployeesPage() {
 
   // Salary Revision State
   const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 });
-  const [effectiveMonth, setEffectiveMonth] = useState<string>("August");
+  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[0]);
 
   const filtered = employees.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -662,7 +673,7 @@ export default function EmployeesPage() {
                         <SelectValue placeholder="Select Month" />
                       </SelectTrigger>
                       <SelectContent>
-                        {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        {MONTH_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
