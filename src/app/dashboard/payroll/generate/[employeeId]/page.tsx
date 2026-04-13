@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
@@ -101,7 +102,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   const estimatedFinalNet = useMemo(() => {
     if (!employee || !currentSummary) return 0;
     
-    const earningDays = currentSummary.attendance; // Simplification: we'd track adjusted leave if needed
+    const earningDays = currentSummary.attendance;
     const basic = employee.salary.basic;
     const incentiveAmt = Math.round(basic * (incentivePct / 100));
     
@@ -161,45 +162,49 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   if (!employee) return <div>Employee not found.</div>;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-100px)] -m-6">
-      {/* Header */}
-      <div className="p-6 border-b bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="flex flex-col h-[calc(100vh-64px)] -m-6">
+      {/* Header - Reduced padding by 40% */}
+      <div className="p-4 border-b bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
-            <ChevronLeft className="w-6 h-6" />
+            <ChevronLeft className="w-5 h-5" />
           </Button>
-          <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center"><Calculator className="text-primary w-6 h-6" /></div>
+          <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+            <Calculator className="text-primary w-5 h-5" />
+          </div>
           <div>
-            <h1 className="text-xl font-bold">Generate Salary • {selectedMonth}</h1>
-            <p className="text-muted-foreground">{employee.name} ({employee.employeeId})</p>
+            <h1 className="text-lg font-bold">Generate Salary • {selectedMonth}</h1>
+            <p className="text-xs text-muted-foreground">{employee.name} ({employee.employeeId})</p>
           </div>
         </div>
-        <div className="flex items-center gap-4 bg-white p-2 rounded-xl border shadow-sm">
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-black text-slate-400 px-1">Salary Slip No</Label>
-            <Input 
-              value={slipNo} 
-              readOnly
-              className="h-10 w-36 font-mono font-bold text-sm bg-slate-100 border-slate-200"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase font-black text-slate-400 px-1">Slip Dated</Label>
-            <Input 
-              type="date"
-              value={slipDate} 
-              onChange={(e) => setSlipDate(e.target.value)} 
-              className="h-10 w-44 font-bold text-sm"
-            />
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-slate-50 border rounded-xl flex items-center gap-4 shadow-sm">
+            <div className="space-y-0.5">
+              <Label className="text-[9px] uppercase font-black text-slate-400 px-1">Salary Slip No</Label>
+              <Input 
+                value={slipNo} 
+                readOnly
+                className="h-8 w-32 font-mono font-bold text-xs bg-slate-100 border-slate-200"
+              />
+            </div>
+            <div className="space-y-0.5">
+              <Label className="text-[9px] uppercase font-black text-slate-400 px-1">Slip Dated</Label>
+              <Input 
+                type="date"
+                value={slipDate} 
+                onChange={(e) => setSlipDate(e.target.value)} 
+                className="h-8 w-40 font-bold text-xs"
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - Improved spacing and layout */}
       <ScrollArea className="flex-1 bg-slate-50/30">
-        <div className="max-w-7xl mx-auto p-10 space-y-12">
-          {/* Stats Row */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+        <div className="max-w-7xl mx-auto p-6 lg:p-10 space-y-10">
+          {/* Stats Row - 6 Columns */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <StatBox label="ATTENDANCE" value={currentSummary?.attendance || 0} color="text-slate-900" />
             <StatBox label="ABSENT" value={currentSummary?.absent || 0} color="text-rose-600" />
             <StatBox label="ADJUST LEAVE" value="+0" color="text-primary" />
@@ -208,58 +213,60 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
             <StatBox label="ADV. BALANCE" value={formatCurrency(advanceBalance)} color="text-rose-500" symbol="₹" />
           </div>
 
-          {/* Earnings & Adjustments */}
+          {/* Earnings & Adjustments Section */}
           <div className="space-y-6">
-            <h4 className="text-sm font-bold flex items-center gap-2 border-b pb-4">
-              <PlusCircle className="w-5 h-5 text-primary" /> Earnings & Adjustments
+            <h4 className="text-sm font-bold flex items-center gap-2 border-b pb-3">
+              <PlusCircle className="w-4 h-4 text-primary" /> Earnings & Adjustments
             </h4>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-              <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-sm space-y-4">
-                <Label className="text-sm font-bold text-slate-700">Incentive %</Label>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-4">
+                <Label className="text-xs font-bold text-slate-700">Incentive %</Label>
                 <div className="flex items-center gap-4">
                   <Input 
                     type="number" 
-                    className="h-14 text-lg font-bold bg-slate-50 border-slate-200" 
+                    className="h-12 text-lg font-bold bg-slate-50 border-slate-200" 
                     placeholder="0"
                     value={incentivePct}
                     onChange={(e) => setIncentivePct(parseFloat(e.target.value) || 0)}
                   />
-                  <div className="h-14 flex items-center px-4 bg-emerald-50 text-emerald-700 rounded-2xl font-black text-sm whitespace-nowrap border border-emerald-100">
+                  <div className="h-12 flex items-center px-4 bg-emerald-50 text-emerald-700 rounded-xl font-black text-xs whitespace-nowrap border border-emerald-100">
                     + {formatCurrency(Math.round(employee.salary.basic * (incentivePct / 100)))}
                   </div>
                 </div>
               </div>
 
-              <div className="p-8 bg-rose-50/30 rounded-3xl space-y-4 border-2 border-dashed border-rose-200">
-                <Label className="text-sm font-bold text-rose-900 flex items-center gap-2"><ArrowDownCircle className="w-4 h-4" /> Deduction Advance Salary (INR)</Label>
+              <div className="p-6 bg-rose-50/30 rounded-2xl space-y-4 border-2 border-dashed border-rose-200">
+                <Label className="text-xs font-bold text-rose-900 flex items-center gap-2">
+                  <ArrowDownCircle className="w-4 h-4" /> Deduction Advance Salary (INR)
+                </Label>
                 <Input 
                   type="number" 
-                  className="h-14 text-lg font-bold bg-white border-rose-200 focus-visible:ring-rose-500" 
+                  className="h-12 text-lg font-bold bg-white border-rose-200 focus-visible:ring-rose-500" 
                   placeholder="0"
                   value={advanceRecovery}
                   onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)}
                 />
               </div>
 
-              <div className="p-8 bg-amber-50/30 rounded-3xl space-y-4 border-2 border-dashed border-amber-200 lg:col-span-2">
+              <div className="p-6 bg-amber-50/20 rounded-2xl space-y-4 border-2 border-dashed border-amber-200 lg:col-span-2">
                 <div className="flex justify-between items-center">
-                  <Label className="text-sm font-bold text-amber-900">Holiday Work Pay</Label>
-                  <Badge className="bg-amber-500 text-xs font-bold px-3 py-1">{currentSummary?.holidayWork || 0} Days</Badge>
+                  <Label className="text-xs font-bold text-amber-900">Holiday Work Pay</Label>
+                  <Badge className="bg-amber-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{currentSummary?.holidayWork || 0} Days</Badge>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Input 
-                    className="h-14 text-lg font-black bg-white/70 border-amber-200" 
-                    value={formatCurrency(Math.round((employee.salary.netSalary / 30) * (currentSummary?.holidayWork || 0)))}
-                    readOnly
-                  />
+                  <div className="flex-1 h-12 flex items-center px-4 bg-white/70 border-2 border-amber-100 rounded-xl font-black text-lg">
+                    {formatCurrency(Math.round((employee.salary.netSalary / 30) * (currentSummary?.holidayWork || 0)))}
+                  </div>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="p-2 cursor-help rounded-full bg-amber-100"><Info className="w-5 h-5 text-amber-600" /></div>
+                        <div className="p-2 cursor-help rounded-full bg-amber-100 hover:bg-amber-200 transition-colors">
+                          <Info className="w-5 h-5 text-amber-600" />
+                        </div>
                       </TooltipTrigger>
-                      <TooltipContent className="bg-slate-900 text-white max-w-xs p-4">
-                        <p className="text-xs font-medium">Calculation Logic:</p>
-                        <p className="text-xs text-slate-400 mt-1">(Net Salary / 30) * Holiday Days</p>
+                      <TooltipContent className="bg-slate-900 text-white p-3 text-xs">
+                        <p className="font-bold mb-1">Calculation Logic:</p>
+                        <p className="text-slate-400">(Net Salary / 30) * Holiday Days</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -270,28 +277,29 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         </div>
       </ScrollArea>
 
-      {/* Footer Summary */}
-      <div className="p-6 bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-center gap-6 border-t border-slate-800">
-        <div className="flex gap-16 items-center mr-auto">
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Monthly CTC (Profile)</p>
-            <p className="text-2xl font-black">{formatCurrency(employee.salary.monthlyCTC)}</p>
+      {/* Footer - Reduced padding by 40% and updated layout */}
+      <div className="px-6 py-4 bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-center gap-6 border-t border-slate-800">
+        <div className="flex gap-10 items-center mr-auto">
+          <div className="space-y-1">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Monthly CTC (Profile)</p>
+            <p className="text-xl font-bold">{formatCurrency(employee.salary.monthlyCTC)}</p>
           </div>
-          <div className="border-l border-slate-700 pl-10">
-            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Estimated Net Payable</p>
-            <p className="text-4xl font-black text-emerald-400 tracking-tight">{formatCurrency(estimatedFinalNet)}</p>
+          <div className="border-l border-slate-700 h-10" />
+          <div className="space-y-1">
+            <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Estimated Net Payable</p>
+            <p className="text-3xl font-black text-emerald-400 tracking-tight">{formatCurrency(estimatedFinalNet)}</p>
           </div>
         </div>
-        <div className="flex items-center gap-4 w-full sm:w-auto">
+        <div className="flex items-center gap-3">
           <Button 
             variant="outline" 
-            className="h-14 px-10 font-bold bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white"
+            className="h-12 px-8 font-bold bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white rounded-xl"
             onClick={() => router.back()}
           >
             Discard
           </Button>
           <Button 
-            className="h-14 px-16 bg-emerald-600 hover:bg-emerald-700 font-black text-xl shadow-xl shadow-emerald-900/20" 
+            className="h-12 px-12 bg-emerald-600 hover:bg-emerald-700 font-black text-lg shadow-xl shadow-emerald-900/40 rounded-xl transition-all active:scale-95" 
             onClick={handlePostSalary} 
             disabled={isProcessing}
           >
@@ -305,10 +313,10 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
 
 function StatBox({ label, value, color, symbol }: { label: string, value: string | number, color: string, symbol?: string }) {
   return (
-    <div className="bg-white p-6 rounded-3xl text-center border border-slate-200 shadow-sm transition-all hover:shadow-md">
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{label}</p>
-      <div className={cn("text-2xl font-bold flex items-center justify-center gap-0.5", color)}>
-        {symbol && <span className="text-lg opacity-70">{symbol}</span>}
+    <div className="bg-white p-4 rounded-2xl text-center border border-slate-200 shadow-sm transition-all hover:shadow-md hover:border-primary/20">
+      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+      <div className={cn("text-lg font-bold flex items-center justify-center gap-0.5", color)}>
+        {symbol && <span className="text-sm opacity-70">{symbol}</span>}
         {value}
       </div>
     </div>
