@@ -678,8 +678,8 @@ export default function PayrollPage() {
                         <Label className="text-[10px] uppercase font-black text-slate-400 px-1">Salary Slip No</Label>
                         <Input 
                           value={slipNo} 
-                          onChange={(e) => setSlipNo(e.target.value)} 
-                          className="h-9 w-32 font-mono font-bold text-xs"
+                          readOnly
+                          className="h-9 w-32 font-mono font-bold text-xs bg-slate-100"
                         />
                       </div>
                       <div className="space-y-1">
