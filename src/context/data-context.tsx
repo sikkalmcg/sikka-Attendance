@@ -1,9 +1,7 @@
-
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { Employee, AttendanceRecord, Voucher, Plant } from '@/lib/types';
-import { SUPER_ADMIN_USER } from '@/lib/constants';
+import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord } from '@/lib/types';
 
 interface DataContextType {
   employees: Employee[];
@@ -12,6 +10,8 @@ interface DataContextType {
   setAttendanceRecords: React.Dispatch<React.SetStateAction<AttendanceRecord[]>>;
   vouchers: Voucher[];
   setVouchers: React.Dispatch<React.SetStateAction<Voucher[]>>;
+  payrollRecords: PayrollRecord[];
+  setPayrollRecords: React.Dispatch<React.SetStateAction<PayrollRecord[]>>;
   plants: Plant[];
 }
 
@@ -26,12 +26,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
 
   // Load initial data from localStorage if available, otherwise use defaults
   useEffect(() => {
     const savedEmps = localStorage.getItem('app_employees');
     const savedAtt = localStorage.getItem('app_attendance');
     const savedVouchers = localStorage.getItem('app_vouchers');
+    const savedPayroll = localStorage.getItem('app_payroll');
 
     if (savedEmps) {
       setEmployees(JSON.parse(savedEmps));
@@ -63,13 +65,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           netSalary: 28087, monthlyCTC: 32438, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25
         },
         salaryHistory: [{ fromMonth: "Jan-2023", toMonth: "Present", monthlyCTC: 32438 }],
-        active: true 
+        active: true,
+        advanceLeaveBalance: 2
       };
       setEmployees([defaultEmp]);
     }
 
     if (savedAtt) setAttendanceRecords(JSON.parse(savedAtt));
     if (savedVouchers) setVouchers(JSON.parse(savedVouchers));
+    if (savedPayroll) setPayrollRecords(JSON.parse(savedPayroll));
   }, []);
 
   // Save to localStorage whenever state changes
@@ -77,14 +81,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (employees.length > 0) localStorage.setItem('app_employees', JSON.stringify(employees));
     localStorage.setItem('app_attendance', JSON.stringify(attendanceRecords));
     localStorage.setItem('app_vouchers', JSON.stringify(vouchers));
-  }, [employees, attendanceRecords, vouchers]);
+    localStorage.setItem('app_payroll', JSON.stringify(payrollRecords));
+  }, [employees, attendanceRecords, vouchers, payrollRecords]);
 
   const value = useMemo(() => ({
     employees, setEmployees,
     attendanceRecords, setAttendanceRecords,
     vouchers, setVouchers,
+    payrollRecords, setPayrollRecords,
     plants: MOCK_PLANTS
-  }), [employees, attendanceRecords, vouchers]);
+  }), [employees, attendanceRecords, vouchers, payrollRecords]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

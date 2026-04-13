@@ -1,183 +1,545 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { useState, useMemo, useEffect } from "react";
+import { 
+  Card, 
+  CardHeader, 
+  CardTitle, 
+  CardContent, 
+  CardDescription,
+  CardFooter
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { 
+  Table, 
+  TableHeader, 
+  TableBody, 
+  TableRow, 
+  TableHead, 
+  TableCell 
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, Calculator, Download, Search, CheckCircle2, Info } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
-import { STATUTORY_RATES } from "@/lib/constants";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Search, 
+  Calculator, 
+  CalendarClock, 
+  CreditCard, 
+  PlusCircle, 
+  History, 
+  Info,
+  Wallet,
+  CheckCircle2,
+  AlertCircle
+} from "lucide-react";
+import { formatCurrency, cn } from "@/lib/utils";
+import { useData } from "@/context/data-context";
+import { useToast } from "@/hooks/use-toast";
+import { Employee, AttendanceRecord, PayrollRecord } from "@/lib/types";
 
-const MOCK_PAYROLL_DATA = [
-  { id: "1", employeeId: "S10001", name: "Ravi Kumar", baseSalary: 35000, presentDays: 24, halfDays: 4, totalDays: 31 },
-  { id: "2", employeeId: "S10002", name: "Anita Singh", baseSalary: 55000, presentDays: 31, halfDays: 0, totalDays: 31 },
-  { id: "3", employeeId: "S10004", name: "Sunil Sharma", baseSalary: 18000, presentDays: 20, halfDays: 8, totalDays: 31 },
-];
+// Helper to generate MMM-YY month options
+const generatePayrollMonths = () => {
+  const options = [];
+  const date = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+    const mmm = d.toLocaleString('en-US', { month: 'short' });
+    const yy = d.getFullYear().toString().slice(-2);
+    options.push(`${mmm}-${yy}`);
+  }
+  return options;
+};
+
+const PAYROLL_MONTHS = generatePayrollMonths();
 
 export default function PayrollPage() {
-  const [month, setMonth] = useState("08");
-  const [year, setYear] = useState("2024");
-  const [searchTerm, setSearchTerm] = useState("");
+  const { employees, setEmployees, attendanceRecords, payrollRecords, setPayrollRecords } = useData();
+  const { toast } = useToast();
 
-  const payrollRecords = useMemo(() => {
-    return MOCK_PAYROLL_DATA.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      p.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
-    ).map(p => {
-      // Rule: Two Half Days = One Present Day
-      const payableDays = p.presentDays + (p.halfDays * 0.5);
-      
-      const perDay = p.baseSalary / p.totalDays;
-      const gross = Math.round(perDay * payableDays);
-      const pf = Math.round(gross * STATUTORY_RATES.PF_EMPLOYEE_RATE);
-      const esic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYEE_RATE);
-      const net = gross - pf - esic;
-      
-      return { ...p, payableDays, gross, pf, esic, net };
+  const [activeTab, setActiveTab] = useState("generate");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(PAYROLL_MONTHS[1]); // Default to previous month
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Modals
+  const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
+  const [generateSalaryEmp, setGenerateSalaryEmp] = useState<Employee | null>(null);
+  const [advanceLeaveValue, setAdvanceLeaveValue] = useState(0);
+
+  // Salary Gen State
+  const [incentivePct, setIncentivePct] = useState(0);
+
+  const filteredEmployees = useMemo(() => {
+    return (employees || []).filter(emp => {
+      const search = searchTerm.toLowerCase();
+      return (
+        emp.name.toLowerCase().includes(search) ||
+        emp.employeeId.toLowerCase().includes(search) ||
+        emp.aadhaar.includes(search)
+      );
     });
-  }, [searchTerm]);
+  }, [employees, searchTerm]);
+
+  // Attendance Logic for Selected Employee and Month
+  const getAttendanceSummary = (empId: string) => {
+    // Note: In a real app, we would match records strictly by month
+    // For this prototype, we'll simulate based on mock attendance records
+    const records = attendanceRecords.filter(r => r.employeeId === empId || r.employeeId === "emp-mock");
+    const presents = records.filter(r => r.status === 'PRESENT').length;
+    const halfDays = records.filter(r => r.status === 'HALF_DAY').length;
+    const holidays = records.filter(r => r.status === 'HOLIDAY').length;
+    
+    // Rule: 2 Half Days = 1 Present Day
+    const effectiveAttendance = presents + (halfDays * 0.5);
+    const totalDaysInMonth = 30; // Mock month length
+    const absent = totalDaysInMonth - effectiveAttendance - holidays;
+
+    return {
+      attendance: effectiveAttendance,
+      absent: Math.max(0, absent),
+      holidayWork: holidays,
+      totalDays: totalDaysInMonth
+    };
+  };
+
+  const handleAdjustLeave = () => {
+    if (!adjustLeaveEmp || isProcessing) return;
+    if (advanceLeaveValue > (adjustLeaveEmp.advanceLeaveBalance || 0)) {
+      toast({ variant: "destructive", title: "Invalid Amount", description: "Adjustment exceeds available balance." });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      setEmployees(prev => prev.map(e => {
+        if (e.id === adjustLeaveEmp.id) {
+          return { ...e, advanceLeaveBalance: (e.advanceLeaveBalance || 0) - advanceLeaveValue };
+        }
+        return e;
+      }));
+      
+      toast({ title: "Leave Adjusted", description: `${advanceLeaveValue} days added to earning days.` });
+      setAdjustLeaveEmp(null);
+      setAdvanceLeaveValue(0);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleAddToAdvanceLeave = () => {
+    if (!adjustLeaveEmp || isProcessing) return;
+    const summary = getAttendanceSummary(adjustLeaveEmp.employeeId);
+    
+    setIsProcessing(true);
+    try {
+      setEmployees(prev => prev.map(e => {
+        if (e.id === adjustLeaveEmp.id) {
+          return { ...e, advanceLeaveBalance: (e.advanceLeaveBalance || 0) + summary.holidayWork };
+        }
+        return e;
+      }));
+      toast({ title: "Balance Updated", description: `${summary.holidayWork} days added to Advance Leave Balance.` });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePostSalary = () => {
+    if (!generateSalaryEmp || isProcessing) return;
+    const summary = getAttendanceSummary(generateSalaryEmp.employeeId);
+    const earningDays = summary.attendance + advanceLeaveValue;
+    
+    const basic = generateSalaryEmp.salary.basic;
+    const incentiveAmt = Math.round(basic * (incentivePct / 100));
+    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / 30) * summary.holidayWork);
+    
+    const finalNet = generateSalaryEmp.salary.netSalary + incentiveAmt + holidayWorkingAmt;
+
+    const newPayrollRecord: PayrollRecord = {
+      id: Math.random().toString(36).substr(2, 9),
+      employeeId: generateSalaryEmp.employeeId,
+      employeeName: generateSalaryEmp.name,
+      month: selectedMonth,
+      attendance: summary.attendance,
+      absent: summary.absent,
+      adjustLeave: advanceLeaveValue,
+      totalEarningDays: earningDays,
+      incentivePct: incentivePct,
+      incentiveAmt: incentiveAmt,
+      holidayWorkDays: summary.holidayWork,
+      holidayWorkAmt: holidayWorkingAmt,
+      netPayable: finalNet,
+      status: 'DRAFT',
+      createdAt: new Date().toISOString()
+    };
+
+    setPayrollRecords(prev => [...prev, newPayrollRecord]);
+    toast({ title: "Salary Generated", description: `Payroll entry created for ${generateSalaryEmp.name}` });
+    setGenerateSalaryEmp(null);
+    setIncentivePct(0);
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Payroll Processor</h1>
-          <p className="text-muted-foreground">Calculate salaries, statutory deductions, and generate payslips.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="font-bold">
-            <Download className="w-4 h-4 mr-2" /> Export Bank Statement
-          </Button>
-          <Button className="font-bold shadow-lg shadow-primary/20">
-            <Calculator className="w-4 h-4 mr-2" /> Finalize Payroll
-          </Button>
+          <h1 className="text-2xl font-bold">Payroll Management</h1>
+          <p className="text-muted-foreground">Comprehensive system for earnings, payments and leave adjustment.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-slate-900 text-white">
-          <CardContent className="p-6">
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Total Net Payable</p>
-            <h3 className="text-2xl font-bold mt-2">{formatCurrency(payrollRecords.reduce((acc, r) => acc + r.net, 0))}</h3>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest">PF Liability</p>
-            <h3 className="text-2xl font-bold mt-2">{formatCurrency(payrollRecords.reduce((acc, r) => acc + r.pf, 0))}</h3>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest">ESIC Liability</p>
-            <h3 className="text-2xl font-bold mt-2">{formatCurrency(payrollRecords.reduce((acc, r) => acc + r.esic, 0))}</h3>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest">Employees</p>
-            <h3 className="text-2xl font-bold mt-2">{payrollRecords.length}</h3>
-          </CardContent>
-        </Card>
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl bg-slate-100 p-1 rounded-xl h-12">
+          <TabsTrigger value="generate" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Generate Salary</TabsTrigger>
+          <TabsTrigger value="payment" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Salary Payment</TabsTrigger>
+          <TabsTrigger value="advance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Advance Payment</TabsTrigger>
+          <TabsTrigger value="leave" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Advance Leave</TabsTrigger>
+        </TabsList>
 
-      <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/50">
-          <div className="flex flex-col md:flex-row items-center gap-4">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search employee..." 
-                className="pl-10 h-10 bg-white"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-2 w-full md:w-auto">
-              <Select value={month} onValueChange={setMonth}>
-                <SelectTrigger className="w-[120px] bg-white">
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="07">July</SelectItem>
-                  <SelectItem value="08">August</SelectItem>
-                  <SelectItem value="09">September</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={year} onValueChange={setYear}>
-                <SelectTrigger className="w-[100px] bg-white">
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2024">2024</SelectItem>
-                  <SelectItem value="2025">2025</SelectItem>
-                </SelectContent>
-              </Select>
+        <TabsContent value="generate" className="mt-8 space-y-6">
+          <Card className="border-none shadow-sm">
+            <CardHeader className="bg-slate-50 border-b border-slate-100 px-6 py-4 rounded-t-xl">
+              <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search by Employee Name / ID / Aadhaar..." 
+                    className="pl-10 h-10 bg-white"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-full md:w-48 bg-white h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Employee Name / ID</TableHead>
+                    <TableHead className="font-bold">Aadhaar No</TableHead>
+                    <TableHead className="font-bold">Dept / Designation</TableHead>
+                    <TableHead className="font-bold">Month</TableHead>
+                    <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                    <TableHead className="text-right font-bold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredEmployees.map((emp) => (
+                    <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-bold">{emp.name}</span>
+                          <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">{emp.department}</span>
+                          <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-emerald-600">
+                        {formatCurrency(emp.salary.monthlyCTC)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-xs font-bold gap-1 border-primary/20 hover:bg-primary/5"
+                            onClick={() => setAdjustLeaveEmp(emp)}
+                          >
+                            <CalendarClock className="w-3 h-3" /> Adjust Leave
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="text-xs font-bold gap-1 bg-primary"
+                            onClick={() => setGenerateSalaryEmp(emp)}
+                          >
+                            <Calculator className="w-3 h-3" /> Generate Salary
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="payment">
+          <div className="flex items-center justify-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+            <div className="text-center space-y-3">
+              <div className="mx-auto w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center"><CreditCard className="text-slate-400" /></div>
+              <h3 className="font-bold text-slate-500">No Finalized Salaries</h3>
+              <p className="text-sm text-muted-foreground">Generate and finalize payroll to track payments here.</p>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow>
-                <TableHead className="font-bold">Employee</TableHead>
-                <TableHead className="font-bold text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    Payable Days
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="w-3 h-3 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Rule: 2 Half Days = 1 Present Day</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </TableHead>
-                <TableHead className="font-bold">Gross Salary</TableHead>
-                <TableHead className="font-bold text-rose-600">PF Ded.</TableHead>
-                <TableHead className="font-bold text-rose-600">ESIC Ded.</TableHead>
-                <TableHead className="font-bold text-emerald-600">Net Payable</TableHead>
-                <TableHead className="text-right font-bold">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payrollRecords.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-bold">{r.name}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-primary">{r.employeeId}</span>
-                        <span className="text-[10px] text-muted-foreground">(P: {r.presentDays}, H: {r.halfDays})</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center font-bold">
-                    {r.payableDays}
-                    <span className="text-muted-foreground font-normal text-xs ml-1">/ {r.totalDays}</span>
-                  </TableCell>
-                  <TableCell className="font-semibold">{formatCurrency(r.gross)}</TableCell>
-                  <TableCell className="text-rose-600 text-xs font-bold">{formatCurrency(r.pf)}</TableCell>
-                  <TableCell className="text-rose-600 text-xs font-bold">{formatCurrency(r.esic)}</TableCell>
-                  <TableCell className="text-emerald-600 font-bold">{formatCurrency(r.net)}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="outline" className="gap-1 border-slate-200">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Computed
-                    </Badge>
-                  </TableCell>
+        </TabsContent>
+
+        <TabsContent value="advance">
+          <div className="flex items-center justify-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+             <div className="text-center space-y-3">
+              <div className="mx-auto w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center"><Wallet className="text-slate-400" /></div>
+              <h3 className="font-bold text-slate-500">Advance Ledger Ready</h3>
+              <p className="text-sm text-muted-foreground">Record cash advances for tracking in monthly payroll.</p>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="leave" className="mt-8 space-y-6">
+          <Card className="border-none shadow-sm overflow-hidden">
+             <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="font-bold">Employee Name</TableHead>
+                  <TableHead className="font-bold">Department</TableHead>
+                  <TableHead className="font-bold text-center">Available Balance</TableHead>
+                  <TableHead className="text-right font-bold">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {employees.map(emp => (
+                  <TableRow key={emp.id}>
+                    <TableCell className="font-bold">{emp.name}</TableCell>
+                    <TableCell>{emp.department}</TableCell>
+                    <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
+                    <TableCell className="text-right">
+                       <Button variant="ghost" size="sm" className="font-bold gap-2">
+                         <History className="w-4 h-4" /> View History
+                       </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Adjust Leave Dialog */}
+      <Dialog open={!!adjustLeaveEmp} onOpenChange={(open) => !open && setAdjustLeaveEmp(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          {adjustLeaveEmp && (
+            <>
+              <DialogHeader>
+                <div className="flex justify-between items-start border-b pb-4">
+                  <div>
+                    <DialogTitle className="text-xl font-bold">{adjustLeaveEmp.name} ({adjustLeaveEmp.employeeId})</DialogTitle>
+                    <DialogDescription>{adjustLeaveEmp.department} / {adjustLeaveEmp.designation} • {selectedMonth}</DialogDescription>
+                  </div>
+                  <div className="text-right bg-primary/5 p-3 rounded-xl border border-primary/10">
+                    <p className="text-[10px] font-black uppercase text-primary tracking-widest">Available Balance</p>
+                    <p className="text-2xl font-black text-primary">{adjustLeaveEmp.advanceLeaveBalance || 0} Days</p>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-8 py-6">
+                <div className="grid grid-cols-4 gap-4">
+                  {[
+                    { label: "Working Days", val: getAttendanceSummary(adjustLeaveEmp.employeeId).attendance, color: "text-emerald-600" },
+                    { label: "Absent", val: getAttendanceSummary(adjustLeaveEmp.employeeId).absent, color: "text-rose-600" },
+                    { label: "Holiday Attendance", val: getAttendanceSummary(adjustLeaveEmp.employeeId).holidayWork, color: "text-amber-600" },
+                    { label: "Total Earning Days", val: getAttendanceSummary(adjustLeaveEmp.employeeId).attendance, color: "text-primary font-black" }
+                  ].map((stat, i) => (
+                    <div key={i} className="bg-slate-50 p-4 rounded-2xl text-center border border-slate-100 shadow-sm">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">{stat.label}</p>
+                      <p className={cn("text-xl font-bold mt-1", stat.color)}>{stat.val}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-4 shadow-xl">
+                    <h4 className="text-sm font-bold flex items-center gap-2"><CalendarClock className="w-4 h-4 text-primary" /> Adjust Leave</h4>
+                    <div className="space-y-4 pt-2">
+                       <div className="space-y-2">
+                          <Label className="text-slate-400">Advance Leave to Use</Label>
+                          <Input 
+                            type="number" 
+                            className="bg-slate-800 border-slate-700 text-white" 
+                            value={advanceLeaveValue}
+                            onChange={(e) => setAdvanceLeaveValue(parseInt(e.target.value) || 0)}
+                          />
+                          <p className="text-[10px] text-rose-400 font-bold">Max allowed: {adjustLeaveEmp.advanceLeaveBalance || 0} days</p>
+                       </div>
+                       <div className="flex gap-2">
+                          <Button className="flex-1 bg-primary" onClick={handleAdjustLeave} disabled={isProcessing}>Add Leave</Button>
+                          <Button variant="ghost" className="flex-1 text-white" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 border-2 border-dashed border-slate-200 rounded-3xl space-y-4">
+                    <h4 className="text-sm font-bold flex items-center gap-2"><PlusCircle className="w-4 h-4 text-emerald-600" /> Convert Holiday Work</h4>
+                    <div className="space-y-4 pt-2">
+                       <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                          <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Selected Month Holiday Work</p>
+                          <p className="text-2xl font-black text-emerald-900">{getAttendanceSummary(adjustLeaveEmp.employeeId).holidayWork} Days</p>
+                       </div>
+                       <Button variant="outline" className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50 h-12 font-bold" onClick={handleAddToAdvanceLeave} disabled={isProcessing}>
+                         Add to Advance Leave Balance
+                       </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Salary Dialog */}
+      <Dialog open={!!generateSalaryEmp} onOpenChange={(open) => !open && setGenerateSalaryEmp(null)}>
+        <DialogContent className="sm:max-w-4xl">
+          {generateSalaryEmp && (
+            <>
+              <DialogHeader className="border-b pb-4">
+                 <div className="flex items-center gap-4">
+                   <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center"><Calculator className="text-primary" /></div>
+                   <div>
+                     <DialogTitle className="text-xl font-bold">Generate Salary • {selectedMonth}</DialogTitle>
+                     <DialogDescription>{generateSalaryEmp.name} ({generateSalaryEmp.employeeId})</DialogDescription>
+                   </div>
+                 </div>
+              </DialogHeader>
+
+              <div className="space-y-8 py-6">
+                <div className="grid grid-cols-4 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                  <div className="text-center border-r">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Attendance</p>
+                    <p className="text-lg font-bold">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance}</p>
+                  </div>
+                  <div className="text-center border-r">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Absent</p>
+                    <p className="text-lg font-bold text-rose-600">{getAttendanceSummary(generateSalaryEmp.employeeId).absent}</p>
+                  </div>
+                  <div className="text-center border-r">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Adjust Leave</p>
+                    <p className="text-lg font-bold text-primary">+{advanceLeaveValue}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Earning Days</p>
+                    <p className="text-xl font-black text-primary">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-6">
+                    <h4 className="text-sm font-bold border-b pb-2 flex items-center gap-2">
+                       <PlusCircle className="w-4 h-4 text-primary" /> Earnings & Adjustments
+                    </h4>
+                    <div className="space-y-4">
+                       <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
+                          <Label className="text-xs font-bold">Incentive %</Label>
+                          <div className="flex items-center gap-3">
+                            <Input 
+                              type="number" 
+                              className="bg-white h-10 font-bold" 
+                              placeholder="0"
+                              value={incentivePct}
+                              onChange={(e) => setIncentivePct(parseFloat(e.target.value) || 0)}
+                            />
+                            <div className="bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg font-bold text-xs whitespace-nowrap">
+                              +{formatCurrency(Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)))}
+                            </div>
+                          </div>
+                       </div>
+
+                       <div className="p-4 bg-amber-50 rounded-2xl space-y-2 border border-amber-100">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-xs font-bold text-amber-900">Holiday Work Pay</Label>
+                            <Badge className="bg-amber-500 text-[10px]">{getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork} Days</Badge>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Input 
+                              className="bg-white/50 h-10 font-bold border-amber-200" 
+                              value={formatCurrency(Math.round((generateSalaryEmp.salary.netSalary / 30) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork))}
+                              readOnly
+                            />
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="w-5 h-5 text-amber-400 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-slate-900 text-white">
+                                   <p className="text-xs">Formula: (Net Salary / 30) * Holiday Days</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 text-white rounded-3xl p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                      <Calculator size={120} />
+                    </div>
+                    <div className="space-y-6">
+                       <div className="space-y-1">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monthly CTC (Profile)</p>
+                          <p className="text-2xl font-bold">{formatCurrency(generateSalaryEmp.salary.monthlyCTC)}</p>
+                       </div>
+                       <div className="h-px bg-slate-800" />
+                       <div className="space-y-2">
+                          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Estimated Net Payable</p>
+                          <h2 className="text-4xl font-black text-emerald-300">
+                            {formatCurrency(
+                              generateSalaryEmp.salary.netSalary + 
+                              Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)) +
+                              Math.round((generateSalaryEmp.salary.netSalary / 30) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork)
+                            )}
+                          </h2>
+                          <div className="flex items-center gap-2 text-xs text-slate-400 pt-2">
+                             <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                             Statutory deductions (PF/ESIC) applied as per profile.
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="border-t pt-6">
+                 <Button variant="outline" className="h-12 px-8 font-bold" onClick={() => setGenerateSalaryEmp(null)}>Discard</Button>
+                 <Button className="h-12 px-12 bg-emerald-600 hover:bg-emerald-700 font-bold text-lg" onClick={handlePostSalary} disabled={isProcessing}>
+                    Finalize & Post Salary
+                 </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

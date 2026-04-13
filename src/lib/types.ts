@@ -80,6 +80,7 @@ export interface Employee {
   salary: SalaryStructure;
   salaryHistory: SalaryHistoryEntry[];
   active: boolean;
+  advanceLeaveBalance?: number;
 }
 
 export interface AttendanceRecord {
@@ -115,4 +116,22 @@ export interface Voucher {
   purpose: string;
   amount: number;
   status: 'PENDING' | 'PAID' | 'CANCELLED';
+}
+
+export interface PayrollRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  month: string; // MMM-YY
+  attendance: number;
+  absent: number;
+  adjustLeave: number;
+  totalEarningDays: number;
+  incentivePct: number;
+  incentiveAmt: number;
+  holidayWorkDays: number;
+  holidayWorkAmt: number;
+  netPayable: number;
+  status: 'DRAFT' | 'FINALIZED' | 'PAID';
+  createdAt: string;
 }
