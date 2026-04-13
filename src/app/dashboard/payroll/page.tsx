@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -205,7 +204,8 @@ export default function PayrollPage() {
       
     const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / currentSummary.totalDays) * currentSummary.holidayWork);
     
-    return baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
+    const final = baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
+    return Math.max(0, final);
   }, [generateSalaryEmp, currentSummary, advanceLeaveValue, incentivePct, advanceRecovery]);
 
   const handleAdjustLeave = () => {
