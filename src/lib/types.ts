@@ -110,6 +110,30 @@ export interface Voucher {
   status: 'PENDING' | 'PAID' | 'CANCELLED';
 }
 
+export interface AttendanceRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  inTime: string | null;
+  outTime: string | null;
+  hours: number;
+  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'FIELD' | 'WFH';
+  attendanceType: 'OFFICE' | 'FIELD' | 'WFH';
+  attendanceTypeOut?: 'OFFICE' | 'FIELD' | 'WFH';
+  lat: number;
+  lng: number;
+  address: string;
+  latOut?: number;
+  lngOut?: number;
+  addressOut?: string;
+  inPlant?: string;
+  outPlant?: string;
+  approved: boolean;
+  remark?: string;
+  autoCheckout?: boolean;
+}
+
 export interface PayrollRecord {
   id: string;
   employeeId: string;
