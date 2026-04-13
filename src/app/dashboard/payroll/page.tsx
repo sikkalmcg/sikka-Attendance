@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -155,6 +156,17 @@ export default function PayrollPage() {
     return payrollRecords.some(p => p.employeeId === empId && p.month === selectedMonth);
   };
 
+  const getAdvanceBalance = (empId: string) => {
+    const emp = employees.find(e => e.id === empId);
+    if (!emp) return 0;
+    const empVouchers = vouchers.filter(v => v.employeeId === empId && v.status === 'PAID');
+    const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
+    const totalRecovered = payrollRecords
+      .filter(p => p.employeeId === emp.employeeId)
+      .reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+    return Math.max(0, totalAdv - totalRecovered);
+  };
+
   // Attendance Logic for Selected Employee and Month
   const getAttendanceSummary = (empId: string) => {
     const records = attendanceRecords.filter(r => r.employeeId === empId || r.employeeId === "emp-mock");
@@ -191,9 +203,7 @@ export default function PayrollPage() {
         return e;
       }));
       
-      // Mark as adjusted to unlock Generate Salary
       setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
-      
       toast({ title: "Leave Adjusted", description: `${advanceLeaveValue} days added to earning days.` });
       setAdjustLeaveEmp(null);
     } finally {
@@ -221,9 +231,7 @@ export default function PayrollPage() {
         return e;
       }));
       
-      // Mark as adjusted to unlock Generate Salary
       setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
-      
       toast({ title: "Balance Updated", description: `${summary.holidayWork} days added to Advance Leave Balance.` });
     } finally {
       setIsProcessing(false);
@@ -233,7 +241,6 @@ export default function PayrollPage() {
   const handlePostSalary = () => {
     if (!generateSalaryEmp || isProcessing) return;
     
-    // Duplicate check for Slip No
     if (payrollRecords.some(p => p.slipNo === slipNo)) {
       toast({ variant: "destructive", title: "Duplicate Slip No", description: `Salary slip number ${slipNo} already exists.` });
       return;
@@ -241,18 +248,14 @@ export default function PayrollPage() {
 
     const summary = getAttendanceSummary(generateSalaryEmp.employeeId);
     const earningDays = summary.attendance + advanceLeaveValue;
-    
     const basic = generateSalaryEmp.salary.basic;
     const incentiveAmt = Math.round(basic * (incentivePct / 100));
     
-    // Scale net salary by ratio of earning days
     const baseNetPayable = earningDays > 0 
       ? Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * earningDays)
       : 0;
       
     const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * summary.holidayWork);
-    
-    // Final Calculation: Net = Base + Incentive + HolidayPay - AdvanceRecovery
     const finalNet = baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
 
     const newPayrollRecord: PayrollRecord = {
@@ -288,19 +291,16 @@ export default function PayrollPage() {
     if (!viewLeaveHistoryEmp) return [];
     
     let runningBalance = viewLeaveHistoryEmp.advanceLeaveBalance || 0;
-    
     const records = payrollRecords
       .filter(p => p.employeeId === viewLeaveHistoryEmp.employeeId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    return records.map(p => {
-      return {
-        month: p.month,
-        holidayWork: p.holidayWorkDays,
-        adjust: p.adjustLeave,
-        balance: runningBalance // Simplified for mock
-      };
-    });
+    return records.map(p => ({
+      month: p.month,
+      holidayWork: p.holidayWorkDays,
+      adjust: p.adjustLeave,
+      balance: runningBalance
+    }));
   }, [viewLeaveHistoryEmp, payrollRecords]);
 
   return (
@@ -489,7 +489,7 @@ export default function PayrollPage() {
                     <TableHead className="font-bold">Dept / Desig</TableHead>
                     <TableHead className="text-right font-bold">Adv. Amount</TableHead>
                     <TableHead className="text-right font-bold">Paid Amount</TableHead>
-                    <TableHead className="text-right font-bold">Debit Salary</TableHead>
+                    <TableHead className="text-right font-bold">Deduction Advance Salary</TableHead>
                     <TableHead className="text-center font-bold">Slip No</TableHead>
                     <TableHead className="text-center font-bold">Sal. Month</TableHead>
                     <TableHead className="text-right font-bold">Remaining</TableHead>
@@ -696,7 +696,7 @@ export default function PayrollPage() {
 
               <ScrollArea className="flex-1">
                 <div className="p-6 space-y-8">
-                  <div className="grid grid-cols-5 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                  <div className="grid grid-cols-6 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
                     <div className="text-center border-r">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Attendance</p>
                       <p className="text-lg font-bold">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance}</p>
@@ -713,9 +713,13 @@ export default function PayrollPage() {
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Holiday Work</p>
                       <p className="text-lg font-bold text-amber-600">{getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork}</p>
                     </div>
-                    <div className="text-center">
+                    <div className="text-center border-r">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Earning Days</p>
-                      <p className="text-xl font-black text-primary">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue}</p>
+                      <p className="text-lg font-black text-primary">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Adv. Balance</p>
+                      <p className="text-lg font-bold text-rose-500">{formatCurrency(getAdvanceBalance(generateSalaryEmp.id))}</p>
                     </div>
                   </div>
 
@@ -742,7 +746,7 @@ export default function PayrollPage() {
                         </div>
 
                         <div className="p-4 bg-rose-50 rounded-2xl space-y-2 border border-rose-100">
-                            <Label className="text-xs font-bold text-rose-900 flex items-center gap-2"><ArrowDownCircle className="w-3 h-3" /> Advance Recovery (INR)</Label>
+                            <Label className="text-xs font-bold text-rose-900 flex items-center gap-2"><ArrowDownCircle className="w-3 h-3" /> Deduction Advance Salary (INR)</Label>
                             <Input 
                               type="number" 
                               className="bg-white h-10 font-bold border-rose-200" 
@@ -801,9 +805,17 @@ export default function PayrollPage() {
                                 advanceRecovery
                               )}
                             </h2>
-                            <div className="flex items-center gap-2 text-xs text-slate-400 pt-2">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                              Statutory deductions (PF/ESIC) applied as per profile.
+                            <div className="flex flex-col gap-2 mt-4 text-xs">
+                              {advanceRecovery > 0 && (
+                                <div className="flex items-center gap-2 text-rose-400">
+                                  <ArrowDownCircle className="w-3 h-3" />
+                                  Deduction Advance Salary: -{formatCurrency(advanceRecovery)}
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-slate-400 pt-2">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                Statutory deductions (PF/ESIC) applied as per profile.
+                              </div>
                             </div>
                         </div>
                       </div>
