@@ -11,10 +11,32 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock, Building2, Factory, ShieldCheck, FileCheck, Users } from "lucide-react";
+import { 
+  Wallet, 
+  CreditCard, 
+  Search, 
+  XCircle, 
+  CheckCircle, 
+  Building2, 
+  Factory, 
+  ShieldCheck, 
+  FileCheck, 
+  Users,
+  AlertTriangle 
+} from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function VouchersPage() {
   const { employees, firms, plants, vouchers, setVouchers } = useData();
@@ -25,6 +47,9 @@ export default function VouchersPage() {
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
   const { toast } = useToast();
+
+  // State for Rejection Confirmation
+  const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
 
   // Selected Employee Details
   const selectedEmployee = useMemo(() => 
@@ -113,14 +138,16 @@ export default function VouchersPage() {
     toast({ title: "Voucher Approved", description: "Voucher moved to payments list." });
   };
 
+  const handleRejectConfirm = () => {
+    if (!voucherToReject) return;
+    setVouchers(prev => prev.filter(v => v.id !== voucherToReject));
+    toast({ variant: "destructive", title: "Voucher Rejected", description: "Voucher removed from database. Number is now reusable." });
+    setVoucherToReject(null);
+  };
+
   const handlePayVoucher = (id: string) => {
     setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'PAID' } : v));
     toast({ title: "Voucher Paid", description: "Voucher marked as paid and added to payroll ledger." });
-  };
-
-  const handleCancelVoucher = (id: string) => {
-    setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'CANCELLED' } : v));
-    toast({ variant: "destructive", title: "Voucher Cancelled", description: "Voucher has been voided." });
   };
 
   return (
@@ -340,7 +367,7 @@ export default function VouchersPage() {
                                 size="sm" 
                                 variant="ghost" 
                                 className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
-                                onClick={() => handleCancelVoucher(v.id)}
+                                onClick={() => setVoucherToReject(v.id)}
                               >
                                 <XCircle className="w-3 h-3 mr-1" /> Reject
                               </Button>
@@ -449,9 +476,9 @@ export default function VouchersPage() {
                                   size="sm" 
                                   variant="ghost" 
                                   className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
-                                  onClick={() => handleCancelVoucher(v.id)}
+                                  onClick={() => setVoucherToReject(v.id)}
                                 >
-                                  <XCircle className="w-3 h-3 mr-1" /> Cancel
+                                  <XCircle className="w-3 h-3 mr-1" /> Reject
                                 </Button>
                               </div>
                             ) : (
@@ -468,6 +495,30 @@ export default function VouchersPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Rejection Confirmation Alert */}
+      <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-rose-600" />
+            </div>
+            <AlertDialogTitle className="text-center">Reject & Remove Voucher?</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Are you sure you want to reject this request? The voucher will be permanently removed from the system and its number will become reusable.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center gap-3">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleRejectConfirm}
+              className="bg-rose-600 hover:bg-rose-700 font-bold"
+            >
+              Confirm Rejection
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
