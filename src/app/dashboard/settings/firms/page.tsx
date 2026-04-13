@@ -43,7 +43,6 @@ import { Firm, Plant, FirmUnit } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function FirmsAndPlantsPage() {
   const { firms, setFirms, plants, setPlants } = useData();
@@ -101,17 +100,30 @@ export default function FirmsAndPlantsPage() {
   };
 
   const addUnit = () => {
-    if (!unitDraft.name || !unitDraft.address) return;
+    if (!unitDraft.name.trim() || !unitDraft.address.trim()) {
+      toast({ 
+        variant: "destructive", 
+        title: "Incomplete Unit", 
+        description: "Both Unit Name and Address are required to add a new entity." 
+      });
+      return;
+    }
     setFirmDraft(prev => ({
       ...prev,
-      units: [...(prev.units || []), { id: Date.now().toString(), ...unitDraft }]
+      units: [...(prev.units || []), { id: Date.now().toString(), name: unitDraft.name, address: unitDraft.address }]
     }));
     setUnitDraft({ name: '', address: '' });
+    toast({ title: "Unit Added", description: "Entity added to the pending list." });
   };
 
   const handleRegisterFirm = () => {
     if (!firmDraft.name || !firmDraft.gstin) {
       toast({ variant: "destructive", title: "Validation Error", description: "Firm name and GSTIN are required." });
+      return;
+    }
+
+    if (!firmDraft.units || firmDraft.units.length === 0) {
+      toast({ variant: "destructive", title: "Missing Units", description: "At least one Unit Entity is mandatory for firm registration." });
       return;
     }
 
@@ -386,13 +398,20 @@ export default function FirmsAndPlantsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {(firmDraft.units || []).map(u => (
-                    <div key={u.id} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                  {(firmDraft.units || []).map((u, idx) => (
+                    <div key={u.id || idx} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                       <div className="min-w-0">
                         <p className="font-bold text-slate-900">{u.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{u.address}</p>
                       </div>
-                      <Button variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50" onClick={() => setFirmDraft(p => ({...p, units: (p.units || []).filter(x => x.id !== u.id)}))}>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-rose-500 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed" 
+                        disabled={(firmDraft.units || []).length <= 1}
+                        onClick={() => setFirmDraft(p => ({...p, units: (p.units || []).filter(x => x.id !== u.id)}))}
+                        title={(firmDraft.units || []).length <= 1 ? "At least one unit is mandatory" : "Remove Unit"}
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
