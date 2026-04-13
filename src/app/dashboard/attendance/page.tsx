@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -32,13 +33,10 @@ import {
   TableCell 
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant } from "@/lib/types";
-
-const MOCK_PLANTS: Plant[] = [
-  { id: "plant-1", name: "Okhla Phase III Plant", lat: 28.5355, lng: 77.2639, radius: 700 },
-  { id: "plant-2", name: "Gurgaon Sec 18 Plant", lat: 28.4595, lng: 77.0266, radius: 700 },
-];
+import { useData } from "@/context/data-context";
 
 export default function AttendancePage() {
+  const { employees, attendanceRecords, setAttendanceRecords, plants } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
@@ -53,28 +51,10 @@ export default function AttendancePage() {
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
 
-  const history: AttendanceRecord[] = useMemo(() => {
+  const history = useMemo(() => {
     if (!currentUser) return [];
-    const currentYear = new Date().getFullYear();
-    return Array.from({ length: 15 }).map((_, i) => ({
-      id: `hist-${i}`,
-      employeeId: currentUser.id,
-      employeeName: currentUser.fullName,
-      date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      inTime: "09:00",
-      outTime: "18:00",
-      inPlant: "Okhla Phase III",
-      outPlant: "Okhla Phase III",
-      hours: 9,
-      status: 'PRESENT',
-      attendanceType: 'OFFICE',
-      lat: 28.5355,
-      lng: 77.2639,
-      address: "Verified Plant Location",
-      approved: i % 3 === 0,
-      remark: i % 3 === 1 ? "Incorrect GPS" : undefined
-    }));
-  }, [currentUser]);
+    return attendanceRecords.filter(r => r.employeeId === currentUser.id || r.employeeId === "emp-mock").reverse();
+  }, [currentUser, attendanceRecords]);
 
   useEffect(() => {
     if ("geolocation" in navigator) {
@@ -83,7 +63,7 @@ export default function AttendancePage() {
           const { latitude: lat, longitude: lng } = pos.coords;
           setLocation({ lat, lng });
           
-          let foundPlant = MOCK_PLANTS.find(p => calculateDistance(lat, lng, p.lat, p.lng) <= 700);
+          let foundPlant = plants.find(p => calculateDistance(lat, lng, p.lat, p.lng) <= p.radius);
           if (foundPlant) {
             setDetectedPlant(foundPlant);
             setAttendanceType('OFFICE');
@@ -98,19 +78,50 @@ export default function AttendancePage() {
         }
       );
     }
-  }, [toast]);
+  }, [toast, plants]);
 
   const handleCheckIn = () => {
     if (!detectedPlant && attendanceType === 'OFFICE') {
       toast({ variant: "destructive", title: "Out of Range", description: "Please select Field or WFH mode." });
       return;
     }
+    const time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const today = new Date().toISOString().split('T')[0];
+
+    const newRecord: AttendanceRecord = {
+      id: Math.random().toString(36).substr(2, 9),
+      employeeId: currentUser?.username || "emp-mock",
+      employeeName: currentUser?.fullName || "Employee",
+      date: today,
+      inTime: time,
+      outTime: null,
+      inPlant: detectedPlant?.name || attendanceType,
+      outPlant: undefined,
+      hours: 0,
+      status: attendanceType === 'OFFICE' ? 'PRESENT' : (attendanceType as any),
+      attendanceType: attendanceType,
+      lat: location?.lat || 0,
+      lng: location?.lng || 0,
+      address: address,
+      approved: false
+    };
+
+    setAttendanceRecords(prev => [...prev, newRecord]);
     setAttendanceStatus("IN");
-    setCheckInTime(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }));
+    setCheckInTime(time);
     toast({ title: "Check-In Successful" });
   };
 
   const handleCheckOut = () => {
+    const time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    
+    setAttendanceRecords(prev => prev.map(r => {
+      if (r.employeeId === (currentUser?.username || "emp-mock") && !r.outTime) {
+        return { ...r, outTime: time, outPlant: detectedPlant?.name || attendanceType };
+      }
+      return r;
+    }));
+
     setAttendanceStatus("OUT");
     toast({ title: "Check-Out Successful" });
   };
@@ -130,7 +141,7 @@ export default function AttendancePage() {
             <div className="flex items-center gap-5">
               <div className={`p-4 rounded-2xl ${detectedPlant ? 'bg-emerald-100' : 'bg-slate-200'}`}><MapPin className={detectedPlant ? 'text-emerald-600' : 'text-slate-500'} size={28} /></div>
               <div>
-                <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground mb-1">Geofence Status (0.7 KM)</p>
+                <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground mb-1">Geofence Status</p>
                 <h4 className="font-bold text-xl">{detectedPlant ? detectedPlant.name : "Outside Geofence"}</h4>
                 <p className="text-sm text-muted-foreground font-mono">{address}</p>
               </div>
@@ -157,12 +168,11 @@ export default function AttendancePage() {
             <Button className="flex-1 h-20 text-xl font-bold rounded-2xl bg-emerald-600" disabled={attendanceStatus !== "NONE" || !location} onClick={handleCheckIn}>Check-In</Button>
             <Button variant="destructive" className="flex-1 h-20 text-xl font-bold rounded-2xl" disabled={attendanceStatus !== "IN"} onClick={handleCheckOut}>Check-Out</Button>
           </div>
-          <p className="text-xs text-slate-400 italic text-center">* Auto-checkout after 16hrs with 8hr shift deduction if forgotten.</p>
         </CardContent>
       </Card>
 
       <div className="space-y-4">
-        <h3 className="font-bold text-xl flex items-center gap-2"><History className="w-5 h-5 text-slate-400" /> My History (Last 45 Days)</h3>
+        <h3 className="font-bold text-xl flex items-center gap-2"><History className="w-5 h-5 text-slate-400" /> My Attendance History</h3>
         <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
           <Table>
             <TableHeader className="bg-slate-50">
@@ -178,26 +188,30 @@ export default function AttendancePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {history.map((h) => (
-                <TableRow key={h.id} className="hover:bg-slate-50/50">
-                  <TableCell className="font-medium">{h.employeeName}</TableCell>
-                  <TableCell className="text-sm">{h.inPlant || "--"}</TableCell>
-                  <TableCell className="font-mono text-xs">{h.date} {h.inTime}</TableCell>
-                  <TableCell className="text-sm">{h.outPlant || "--"}</TableCell>
-                  <TableCell className="font-mono text-xs">{h.date} {h.outTime}</TableCell>
-                  <TableCell className="font-bold text-emerald-600">{h.hours}h</TableCell>
-                  <TableCell><Badge variant="outline" className="text-[10px] font-bold">{h.attendanceType}</Badge></TableCell>
-                  <TableCell>
-                    {h.approved ? (
-                      <Badge className="bg-emerald-600 border-none">Approved</Badge>
-                    ) : h.remark ? (
-                      <Badge variant="destructive" className="border-none">Rejected</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="border-none">Pending</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {history.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No attendance history found.</TableCell></TableRow>
+              ) : (
+                history.map((h) => (
+                  <TableRow key={h.id} className="hover:bg-slate-50/50">
+                    <TableCell className="font-medium">{h.employeeName}</TableCell>
+                    <TableCell className="text-sm">{h.inPlant || "--"}</TableCell>
+                    <TableCell className="font-mono text-xs">{h.date} {h.inTime}</TableCell>
+                    <TableCell className="text-sm">{h.outPlant || "--"}</TableCell>
+                    <TableCell className="font-mono text-xs">{h.date} {h.outTime || "--:--"}</TableCell>
+                    <TableCell className="font-bold text-emerald-600">{h.hours}h</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px] font-bold">{h.attendanceType}</Badge></TableCell>
+                    <TableCell>
+                      {h.approved ? (
+                        <Badge className="bg-emerald-600 border-none">Approved</Badge>
+                      ) : h.remark ? (
+                        <Badge variant="destructive" className="border-none">Rejected</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="border-none">Pending</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </Card>
