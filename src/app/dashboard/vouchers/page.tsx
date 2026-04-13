@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock, Building2, Factory } from "lucide-react";
+import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock, Building2, Factory, ShieldCheck, FileCheck } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
@@ -39,8 +39,21 @@ export default function VouchersPage() {
     plants.find(p => p.id === selectedEmployee?.unitId), 
   [plants, selectedEmployee]);
 
-  const filteredVouchers = useMemo(() => {
-    return vouchers.filter(v => {
+  // Filtering Logic based on tabs
+  const pendingVouchers = useMemo(() => {
+    return vouchers.filter(v => v.status === 'PENDING').filter(v => {
+      const emp = employees.find(e => e.id === v.employeeId);
+      const search = searchTerm.toLowerCase();
+      return (
+        v.voucherNo.toLowerCase().includes(search) ||
+        (emp?.name || "").toLowerCase().includes(search) ||
+        (emp?.employeeId || "").toLowerCase().includes(search)
+      );
+    }).reverse();
+  }, [vouchers, searchTerm, employees]);
+
+  const payableVouchers = useMemo(() => {
+    return vouchers.filter(v => v.status === 'APPROVED' || v.status === 'PAID').filter(v => {
       const emp = employees.find(e => e.id === v.employeeId);
       const search = searchTerm.toLowerCase();
       return (
@@ -87,12 +100,17 @@ export default function VouchersPage() {
     };
 
     setVouchers(prev => [...prev, newVoucher]);
-    toast({ title: "Voucher Created", description: `Voucher #${voucherNo} generated.` });
+    toast({ title: "Voucher Created", description: `Voucher #${voucherNo} generated and sent for approval.` });
     
     setSelectedEmployeeId("");
     setAmount("");
     setPurpose("");
-    setActiveTab("payment");
+    setActiveTab("approve");
+  };
+
+  const handleApproveVoucher = (id: string) => {
+    setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'APPROVED' } : v));
+    toast({ title: "Voucher Approved", description: "Voucher moved to payments list." });
   };
 
   const handlePayVoucher = (id: string) => {
@@ -115,8 +133,9 @@ export default function VouchersPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2 mb-8 bg-slate-100 p-1 rounded-xl h-12">
+        <TabsList className="grid w-full max-w-xl grid-cols-3 mb-8 bg-slate-100 p-1 rounded-xl h-12">
           <TabsTrigger value="create" className="font-semibold rounded-lg">Create Voucher</TabsTrigger>
+          <TabsTrigger value="approve" className="font-semibold rounded-lg">Approve Voucher</TabsTrigger>
           <TabsTrigger value="payment" className="font-semibold rounded-lg">Voucher Payments</TabsTrigger>
         </TabsList>
 
@@ -211,10 +230,100 @@ export default function VouchersPage() {
                 </div>
               </CardContent>
               <CardFooter className="bg-slate-50 border-t border-slate-100 rounded-b-xl flex justify-end gap-3 p-6">
-                <Button variant="outline" type="button" className="h-12 px-8" onClick={() => setActiveTab("payment")}>Cancel</Button>
+                <Button variant="outline" type="button" className="h-12 px-8" onClick={() => setActiveTab("approve")}>Cancel</Button>
                 <Button className="px-12 h-12 font-bold shadow-lg shadow-primary/20 bg-primary">Create Voucher</Button>
               </CardFooter>
             </form>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="approve">
+          <Card className="shadow-sm border-slate-200 overflow-hidden">
+            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-amber-50 rounded-lg"><FileCheck className="w-5 h-5 text-amber-600" /></div>
+                  <CardTitle className="text-lg">Pending Approvals</CardTitle>
+                </div>
+                <div className="relative w-80">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search pending vouchers..." 
+                    className="pl-10 h-10 bg-white"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50 hover:bg-slate-50">
+                    <TableHead className="font-bold">Voucher No</TableHead>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Firm / Unit</TableHead>
+                    <TableHead className="font-bold">Date</TableHead>
+                    <TableHead className="font-bold">Amount</TableHead>
+                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingVouchers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                        No vouchers pending approval.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    pendingVouchers.map((v) => {
+                      const emp = employees.find(e => e.id === v.employeeId);
+                      const firm = firms.find(f => f.id === emp?.firmId);
+                      const unit = plants.find(p => p.id === emp?.unitId);
+                      
+                      return (
+                        <TableRow key={v.id} className="hover:bg-slate-50/50">
+                          <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold">{emp?.name || "Unknown"}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
+                              <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">{v.date}</TableCell>
+                          <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                size="sm" 
+                                className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
+                                onClick={() => handleApproveVoucher(v.id)}
+                              >
+                                <CheckCircle className="w-3 h-3 mr-1" /> Approve
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
+                                onClick={() => handleCancelVoucher(v.id)}
+                              >
+                                <XCircle className="w-3 h-3 mr-1" /> Reject
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
           </Card>
         </TabsContent>
 
@@ -224,7 +333,7 @@ export default function VouchersPage() {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-emerald-50 rounded-lg"><CreditCard className="w-5 h-5 text-emerald-600" /></div>
-                  <CardTitle className="text-lg">Recent Advance Vouchers</CardTitle>
+                  <CardTitle className="text-lg">Approved Vouchers for Payment</CardTitle>
                 </div>
                 <div className="relative w-80">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -251,14 +360,14 @@ export default function VouchersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredVouchers.length === 0 ? (
+                  {payableVouchers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                        No vouchers found.
+                        No approved vouchers ready for payment.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredVouchers.map((v) => {
+                    payableVouchers.map((v) => {
                       const emp = employees.find(e => e.id === v.employeeId);
                       const firm = firms.find(f => f.id === emp?.firmId);
                       const unit = plants.find(p => p.id === emp?.unitId);
@@ -281,17 +390,17 @@ export default function VouchersPage() {
                           <TableCell className="text-sm">{v.date}</TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                           <TableCell>
-                            <Badge variant={v.status === "PAID" ? "default" : v.status === "CANCELLED" ? "destructive" : "secondary"} className={cn(
+                            <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
                               "text-[10px] font-bold px-2 py-0.5",
                               v.status === "PAID" && "bg-emerald-600",
-                              v.status === "PENDING" && "bg-amber-500 text-white border-none"
+                              v.status === "APPROVED" && "bg-blue-500 text-white border-none"
                             )}>
-                              {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : v.status === "PENDING" ? <Clock className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+                              {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
                               {v.status}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right pr-6">
-                            {v.status === "PENDING" ? (
+                            {v.status === "APPROVED" ? (
                               <div className="flex justify-end gap-2">
                                 <Button 
                                   size="sm" 

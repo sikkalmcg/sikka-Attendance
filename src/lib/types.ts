@@ -106,7 +106,7 @@ export interface Voucher {
   date: string;
   purpose: string;
   amount: number;
-  status: 'PENDING' | 'PAID' | 'CANCELLED';
+  status: 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED';
 }
 
 export interface AttendanceRecord {
