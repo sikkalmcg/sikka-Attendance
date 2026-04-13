@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,7 @@ export default function FirmsAndPlantsPage() {
   const { firms, setFirms, plants, setPlants } = useData();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("plants");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Plant Form State
   const [plantDraft, setPlantDraft] = useState<Partial<Plant>>({ radius: 700 });
@@ -71,18 +72,31 @@ export default function FirmsAndPlantsPage() {
         title: "File too large",
         description: "Logo must be under 500KB."
       });
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onload = () => {
       setFirmDraft(prev => ({ ...prev, logo: reader.result as string }));
+    };
+    reader.onerror = () => {
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: "Could not read the image file."
+      });
     };
     reader.readAsDataURL(file);
   };
 
   const handleRegisterPlant = () => {
-    if (!plantDraft.name || !plantDraft.firmId || plantDraft.lat === undefined || plantDraft.lng === undefined) {
+    const isNameValid = !!plantDraft.name?.trim();
+    const isFirmValid = !!plantDraft.firmId;
+    const isLatValid = plantDraft.lat !== undefined && !isNaN(Number(plantDraft.lat));
+    const isLngValid = plantDraft.lng !== undefined && !isNaN(Number(plantDraft.lng));
+
+    if (!isNameValid || !isFirmValid || !isLatValid || !isLngValid) {
       toast({ 
         variant: "destructive", 
         title: "Missing Fields", 
@@ -134,7 +148,7 @@ export default function FirmsAndPlantsPage() {
       toast({ 
         variant: "destructive", 
         title: "Incomplete Unit", 
-        description: "Both Unit Name and Address are required to add a new entity." 
+        description: "Both Unit Name and Address are required." 
       });
       return;
     }
@@ -143,17 +157,16 @@ export default function FirmsAndPlantsPage() {
       units: [...(prev.units || []), { id: Date.now().toString(), name: unitDraft.name, address: unitDraft.address }]
     }));
     setUnitDraft({ name: '', address: '' });
-    toast({ title: "Unit Added", description: "Entity added to the pending list." });
   };
 
   const handleRegisterFirm = () => {
-    if (!firmDraft.name || !firmDraft.gstin) {
+    if (!firmDraft.name?.trim() || !firmDraft.gstin?.trim()) {
       toast({ variant: "destructive", title: "Validation Error", description: "Firm name and GSTIN are required." });
       return;
     }
 
     if (!firmDraft.units || firmDraft.units.length === 0) {
-      toast({ variant: "destructive", title: "Missing Units", description: "At least one Unit Entity is mandatory for firm registration." });
+      toast({ variant: "destructive", title: "Missing Units", description: "At least one Unit Entity is mandatory." });
       return;
     }
 
@@ -181,6 +194,7 @@ export default function FirmsAndPlantsPage() {
       }
       setFirmDraft({ units: [] });
       setEditingFirmId(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
       setIsProcessing(false);
     }
@@ -191,6 +205,10 @@ export default function FirmsAndPlantsPage() {
     setFirms(prev => prev.filter(f => f.id !== firmToRemove.id));
     setFirmToRemove(null);
     toast({ title: "Firm Removed", description: "The legal entity record has been deleted." });
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
   };
 
   return (
@@ -362,18 +380,30 @@ export default function FirmsAndPlantsPage() {
               <div className="flex flex-col md:flex-row gap-8 items-start">
                 <div className="space-y-2 w-full md:w-1/4">
                   <Label className="font-bold">Firm Logo</Label>
-                  <div className="relative group">
-                    <div className="w-full aspect-square bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden">
+                  <div 
+                    className="relative group cursor-pointer"
+                    onClick={() => !firmDraft.logo && triggerFileUpload()}
+                  >
+                    <div className="w-full aspect-square bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden transition-colors hover:bg-slate-200/50">
                       {firmDraft.logo ? (
-                        <>
+                        <div className="relative w-full h-full">
                           <img src={firmDraft.logo} alt="Logo Preview" className="w-full h-full object-cover" />
-                          <button 
-                            className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => setFirmDraft(prev => ({...prev, logo: undefined}))}
-                          >
-                            <X className="w-4 h-4 text-rose-500" />
-                          </button>
-                        </>
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Button 
+                              type="button"
+                              variant="destructive" 
+                              size="sm" 
+                              className="h-8 gap-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFirmDraft(prev => ({...prev, logo: undefined}));
+                                if (fileInputRef.current) fileInputRef.current.value = "";
+                              }}
+                            >
+                              <X className="w-3 h-3" /> Remove
+                            </Button>
+                          </div>
+                        </div>
                       ) : (
                         <div className="flex flex-col items-center gap-2 text-slate-400 p-4 text-center">
                           <Upload className="w-8 h-8" />
@@ -381,10 +411,11 @@ export default function FirmsAndPlantsPage() {
                         </div>
                       )}
                     </div>
-                    <Input 
+                    <input 
+                      ref={fileInputRef}
                       type="file" 
                       accept="image/*" 
-                      className="absolute inset-0 opacity-0 cursor-pointer" 
+                      className="hidden" 
                       onChange={handleLogoUpload}
                     />
                   </div>
@@ -481,7 +512,7 @@ export default function FirmsAndPlantsPage() {
                     <Label className="text-xs font-bold">Address</Label>
                     <Input placeholder="Full Address" value={unitDraft.address} onChange={(e) => setUnitDraft({...unitDraft, address: e.target.value})} className="bg-white" />
                   </div>
-                  <Button variant="secondary" className="md:col-span-2 gap-2 font-bold h-11" onClick={addUnit}>
+                  <Button variant="secondary" type="button" className="md:col-span-2 gap-2 font-bold h-11" onClick={addUnit}>
                     <PlusCircle className="w-4 h-4" /> Add Unit Entity
                   </Button>
                 </div>
@@ -496,6 +527,7 @@ export default function FirmsAndPlantsPage() {
                       <Button 
                         variant="ghost" 
                         size="icon" 
+                        type="button"
                         className="text-rose-500 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed" 
                         disabled={(firmDraft.units || []).length <= 1}
                         onClick={() => setFirmDraft(p => ({...p, units: (p.units || []).filter(x => x.id !== u.id)}))}
@@ -508,9 +540,9 @@ export default function FirmsAndPlantsPage() {
               </div>
 
               <div className="flex justify-end pt-4 gap-3">
-                {editingFirmId && <Button variant="ghost" onClick={() => {setEditingFirmId(null); setFirmDraft({units: []});}}>Cancel</Button>}
-                <Button className="px-10 h-12 font-bold bg-slate-900 text-white hover:bg-slate-800 text-lg rounded-xl shadow-xl" onClick={handleRegisterFirm}>
-                  {editingFirmId ? 'Update Firm Details' : 'Finalize Firm Configuration'}
+                {editingFirmId && <Button variant="ghost" type="button" onClick={() => {setEditingFirmId(null); setFirmDraft({units: []});}}>Cancel</Button>}
+                <Button className="px-10 h-12 font-bold bg-slate-900 text-white hover:bg-slate-800 text-lg rounded-xl shadow-xl" onClick={handleRegisterFirm} disabled={isProcessing}>
+                  {isProcessing ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Finalizing...</> : editingFirmId ? 'Update Firm Details' : 'Finalize Firm Configuration'}
                 </Button>
               </div>
             </CardContent>
