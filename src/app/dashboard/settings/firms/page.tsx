@@ -18,8 +18,7 @@ import {
   MapPin, 
   Pencil,
   AlertTriangle,
-  Banknote,
-  Image as ImageIcon
+  Loader2
 } from "lucide-react";
 import {
   AlertDialog,
@@ -39,9 +38,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Firm, Plant, FirmUnit } from "@/lib/types";
+import { Firm, Plant } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 
 export default function FirmsAndPlantsPage() {
@@ -62,8 +60,13 @@ export default function FirmsAndPlantsPage() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleRegisterPlant = () => {
-    if (!plantDraft.name || !plantDraft.lat || !plantDraft.lng || !plantDraft.firmId) {
-      toast({ variant: "destructive", title: "Missing Fields", description: "Please fill all required plant details." });
+    // Robust validation for coordinates and required fields
+    if (!plantDraft.name || !plantDraft.firmId || plantDraft.lat === undefined || plantDraft.lng === undefined) {
+      toast({ 
+        variant: "destructive", 
+        title: "Missing Fields", 
+        description: "Please fill all required plant details (Name, Firm, and Coordinates)." 
+      });
       return;
     }
 
@@ -72,21 +75,29 @@ export default function FirmsAndPlantsPage() {
       if (editingPlantId) {
         setPlants(prev => prev.map(p => p.id === editingPlantId ? { ...p, ...plantDraft } as Plant : p));
         toast({ title: "Plant Updated", description: `${plantDraft.name} configuration saved.` });
+        setEditingPlantId(null);
+        setPlantDraft({ radius: 700 });
       } else {
         const newPlant: Plant = {
           id: Math.random().toString(36).substr(2, 9),
           name: plantDraft.name!,
           lat: Number(plantDraft.lat),
           lng: Number(plantDraft.lng),
-          radius: Number(plantDraft.radius),
+          radius: Number(plantDraft.radius || 700),
           firmId: plantDraft.firmId!,
           active: true
         };
         setPlants(prev => [...prev, newPlant]);
         toast({ title: "Plant Registered", description: `${newPlant.name} is now live for geofencing.` });
+        
+        // Reset name and coordinates but keep firmId for potential consecutive entries
+        setPlantDraft({ 
+          radius: 700, 
+          firmId: plantDraft.firmId 
+        });
       }
-      setPlantDraft({ radius: 700 });
-      setEditingPlantId(null);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Registration Error", description: "Failed to save plant data." });
     } finally {
       setIsProcessing(false);
     }
@@ -175,7 +186,6 @@ export default function FirmsAndPlantsPage() {
           <TabsTrigger value="firms" className="rounded-lg font-bold data-[state=active]:shadow-sm">Firm Registration</TabsTrigger>
         </TabsList>
 
-        {/* Plants Tab */}
         <TabsContent value="plants" className="space-y-12">
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="bg-slate-50/50 border-b">
@@ -188,7 +198,10 @@ export default function FirmsAndPlantsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <div className="space-y-2">
                   <Label className="font-bold">Associated Firm *</Label>
-                  <Select value={plantDraft.firmId} onValueChange={(v) => setPlantDraft(p => ({...p, firmId: v}))}>
+                  <Select 
+                    value={plantDraft.firmId} 
+                    onValueChange={(v) => setPlantDraft(p => ({...p, firmId: v}))}
+                  >
                     <SelectTrigger className="h-12 bg-white">
                       <SelectValue placeholder="Select Firm" />
                     </SelectTrigger>
@@ -207,8 +220,8 @@ export default function FirmsAndPlantsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="font-bold">Radius (Meters)</Label>
-                  <Input value={plantDraft.radius} disabled className="h-12 bg-slate-100 font-bold" />
+                  <Label className="font-bold text-slate-400">Radius (Meters)</Label>
+                  <Input value={plantDraft.radius || 700} disabled className="h-12 bg-slate-50 font-bold" />
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">Latitude *</Label>
@@ -217,8 +230,11 @@ export default function FirmsAndPlantsPage() {
                     className="h-12 bg-white font-mono" 
                     type="number" 
                     step="any"
-                    value={plantDraft.lat || ''} 
-                    onChange={(e) => setPlantDraft(p => ({...p, lat: Number(e.target.value)}))}
+                    value={plantDraft.lat !== undefined ? plantDraft.lat : ''} 
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? undefined : Number(e.target.value);
+                      setPlantDraft(p => ({...p, lat: val}));
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -228,15 +244,33 @@ export default function FirmsAndPlantsPage() {
                     className="h-12 bg-white font-mono" 
                     type="number" 
                     step="any"
-                    value={plantDraft.lng || ''} 
-                    onChange={(e) => setPlantDraft(p => ({...p, lng: Number(e.target.value)}))}
+                    value={plantDraft.lng !== undefined ? plantDraft.lng : ''} 
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? undefined : Number(e.target.value);
+                      setPlantDraft(p => ({...p, lng: val}));
+                    }}
                   />
                 </div>
               </div>
               <div className="flex justify-end pt-4 gap-3">
-                {editingPlantId && <Button variant="ghost" onClick={() => {setEditingPlantId(null); setPlantDraft({radius: 700});}}>Cancel</Button>}
-                <Button className="px-10 h-12 font-bold bg-primary text-lg rounded-xl shadow-lg shadow-primary/20" onClick={handleRegisterPlant}>
-                  {editingPlantId ? 'Update Plant' : 'Register Plant'}
+                {editingPlantId && (
+                  <Button variant="ghost" onClick={() => {
+                    setEditingPlantId(null); 
+                    setPlantDraft({ radius: 700 });
+                  }}>
+                    Cancel
+                  </Button>
+                )}
+                <Button 
+                  className="px-10 h-12 font-bold bg-primary text-lg rounded-xl shadow-lg shadow-primary/20" 
+                  onClick={handleRegisterPlant}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processing...</>
+                  ) : (
+                    editingPlantId ? 'Update Plant' : 'Register Plant'
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -256,7 +290,7 @@ export default function FirmsAndPlantsPage() {
                   <TableRow>
                     <TableHead className="font-bold">Firm Name</TableHead>
                     <TableHead className="font-bold">Plant Name</TableHead>
-                    <TableHead className="font-bold text-center">Radius (Meters)</TableHead>
+                    <TableHead className="font-bold text-center">Radius</TableHead>
                     <TableHead className="font-bold">Location (Lat, Lng)</TableHead>
                     <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                   </TableRow>
@@ -275,7 +309,11 @@ export default function FirmsAndPlantsPage() {
                         <TableCell className="font-mono text-xs">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</TableCell>
                         <TableCell className="text-right pr-6">
                           <div className="flex justify-end gap-2">
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {setEditingPlantId(p.id); setPlantDraft(p); window.scrollTo({ top: 0, behavior: 'smooth' });}}>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {
+                              setEditingPlantId(p.id); 
+                              setPlantDraft(p); 
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setPlantToRemove(p)}>
