@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord, Firm, User } from '@/lib/types';
+import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord, Firm, User, Holiday } from '@/lib/types';
 import { SUPER_ADMIN_USER } from '@/lib/constants';
 
 interface DataContextType {
@@ -20,6 +20,8 @@ interface DataContextType {
   setFirms: React.Dispatch<React.SetStateAction<Firm[]>>;
   users: User[];
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
+  holidays: Holiday[];
+  setHolidays: React.Dispatch<React.SetStateAction<Holiday[]>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -73,6 +75,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [plants, setPlants] = useState<Plant[]>([]);
   const [firms, setFirms] = useState<Firm[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
 
   // Load initial data from localStorage if available, otherwise use defaults
   useEffect(() => {
@@ -83,6 +86,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const savedPlants = localStorage.getItem('app_plants');
     const savedFirms = localStorage.getItem('app_firms');
     const savedUsers = localStorage.getItem('app_users');
+    const savedHolidays = localStorage.getItem('app_holidays');
 
     if (savedEmps) {
       setEmployees(JSON.parse(savedEmps));
@@ -125,6 +129,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (savedPlants) setPlants(JSON.parse(savedPlants)); else setPlants(INITIAL_PLANTS);
     if (savedFirms) setFirms(JSON.parse(savedFirms)); else setFirms(INITIAL_FIRMS);
     if (savedUsers) setUsers(JSON.parse(savedUsers)); else setUsers(INITIAL_USERS);
+    if (savedHolidays) setHolidays(JSON.parse(savedHolidays));
   }, []);
 
   // Save to localStorage whenever state changes
@@ -136,7 +141,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('app_plants', JSON.stringify(plants));
     localStorage.setItem('app_firms', JSON.stringify(firms));
     localStorage.setItem('app_users', JSON.stringify(users));
-  }, [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users]);
+    localStorage.setItem('app_holidays', JSON.stringify(holidays));
+  }, [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users, holidays]);
 
   const value = useMemo(() => ({
     employees, setEmployees,
@@ -145,8 +151,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     payrollRecords, setPayrollRecords,
     plants, setPlants,
     firms, setFirms,
-    users, setUsers
-  }), [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users]);
+    users, setUsers,
+    holidays, setHolidays
+  }), [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users, holidays]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
