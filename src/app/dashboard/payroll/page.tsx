@@ -469,7 +469,9 @@ export default function PayrollPage() {
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Employee ID</TableHead>
                     <TableHead className="font-bold">Department</TableHead>
+                    <TableHead className="font-bold">Designation</TableHead>
                     <TableHead className="font-bold text-center">Available Balance</TableHead>
                     <TableHead className="text-right font-bold">Actions</TableHead>
                   </TableRow>
@@ -478,7 +480,9 @@ export default function PayrollPage() {
                   {employees.map(emp => (
                     <TableRow key={emp.id}>
                       <TableCell className="font-bold">{emp.name}</TableCell>
+                      <TableCell className="font-mono text-xs">{emp.employeeId}</TableCell>
                       <TableCell>{emp.department}</TableCell>
+                      <TableCell>{emp.designation}</TableCell>
                       <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" className="font-bold gap-2" onClick={() => setViewLeaveHistoryEmp(emp)}>
@@ -782,4 +786,3 @@ export default function PayrollPage() {
     </div>
   );
 }
-
