@@ -33,6 +33,12 @@ export interface Firm {
   units: FirmUnit[];
 }
 
+export interface SalaryHistoryEntry {
+  fromMonth: string; // MMM-YYYY
+  toMonth: string;   // MMM-YYYY or "Present"
+  monthlyCTC: number;
+}
+
 export interface SalaryStructure {
   basic: number;
   hra: number;
@@ -72,6 +78,7 @@ export interface Employee {
   pfNumber?: string;
   esicNumber?: string;
   salary: SalaryStructure;
+  salaryHistory: SalaryHistoryEntry[];
   active: boolean;
 }
 

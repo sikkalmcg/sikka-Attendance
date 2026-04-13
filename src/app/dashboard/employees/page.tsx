@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { 
   Table, 
   TableHeader, 
@@ -39,7 +38,8 @@ import {
   Banknote,
   ShieldCheck,
   ChevronRight,
-  User
+  User,
+  Info
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -58,7 +58,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, SalaryStructure, Firm } from "@/lib/types";
+import { Employee, SalaryStructure, Firm, SalaryHistoryEntry } from "@/lib/types";
 import { DEPARTMENTS, DESIGNATIONS } from "@/lib/constants";
 
 const MOCK_FIRMS: Firm[] = [
@@ -114,6 +114,9 @@ const MOCK_EMPLOYEES: Employee[] = [
       pfRateEx: 13,
       esicRateEx: 3.25
     },
+    salaryHistory: [
+      { fromMonth: "Jan-2023", toMonth: "Present", monthlyCTC: 32438 }
+    ],
     active: true 
   }
 ];
@@ -121,7 +124,7 @@ const MOCK_EMPLOYEES: Employee[] = [
 const generateMonthOptions = () => {
   const options = [];
   const date = new Date();
-  date.setDate(1); // Set to start of month to avoid overflow
+  date.setDate(1); 
   for (let i = -1; i < 12; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() + i, 1);
     const mmm = d.toLocaleString('en-US', { month: 'short' });
@@ -132,6 +135,17 @@ const generateMonthOptions = () => {
 };
 
 const MONTH_OPTIONS = generateMonthOptions();
+
+const getMonthFromMMM_YYYY = (formatted: string) => {
+  const [mmm, yyyy] = formatted.split('-');
+  return new Date(Date.parse(`${mmm} 1, ${yyyy}`));
+};
+
+const formatToMMM_YYYY = (date: Date) => {
+  const mmm = date.toLocaleString('en-US', { month: 'short' });
+  const yyyy = date.getFullYear();
+  return `${mmm}-${yyyy}`;
+};
 
 const INITIAL_SALARY_STRUCTURE: SalaryStructure = { 
   basic: 0, 
@@ -154,7 +168,8 @@ const INITIAL_SALARY_STRUCTURE: SalaryStructure = {
 const INITIAL_FORM_DATA: Partial<Employee> = {
   firmId: "f1",
   isGovComplianceEnabled: true,
-  salary: INITIAL_SALARY_STRUCTURE
+  salary: INITIAL_SALARY_STRUCTURE,
+  salaryHistory: []
 };
 
 export default function EmployeesPage() {
@@ -165,20 +180,11 @@ export default function EmployeesPage() {
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [salaryRevision, setSalaryRevision] = useState<Employee | null>(null);
+  const [viewHistoryEmployee, setViewHistoryEmployee] = useState<Employee | null>(null);
   
   const [formData, setFormData] = useState<Partial<Employee>>(INITIAL_FORM_DATA);
   const [revisionData, setRevisionData] = useState<SalaryStructure>(INITIAL_SALARY_STRUCTURE);
-  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[1]); // Default to current month
-
-  const nextEmpId = useMemo(() => {
-    if (employees.length === 0) return 'EMP-S0001';
-    const ids = employees.map(e => {
-      const match = e.employeeId.match(/EMP-S(\d+)/);
-      return match ? parseInt(match[1]) : 0;
-    });
-    const maxId = Math.max(...ids);
-    return `EMP-S${(maxId + 1).toString().padStart(4, '0')}`;
-  }, [employees]);
+  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[1]);
 
   const filtered = employees.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -199,7 +205,6 @@ export default function EmployeesPage() {
     if (compliance) {
       epf = Math.round(basic * (rates.pfEmp / 100));
       erpf = Math.round(basic * (rates.pfEx / 100));
-      // ESIC calculated on Basic Salary as per user requirement
       eesic = Math.round(basic * (rates.esicEmp / 100));
       eresic = Math.round(basic * (rates.esicEx / 100));
     }
@@ -250,10 +255,16 @@ export default function EmployeesPage() {
       return;
     }
 
+    const joinDateObj = new Date(formData.joinDate || Date.now());
+    const joinMonthStr = formatToMMM_YYYY(joinDateObj);
+
     const newEmp: Employee = {
       ...(formData as Employee),
       id: editEmployee ? editEmployee.id : Math.random().toString(36).substr(2, 9),
-      employeeId: editEmployee ? editEmployee.employeeId : nextEmpId,
+      employeeId: editEmployee ? editEmployee.employeeId : `EMP-S${(employees.length + 1).toString().padStart(4, '0')}`,
+      salaryHistory: editEmployee ? (formData.salaryHistory || []) : [
+        { fromMonth: joinMonthStr, toMonth: "Present", monthlyCTC: formData.salary?.monthlyCTC || 0 }
+      ],
       active: true
     };
 
@@ -268,15 +279,37 @@ export default function EmployeesPage() {
     toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${newEmp.name} has been saved.` });
   };
 
-  const handleEditClick = (emp: Employee) => {
-    setEditEmployee(emp);
-    setFormData(emp);
-    setIsRegistrationOpen(true);
-  };
-  
-  const handleIncreaseSalary = (emp: Employee) => {
-    setSalaryRevision(emp);
-    setRevisionData(emp.salary);
+  const handlePostSalaryRevision = () => {
+    if (!salaryRevision) return;
+
+    setEmployees(prev => prev.map(emp => {
+      if (emp.id !== salaryRevision.id) return emp;
+
+      const history = [...emp.salaryHistory];
+      const newEffectiveDate = getMonthFromMMM_YYYY(effectiveMonth);
+      
+      if (history.length > 0) {
+        const lastEntry = history[history.length - 1];
+        const prevMonthDate = new Date(newEffectiveDate);
+        prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+        lastEntry.toMonth = formatToMMM_YYYY(prevMonthDate);
+      }
+
+      history.push({
+        fromMonth: effectiveMonth,
+        toMonth: "Present",
+        monthlyCTC: revisionData.monthlyCTC
+      });
+
+      return {
+        ...emp,
+        salary: revisionData,
+        salaryHistory: history
+      };
+    }));
+
+    setSalaryRevision(null);
+    toast({ title: "Salary Revision Posted", description: `Updated for ${salaryRevision.name}` });
   };
 
   const increasePct = useMemo(() => {
@@ -349,7 +382,7 @@ export default function EmployeesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(emp)} title="Edit Profile">
+                        <Button variant="ghost" size="icon" onClick={() => { setEditEmployee(emp); setFormData(emp); setIsRegistrationOpen(true); }} title="Edit Profile">
                           <Pencil className="w-4 h-4 text-slate-500" />
                         </Button>
                         <DropdownMenu>
@@ -359,10 +392,10 @@ export default function EmployeesPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem onClick={() => handleIncreaseSalary(emp)}>
+                            <DropdownMenuItem onClick={() => { setSalaryRevision(emp); setRevisionData(emp.salary); }}>
                               <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setViewHistoryEmployee(emp)}>
                               <History className="w-4 h-4 mr-2" /> View Salary Record
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -429,7 +462,7 @@ export default function EmployeesPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Employee ID</Label>
-                    <Input value={editEmployee ? editEmployee.employeeId : nextEmpId} disabled className="bg-slate-100 font-mono font-bold" />
+                    <Input value={editEmployee ? editEmployee.employeeId : `EMP-S${(employees.length + 1).toString().padStart(4, '0')}`} disabled className="bg-slate-100 font-mono font-bold" />
                   </div>
                   <div className="space-y-2">
                     <Label>Employee Name *</Label>
@@ -744,12 +777,106 @@ export default function EmployeesPage() {
 
           <DialogFooter className="bg-slate-50 -m-6 mt-2 p-6 rounded-b-lg border-t">
             <Button variant="outline" onClick={() => setSalaryRevision(null)}>Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={() => {
-              setEmployees(prev => prev.map(e => e.id === salaryRevision?.id ? { ...e, salary: revisionData } : e));
-              setSalaryRevision(null);
-              toast({ title: "Salary Revision Posted" });
-            }}>Post Update</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={handlePostSalaryRevision}>Post Update</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Salary History Modal */}
+      <Dialog open={!!viewHistoryEmployee} onOpenChange={(open) => { if (!open) setViewHistoryEmployee(null); }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 border-b bg-slate-50/50">
+            <div className="flex justify-between items-start">
+              <div>
+                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                  <History className="w-5 h-5 text-primary" />
+                  Salary Record: {viewHistoryEmployee?.name}
+                </DialogTitle>
+                <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground font-medium">
+                  <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-mono">{viewHistoryEmployee?.employeeId}</span>
+                  <span>•</span>
+                  <span>{viewHistoryEmployee?.department} / {viewHistoryEmployee?.designation}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Join Month</p>
+                <p className="font-bold text-slate-700">{viewHistoryEmployee ? formatToMMM_YYYY(new Date(viewHistoryEmployee.joinDate)) : '---'}</p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <ScrollArea className="flex-1 p-6">
+            <div className="space-y-6">
+              {/* Top Summary Card */}
+              <Card className="border-none bg-slate-900 text-white shadow-lg">
+                <CardContent className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Basic Salary</p>
+                    <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee?.salary.basic || 0)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">HRA</p>
+                    <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee?.salary.hra || 0)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Other Allowance</p>
+                    <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee?.salary.allowance || 0)}</p>
+                  </div>
+                  <div className="space-y-1 border-l border-slate-700 pl-4">
+                    <p className="text-[10px] font-bold text-emerald-400 uppercase">Current Monthly CTC</p>
+                    <p className="text-xl font-bold text-emerald-300">{formatCurrency(viewHistoryEmployee?.salary.monthlyCTC || 0)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* History Table */}
+              <div className="space-y-4">
+                <h4 className="font-bold text-sm flex items-center gap-2 text-slate-700">
+                  <History className="w-4 h-4" /> Salary History Timeline
+                </h4>
+                <div className="border rounded-xl overflow-hidden shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold">From Month</TableHead>
+                        <TableHead className="font-bold">To Month</TableHead>
+                        <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {viewHistoryEmployee?.salaryHistory.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                            No history records found.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        [...viewHistoryEmployee!.salaryHistory].reverse().map((entry, idx) => (
+                          <TableRow key={idx} className="hover:bg-slate-50/50">
+                            <TableCell className="font-medium">{entry.fromMonth}</TableCell>
+                            <TableCell>
+                              {entry.toMonth === "Present" ? (
+                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Present</Badge>
+                              ) : (
+                                entry.toMonth
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-primary">
+                              {formatCurrency(entry.monthlyCTC)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+          
+          <div className="p-4 bg-slate-50 border-t flex justify-end">
+            <Button variant="outline" onClick={() => setViewHistoryEmployee(null)}>Close Record</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
