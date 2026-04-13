@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { useToast } from "@/toast/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { PayrollRecord } from "@/lib/types";
 import {
   Tooltip,
