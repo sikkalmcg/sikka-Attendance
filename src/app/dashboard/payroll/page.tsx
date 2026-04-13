@@ -8,7 +8,8 @@ import {
   CardHeader, 
   CardTitle, 
   CardContent, 
-  CardDescription
+  CardDescription,
+  CardFooter
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -54,7 +55,9 @@ import {
   Info,
   Banknote,
   ShieldCheck,
-  FileText
+  FileText,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -93,6 +96,10 @@ export default function PayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState(PAYROLL_MONTHS[1]);
   const [selectedFirmId, setSelectedFirmId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Pagination for Advance Salary tab
+  const [advancePage, setAdvancePage] = useState(1);
+  const rowsPerPageAdvance = 15;
 
   // Dialog States
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
@@ -147,6 +154,13 @@ export default function PayrollPage() {
   const paidVouchers = useMemo(() => {
     return vouchers.filter(v => v.status === 'PAID').reverse();
   }, [vouchers]);
+
+  const paginatedPaidVouchers = useMemo(() => {
+    const start = (advancePage - 1) * rowsPerPageAdvance;
+    return paidVouchers.slice(start, start + rowsPerPageAdvance);
+  }, [paidVouchers, advancePage]);
+
+  const totalAdvancePages = Math.ceil(paidVouchers.length / rowsPerPageAdvance);
 
   const isSalaryGenerated = (empId: string) => {
     return payrollRecords.some(p => p.employeeId === empId && p.month === selectedMonth);
@@ -710,14 +724,14 @@ export default function PayrollPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paidVouchers.length === 0 ? (
+                    {paginatedPaidVouchers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={11} className="text-center py-20 text-muted-foreground">
                           No paid advance salary records found.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      paidVouchers.map(v => {
+                      paginatedPaidVouchers.map(v => {
                         const emp = employees.find(e => e.id === v.employeeId);
                         const recoveries = payrollRecords.filter(p => p.employeeId === (emp?.employeeId || v.employeeId));
                         const totalRecovered = recoveries.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
@@ -758,6 +772,32 @@ export default function PayrollPage() {
                 <ScrollBar orientation="horizontal" />
               </ScrollArea>
             </CardContent>
+            {totalAdvancePages > 1 && (
+              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                <div className="text-xs font-bold text-muted-foreground">
+                  Showing {((advancePage - 1) * rowsPerPageAdvance) + 1} - {Math.min(advancePage * rowsPerPageAdvance, paidVouchers.length)} of {paidVouchers.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={advancePage === 1}
+                    onClick={() => setAdvancePage(p => p - 1)}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                  </Button>
+                  <div className="text-xs font-black px-4">Page {advancePage} of {totalAdvancePages}</div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={advancePage === totalAdvancePages}
+                    onClick={() => setAdvancePage(p => p + 1)}
+                  >
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </CardFooter>
+            )}
           </Card>
         </TabsContent>
 
