@@ -55,6 +55,7 @@ export default function AttendancePage() {
 
   const history: AttendanceRecord[] = useMemo(() => {
     if (!currentUser) return [];
+    const currentYear = new Date().getFullYear();
     return Array.from({ length: 15 }).map((_, i) => ({
       id: `hist-${i}`,
       employeeId: currentUser.id,
@@ -70,7 +71,8 @@ export default function AttendancePage() {
       lat: 28.5355,
       lng: 77.2639,
       address: "Verified Plant Location",
-      approved: true
+      approved: i % 3 === 0,
+      remark: i % 3 === 1 ? "Incorrect GPS" : undefined
     }));
   }, [currentUser]);
 
@@ -114,8 +116,8 @@ export default function AttendancePage() {
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-12">
-      <Card className="shadow-2xl border-none overflow-hidden bg-white">
+    <div className="space-y-8 max-w-7xl mx-auto pb-12">
+      <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-5xl mx-auto">
         <div className="h-3 bg-primary" />
         <CardHeader className="text-center pb-2">
           <CardTitle className="text-3xl font-bold flex items-center justify-center gap-2">
@@ -161,7 +163,7 @@ export default function AttendancePage() {
 
       <div className="space-y-4">
         <h3 className="font-bold text-xl flex items-center gap-2"><History className="w-5 h-5 text-slate-400" /> My History (Last 45 Days)</h3>
-        <Card className="rounded-2xl overflow-hidden">
+        <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
@@ -172,18 +174,28 @@ export default function AttendancePage() {
                 <TableHead className="font-bold">Out Date Time</TableHead>
                 <TableHead className="font-bold">Working Hours</TableHead>
                 <TableHead className="font-bold">Type</TableHead>
+                <TableHead className="font-bold">Approval Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {history.map((h) => (
-                <TableRow key={h.id}>
+                <TableRow key={h.id} className="hover:bg-slate-50/50">
                   <TableCell className="font-medium">{h.employeeName}</TableCell>
                   <TableCell className="text-sm">{h.inPlant || "--"}</TableCell>
                   <TableCell className="font-mono text-xs">{h.date} {h.inTime}</TableCell>
                   <TableCell className="text-sm">{h.outPlant || "--"}</TableCell>
                   <TableCell className="font-mono text-xs">{h.date} {h.outTime}</TableCell>
                   <TableCell className="font-bold text-emerald-600">{h.hours}h</TableCell>
-                  <TableCell><Badge variant="outline">{h.attendanceType}</Badge></TableCell>
+                  <TableCell><Badge variant="outline" className="text-[10px] font-bold">{h.attendanceType}</Badge></TableCell>
+                  <TableCell>
+                    {h.approved ? (
+                      <Badge className="bg-emerald-600 border-none">Approved</Badge>
+                    ) : h.remark ? (
+                      <Badge variant="destructive" className="border-none">Rejected</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="border-none">Pending</Badge>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
