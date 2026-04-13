@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -330,7 +330,6 @@ export default function FirmsAndPlantsPage() {
           </div>
         </TabsContent>
 
-        {/* Firms Tab */}
         <TabsContent value="firms" className="space-y-12">
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="bg-slate-50/50 border-b">
@@ -448,7 +447,6 @@ export default function FirmsAndPlantsPage() {
                         className="text-rose-500 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed" 
                         disabled={(firmDraft.units || []).length <= 1}
                         onClick={() => setFirmDraft(p => ({...p, units: (p.units || []).filter(x => x.id !== u.id)}))}
-                        title={(firmDraft.units || []).length <= 1 ? "At least one unit is mandatory" : "Remove Unit"}
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

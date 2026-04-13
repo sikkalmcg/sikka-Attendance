@@ -1,9 +1,8 @@
 
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord, Firm, User, Holiday } from '@/lib/types';
-import { SUPER_ADMIN_USER } from '@/lib/constants';
 
 interface DataContextType {
   employees: Employee[];
@@ -67,6 +66,36 @@ const INITIAL_USERS: User[] = [
   }
 ];
 
+const DEFAULT_EMPLOYEE: Employee = { 
+  id: "1", 
+  employeeId: "EMP-S0001", 
+  name: "Ravi Kumar", 
+  fatherName: "Mr. Ramesh Kumar",
+  aadhaar: "1234 5678 9012",
+  pan: "ABCDE1234F",
+  mobile: "9988776655", 
+  address: "New Delhi, India",
+  department: "Production", 
+  designation: "Engineer", 
+  joinDate: "2023-01-15",
+  firmId: "f1",
+  unitId: "u1",
+  bankName: "HDFC Bank",
+  accountNo: "50100123456789",
+  ifscCode: "HDFC0000123",
+  isGovComplianceEnabled: true,
+  pfNumber: "DL/CPM/123/001",
+  esicNumber: "11000123001",
+  salary: { 
+    basic: 15000, hra: 7500, da: 0, allowance: 7500, grossSalary: 30000,
+    employeePF: 1800, employeeESIC: 113, employerPF: 1950, employerESIC: 488,
+    netSalary: 28087, monthlyCTC: 32438, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25
+  },
+  salaryHistory: [{ fromMonth: "Jan-2023", toMonth: "Present", monthlyCTC: 32438 }],
+  active: true,
+  advanceLeaveBalance: 2
+};
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
@@ -76,6 +105,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [firms, setFirms] = useState<Firm[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+  
+  // Guard to prevent saving before the initial load is complete
+  const isLoaded = useRef(false);
 
   // Load initial data from localStorage if available, otherwise use defaults
   useEffect(() => {
@@ -88,53 +120,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const savedUsers = localStorage.getItem('app_users');
     const savedHolidays = localStorage.getItem('app_holidays');
 
-    if (savedEmps) {
-      setEmployees(JSON.parse(savedEmps));
-    } else {
-      const defaultEmp: Employee = { 
-        id: "1", 
-        employeeId: "EMP-S0001", 
-        name: "Ravi Kumar", 
-        fatherName: "Mr. Ramesh Kumar",
-        aadhaar: "1234 5678 9012",
-        pan: "ABCDE1234F",
-        mobile: "9988776655", 
-        address: "New Delhi, India",
-        department: "Production", 
-        designation: "Engineer", 
-        joinDate: "2023-01-15",
-        firmId: "f1",
-        unitId: "u1",
-        bankName: "HDFC Bank",
-        accountNo: "50100123456789",
-        ifscCode: "HDFC0000123",
-        isGovComplianceEnabled: true,
-        pfNumber: "DL/CPM/123/001",
-        esicNumber: "11000123001",
-        salary: { 
-          basic: 15000, hra: 7500, da: 0, allowance: 7500, grossSalary: 30000,
-          employeePF: 1800, employeeESIC: 113, employerPF: 1950, employerESIC: 488,
-          netSalary: 28087, monthlyCTC: 32438, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25
-        },
-        salaryHistory: [{ fromMonth: "Jan-2023", toMonth: "Present", monthlyCTC: 32438 }],
-        active: true,
-        advanceLeaveBalance: 2
-      };
-      setEmployees([defaultEmp]);
-    }
+    setEmployees(savedEmps ? JSON.parse(savedEmps) : [DEFAULT_EMPLOYEE]);
+    setAttendanceRecords(savedAtt ? JSON.parse(savedAtt) : []);
+    setVouchers(savedVouchers ? JSON.parse(savedVouchers) : []);
+    setPayrollRecords(savedPayroll ? JSON.parse(savedPayroll) : []);
+    setPlants(savedPlants ? JSON.parse(savedPlants) : INITIAL_PLANTS);
+    setFirms(savedFirms ? JSON.parse(savedFirms) : INITIAL_FIRMS);
+    setUsers(savedUsers ? JSON.parse(savedUsers) : INITIAL_USERS);
+    setHolidays(savedHolidays ? JSON.parse(savedHolidays) : []);
 
-    if (savedAtt) setAttendanceRecords(JSON.parse(savedAtt));
-    if (savedVouchers) setVouchers(JSON.parse(savedVouchers));
-    if (savedPayroll) setPayrollRecords(JSON.parse(savedPayroll));
-    if (savedPlants) setPlants(JSON.parse(savedPlants)); else setPlants(INITIAL_PLANTS);
-    if (savedFirms) setFirms(JSON.parse(savedFirms)); else setFirms(INITIAL_FIRMS);
-    if (savedUsers) setUsers(JSON.parse(savedUsers)); else setUsers(INITIAL_USERS);
-    if (savedHolidays) setHolidays(JSON.parse(savedHolidays));
+    isLoaded.current = true;
   }, []);
 
-  // Save to localStorage whenever state changes
+  // Save to localStorage whenever state changes, but ONLY after initial load
   useEffect(() => {
-    if (employees.length > 0) localStorage.setItem('app_employees', JSON.stringify(employees));
+    if (!isLoaded.current) return;
+
+    localStorage.setItem('app_employees', JSON.stringify(employees));
     localStorage.setItem('app_attendance', JSON.stringify(attendanceRecords));
     localStorage.setItem('app_vouchers', JSON.stringify(vouchers));
     localStorage.setItem('app_payroll', JSON.stringify(payrollRecords));

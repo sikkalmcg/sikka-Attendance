@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -25,9 +25,9 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { AttendanceRecord, Plant, Holiday } from "@/lib/types";
+import { AttendanceRecord, Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -65,6 +65,7 @@ export default function AttendancePage() {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
     
+    // Defer date initialization to avoid hydration mismatch
     setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -104,6 +105,7 @@ export default function AttendancePage() {
         };
       }
 
+      // Don't show today as absent if it hasn't happened yet
       if (isSameDay(date, today)) return null;
 
       if (isSun) {
@@ -248,6 +250,7 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
+      {/* Reduced Clock Section - 50% smaller container */}
       <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-md mx-auto">
         <div className="h-1 bg-primary" />
         <CardHeader className="text-center py-4">
@@ -256,6 +259,7 @@ export default function AttendancePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 px-6 pb-8 pt-0">
+          {/* Light Blue Compact Clock Box */}
           <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
             {currentTime ? (
               <div className="text-center">
@@ -290,6 +294,7 @@ export default function AttendancePage() {
         </CardContent>
       </Card>
 
+      {/* History Table - Filtered to last 45 days */}
       <div className="space-y-4 max-w-6xl mx-auto pt-6">
         <div className="flex items-center justify-between">
           <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
