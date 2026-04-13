@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock, Building2, Factory, ShieldCheck, FileCheck } from "lucide-react";
+import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock, Building2, Factory, ShieldCheck, FileCheck, Users } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
@@ -216,6 +216,28 @@ export default function VouchersPage() {
                       className="h-12 bg-slate-50 border-slate-200 italic text-slate-500" 
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                      <Users className="w-3 h-3" /> Department (Auto)
+                    </Label>
+                    <Input 
+                      value={selectedEmployee?.department || "Select Employee First"} 
+                      disabled 
+                      className="h-12 bg-slate-50 border-slate-200 italic text-slate-500" 
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                      <ShieldCheck className="w-3 h-3" /> Designation (Auto)
+                    </Label>
+                    <Input 
+                      value={selectedEmployee?.designation || "Select Employee First"} 
+                      disabled 
+                      className="h-12 bg-slate-50 border-slate-200 italic text-slate-500" 
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -262,6 +284,7 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Dept / Desig</TableHead>
                     <TableHead className="font-bold">Firm / Unit</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
@@ -271,7 +294,7 @@ export default function VouchersPage() {
                 <TableBody>
                   {pendingVouchers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                         No vouchers pending approval.
                       </TableCell>
                     </TableRow>
@@ -288,6 +311,12 @@ export default function VouchersPage() {
                             <div className="flex flex-col">
                               <span className="font-bold">{emp?.name || "Unknown"}</span>
                               <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
+                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -352,6 +381,7 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50 hover:bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Dept / Desig</TableHead>
                     <TableHead className="font-bold">Firm / Unit</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
@@ -362,7 +392,7 @@ export default function VouchersPage() {
                 <TableBody>
                   {payableVouchers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                         No approved vouchers ready for payment.
                       </TableCell>
                     </TableRow>
@@ -379,6 +409,12 @@ export default function VouchersPage() {
                             <div className="flex flex-col">
                               <span className="font-bold">{emp?.name || "Unknown"}</span>
                               <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
+                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
                             </div>
                           </TableCell>
                           <TableCell>
