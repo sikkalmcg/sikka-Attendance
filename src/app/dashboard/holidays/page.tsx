@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -18,11 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Plus, 
-  Info,
   CalendarDays,
   Sun,
-  PartyPopper,
-  X,
   ShieldCheck
 } from "lucide-react";
 import { 
@@ -146,20 +142,20 @@ export default function HolidaysPage() {
       </div>
 
       <Card className="shadow-xl border-slate-200 overflow-hidden">
-        <CardHeader className="bg-slate-50 border-b border-slate-100 p-8">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-              <Plus className="w-6 h-6 text-primary" />
+        <CardHeader className="bg-slate-50 border-b border-slate-100 p-8 text-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
+              <Plus className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-xl font-bold">Add Festival / Holidays</CardTitle>
+              <CardTitle className="text-2xl font-bold">Add Festival / Holidays</CardTitle>
               <CardDescription>Setup company holidays and festival schedules for {CURRENT_YEAR}.</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            <div className="lg:col-span-5 space-y-8">
+          <div className="flex flex-col items-center space-y-12 max-w-4xl mx-auto">
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-3">
                 <Label className="text-sm font-bold text-slate-700">Festival / Holiday Name</Label>
                 <Input 
@@ -184,41 +180,13 @@ export default function HolidaysPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100/50 space-y-3">
-                <div className="flex items-center gap-2 text-primary">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span className="text-xs font-black uppercase tracking-widest">Automation Rules</span>
-                </div>
-                <div className="text-xs text-slate-600 space-y-2 font-medium leading-relaxed">
-                  <p>• <span className="text-rose-600 font-bold">Sundays</span> are auto-marked as Weekly Off.</p>
-                  <p>• Adding a <span className="text-primary font-bold">Festival</span> on Sunday will override the auto-off entry.</p>
-                  <p>• Multi-date selection is enabled for bulk scheduling.</p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 pt-4">
-                <Button 
-                  variant="outline" 
-                  className="flex-1 h-14 font-bold rounded-2xl" 
-                  onClick={() => { setFestivalName(""); setSelectedDates([]); }}
-                >
-                  Clear Selection
-                </Button>
-                <Button 
-                  className="flex-1 h-14 font-bold bg-primary shadow-lg shadow-primary/20 rounded-2xl text-lg" 
-                  onClick={handleAddHolidays}
-                >
-                  Add Holiday
-                </Button>
-              </div>
             </div>
 
-            <div className="lg:col-span-7 space-y-4">
-              <Label className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-2">
+            <div className="w-full space-y-4">
+              <Label className="text-sm font-bold text-slate-700 flex items-center justify-center gap-2 mb-2">
                 <CalendarDays className="w-5 h-5 text-primary" /> Select Holiday Dates
               </Label>
-              <div className="border-2 border-slate-100 rounded-[2rem] p-8 bg-white shadow-inner flex justify-center">
+              <div className="border-2 border-slate-100 rounded-[2.5rem] p-10 bg-white shadow-inner flex justify-center">
                 <Calendar
                   mode="multiple"
                   selected={selectedDates}
@@ -238,16 +206,45 @@ export default function HolidaysPage() {
                   }}
                 />
               </div>
-              <div className="flex flex-wrap gap-6 pt-6 px-4">
+              <div className="flex flex-wrap justify-center gap-8 pt-6">
                 <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                   <div className="w-3 h-3 rounded-full bg-primary" /> Festival
                 </div>
                 <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <div className="w-3 h-3 rounded-full bg-slate-200" /> Weekly Off
+                  <div className="w-3 h-3 rounded-full bg-slate-100" /> Weekly Off
                 </div>
                 <div className="flex items-center gap-2 text-[10px] font-black text-rose-500 uppercase tracking-widest">
                   <Sun className="w-3 h-3" /> Sunday
                 </div>
+              </div>
+            </div>
+
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+              <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100/50 space-y-3">
+                <div className="flex items-center gap-2 text-primary">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase tracking-widest">Automation Rules</span>
+                </div>
+                <div className="text-xs text-slate-600 space-y-2 font-medium leading-relaxed">
+                  <p>• <span className="text-rose-600 font-bold">Sundays</span> are auto-marked as Weekly Off.</p>
+                  <p>• Adding a <span className="text-primary font-bold">Festival</span> on Sunday overrides auto-off.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 justify-center">
+                <Button 
+                  className="w-full h-14 font-bold bg-primary shadow-lg shadow-primary/20 rounded-2xl text-lg" 
+                  onClick={handleAddHolidays}
+                >
+                  Confirm & Add Holidays
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  className="w-full h-12 font-bold rounded-xl text-slate-500" 
+                  onClick={() => { setFestivalName(""); setSelectedDates([]); }}
+                >
+                  Clear Selection
+                </Button>
               </div>
             </div>
           </div>
