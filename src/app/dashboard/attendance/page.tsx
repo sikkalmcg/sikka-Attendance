@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format } from "date-fns";
+import { format, subDays, isAfter, parseISO } from "date-fns";
 
 export default function AttendancePage() {
   const { employees, attendanceRecords, setAttendanceRecords, plants } = useData();
@@ -55,9 +55,20 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Filter history to only 45 days for the current employee
   const history = useMemo(() => {
     if (!currentUser) return [];
-    return attendanceRecords.filter(r => r.employeeId === currentUser.id || r.employeeId === "emp-mock").reverse();
+    
+    const fortyFiveDaysAgo = subDays(new Date(), 45);
+    fortyFiveDaysAgo.setHours(0, 0, 0, 0);
+
+    return (attendanceRecords || [])
+      .filter(r => {
+        const isMine = r.employeeId === (currentUser.username || "emp-mock");
+        const recordDate = parseISO(r.date);
+        return isMine && (isAfter(recordDate, fortyFiveDaysAgo) || format(recordDate, 'yyyy-MM-dd') === format(fortyFiveDaysAgo, 'yyyy-MM-dd'));
+      })
+      .reverse();
   }, [currentUser, attendanceRecords]);
 
   useEffect(() => {
@@ -138,7 +149,7 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent className="space-y-6 px-6 pb-6 pt-0">
           
-          {/* Refined Clock - Light Blue Theme, Compact Size */}
+          {/* Clock Box - Light Blue Theme, Compact Size */}
           <div className="py-4 px-4 rounded-2xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-2 shadow-sm border-2 border-sky-100 max-w-md mx-auto">
             {currentTime ? (
               <div className="text-center">
@@ -156,7 +167,7 @@ export default function AttendancePage() {
             )}
           </div>
 
-          {/* Action Buttons Only */}
+          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
             <Button 
               className="flex-1 h-12 text-lg font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200 transition-all active:scale-95" 
@@ -167,7 +178,7 @@ export default function AttendancePage() {
             </Button>
             <Button 
               variant="destructive" 
-              className="flex-1 h-12 text-lg font-black rounded-xl shadow-md shadow-rose-200 transition-all active:scale-95" 
+              className="flex-1 h-12 text-lg font-black rounded-xl shadow-md shadow-rose-200 transition-all active:scale-95 bg-rose-500 hover:bg-rose-600 border-none" 
               disabled={attendanceStatus !== "IN"} 
               onClick={handleCheckOut}
             >
@@ -178,7 +189,7 @@ export default function AttendancePage() {
       </Card>
 
       <div className="space-y-4 max-w-6xl mx-auto">
-        <h3 className="font-bold text-lg flex items-center gap-2"><History className="w-5 h-5 text-slate-400" /> My Attendance History</h3>
+        <h3 className="font-bold text-lg flex items-center gap-2 text-slate-700"><History className="w-5 h-5 text-slate-400" /> My Attendance History</h3>
         <Card className="rounded-xl overflow-hidden shadow-sm border-slate-200">
           <Table>
             <TableHeader className="bg-slate-50">
@@ -195,24 +206,24 @@ export default function AttendancePage() {
             </TableHeader>
             <TableBody>
               {history.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No attendance history found.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground font-medium">No attendance history found for the last 45 days.</TableCell></TableRow>
               ) : (
                 history.map((h) => (
                   <TableRow key={h.id} className="hover:bg-slate-50/50">
-                    <TableCell className="font-medium">{h.employeeName}</TableCell>
-                    <TableCell className="text-sm">{h.inPlant || "--"}</TableCell>
-                    <TableCell className="font-mono text-xs">{h.date} {h.inTime}</TableCell>
-                    <TableCell className="text-sm">{h.outPlant || "--"}</TableCell>
-                    <TableCell className="font-mono text-xs">{h.date} {h.outTime || "--:--"}</TableCell>
-                    <TableCell className="font-bold text-emerald-600">{h.hours}h</TableCell>
-                    <TableCell><Badge variant="outline" className="text-[10px] font-bold">{h.attendanceType}</Badge></TableCell>
+                    <TableCell className="font-bold">{h.employeeName}</TableCell>
+                    <TableCell className="text-sm font-medium">{h.inPlant || "--"}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime}</TableCell>
+                    <TableCell className="text-sm font-medium">{h.outPlant || "--"}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.outTime || "--:--"}</TableCell>
+                    <TableCell className="font-black text-emerald-600">{h.hours}h</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight">{h.attendanceType}</Badge></TableCell>
                     <TableCell>
                       {h.approved ? (
-                        <Badge className="bg-emerald-600 border-none">Approved</Badge>
+                        <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px]">Approved</Badge>
                       ) : h.remark ? (
-                        <Badge variant="destructive" className="border-none">Rejected</Badge>
+                        <Badge variant="destructive" className="border-none font-bold uppercase text-[9px]">Rejected</Badge>
                       ) : (
-                        <Badge variant="secondary" className="border-none">Pending</Badge>
+                        <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-slate-100 text-slate-500">Pending</Badge>
                       )}
                     </TableCell>
                   </TableRow>
