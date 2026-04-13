@@ -50,7 +50,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Ban,
-  User
+  User,
+  ArrowDownCircle
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -99,6 +100,7 @@ export default function PayrollPage() {
 
   // Salary Gen State
   const [incentivePct, setIncentivePct] = useState(0);
+  const [advanceRecovery, setAdvanceRecovery] = useState(0);
 
   // Reset adjustment tracking when month changes
   useEffect(() => {
@@ -166,7 +168,6 @@ export default function PayrollPage() {
       
       toast({ title: "Leave Adjusted", description: `${advanceLeaveValue} days added to earning days.` });
       setAdjustLeaveEmp(null);
-      // We don't reset advanceLeaveValue here because it's used in calculation during Generate Salary
     } finally {
       setIsProcessing(false);
     }
@@ -216,7 +217,8 @@ export default function PayrollPage() {
       
     const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * summary.holidayWork);
     
-    const finalNet = baseNetPayable + incentiveAmt + holidayWorkingAmt;
+    // Final Calculation: Net = Base + Incentive + HolidayPay - AdvanceRecovery
+    const finalNet = baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
 
     const newPayrollRecord: PayrollRecord = {
       id: Math.random().toString(36).substr(2, 9),
@@ -231,6 +233,7 @@ export default function PayrollPage() {
       incentiveAmt: incentiveAmt,
       holidayWorkDays: summary.holidayWork,
       holidayWorkAmt: holidayWorkingAmt,
+      advanceRecovery: advanceRecovery,
       netPayable: finalNet,
       status: 'DRAFT',
       createdAt: new Date().toISOString()
@@ -240,14 +243,13 @@ export default function PayrollPage() {
     toast({ title: "Salary Generated", description: `Payroll entry created for ${generateSalaryEmp.name}` });
     setGenerateSalaryEmp(null);
     setIncentivePct(0);
-    setAdvanceLeaveValue(0); // Reset after use
+    setAdvanceLeaveValue(0);
+    setAdvanceRecovery(0);
   };
 
   const leaveHistoryData = useMemo(() => {
     if (!viewLeaveHistoryEmp) return [];
     
-    // In a real app, this would be fetched from a leave transactions table
-    // Here we derive it from payroll records for the employee
     let runningBalance = viewLeaveHistoryEmp.advanceLeaveBalance || 0;
     
     const records = payrollRecords
@@ -415,8 +417,8 @@ export default function PayrollPage() {
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-50 rounded-lg"><Wallet className="w-5 h-5 text-emerald-600" /></div>
                 <div>
-                  <CardTitle className="text-lg font-bold">Paid Advance Ledger</CardTitle>
-                  <CardDescription>Track cash advances paid via vouchers.</CardDescription>
+                  <CardTitle className="text-lg font-bold">Paid Advance Salary Ledger</CardTitle>
+                  <CardDescription>Track cash advances, salary deductions, and recovery status.</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -425,32 +427,57 @@ export default function PayrollPage() {
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead className="font-bold">Voucher No</TableHead>
+                    <TableHead className="font-bold">Voucher Date</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Date Paid</TableHead>
-                    <TableHead className="font-bold">Purpose</TableHead>
-                    <TableHead className="text-right font-bold">Amount</TableHead>
+                    <TableHead className="font-bold">Dept / Desig</TableHead>
+                    <TableHead className="text-right font-bold">Adv. Amount</TableHead>
+                    <TableHead className="text-right font-bold">Paid Amount</TableHead>
+                    <TableHead className="text-right font-bold">Debit Salary</TableHead>
+                    <TableHead className="text-center font-bold">Slip No</TableHead>
+                    <TableHead className="text-center font-bold">Sal. Month</TableHead>
+                    <TableHead className="text-right font-bold">Remaining</TableHead>
                     <TableHead className="text-center font-bold">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paidVouchers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-20 text-muted-foreground">
+                      <TableCell colSpan={11} className="text-center py-20 text-muted-foreground">
                         No paid advance salary records found.
                       </TableCell>
                     </TableRow>
                   ) : (
                     paidVouchers.map(v => {
                       const emp = employees.find(e => e.id === v.employeeId);
+                      const recoveries = payrollRecords.filter(p => p.employeeId === (emp?.employeeId || v.employeeId));
+                      const totalRecovered = recoveries.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+                      const remaining = v.amount - totalRecovered;
+                      const lastRecovery = recoveries[recoveries.length - 1];
+
                       return (
                         <TableRow key={v.id} className="hover:bg-slate-50/50">
                           <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold">{emp?.name || v.employeeId}</TableCell>
                           <TableCell className="text-sm">{v.date}</TableCell>
-                          <TableCell className="text-sm italic">{v.purpose}</TableCell>
-                          <TableCell className="text-right font-black text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="font-bold">{emp?.name || v.employeeId}</TableCell>
+                          <TableCell className="text-xs">
+                            <div className="flex flex-col">
+                              <span>{emp?.department || "--"}</span>
+                              <span className="text-muted-foreground">{emp?.designation || "--"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-right font-bold text-rose-600">{formatCurrency(totalRecovered)}</TableCell>
+                          <TableCell className="text-center font-mono text-[10px]">{lastRecovery ? lastRecovery.id.toUpperCase() : "--"}</TableCell>
+                          <TableCell className="text-center font-bold text-xs">{lastRecovery ? lastRecovery.month : "--"}</TableCell>
+                          <TableCell className="text-right font-black text-primary">{formatCurrency(Math.max(0, remaining))}</TableCell>
                           <TableCell className="text-center">
-                            <Badge className="bg-emerald-600 border-none font-bold">PAID</Badge>
+                            <Badge variant={remaining <= 0 ? "default" : "outline"} className={cn(
+                              "text-[10px] font-black",
+                              remaining <= 0 ? "bg-emerald-600" : "text-amber-600 border-amber-200 bg-amber-50"
+                            )}>
+                              {remaining <= 0 ? "COMPLETE" : "PENDING DEDUCTION"}
+                            </Badge>
                           </TableCell>
                         </TableRow>
                       );
@@ -635,6 +662,17 @@ export default function PayrollPage() {
                           </div>
                        </div>
 
+                       <div className="p-4 bg-rose-50 rounded-2xl space-y-2 border border-rose-100">
+                          <Label className="text-xs font-bold text-rose-900 flex items-center gap-2"><ArrowDownCircle className="w-3 h-3" /> Advance Recovery (INR)</Label>
+                          <Input 
+                            type="number" 
+                            className="bg-white h-10 font-bold border-rose-200" 
+                            placeholder="Amount to deduct"
+                            value={advanceRecovery}
+                            onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)}
+                          />
+                       </div>
+
                        <div className="p-4 bg-amber-50 rounded-2xl space-y-2 border border-amber-100">
                           <div className="flex justify-between items-center">
                             <Label className="text-xs font-bold text-amber-900">Holiday Work Pay</Label>
@@ -680,7 +718,8 @@ export default function PayrollPage() {
                                 : 0
                               ) + 
                               Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)) +
-                              Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork)
+                              Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork) -
+                              advanceRecovery
                             )}
                           </h2>
                           <div className="flex items-center gap-2 text-xs text-slate-400 pt-2">

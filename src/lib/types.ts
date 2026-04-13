@@ -123,6 +123,7 @@ export interface PayrollRecord {
   incentiveAmt: number;
   holidayWorkDays: number;
   holidayWorkAmt: number;
+  advanceRecovery?: number;
   netPayable: number;
   status: 'DRAFT' | 'FINALIZED' | 'PAID';
   createdAt: string;
