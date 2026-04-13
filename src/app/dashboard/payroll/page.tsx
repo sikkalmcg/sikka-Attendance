@@ -85,6 +85,9 @@ export default function PayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState(PAYROLL_MONTHS[1]); // Default to previous month
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Tracking for mandatory Adjust Leave step
+  const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, boolean>>({});
+
   // Modals
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
   const [generateSalaryEmp, setGenerateSalaryEmp] = useState<Employee | null>(null);
@@ -92,6 +95,11 @@ export default function PayrollPage() {
 
   // Salary Gen State
   const [incentivePct, setIncentivePct] = useState(0);
+
+  // Reset adjustment tracking when month changes
+  useEffect(() => {
+    setAdjustedEmployees({});
+  }, [selectedMonth]);
 
   const filteredEmployees = useMemo(() => {
     return (employees || []).filter(emp => {
@@ -144,6 +152,9 @@ export default function PayrollPage() {
         return e;
       }));
       
+      // Mark as adjusted to unlock Generate Salary
+      setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
+      
       toast({ title: "Leave Adjusted", description: `${advanceLeaveValue} days added to earning days.` });
       setAdjustLeaveEmp(null);
       setAdvanceLeaveValue(0);
@@ -164,6 +175,10 @@ export default function PayrollPage() {
         }
         return e;
       }));
+      
+      // Mark as adjusted to unlock Generate Salary
+      setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
+      
       toast({ title: "Balance Updated", description: `${summary.holidayWork} days added to Advance Leave Balance.` });
     } finally {
       setIsProcessing(false);
@@ -258,48 +273,72 @@ export default function PayrollPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredEmployees.map((emp) => (
-                    <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-bold">{emp.name}</span>
-                          <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{emp.department}</span>
-                          <span className="text-xs text-muted-foreground">{emp.designation}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-emerald-600">
-                        {formatCurrency(emp.salary.monthlyCTC)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="text-xs font-bold gap-1 border-primary/20 hover:bg-primary/5"
-                            onClick={() => setAdjustLeaveEmp(emp)}
-                          >
-                            <CalendarClock className="w-3 h-3" /> Adjust Leave
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            className="text-xs font-bold gap-1 bg-primary"
-                            onClick={() => setGenerateSalaryEmp(emp)}
-                          >
-                            <Calculator className="w-3 h-3" /> Generate Salary
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredEmployees.map((emp) => {
+                    const isAdjusted = adjustedEmployees[emp.id];
+                    return (
+                      <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-bold">{emp.name}</span>
+                            <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{emp.department}</span>
+                            <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-emerald-600">
+                          {formatCurrency(emp.salary.monthlyCTC)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className={cn(
+                                "text-xs font-bold gap-1 border-primary/20",
+                                isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5"
+                              )}
+                              onClick={() => setAdjustLeaveEmp(emp)}
+                            >
+                              <CalendarClock className="w-3 h-3" /> 
+                              {isAdjusted ? "Adjusted" : "Adjust Leave"}
+                            </Button>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="inline-block">
+                                    <Button 
+                                      size="sm" 
+                                      className={cn(
+                                        "text-xs font-bold gap-1",
+                                        isAdjusted ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                      )}
+                                      onClick={() => isAdjusted && setGenerateSalaryEmp(emp)}
+                                      disabled={!isAdjusted}
+                                    >
+                                      <Calculator className="w-3 h-3" /> Generate Salary
+                                    </Button>
+                                  </div>
+                                </TooltipTrigger>
+                                {!isAdjusted && (
+                                  <TooltipContent>
+                                    <p className="text-xs">Review leave before generating salary</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
