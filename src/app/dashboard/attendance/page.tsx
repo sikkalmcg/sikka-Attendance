@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +13,9 @@ import {
   Calendar,
   Loader2,
   Building2,
-  Navigation
+  Navigation,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -57,6 +59,10 @@ export default function AttendancePage() {
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
   const [manualType, setManualType] = useState<'FIELD' | 'WFH'>('FIELD');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 15;
 
   const { toast } = useToast();
 
@@ -151,6 +157,12 @@ export default function AttendancePage() {
       } as any;
     }).filter(Boolean).reverse();
   }, [currentUser, attendanceRecords, holidays]);
+
+  const totalPages = Math.ceil(history.length / rowsPerPage);
+  const paginatedHistory = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return history.slice(start, start + rowsPerPage);
+  }, [history, currentPage]);
 
   const addNotification = (message: string) => {
     const newNotif: AppNotification = {
@@ -305,7 +317,7 @@ export default function AttendancePage() {
         </CardContent>
       </Card>
 
-      {/* History Table - Filtered to last 45 days */}
+      {/* History Table - Filtered to last 45 days with Pagination */}
       <div className="space-y-4 max-w-6xl mx-auto pt-6">
         <div className="flex items-center justify-between">
           <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
@@ -327,10 +339,10 @@ export default function AttendancePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {history.length === 0 ? (
+              {paginatedHistory.length === 0 ? (
                 <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
               ) : (
-                history.map((h: any) => (
+                paginatedHistory.map((h: any) => (
                   <TableRow key={h.id} className="hover:bg-slate-50/50">
                     <TableCell className="text-sm font-bold text-slate-700">{h.employeeName}</TableCell>
                     <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
@@ -368,6 +380,36 @@ export default function AttendancePage() {
               )}
             </TableBody>
           </Table>
+          {totalPages > 1 && (
+            <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+              <div className="text-xs font-bold text-muted-foreground">
+                Showing {((currentPage - 1) * rowsPerPage) + 1} - {Math.min(currentPage * rowsPerPage, history.length)} of {history.length}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                  className="h-8 rounded-lg font-bold"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                </Button>
+                <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border border-slate-200 shadow-sm">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                  className="h-8 rounded-lg font-bold"
+                >
+                  Next <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </CardFooter>
+          )}
         </Card>
       </div>
 
