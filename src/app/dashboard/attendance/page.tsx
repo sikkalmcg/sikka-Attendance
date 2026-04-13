@@ -86,6 +86,7 @@ export default function AttendancePage() {
     const fortyFiveDaysAgo = subDays(today, 45);
     fortyFiveDaysAgo.setHours(0, 0, 0, 0);
 
+    // Generate date interval
     const dateRange = eachDayOfInterval({ start: fortyFiveDaysAgo, end: today });
     
     return dateRange.map(date => {
