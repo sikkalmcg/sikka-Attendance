@@ -127,4 +127,6 @@ export interface PayrollRecord {
   netPayable: number;
   status: 'DRAFT' | 'FINALIZED' | 'PAID';
   createdAt: string;
+  slipNo?: string;
+  slipDate?: string;
 }
