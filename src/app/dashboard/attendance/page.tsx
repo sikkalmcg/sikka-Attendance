@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -14,7 +13,7 @@ import {
   Calendar,
   Timer
 } from "lucide-react";
-import { calculateDistance } from "@/lib/utils";
+import { calculateDistance, cn } from "@/lib/utils";
 import { 
   Table, 
   TableHeader, 
@@ -50,7 +49,7 @@ export default function AttendancePage() {
     // Update clock every minute
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000);
+    }, 1000); // Changed to 1s for smoother "Live" feel as requested
     
     return () => clearInterval(timer);
   }, []);
@@ -132,33 +131,33 @@ export default function AttendancePage() {
         <div className="h-3 bg-primary" />
         <CardHeader className="text-center pb-2">
           <CardTitle className="text-3xl font-bold flex items-center justify-center gap-2">
-            <ShieldCheck className="text-primary w-8 h-8" /> Check-In / Check-Out
+            <ShieldCheck className="text-primary w-8 h-8" /> Gateway Check-In
           </CardTitle>
-          <CardDescription>Sikka Industries Secure Gateway (24h Clock)</CardDescription>
+          <CardDescription>Sikka Industries & Logistics Secure Portal</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8 p-10">
           
-          {/* Real-time Clock Section */}
-          <div className="p-8 rounded-3xl bg-slate-50 border-2 border-slate-100 flex flex-col items-center justify-center space-y-2">
-            <div className="flex items-center gap-3 text-primary mb-2">
-              <Timer className="w-6 h-6 animate-pulse" />
+          {/* High Visibility Clock */}
+          <div className="p-10 rounded-3xl bg-slate-900 text-white flex flex-col items-center justify-center space-y-4 shadow-xl border-4 border-slate-800">
+            <div className="flex items-center gap-2 text-emerald-400">
+              <Timer className="w-5 h-5 animate-pulse" />
               <span className="text-[10px] font-black uppercase tracking-[0.2em]">Live System Time</span>
             </div>
             {currentTime ? (
               <div className="text-center">
-                <h2 className="text-5xl font-black text-slate-900 tracking-tight font-mono">
+                <h2 className="text-7xl font-black tracking-tighter font-mono text-white">
                   {format(currentTime, "HH:mm")}
                 </h2>
-                <p className="text-lg font-bold text-slate-500 mt-2 flex items-center justify-center gap-2">
-                  <Calendar className="w-4 h-4" /> {format(currentTime, "dd-MMMM-yyyy")}
+                <p className="text-xl font-bold text-slate-400 mt-2 flex items-center justify-center gap-2">
+                  <Calendar className="w-5 h-5" /> {format(currentTime, "dd-MMMM-yyyy")}
                 </p>
               </div>
             ) : (
-              <div className="h-16 flex items-center justify-center">
-                <span className="text-slate-300 font-bold">Synchronizing...</span>
+              <div className="h-20 flex items-center justify-center">
+                <span className="text-slate-500 font-bold">Synchronizing...</span>
               </div>
             )}
-            <div className="pt-4 flex items-center gap-2 text-[10px] text-muted-foreground font-mono bg-white/50 px-4 py-1.5 rounded-full border border-slate-200 mt-4">
+            <div className="pt-4 flex items-center gap-2 text-[10px] text-slate-500 font-mono bg-white/5 px-4 py-1.5 rounded-full border border-white/10">
               <MapPin className="w-3 h-3" /> {address}
             </div>
           </div>
@@ -181,19 +180,19 @@ export default function AttendancePage() {
 
           <div className="flex flex-col sm:flex-row gap-5">
             <Button 
-              className="flex-1 h-20 text-xl font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95" 
+              className="flex-1 h-24 text-2xl font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95" 
               disabled={attendanceStatus !== "NONE" || !location} 
               onClick={handleCheckIn}
             >
-              Check-In
+              Mark Check-In
             </Button>
             <Button 
               variant="destructive" 
-              className="flex-1 h-20 text-xl font-bold rounded-2xl shadow-lg shadow-rose-200 transition-all active:scale-95" 
+              className="flex-1 h-24 text-2xl font-black rounded-2xl shadow-lg shadow-rose-200 transition-all active:scale-95" 
               disabled={attendanceStatus !== "IN"} 
               onClick={handleCheckOut}
             >
-              Check-Out
+              Mark Check-Out
             </Button>
           </div>
         </CardContent>
