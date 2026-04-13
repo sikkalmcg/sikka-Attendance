@@ -1,11 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Clock, CheckCircle2, AlertTriangle, ShieldCheck, Home, Building2, Calendar as CalendarIcon } from "lucide-react";
+import { 
+  MapPin, 
+  Clock, 
+  CheckCircle2, 
+  AlertTriangle, 
+  ShieldCheck, 
+  Home, 
+  Building2, 
+  Calendar as CalendarIcon,
+  Navigation,
+  History
+} from "lucide-react";
 import { calculateDistance, checkIfSunday } from "@/lib/utils";
 import {
   Select,
@@ -15,38 +26,56 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { 
+  Table, 
+  TableHeader, 
+  TableBody, 
+  TableRow, 
+  TableHead, 
+  TableCell 
+} from "@/components/ui/table";
+import { AttendanceRecord, Plant } from "@/lib/types";
 
-// Mock Data
-const MOCK_PLANT = {
-  id: "plant-1",
-  name: "Okhla Phase III Plant",
-  lat: 28.5355,
-  lng: 77.2639,
-  radius: 700 // 700 meters
-};
-
-// Mock Holiday Database
-const MOCK_HOLIDAYS = ["2024-01-26", "2024-08-15", "2024-10-02"];
-
-export type AttendanceType = "office" | "remote";
+// Mock Plants from Admin Panel
+const MOCK_PLANTS: Plant[] = [
+  { id: "plant-1", name: "Okhla Phase III Plant", lat: 28.5355, lng: 77.2639, radius: 700 },
+  { id: "plant-2", name: "Gurgaon Sec 18 Plant", lat: 28.4595, lng: 77.0266, radius: 700 },
+];
 
 export default function AttendancePage() {
   const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
-  const [address, setAddress] = useState<string>("Locating...");
-  const [isWithinRadius, setIsWithinRadius] = useState<boolean | null>(null);
+  const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
+  const [address, setAddress] = useState<string>("Detecting location...");
   const [attendanceStatus, setAttendanceStatus] = useState<"NONE" | "IN" | "OUT">("NONE");
-  const [attendanceType, setAttendanceType] = useState<AttendanceType>("office");
-  const [inTime, setInTime] = useState<string | null>(null);
+  const [attendanceType, setAttendanceType] = useState<'OFFICE' | 'FIELD' | 'WFH'>('OFFICE');
+  const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [isHoliday, setIsHoliday] = useState(false);
   const { toast } = useToast();
 
+  // Mock 45-day history for the logged-in employee
+  const history: AttendanceRecord[] = useMemo(() => {
+    return Array.from({ length: 15 }).map((_, i) => ({
+      id: `hist-${i}`,
+      employeeId: "emp-mock",
+      employeeName: "Employee Name",
+      date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      inTime: "09:00 AM",
+      outTime: "06:00 PM",
+      inPlant: "Okhla Phase III",
+      outPlant: "Okhla Phase III",
+      hours: 9,
+      status: 'PRESENT',
+      attendanceType: 'OFFICE',
+      lat: 28.5355,
+      lng: 77.2639,
+      address: "Verified Plant Location",
+      approved: true
+    }));
+  }, []);
+
   useEffect(() => {
-    // Check if today is a holiday or Sunday
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const sunday = checkIfSunday(today);
-    const festival = MOCK_HOLIDAYS.includes(todayStr);
-    setIsHoliday(sunday || festival);
+    setIsHoliday(checkIfSunday(today));
 
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -55,149 +84,183 @@ export default function AttendancePage() {
           const lng = pos.coords.longitude;
           setLocation({ lat, lng });
           
-          const distance = calculateDistance(lat, lng, MOCK_PLANT.lat, MOCK_PLANT.lng);
-          const within = distance <= MOCK_PLANT.radius;
-          setIsWithinRadius(within);
-          setAddress(`Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`);
-          
-          if (!within) {
-            setAttendanceType("office");
+          // Geofencing Check
+          let foundPlant: Plant | null = null;
+          for (const plant of MOCK_PLANTS) {
+            const distance = calculateDistance(lat, lng, plant.lat, plant.lng);
+            if (distance <= plant.radius) {
+              foundPlant = plant;
+              break;
+            }
           }
+
+          if (foundPlant) {
+            setDetectedPlant(foundPlant);
+            setAttendanceType('OFFICE');
+          }
+          setAddress(`Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`);
         },
         (err) => {
-          toast({ variant: "destructive", title: "GPS Required", description: "Please enable location to mark attendance." });
+          toast({ variant: "destructive", title: "GPS Required", description: "Please enable location to check-in." });
           setAddress("Permission Denied");
         }
       );
     }
   }, [toast]);
 
-  const handleMarkIn = () => {
-    if (attendanceType === "office" && !isWithinRadius) {
-      toast({ variant: "destructive", title: "Out of Range", description: "You must be at the plant to mark Office attendance." });
+  const handleCheckIn = () => {
+    if (!detectedPlant && attendanceType === 'OFFICE') {
+      toast({ variant: "destructive", title: "Out of Range", description: "Select 'Field' or 'Work from Home' if not at a plant." });
       return;
     }
     setAttendanceStatus("IN");
-    setInTime(new Date().toLocaleTimeString());
+    setCheckInTime(new Date().toLocaleTimeString());
     toast({ 
-      title: "Check-in Successful", 
-      description: `Your attendance IN (${attendanceType === 'office' ? 'Office' : 'Work from Home'}) has been recorded.` 
+      title: "Check-In Successful", 
+      description: `Logged at ${detectedPlant ? detectedPlant.name : attendanceType}.` 
     });
   };
 
-  const handleMarkOut = () => {
+  const handleCheckOut = () => {
     setAttendanceStatus("OUT");
-    toast({ title: "Check-out Successful", description: "Your attendance OUT has been recorded." });
+    toast({ title: "Check-Out Successful", description: "Your attendance cycle is complete." });
   };
 
-  const canPunchIn = attendanceStatus === "NONE" && (isWithinRadius || attendanceType === "remote");
-
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-8 max-w-4xl mx-auto pb-12">
       {isHoliday && (
-        <Card className="bg-amber-50 border-amber-200 border shadow-none mb-6">
+        <Card className="bg-amber-50 border-amber-200 shadow-none">
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="bg-amber-100 p-2 rounded-lg">
-              <CalendarIcon className="text-amber-600 w-5 h-5" />
-            </div>
-            <div>
-              <p className="font-bold text-amber-900 text-sm">Holiday Today</p>
-              <p className="text-amber-700 text-xs">Attendance is optional today. Any logs will be marked as 'Work on Holiday'.</p>
-            </div>
+            <CalendarIcon className="text-amber-600 w-5 h-5" />
+            <p className="text-sm font-bold text-amber-900">Weekly Off Today (Sunday)</p>
           </CardContent>
         </Card>
       )}
 
-      <Card className="shadow-xl border-none">
+      <Card className="shadow-xl border-none overflow-hidden">
+        <div className="h-2 bg-primary" />
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+          <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
             <ShieldCheck className="text-primary w-6 h-6" />
-          </div>
-          <CardTitle className="text-2xl font-bold">Attendance Verification</CardTitle>
-          <CardDescription>Sikka Industries & Logistics - {MOCK_PLANT.name}</CardDescription>
+            Check-In / Check-Out
+          </CardTitle>
+          <CardDescription>Verify your presence at Sikka Industries</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-8 p-8">
+        <CardContent className="space-y-6 p-8">
           
-          <div className="flex flex-col items-center space-y-6">
-            <div className={`p-4 rounded-2xl w-full flex items-center justify-between border ${isWithinRadius ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-              <div className="flex items-center gap-3">
-                <MapPin className={isWithinRadius ? 'text-emerald-600' : 'text-rose-600'} />
-                <div>
-                  <p className="text-sm font-semibold">{isWithinRadius ? 'Within Plant Radius' : 'Outside Plant Radius'}</p>
-                  <p className="text-xs text-muted-foreground">{address}</p>
-                </div>
+          <div className={`p-5 rounded-2xl flex items-center justify-between border ${detectedPlant ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-full ${detectedPlant ? 'bg-emerald-100' : 'bg-slate-200'}`}>
+                <MapPin className={detectedPlant ? 'text-emerald-600' : 'text-slate-500'} />
               </div>
-              <Badge variant={isWithinRadius ? 'default' : 'destructive'} className={isWithinRadius ? 'bg-emerald-600' : 'bg-rose-600'}>
-                {isWithinRadius ? 'Verified' : 'Blocked'}
-              </Badge>
+              <div>
+                <p className="text-sm font-bold uppercase tracking-tight text-muted-foreground">Location Verification</p>
+                <h4 className="font-bold text-lg">{detectedPlant ? detectedPlant.name : "Outside Plant Radius"}</h4>
+                <p className="text-xs text-muted-foreground">{address}</p>
+              </div>
             </div>
+            <Badge variant={detectedPlant ? 'default' : 'outline'} className={detectedPlant ? 'bg-emerald-600' : ''}>
+              {detectedPlant ? 'In Radius' : 'Manual Selection'}
+            </Badge>
+          </div>
 
-            {!isWithinRadius && attendanceStatus === "NONE" && (
-              <div className="w-full space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                <Label className="text-sm font-bold flex items-center gap-2">
-                  Attendance Type Required
-                </Label>
-                <Select value={attendanceType} onValueChange={(value: AttendanceType) => setAttendanceType(value)}>
-                  <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="office" disabled>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4" /> Office (Locked - Out of Range)
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="remote">
-                      <div className="flex items-center gap-2">
-                        <Home className="w-4 h-4 text-emerald-600" /> Work from Home
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-muted-foreground">Since you are outside the 700m radius, you must select 'Work from Home' to mark attendance.</p>
-              </div>
-            )}
+          {!detectedPlant && attendanceStatus === "NONE" && (
+            <div className="space-y-3 p-5 bg-blue-50/50 border border-blue-100 rounded-2xl">
+              <Label className="text-sm font-bold flex items-center gap-2">
+                <Navigation className="w-4 h-4 text-blue-600" /> Attendance Type
+              </Label>
+              <Select value={attendanceType} onValueChange={(v: any) => setAttendanceType(v)}>
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FIELD" className="font-medium">Field Visit</SelectItem>
+                  <SelectItem value="WFH" className="font-medium">Work from Home</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                You are currently outside the 0.7km verification geofence. Please select your work mode manually.
+              </p>
+            </div>
+          )}
 
-            <div className="grid grid-cols-2 gap-4 w-full">
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                <Clock className="w-5 h-5 mx-auto mb-2 text-primary" />
-                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Status</p>
-                <p className="font-bold text-lg">{attendanceStatus === "NONE" ? "Pending" : attendanceStatus}</p>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                <CheckCircle2 className="w-5 h-5 mx-auto mb-2 text-primary" />
-                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Check-in</p>
-                <p className="font-bold text-lg">{inTime || '--:--'}</p>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+              <Clock className="w-5 h-5 mx-auto mb-2 text-primary opacity-50" />
+              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Session Status</p>
+              <p className="font-bold text-xl mt-1">{attendanceStatus === "NONE" ? "Pending" : attendanceStatus}</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+              <CheckCircle2 className="w-5 h-5 mx-auto mb-2 text-emerald-500 opacity-50" />
+              <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Check-In Time</p>
+              <p className="font-bold text-xl mt-1">{checkInTime || '--:--'}</p>
             </div>
           </div>
 
-          <div className="space-y-4 pt-4">
+          <div className="flex flex-col sm:flex-row gap-4 pt-4">
             <Button 
-              className={`w-full h-16 text-lg font-bold shadow-lg ${canPunchIn ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : ''}`}
-              disabled={!canPunchIn}
-              onClick={handleMarkIn}
+              className="flex-1 h-16 text-lg font-bold shadow-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 transition-all"
+              disabled={attendanceStatus !== "NONE" || !location}
+              onClick={handleCheckIn}
             >
-              Punch IN
+              Check-In
             </Button>
             <Button 
               variant="destructive"
-              className="w-full h-16 text-lg font-bold shadow-lg shadow-rose-200"
+              className="flex-1 h-16 text-lg font-bold shadow-lg disabled:opacity-30 transition-all"
               disabled={attendanceStatus !== "IN"}
-              onClick={handleMarkOut}
+              onClick={handleCheckOut}
             >
-              Punch OUT
+              Check-Out
             </Button>
           </div>
-
-          {!isWithinRadius && attendanceType === "office" && (
-            <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 text-sm">
-              <AlertTriangle className="w-5 h-5 shrink-0" />
-              <p>GPS validation failed. You are not within the allowed 700m radius of the plant. Please select "Work from Home" or contact your Administrator if this is an error.</p>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <History className="w-5 h-5 text-slate-400" />
+          <h3 className="font-bold text-lg">My Attendance History (Last 45 Days)</h3>
+        </div>
+        <Card className="border-slate-200 shadow-sm overflow-hidden">
+          <Table>
+            <TableHeader className="bg-slate-50">
+              <TableRow>
+                <TableHead className="font-bold">Date</TableHead>
+                <TableHead className="font-bold">In-Plant / Location</TableHead>
+                <TableHead className="font-bold">IN / OUT</TableHead>
+                <TableHead className="font-bold">Working Hours</TableHead>
+                <TableHead className="font-bold">Type</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {history.map((h) => (
+                <TableRow key={h.id}>
+                  <TableCell className="text-sm font-medium">{h.date}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold">{h.inPlant || "Field"}</span>
+                      <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">{h.address}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Badge variant="outline" className="font-mono text-[10px]">{h.inTime}</Badge>
+                      <Badge variant="outline" className="font-mono text-[10px]">{h.outTime}</Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-bold">{h.hours}h</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-tight">
+                      {h.attendanceType}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      </div>
     </div>
   );
 }

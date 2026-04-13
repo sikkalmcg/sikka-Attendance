@@ -16,43 +16,58 @@ export interface Plant {
   radius: number; // In meters
 }
 
+export interface FirmUnit {
+  id: string;
+  name: string;
+  address: string;
+}
+
 export interface Firm {
   id: string;
   name: string;
+  logo?: string;
   gstin: string;
   pan: string;
   pfNo: string;
   esicNo: string;
+  units: FirmUnit[];
+}
+
+export interface SalaryStructure {
+  basic: number;
+  hra: number;
+  da: number;
+  allowance: number;
+  monthlyCTC: number;
 }
 
 export interface Employee {
   id: string;
   employeeId: string;
-  firstName: string;
-  lastName: string;
+  name: string;
   aadhaar: string;
   pan: string;
   mobile: string;
   department: string;
   designation: string;
+  joinDate: string;
   plantId: string;
-  salary: {
-    basic: number;
-    hra: number;
-    da: number;
-    allowance: number;
-  };
+  salary: SalaryStructure;
   active: boolean;
 }
 
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
-  date: string; // ISO String (Date only)
+  employeeName: string;
+  date: string;
   inTime: string | null;
   outTime: string | null;
+  inPlant?: string;
+  outPlant?: string;
   hours: number;
-  status: 'PRESENT' | 'HALF_DAY' | 'ABSENT' | 'HOLIDAY' | 'PRESENT_ON_HOLIDAY';
+  status: 'PRESENT' | 'HALF_DAY' | 'ABSENT' | 'HOLIDAY' | 'FIELD' | 'WFH';
+  attendanceType: 'OFFICE' | 'FIELD' | 'WFH';
   lat: number;
   lng: number;
   address: string;
@@ -66,20 +81,6 @@ export interface Holiday {
   name: string;
 }
 
-export interface PayrollRecord {
-  id: string;
-  payrollNo: string;
-  employeeId: string;
-  month: string;
-  year: string;
-  payableDays: number;
-  gross: number;
-  pf: number;
-  esic: number;
-  netSalary: number;
-  paidAmount: number;
-}
-
 export interface Voucher {
   id: string;
   voucherNo: string;
@@ -87,8 +88,5 @@ export interface Voucher {
   date: string;
   purpose: string;
   amount: number;
-  paidAmount: number;
   status: 'PENDING' | 'PAID' | 'CANCELLED';
-  paidDate?: string;
-  paymentMode?: 'CASH' | 'BANK' | 'CHEQUE';
 }
