@@ -83,29 +83,12 @@ export interface Employee {
   advanceLeaveBalance?: number;
 }
 
-export interface AttendanceRecord {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  date: string;
-  inTime: string | null;
-  outTime: string | null;
-  inPlant?: string;
-  outPlant?: string;
-  hours: number;
-  status: 'PRESENT' | 'HALF_DAY' | 'ABSENT' | 'HOLIDAY' | 'FIELD' | 'WFH';
-  attendanceType: 'OFFICE' | 'FIELD' | 'WFH';
-  lat: number;
-  lng: number;
-  address: string;
-  approved: boolean;
-  remark?: string;
-}
-
 export interface Holiday {
   id: string;
   date: string;
   name: string;
+  type: 'FESTIVAL' | 'NATIONAL_HOLIDAY' | 'COMPANY_HOLIDAY' | 'WEEKLY_OFF';
+  auto?: boolean;
 }
 
 export interface Voucher {
