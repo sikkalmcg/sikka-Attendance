@@ -9,21 +9,12 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   MapPin, 
   Clock, 
-  CheckCircle2, 
   ShieldCheck, 
   History,
-  Info,
-  Navigation
+  Calendar,
+  Timer
 } from "lucide-react";
 import { calculateDistance } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { 
   Table, 
   TableHeader, 
@@ -34,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
+import { format } from "date-fns";
 
 export default function AttendancePage() {
   const { employees, attendanceRecords, setAttendanceRecords, plants } = useData();
@@ -44,11 +36,23 @@ export default function AttendancePage() {
   const [attendanceStatus, setAttendanceStatus] = useState<"NONE" | "IN" | "OUT">("NONE");
   const [attendanceType, setAttendanceType] = useState<'OFFICE' | 'FIELD' | 'WFH'>('OFFICE');
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  
   const { toast } = useToast();
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
+    
+    // Set initial clock
+    setCurrentTime(new Date());
+    
+    // Update clock every minute
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000);
+    
+    return () => clearInterval(timer);
   }, []);
 
   const history = useMemo(() => {
@@ -81,10 +85,6 @@ export default function AttendancePage() {
   }, [toast, plants]);
 
   const handleCheckIn = () => {
-    if (!detectedPlant && attendanceType === 'OFFICE') {
-      toast({ variant: "destructive", title: "Out of Range", description: "Please select Field or WFH mode." });
-      return;
-    }
     const time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
     const today = new Date().toISOString().split('T')[0];
 
@@ -136,37 +136,65 @@ export default function AttendancePage() {
           </CardTitle>
           <CardDescription>Sikka Industries Secure Gateway (24h Clock)</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 p-10">
-          <div className={`p-6 rounded-3xl flex items-center justify-between border-2 ${detectedPlant ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
-            <div className="flex items-center gap-5">
-              <div className={`p-4 rounded-2xl ${detectedPlant ? 'bg-emerald-100' : 'bg-slate-200'}`}><MapPin className={detectedPlant ? 'text-emerald-600' : 'text-slate-500'} size={28} /></div>
-              <div>
-                <p className="text-[10px] uppercase font-black tracking-widest text-muted-foreground mb-1">Geofence Status</p>
-                <h4 className="font-bold text-xl">{detectedPlant ? detectedPlant.name : "Outside Geofence"}</h4>
-                <p className="text-sm text-muted-foreground font-mono">{address}</p>
-              </div>
+        <CardContent className="space-y-8 p-10">
+          
+          {/* Real-time Clock Section */}
+          <div className="p-8 rounded-3xl bg-slate-50 border-2 border-slate-100 flex flex-col items-center justify-center space-y-2">
+            <div className="flex items-center gap-3 text-primary mb-2">
+              <Timer className="w-6 h-6 animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em]">Live System Time</span>
             </div>
-            <Badge variant={detectedPlant ? 'default' : 'outline'}>{detectedPlant ? 'Plant Verified' : 'Manual Selection'}</Badge>
+            {currentTime ? (
+              <div className="text-center">
+                <h2 className="text-5xl font-black text-slate-900 tracking-tight font-mono">
+                  {format(currentTime, "HH:mm")}
+                </h2>
+                <p className="text-lg font-bold text-slate-500 mt-2 flex items-center justify-center gap-2">
+                  <Calendar className="w-4 h-4" /> {format(currentTime, "dd-MMMM-yyyy")}
+                </p>
+              </div>
+            ) : (
+              <div className="h-16 flex items-center justify-center">
+                <span className="text-slate-300 font-bold">Synchronizing...</span>
+              </div>
+            )}
+            <div className="pt-4 flex items-center gap-2 text-[10px] text-muted-foreground font-mono bg-white/50 px-4 py-1.5 rounded-full border border-slate-200 mt-4">
+              <MapPin className="w-3 h-3" /> {address}
+            </div>
           </div>
 
-          {!detectedPlant && attendanceStatus === "NONE" && (
-            <div className="space-y-4 p-6 bg-blue-50/50 border-2 border-blue-100 rounded-3xl">
-              <Label className="text-sm font-bold flex items-center gap-2"><Navigation className="w-4 h-4" /> Attendance Type</Label>
-              <Select value={attendanceType} onValueChange={(v: any) => setAttendanceType(v)}>
-                <SelectTrigger className="bg-white h-12 border-blue-200"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="FIELD">Field Visit</SelectItem><SelectItem value="WFH">Work from Home</SelectItem></SelectContent>
-              </Select>
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-6">
-            <div className="p-6 rounded-3xl bg-slate-50 text-center"><p className="text-[10px] text-muted-foreground font-black">STATUS</p><p className="font-bold text-2xl">{attendanceStatus}</p></div>
-            <div className="p-6 rounded-3xl bg-slate-50 text-center"><p className="text-[10px] text-muted-foreground font-black">LOGGED AT</p><p className="font-bold text-2xl font-mono">{checkInTime || '--:--'}</p></div>
+            <div className="p-6 rounded-3xl bg-slate-50 text-center border border-slate-100">
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">CURRENT STATUS</p>
+              <p className={cn(
+                "font-black text-2xl",
+                attendanceStatus === 'IN' ? "text-emerald-600" : attendanceStatus === 'OUT' ? "text-rose-600" : "text-slate-400"
+              )}>
+                {attendanceStatus === 'NONE' ? 'STATIONARY' : `LOGGED ${attendanceStatus}`}
+              </p>
+            </div>
+            <div className="p-6 rounded-3xl bg-slate-50 text-center border border-slate-100">
+              <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest mb-1">LOGGED AT</p>
+              <p className="font-black text-2xl font-mono text-slate-900">{checkInTime || '--:--'}</p>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-5">
-            <Button className="flex-1 h-20 text-xl font-bold rounded-2xl bg-emerald-600" disabled={attendanceStatus !== "NONE" || !location} onClick={handleCheckIn}>Check-In</Button>
-            <Button variant="destructive" className="flex-1 h-20 text-xl font-bold rounded-2xl" disabled={attendanceStatus !== "IN"} onClick={handleCheckOut}>Check-Out</Button>
+            <Button 
+              className="flex-1 h-20 text-xl font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95" 
+              disabled={attendanceStatus !== "NONE" || !location} 
+              onClick={handleCheckIn}
+            >
+              Check-In
+            </Button>
+            <Button 
+              variant="destructive" 
+              className="flex-1 h-20 text-xl font-bold rounded-2xl shadow-lg shadow-rose-200 transition-all active:scale-95" 
+              disabled={attendanceStatus !== "IN"} 
+              onClick={handleCheckOut}
+            >
+              Check-Out
+            </Button>
           </div>
         </CardContent>
       </Card>
