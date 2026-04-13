@@ -48,7 +48,8 @@ import {
   Info,
   Wallet,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Ban
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -116,6 +117,11 @@ export default function PayrollPage() {
     return vouchers.filter(v => v.status === 'PAID').reverse();
   }, [vouchers]);
 
+  // Check if salary is already generated for an employee in selected month
+  const isSalaryGenerated = (empId: string) => {
+    return payrollRecords.some(p => p.employeeId === empId && p.month === selectedMonth);
+  };
+
   // Attendance Logic for Selected Employee and Month
   const getAttendanceSummary = (empId: string) => {
     const records = attendanceRecords.filter(r => r.employeeId === empId || r.employeeId === "emp-mock");
@@ -161,6 +167,13 @@ export default function PayrollPage() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleMarkNotRequired = () => {
+    if (!adjustLeaveEmp) return;
+    setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
+    toast({ title: "Review Complete", description: "Marked as not required. Salary generation unlocked." });
+    setAdjustLeaveEmp(null);
   };
 
   const handleAddToAdvanceLeave = () => {
@@ -218,6 +231,7 @@ export default function PayrollPage() {
     toast({ title: "Salary Generated", description: `Payroll entry created for ${generateSalaryEmp.name}` });
     setGenerateSalaryEmp(null);
     setIncentivePct(0);
+    setAdvanceLeaveValue(0); // Reset after use
   };
 
   return (
@@ -275,6 +289,8 @@ export default function PayrollPage() {
                 <TableBody>
                   {filteredEmployees.map((emp) => {
                     const isAdjusted = adjustedEmployees[emp.id];
+                    const generated = isSalaryGenerated(emp.employeeId);
+                    
                     return (
                       <TableRow key={emp.id} className="hover:bg-slate-50/50">
                         <TableCell>
@@ -301,14 +317,16 @@ export default function PayrollPage() {
                             <Button 
                               variant="outline" 
                               size="sm" 
+                              disabled={generated}
                               className={cn(
                                 "text-xs font-bold gap-1 border-primary/20",
-                                isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5"
+                                isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5",
+                                generated && "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
                               )}
-                              onClick={() => setAdjustLeaveEmp(emp)}
+                              onClick={() => !generated && setAdjustLeaveEmp(emp)}
                             >
                               <CalendarClock className="w-3 h-3" /> 
-                              {isAdjusted ? "Adjusted" : "Adjust Leave"}
+                              {generated ? "Locked" : isAdjusted ? "Reviewed" : "Adjust Leave"}
                             </Button>
                             <TooltipProvider>
                               <Tooltip>
@@ -318,18 +336,24 @@ export default function PayrollPage() {
                                       size="sm" 
                                       className={cn(
                                         "text-xs font-bold gap-1",
-                                        isAdjusted ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                        isAdjusted && !generated ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
                                       )}
-                                      onClick={() => isAdjusted && setGenerateSalaryEmp(emp)}
-                                      disabled={!isAdjusted}
+                                      onClick={() => isAdjusted && !generated && setGenerateSalaryEmp(emp)}
+                                      disabled={!isAdjusted || generated}
                                     >
-                                      <Calculator className="w-3 h-3" /> Generate Salary
+                                      {generated ? <CheckCircle2 className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
+                                      {generated ? "Generated" : "Generate Salary"}
                                     </Button>
                                   </div>
                                 </TooltipTrigger>
-                                {!isAdjusted && (
+                                {!isAdjusted && !generated && (
                                   <TooltipContent>
                                     <p className="text-xs">Review leave before generating salary</p>
+                                  </TooltipContent>
+                                )}
+                                {generated && (
+                                  <TooltipContent>
+                                    <p className="text-xs">Salary record already exists</p>
                                   </TooltipContent>
                                 )}
                               </Tooltip>
@@ -483,9 +507,12 @@ export default function PayrollPage() {
                           />
                           <p className="text-[10px] text-rose-400 font-bold">Max allowed: {adjustLeaveEmp.advanceLeaveBalance || 0} days</p>
                        </div>
-                       <div className="flex gap-2">
-                          <Button className="flex-1 bg-primary font-bold" onClick={handleAdjustLeave} disabled={isProcessing}>Add Leave</Button>
-                          <Button variant="ghost" className="flex-1 text-white" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
+                       <div className="flex flex-col gap-2">
+                          <div className="flex gap-2">
+                            <Button className="flex-1 bg-primary font-bold" onClick={handleAdjustLeave} disabled={isProcessing}>Add Leave</Button>
+                            <Button variant="outline" className="flex-1 border-slate-700 text-white hover:bg-slate-800" onClick={handleMarkNotRequired}>Not Required</Button>
+                          </div>
+                          <Button variant="ghost" className="w-full text-slate-400 hover:text-white" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
                        </div>
                     </div>
                   </div>
