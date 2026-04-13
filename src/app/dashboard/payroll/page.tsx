@@ -53,9 +53,10 @@ import {
   Printer,
   Info,
   Banknote,
-  ShieldCheck
+  ShieldCheck,
+  FileText
 } from "lucide-react";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord } from "@/lib/types";
@@ -98,6 +99,7 @@ export default function PayrollPage() {
   const [payPFRec, setPayPFRec] = useState<PayrollRecord | null>(null);
   const [payESICRec, setPayESICRec] = useState<PayrollRecord | null>(null);
   const [printRec, setPrintRec] = useState<PayrollRecord | null>(null);
+  const [printVoucherRec, setPrintVoucherRec] = useState<PayrollRecord | null>(null);
 
   // Form States for Payments
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -296,6 +298,13 @@ export default function PayrollPage() {
 
   const handlePrint = (rec: PayrollRecord) => {
     setPrintRec(rec);
+    setTimeout(() => {
+      window.print();
+    }, 500);
+  };
+
+  const handlePrintVoucher = (rec: PayrollRecord) => {
+    setPrintVoucherRec(rec);
     setTimeout(() => {
       window.print();
     }, 500);
@@ -637,9 +646,26 @@ export default function PayrollPage() {
                                 >
                                   <Building2 className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => handlePrint(p)}>
-                                  <Printer className="w-4 h-4" />
-                                </Button>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => handlePrint(p)}>
+                                        <Printer className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Print Salary Slip</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handlePrintVoucher(p)}>
+                                        <FileText className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Print Payment Voucher</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -980,10 +1006,119 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Printable Salary Slip (Hidden until triggered) */}
+      {/* Printable Salary Slip */}
       {printRec && (
         <SalarySlip printRec={printRec} employees={employees} firms={firms} plants={plants} />
       )}
+
+      {/* Printable Salary Payment Voucher */}
+      {printVoucherRec && (
+        <SalaryVoucherPrint payroll={printVoucherRec} employees={employees} firms={firms} plants={plants} />
+      )}
+    </div>
+  );
+}
+
+function SalaryVoucherPrint({ payroll, employees, firms, plants }: any) {
+  const emp = employees.find((e: any) => e.employeeId === payroll.employeeId);
+  const firm = firms.find((f: any) => f.id === emp?.firmId);
+  const plant = plants.find((p: any) => p.id === emp?.unitId);
+  const lastPayment = payroll.salaryHistory?.[payroll.salaryHistory.length - 1];
+
+  return (
+    <div className="fixed inset-0 bg-white z-[999] font-serif text-slate-900 hidden print:block overflow-auto p-[1cm]">
+      <div className="w-full max-w-[210mm] mx-auto border-4 border-slate-900 p-10 space-y-10 min-h-[297mm]">
+        {/* Header */}
+        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+          <div className="flex items-center gap-6">
+            <div className="w-24 h-24 border flex items-center justify-center">
+              {firm?.logo ? <img src={firm.logo} className="max-h-full max-w-full" alt="logo" /> : <Building2 className="w-12 h-12 opacity-20" />}
+            </div>
+            <div>
+              <h1 className="text-2xl font-black uppercase tracking-tight">{firm?.name}</h1>
+              <p className="text-sm font-bold text-slate-700">{plant?.name}</p>
+              <p className="text-xs text-slate-500 italic max-w-xs">{plant?.address}</p>
+            </div>
+          </div>
+          <div className="text-right space-y-1">
+            <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher No:</span><span className="font-mono font-bold">{payroll.slipNo?.replace('SIL', 'VCH-SAL')}</span></div>
+            <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Date:</span><span className="font-bold">{payroll.salaryPaidDate || payroll.slipDate}</span></div>
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="text-center py-4 bg-slate-100 border-y-2 border-slate-900">
+          <h2 className="text-xl font-black uppercase tracking-[0.25em]">Salary Payment Voucher</h2>
+        </div>
+
+        {/* Employee Identity */}
+        <div className="grid grid-cols-2 border-2 border-slate-900">
+          <DetailCell label="Employee ID" value={payroll.employeeId} />
+          <DetailCell label="Employee Name" value={payroll.employeeName} />
+          <DetailCell label="Department" value={emp?.department} />
+          <DetailCell label="Designation" value={emp?.designation} />
+          <DetailCell label="Salary Month" value={payroll.month} />
+          <DetailCell label="Payment Date" value={payroll.salaryPaidDate} />
+        </div>
+
+        {/* Payment Details */}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 border-2 border-slate-900">
+            <div className="p-4 border-b-2 border-slate-900 flex items-center justify-between">
+              <span className="font-black uppercase text-sm">Net Salary Paid (In Figures)</span>
+              <span className="text-2xl font-black">{formatCurrency(payroll.salaryPaidAmount)}</span>
+            </div>
+            <div className="p-4 bg-slate-50 border-b-2 border-slate-900 flex items-start gap-4">
+              <span className="font-black uppercase text-xs w-48 shrink-0">Amount in Words:</span>
+              <span className="text-sm font-bold italic underline decoration-dotted">{numberToIndianWords(payroll.salaryPaidAmount)}</span>
+            </div>
+            <div className="grid grid-cols-2">
+              <div className="p-4 border-r-2 border-slate-900 flex items-center gap-4">
+                <span className="font-black uppercase text-xs">Payment Mode:</span>
+                <span className="text-sm font-bold">{lastPayment?.type || 'BANKING'}</span>
+              </div>
+              <div className="p-4 flex items-center gap-4">
+                <span className="font-black uppercase text-xs">Ref/Chq No:</span>
+                <span className="text-sm font-mono font-bold">{lastPayment?.reference || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Compliance Summary */}
+        <div className="p-6 border-2 border-slate-900 space-y-4">
+          <h3 className="font-black text-xs uppercase border-b pb-2">Compliance Deductions Applied</h3>
+          <div className="grid grid-cols-2 gap-10 text-sm">
+            <div className="flex justify-between"><span>Employee PF Deduction:</span><span className="font-bold">{formatCurrency(payroll.pfAmountEmployee)}</span></div>
+            <div className="flex justify-between"><span>Employee ESIC Deduction:</span><span className="font-bold">{formatCurrency(payroll.esicAmountEmployee)}</span></div>
+          </div>
+        </div>
+
+        {/* Declaration */}
+        <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl italic text-sm text-center leading-relaxed">
+          "Received the salary amount for the above-mentioned period in full/partial settlement."
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-between items-end pt-24">
+          <div className="text-center space-y-3">
+            <div className="w-64 border-b-2 border-slate-900" />
+            <p className="text-sm font-black uppercase tracking-tighter">Receiver Signature (Employee)</p>
+          </div>
+          <div className="text-center space-y-3">
+             <div className="w-16 h-16 border-2 border-slate-200 rounded-lg mx-auto flex items-center justify-center opacity-20"><span className="text-[8px] font-bold">Stamp Here</span></div>
+            <div className="w-64 border-b-2 border-slate-900" />
+            <p className="text-sm font-black uppercase tracking-tighter">Authorized Signature</p>
+          </div>
+        </div>
+
+        {/* End Note */}
+        <div className="mt-auto pt-10 border-t border-slate-100 text-center">
+          <p className="text-[10px] text-slate-400 font-bold italic uppercase tracking-wider">
+            👉 This is a system-generated Salary Payment Voucher and is considered an original document.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

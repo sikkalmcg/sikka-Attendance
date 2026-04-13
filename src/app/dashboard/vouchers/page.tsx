@@ -22,9 +22,10 @@ import {
   ShieldCheck, 
   FileCheck, 
   Users,
-  AlertTriangle 
+  AlertTriangle,
+  Printer
 } from "lucide-react";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
 import {
@@ -47,6 +48,9 @@ export default function VouchersPage() {
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
   const { toast } = useToast();
+
+  // State for Print
+  const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
 
   // State for Rejection Confirmation
   const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
@@ -150,8 +154,15 @@ export default function VouchersPage() {
     toast({ title: "Voucher Paid", description: "Voucher marked as paid and added to payroll ledger." });
   };
 
+  const handlePrint = (v: Voucher) => {
+    setPrintVoucher(v);
+    setTimeout(() => {
+      window.print();
+    }, 500);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 print:hidden">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">Advance Voucher System</h1>
@@ -463,27 +474,31 @@ export default function VouchersPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right pr-6">
-                            {v.status === "APPROVED" ? (
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  size="sm" 
-                                  className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
-                                  onClick={() => handlePayVoucher(v.id)}
-                                >
-                                  <CreditCard className="w-3 h-3 mr-1" /> Pay
+                            <div className="flex justify-end gap-2">
+                              {v.status === "APPROVED" ? (
+                                <>
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
+                                    onClick={() => handlePayVoucher(v.id)}
+                                  >
+                                    <CreditCard className="w-3 h-3 mr-1" /> Pay
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
+                                    onClick={() => setVoucherToReject(v.id)}
+                                  >
+                                    <XCircle className="w-3 h-3 mr-1" /> Reject
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1" onClick={() => handlePrint(v)}>
+                                  <Printer className="w-3 h-3" /> Print
                                 </Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
-                                  onClick={() => setVoucherToReject(v.id)}
-                                >
-                                  <XCircle className="w-3 h-3 mr-1" /> Reject
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button size="sm" variant="outline" className="h-8 text-xs font-medium">View Details</Button>
-                            )}
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -519,6 +534,107 @@ export default function VouchersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Print Component */}
+      {printVoucher && (
+        <AdvanceVoucherPrint voucher={printVoucher} employees={employees} firms={firms} plants={plants} />
+      )}
+    </div>
+  );
+}
+
+function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
+  const emp = employees.find((e: any) => e.id === voucher.employeeId);
+  const firm = firms.find((f: any) => f.id === emp?.firmId);
+  const plant = plants.find((p: any) => p.id === emp?.unitId);
+
+  return (
+    <div className="fixed inset-0 bg-white z-[999] font-serif text-slate-900 hidden print:block overflow-auto p-[1cm]">
+      <div className="w-full max-w-[210mm] mx-auto border-4 border-slate-900 p-10 space-y-10 min-h-[297mm]">
+        {/* Header */}
+        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
+          <div className="flex items-center gap-6">
+            <div className="w-24 h-24 border flex items-center justify-center">
+              {firm?.logo ? <img src={firm.logo} className="max-h-full max-w-full" alt="logo" /> : <Building2 className="w-12 h-12 opacity-20" />}
+            </div>
+            <div>
+              <h1 className="text-2xl font-black uppercase tracking-tight">{firm?.name}</h1>
+              <p className="text-sm font-bold text-slate-700">{plant?.name}</p>
+              <p className="text-xs text-slate-500 italic max-w-xs">{plant?.address}</p>
+              {firm?.gstin && <p className="text-xs font-bold mt-1 uppercase">GSTIN: {firm.gstin}</p>}
+            </div>
+          </div>
+          <div className="text-right space-y-1">
+            <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher No:</span><span className="font-mono font-bold">{voucher.voucherNo}</span></div>
+            <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher Date:</span><span className="font-bold">{voucher.date}</span></div>
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="text-center py-4 bg-slate-100 border-y-2 border-slate-900">
+          <h2 className="text-xl font-black uppercase tracking-[0.25em]">Advance Payment Voucher</h2>
+        </div>
+
+        {/* Employee Details */}
+        <div className="grid grid-cols-2 border-2 border-slate-900">
+          <DetailCell label="Employee ID" value={emp?.employeeId} />
+          <DetailCell label="Employee Name" value={emp?.name} />
+          <DetailCell label="Department" value={emp?.department} />
+          <DetailCell label="Designation" value={emp?.designation} />
+        </div>
+
+        {/* Advance Details */}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 border-2 border-slate-900">
+            <div className="p-4 border-b-2 border-slate-900 flex items-center justify-between">
+              <span className="font-black uppercase text-sm">Advance Amount (In Figures)</span>
+              <span className="text-2xl font-black">{formatCurrency(voucher.amount)}</span>
+            </div>
+            <div className="p-4 bg-slate-50 flex items-start gap-4">
+              <span className="font-black uppercase text-xs w-48 shrink-0">Amount in Words:</span>
+              <span className="text-sm font-bold italic underline decoration-dotted">{numberToIndianWords(voucher.amount)}</span>
+            </div>
+            <div className="p-4 border-t-2 border-slate-900 flex items-start gap-4">
+              <span className="font-black uppercase text-xs w-48 shrink-0">Purpose:</span>
+              <span className="text-sm font-medium">{voucher.purpose}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Declaration */}
+        <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl italic text-sm text-center leading-relaxed">
+          "Received the above-mentioned advance amount for official/personal purpose and agree to adjust the same against future salary/payments."
+        </div>
+
+        {/* Footer / Signatures */}
+        <div className="flex justify-between items-end pt-24">
+          <div className="text-center space-y-3">
+            <div className="w-64 border-b-2 border-slate-900" />
+            <p className="text-sm font-black uppercase tracking-tighter">Receiver Signature (Employee)</p>
+          </div>
+          <div className="text-center space-y-3">
+             <div className="w-16 h-16 border-2 border-slate-200 rounded-lg mx-auto flex items-center justify-center opacity-20"><span className="text-[8px] font-bold">Stamp Here</span></div>
+            <div className="w-64 border-b-2 border-slate-900" />
+            <p className="text-sm font-black uppercase tracking-tighter">Authorized Signatory</p>
+          </div>
+        </div>
+
+        {/* End Note */}
+        <div className="mt-auto pt-10 border-t border-slate-100 text-center">
+          <p className="text-[10px] text-slate-400 font-bold italic uppercase tracking-wider">
+            👉 This is a system-generated Advance Payment Voucher and is considered an original document.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailCell({ label, value }: { label: string, value: any }) {
+  return (
+    <div className="flex items-center p-4 border border-slate-900">
+      <span className="text-[10px] font-black uppercase text-slate-500 w-36 shrink-0">{label}:</span>
+      <span className="text-sm font-bold text-slate-900 uppercase">{value}</span>
     </div>
   );
 }
