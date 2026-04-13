@@ -437,28 +437,32 @@ export default function PayrollPage() {
 
         <TabsContent value="leave" className="mt-8 space-y-6">
           <Card className="border-none shadow-sm overflow-hidden">
-             <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-bold">Employee Name</TableHead>
-                  <TableHead className="font-bold">Department</TableHead>
-                  <TableHead className="font-bold text-center">Available Balance</TableHead>
-                  <TableHead className="text-right font-bold">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {employees.map(emp => (
-                  <TableRow key={emp.id}>
-                    <TableCell className="font-bold">{emp.name}</TableCell>
-                    <TableCell>{emp.department}</TableCell>
-                    <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
-                    <TableCell className="text-right">
-                       <Button variant="ghost" size="sm" className="font-bold gap-2">
-                         <History className="w-4 h-4" /> View History
-                       </Button>
-                    </TableCell>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Department</TableHead>
+                    <TableHead className="font-bold text-center">Available Balance</TableHead>
+                    <TableHead className="text-right font-bold">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
+                </TableHeader>
+                <TableBody>
+                  {employees.map(emp => (
+                    <TableRow key={emp.id}>
+                      <TableCell className="font-bold">{emp.name}</TableCell>
+                      <TableCell>{emp.department}</TableCell>
+                      <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" className="font-bold gap-2">
+                          <History className="w-4 h-4" /> View History
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
