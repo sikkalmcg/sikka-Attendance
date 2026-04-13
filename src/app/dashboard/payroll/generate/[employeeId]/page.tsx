@@ -70,6 +70,21 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     }
   }, [payrollRecords]);
 
+  const advanceBalance = useMemo(() => {
+    if (!employee) return 0;
+    const empVouchers = vouchers.filter(v => v.employeeId === employee.id && v.status === 'PAID');
+    const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
+    const totalRecovered = payrollRecords
+      .filter(p => p.employeeId === employee.employeeId)
+      .reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+    return Math.max(0, totalAdv - totalRecovered);
+  }, [employee, vouchers, payrollRecords]);
+
+  // Set default deduction to full advance balance
+  useEffect(() => {
+    setAdvanceRecovery(advanceBalance);
+  }, [advanceBalance]);
+
   const currentSummary = useMemo(() => {
     if (!employee) return null;
     const records = attendanceRecords.filter(r => r.employeeId === employee.employeeId || r.employeeId === "emp-mock");
@@ -88,16 +103,6 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       totalDays: totalDaysInMonth
     };
   }, [employee, attendanceRecords]);
-
-  const advanceBalance = useMemo(() => {
-    if (!employee) return 0;
-    const empVouchers = vouchers.filter(v => v.employeeId === employee.id && v.status === 'PAID');
-    const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
-    const totalRecovered = payrollRecords
-      .filter(p => p.employeeId === employee.employeeId)
-      .reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
-    return Math.max(0, totalAdv - totalRecovered);
-  }, [employee, vouchers, payrollRecords]);
 
   const estimatedFinalNet = useMemo(() => {
     if (!employee || !currentSummary) return 0;
@@ -200,7 +205,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         </div>
       </div>
 
-      {/* Main Content - Improved spacing and layout */}
+      {/* Main Content */}
       <ScrollArea className="flex-1 bg-slate-50/30">
         <div className="max-w-7xl mx-auto p-6 lg:p-10 space-y-10">
           {/* Stats Row - 6 Columns */}
@@ -210,7 +215,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
             <StatBox label="ADJUST LEAVE" value="+0" color="text-primary" />
             <StatBox label="HOLIDAY WORK" value={currentSummary?.holidayWork || 0} color="text-amber-600" />
             <StatBox label="TOTAL EARNING DAYS" value={currentSummary?.attendance || 0} color="text-primary font-black" />
-            <StatBox label="ADV. BALANCE" value={formatCurrency(advanceBalance)} color="text-rose-500" symbol="₹" />
+            <StatBox label="ADV. BALANCE" value={formatCurrency(advanceBalance - advanceRecovery)} color="text-rose-500" symbol="₹" />
           </div>
 
           {/* Earnings & Adjustments Section */}
@@ -244,7 +249,18 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
                   className="h-12 text-lg font-bold bg-white border-rose-200 focus-visible:ring-rose-500" 
                   placeholder="0"
                   value={advanceRecovery}
-                  onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value) || 0;
+                    if (val <= advanceBalance) {
+                      setAdvanceRecovery(val);
+                    } else {
+                      toast({ 
+                        variant: "destructive", 
+                        title: "Limit Exceeded", 
+                        description: `Cannot deduct more than available advance (${formatCurrency(advanceBalance)}).` 
+                      });
+                    }
+                  }}
                 />
               </div>
 
@@ -277,7 +293,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         </div>
       </ScrollArea>
 
-      {/* Footer - Reduced padding by 40% and updated layout */}
+      {/* Footer - Reduced padding by 40% */}
       <div className="px-6 py-4 bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-center gap-6 border-t border-slate-800">
         <div className="flex gap-10 items-center mr-auto">
           <div className="space-y-1">
