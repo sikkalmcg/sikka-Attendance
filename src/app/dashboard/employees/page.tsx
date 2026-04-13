@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Table, 
   TableHeader, 
@@ -50,8 +50,8 @@ import {
   ShieldCheck,
   ChevronRight,
   User,
-  Info,
-  AlertTriangle
+  AlertTriangle,
+  Clock
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -70,7 +70,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, SalaryStructure, Firm, SalaryHistoryEntry } from "@/lib/types";
+import { Employee, SalaryStructure, Firm } from "@/lib/types";
 import { DEPARTMENTS, DESIGNATIONS } from "@/lib/constants";
 import { useData } from "@/context/data-context";
 
@@ -105,12 +105,15 @@ const generateMonthOptions = () => {
 const MONTH_OPTIONS = generateMonthOptions();
 
 const getMonthFromMMM_YYYY = (formatted: string) => {
+  if (!formatted || !formatted.includes('-')) return new Date();
   const [mmm, yyyy] = formatted.split('-');
   const months: Record<string, number> = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
-  return new Date(parseInt(yyyy), months[mmm], 1);
+  const monthIdx = months[mmm] !== undefined ? months[mmm] : 0;
+  return new Date(parseInt(yyyy) || new Date().getFullYear(), monthIdx, 1);
 };
 
 const formatToMMM_YYYY = (date: Date) => {
+  if (!date || isNaN(date.getTime())) return "Jan-2024";
   const mmm = date.toLocaleString('en-US', { month: 'short' });
   const yyyy = date.getFullYear();
   return `${mmm}-${yyyy}`;
@@ -137,8 +140,9 @@ const INITIAL_SALARY_STRUCTURE: SalaryStructure = {
 const INITIAL_FORM_DATA: Partial<Employee> = {
   firmId: "f1",
   isGovComplianceEnabled: true,
-  salary: INITIAL_SALARY_STRUCTURE,
-  salaryHistory: []
+  salary: { ...INITIAL_SALARY_STRUCTURE },
+  salaryHistory: [],
+  active: true
 };
 
 export default function EmployeesPage() {
@@ -153,15 +157,15 @@ export default function EmployeesPage() {
   const [employeeToToggle, setEmployeeToToggle] = useState<Employee | null>(null);
   const [isToggleConfirmOpen, setIsToggleConfirmOpen] = useState(false);
   
-  const [formData, setFormData] = useState<Partial<Employee>>(INITIAL_FORM_DATA);
-  const [revisionData, setRevisionData] = useState<SalaryStructure>(INITIAL_SALARY_STRUCTURE);
+  const [formData, setFormData] = useState<Partial<Employee>>({ ...INITIAL_FORM_DATA });
+  const [revisionData, setRevisionData] = useState<SalaryStructure>({ ...INITIAL_SALARY_STRUCTURE });
   const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[1]);
 
-  const filtered = employees.filter(emp => 
+  const filtered = useMemo(() => employees.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     emp.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
     emp.aadhaar.includes(searchTerm)
-  );
+  ), [employees, searchTerm]);
 
   const calculateSalaryMetrics = (
     basic: number, 
@@ -201,7 +205,7 @@ export default function EmployeesPage() {
 
   const updateFormSalary = (field: string, val: number) => {
     setFormData(prev => {
-      const s = prev.salary || INITIAL_SALARY_STRUCTURE;
+      const s = prev.salary || { ...INITIAL_SALARY_STRUCTURE };
       const newBasic = field === 'basic' ? val : s.basic;
       const newHra = field === 'hra' ? val : (field === 'basic' ? Math.round(val * 0.5) : s.hra);
       const newAllowance = field === 'allowance' ? val : s.allowance;
@@ -221,89 +225,111 @@ export default function EmployeesPage() {
   };
 
   const handleRegistrationPost = () => {
-    if (!formData.name || !formData.aadhaar || formData.aadhaar.replace(/\s/g, '').length !== 12) {
-      toast({ variant: "destructive", title: "Validation Error", description: "Name and 12-digit Aadhaar are mandatory." });
-      return;
+    try {
+      if (!formData.name || !formData.aadhaar || formData.aadhaar.replace(/\s/g, '').length !== 12) {
+        toast({ variant: "destructive", title: "Validation Error", description: "Name and 12-digit Aadhaar are mandatory." });
+        return;
+      }
+
+      const joinDateObj = new Date(formData.joinDate || Date.now());
+      const joinMonthStr = formatToMMM_YYYY(joinDateObj);
+
+      const nextEmpId = editEmployee ? editEmployee.employeeId : `EMP-S${(employees.length + 1).toString().padStart(4, '0')}`;
+
+      const newEmp: Employee = {
+        ...(formData as Employee),
+        id: editEmployee ? editEmployee.id : Math.random().toString(36).substring(2, 11),
+        employeeId: nextEmpId,
+        salaryHistory: editEmployee ? (formData.salaryHistory || []) : [
+          { fromMonth: joinMonthStr, toMonth: "Present", monthlyCTC: formData.salary?.monthlyCTC || 0 }
+        ],
+        active: editEmployee ? (formData.active ?? true) : true
+      };
+
+      setEmployees(prev => {
+        if (editEmployee) return prev.map(e => e.id === editEmployee.id ? newEmp : e);
+        return [...prev, newEmp];
+      });
+
+      handleCloseRegistration();
+      toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${newEmp.name} has been saved.` });
+    } catch (e) {
+      console.error("Registration error:", e);
+      toast({ variant: "destructive", title: "Error", description: "Failed to save employee data." });
     }
+  };
 
-    const joinDateObj = new Date(formData.joinDate || Date.now());
-    const joinMonthStr = formatToMMM_YYYY(joinDateObj);
-
-    const newEmp: Employee = {
-      ...(formData as Employee),
-      id: editEmployee ? editEmployee.id : Math.random().toString(36).substr(2, 9),
-      employeeId: editEmployee ? editEmployee.employeeId : `EMP-S${(employees.length + 1).toString().padStart(4, '0')}`,
-      salaryHistory: editEmployee ? (formData.salaryHistory || []) : [
-        { fromMonth: joinMonthStr, toMonth: "Present", monthlyCTC: formData.salary?.monthlyCTC || 0 }
-      ],
-      active: editEmployee ? (formData.active ?? true) : true
-    };
-
-    setEmployees(prev => {
-      if (editEmployee) return prev.map(e => e.id === editEmployee.id ? newEmp : e);
-      return [...prev, newEmp];
-    });
-
+  const handleCloseRegistration = () => {
     setIsRegistrationOpen(false);
     setEditEmployee(null);
-    setFormData(INITIAL_FORM_DATA);
-    toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${newEmp.name} has been saved.` });
+    setFormData({ ...INITIAL_FORM_DATA });
   };
 
   const handlePostSalaryRevision = () => {
     if (!salaryRevision) return;
 
-    setEmployees(prev => prev.map(emp => {
-      if (emp.id !== salaryRevision.id) return emp;
+    try {
+      setEmployees(prev => prev.map(emp => {
+        if (emp.id !== salaryRevision.id) return emp;
 
-      const history = [...emp.salaryHistory];
-      const newEffectiveDate = getMonthFromMMM_YYYY(effectiveMonth);
-      
-      if (history.length > 0) {
-        const lastEntry = history[history.length - 1];
-        const prevMonthDate = new Date(newEffectiveDate);
-        prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-        lastEntry.toMonth = formatToMMM_YYYY(prevMonthDate);
-      }
+        const history = emp.salaryHistory ? [...emp.salaryHistory] : [];
+        const newEffectiveDate = getMonthFromMMM_YYYY(effectiveMonth);
+        
+        if (history.length > 0) {
+          const lastEntry = { ...history[history.length - 1] };
+          const prevMonthDate = new Date(newEffectiveDate);
+          prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+          lastEntry.toMonth = formatToMMM_YYYY(prevMonthDate);
+          history[history.length - 1] = lastEntry;
+        }
 
-      history.push({
-        fromMonth: effectiveMonth,
-        toMonth: "Present",
-        monthlyCTC: revisionData.monthlyCTC
-      });
+        history.push({
+          fromMonth: effectiveMonth,
+          toMonth: "Present",
+          monthlyCTC: revisionData.monthlyCTC
+        });
 
-      return {
-        ...emp,
-        salary: revisionData,
-        salaryHistory: history
-      };
-    }));
+        return {
+          ...emp,
+          salary: { ...revisionData },
+          salaryHistory: history
+        };
+      }));
 
-    setSalaryRevision(null);
-    toast({ title: "Salary Revision Posted", description: `Updated for ${salaryRevision.name}` });
+      setSalaryRevision(null);
+      toast({ title: "Salary Revision Posted", description: `Updated for ${salaryRevision.name}` });
+    } catch (e) {
+      console.error("Revision error:", e);
+      toast({ variant: "destructive", title: "Error", description: "Failed to post salary revision." });
+    }
   };
 
   const handleToggleStatus = () => {
     if (!employeeToToggle) return;
     
-    setEmployees(prev => prev.map(emp => 
-      emp.id === employeeToToggle.id ? { ...emp, active: !emp.active } : emp
-    ));
-    
-    toast({ 
-      title: employeeToToggle.active ? "Employee Deactivated" : "Employee Activated",
-      description: `${employeeToToggle.name} status updated successfully.`
-    });
-    
-    setIsToggleConfirmOpen(false);
-    setEmployeeToToggle(null);
+    try {
+      setEmployees(prev => prev.map(emp => 
+        emp.id === employeeToToggle.id ? { ...emp, active: !emp.active } : emp
+      ));
+      
+      toast({ 
+        title: employeeToToggle.active ? "Employee Deactivated" : "Employee Activated",
+        description: `${employeeToToggle.name} status updated successfully.`
+      });
+      
+      setIsToggleConfirmOpen(false);
+      setEmployeeToToggle(null);
+    } catch (e) {
+      console.error("Toggle error:", e);
+      toast({ variant: "destructive", title: "Error", description: "Status toggle failed." });
+    }
   };
 
   const increasePct = useMemo(() => {
-    if (!salaryRevision || salaryRevision.salary.monthlyCTC === 0) return "0.0";
+    if (!salaryRevision || !salaryRevision.salary || salaryRevision.salary.monthlyCTC === 0) return "0.0";
     const diff = revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC;
     const pct = (diff / salaryRevision.salary.monthlyCTC) * 100;
-    return isNaN(pct) ? "0.0" : pct.toFixed(1);
+    return isNaN(pct) || !isFinite(pct) ? "0.0" : pct.toFixed(1);
   }, [salaryRevision, revisionData.monthlyCTC]);
 
   return (
@@ -381,7 +407,7 @@ export default function EmployeesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditEmployee(emp); setFormData(emp); setIsRegistrationOpen(true); }} title="Edit Profile">
+                        <Button variant="ghost" size="icon" onClick={() => { setEditEmployee(emp); setFormData({ ...emp }); setIsRegistrationOpen(true); }} title="Edit Profile">
                           <Pencil className="w-4 h-4 text-slate-500" />
                         </Button>
                         <DropdownMenu>
@@ -391,7 +417,7 @@ export default function EmployeesPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem onClick={() => { setSalaryRevision(emp); setRevisionData(emp.salary); }}>
+                            <DropdownMenuItem onClick={() => { setSalaryRevision(emp); setRevisionData({ ...emp.salary }); }}>
                               <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setViewHistoryEmployee(emp)}>
@@ -420,13 +446,7 @@ export default function EmployeesPage() {
       </Card>
 
       {/* Registration Modal */}
-      <Dialog open={isRegistrationOpen} onOpenChange={(open) => { 
-        if (!open) {
-          setIsRegistrationOpen(false);
-          setEditEmployee(null); 
-          setFormData(INITIAL_FORM_DATA); 
-        }
-      }}>
+      <Dialog open={isRegistrationOpen} onOpenChange={(open) => { if (!open) handleCloseRegistration(); }}>
         <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
@@ -570,7 +590,7 @@ export default function EmployeesPage() {
                       checked={formData.isGovComplianceEnabled} 
                       onCheckedChange={(c) => {
                         setFormData(prev => {
-                          const s = prev.salary || INITIAL_SALARY_STRUCTURE;
+                          const s = prev.salary || { ...INITIAL_SALARY_STRUCTURE };
                           return { 
                             ...prev, 
                             isGovComplianceEnabled: c,
@@ -669,11 +689,7 @@ export default function EmployeesPage() {
               <p className="text-xl font-bold text-emerald-300">{formatCurrency(formData.salary?.monthlyCTC || 0)}</p>
             </div>
             <div className="flex items-center justify-end gap-3 pr-4">
-              <Button variant="ghost" className="text-white hover:bg-slate-800" onClick={() => {
-                setIsRegistrationOpen(false);
-                setEditEmployee(null);
-                setFormData(INITIAL_FORM_DATA);
-              }}>Cancel</Button>
+              <Button variant="ghost" className="text-white hover:bg-slate-800" onClick={handleCloseRegistration}>Cancel</Button>
               <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={handleRegistrationPost}>Post Employee</Button>
             </div>
           </div>
@@ -902,7 +918,7 @@ export default function EmployeesPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
-            <AlertDialogCancel className="mt-0">Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="mt-0" onClick={() => { setIsToggleConfirmOpen(false); setEmployeeToToggle(null); }}>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleToggleStatus}
               className={employeeToToggle?.active ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}
