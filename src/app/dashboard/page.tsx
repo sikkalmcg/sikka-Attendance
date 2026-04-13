@@ -2,6 +2,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { 
   Users, 
@@ -30,6 +31,7 @@ const chartConfig = {
 
 export default function DashboardHome() {
   const { employees, attendanceRecords, vouchers } = useData();
+  const router = useRouter();
 
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -49,7 +51,6 @@ export default function DashboardHome() {
   // Generate chart data based on last 6 days of actual attendance
   const chartData = useMemo(() => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const today = new Date();
     
     return days.map((day, i) => {
       // For a real app, we'd map these to the actual last 6 dates
@@ -131,10 +132,26 @@ export default function DashboardHome() {
             <CardTitle className="text-lg font-bold">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <QuickActionButton label="Generate Payroll" color="bg-blue-600" />
-            <QuickActionButton label="Approve Vouchers" color="bg-cyan-500" />
-            <QuickActionButton label="Add Employee" color="bg-slate-800" />
-            <QuickActionButton label="View Reports" color="bg-slate-400" />
+            <QuickActionButton 
+              label="Generate Payroll" 
+              color="bg-blue-600" 
+              onClick={() => router.push("/dashboard/payroll")}
+            />
+            <QuickActionButton 
+              label="Approve Vouchers" 
+              color="bg-cyan-500" 
+              onClick={() => router.push("/dashboard/vouchers")}
+            />
+            <QuickActionButton 
+              label="Add Employee" 
+              color="bg-slate-800" 
+              onClick={() => router.push("/dashboard/employees")}
+            />
+            <QuickActionButton 
+              label="View Reports" 
+              color="bg-slate-400" 
+              onClick={() => router.push("/dashboard/reports")}
+            />
           </CardContent>
         </Card>
       </div>
@@ -167,9 +184,12 @@ function StatCard({ title, value, icon: Icon, trend, trendUp, description }: any
   );
 }
 
-function QuickActionButton({ label, color }: { label: string, color: string }) {
+function QuickActionButton({ label, color, onClick }: { label: string, color: string, onClick: () => void }) {
   return (
-    <button className={`w-full ${color} text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-between hover:opacity-90 transition-all shadow-md active:scale-[0.98]`}>
+    <button 
+      onClick={onClick}
+      className={`w-full ${color} text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-between hover:opacity-90 transition-all shadow-md active:scale-[0.98]`}
+    >
       {label}
       <ArrowUpRight className="w-4 h-4" />
     </button>
