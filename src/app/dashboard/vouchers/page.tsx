@@ -79,6 +79,34 @@ export default function VouchersPage() {
     plants.find(p => p.id === selectedEmployee?.unitId), 
   [plants, selectedEmployee]);
 
+  // Dynamic FY Sequential Voucher Number Calculation
+  const voucherNo = useMemo(() => {
+    const d = new Date(voucherDate);
+    if (isNaN(d.getTime())) return "SIL-XXXXXX-XXXXX";
+    
+    // Indian Financial Year: April to March
+    const month = d.getMonth(); // 0-11
+    const year = d.getFullYear();
+    const startYear = month < 3 ? year - 1 : year;
+    const endYear = startYear + 1;
+    const fyPrefix = `${startYear}${(endYear % 100).toString().padStart(2, '0')}`;
+    const fyFullPrefix = `SIL-${fyPrefix}-`;
+
+    // Filter existing vouchers for this specific FY to find the next serial
+    const sameFYVouchers = vouchers.filter(v => v.voucherNo.startsWith(fyFullPrefix));
+    
+    let nextSerial = 1;
+    if (sameFYVouchers.length > 0) {
+      const serials = sameFYVouchers.map(v => {
+        const parts = v.voucherNo.split('-');
+        return parts.length === 3 ? parseInt(parts[2]) || 0 : 0;
+      });
+      nextSerial = Math.max(...serials) + 1;
+    }
+
+    return `${fyFullPrefix}${nextSerial.toString().padStart(5, '0')}`;
+  }, [voucherDate, vouchers]);
+
   // Filtering Logic based on tabs
   const pendingVouchers = useMemo(() => {
     return vouchers.filter(v => v.status === 'PENDING').filter(v => {
@@ -104,19 +132,6 @@ export default function VouchersPage() {
     }).reverse();
   }, [vouchers, searchTerm, employees]);
 
-  // Dynamic FY Calculation
-  const voucherNo = useMemo(() => {
-    const d = new Date(voucherDate);
-    if (isNaN(d.getTime())) return "--------";
-    
-    const month = d.getMonth();
-    const year = d.getFullYear();
-    const startYear = month < 3 ? year - 1 : year;
-    const endYear = startYear + 1;
-    const fyPrefix = `${startYear}${(endYear % 100).toString().padStart(2, '0')}`;
-    return `VCH-${fyPrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
-  }, [voucherDate]);
-
   const handleCreateVoucher = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -131,7 +146,7 @@ export default function VouchersPage() {
 
     const newVoucher: Voucher = {
       id: Math.random().toString(36).substr(2, 9),
-      voucherNo: voucherNo,
+      voucherNo: voucherNo, // Uses the sequentially calculated number
       employeeId: selectedEmployeeId,
       date: voucherDate,
       amount: parseFloat(amount),
@@ -172,7 +187,6 @@ export default function VouchersPage() {
 
   const handleDownloadPDF = () => {
     if (!previewVoucher) return;
-    // Trigger global print
     window.print();
   };
 
@@ -206,8 +220,8 @@ export default function VouchersPage() {
               <CardContent className="p-8 space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                   <div className="space-y-2">
-                    <Label className="font-bold">Voucher Number</Label>
-                    <Input value={voucherNo} disabled className="bg-slate-100 font-mono font-bold h-12" />
+                    <Label className="font-bold">Voucher Number (Auto Serial)</Label>
+                    <Input value={voucherNo} disabled className="bg-slate-100 font-mono font-bold h-12 text-primary" />
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold">Date *</Label>
@@ -332,84 +346,86 @@ export default function VouchersPage() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-bold">Voucher No</TableHead>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Dept / Desig</TableHead>
-                    <TableHead className="font-bold">Firm / Unit</TableHead>
-                    <TableHead className="font-bold">Date</TableHead>
-                    <TableHead className="font-bold">Amount</TableHead>
-                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingVouchers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                        No vouchers pending approval.
-                      </TableCell>
+              <ScrollArea className="w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 hover:bg-slate-50">
+                      <TableHead className="font-bold">Voucher No</TableHead>
+                      <TableHead className="font-bold">Employee Name</TableHead>
+                      <TableHead className="font-bold">Dept / Desig</TableHead>
+                      <TableHead className="font-bold">Firm / Unit</TableHead>
+                      <TableHead className="font-bold">Date</TableHead>
+                      <TableHead className="font-bold">Amount</TableHead>
+                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    pendingVouchers.map((v) => {
-                      const emp = employees.find(e => e.id === v.employeeId);
-                      const firm = firms.find(f => f.id === emp?.firmId);
-                      const unit = plants.find(p => p.id === emp?.unitId);
-                      
-                      return (
-                        <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell 
-                            className="font-mono font-bold text-primary cursor-pointer hover:underline"
-                            onClick={() => handleOpenPreview(v)}
-                          >
-                            {v.voucherNo}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-bold">{emp?.name || "Unknown"}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
-                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
-                              <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm">{v.date}</TableCell>
-                          <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-2">
-                              <Button 
-                                size="sm" 
-                                className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
-                                onClick={() => handleApproveVoucher(v.id)}
-                              >
-                                <CheckCircle className="w-3 h-3 mr-1" /> Approve
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="ghost" 
-                                className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
-                                onClick={() => setVoucherToReject(v.id)}
-                              >
-                                <XCircle className="w-3 h-3 mr-1" /> Reject
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {pendingVouchers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                          No vouchers pending approval.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pendingVouchers.map((v) => {
+                        const emp = employees.find(e => e.id === v.employeeId);
+                        const firm = firms.find(f => f.id === emp?.firmId);
+                        const unit = plants.find(p => p.id === emp?.unitId);
+                        
+                        return (
+                          <TableRow key={v.id} className="hover:bg-slate-50/50">
+                            <TableCell 
+                              className="font-mono font-bold text-primary cursor-pointer hover:underline"
+                              onClick={() => handleOpenPreview(v)}
+                            >
+                              {v.voucherNo}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-bold">{emp?.name || "Unknown"}</span>
+                                <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
+                                <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
+                                <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">{v.date}</TableCell>
+                            <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  size="sm" 
+                                  className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
+                                  onClick={() => handleApproveVoucher(v.id)}
+                                >
+                                  <CheckCircle className="w-3 h-3 mr-1" /> Approve
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
+                                  onClick={() => setVoucherToReject(v.id)}
+                                >
+                                  <XCircle className="w-3 h-3 mr-1" /> Reject
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
@@ -434,103 +450,105 @@ export default function VouchersPage() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    <TableHead className="font-bold">Voucher No</TableHead>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Dept / Desig</TableHead>
-                    <TableHead className="font-bold">Firm / Unit</TableHead>
-                    <TableHead className="font-bold">Date</TableHead>
-                    <TableHead className="font-bold">Amount</TableHead>
-                    <TableHead className="font-bold">Status</TableHead>
-                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payableVouchers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                        No approved vouchers ready for payment.
-                      </TableCell>
+              <ScrollArea className="w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50 hover:bg-slate-50">
+                      <TableHead className="font-bold">Voucher No</TableHead>
+                      <TableHead className="font-bold">Employee Name</TableHead>
+                      <TableHead className="font-bold">Dept / Desig</TableHead>
+                      <TableHead className="font-bold">Firm / Unit</TableHead>
+                      <TableHead className="font-bold">Date</TableHead>
+                      <TableHead className="font-bold">Amount</TableHead>
+                      <TableHead className="font-bold">Status</TableHead>
+                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    payableVouchers.map((v) => {
-                      const emp = employees.find(e => e.id === v.employeeId);
-                      const firm = firms.find(f => f.id === emp?.firmId);
-                      const unit = plants.find(p => p.id === emp?.unitId);
-                      
-                      return (
-                        <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell 
-                            className="font-mono font-bold text-primary cursor-pointer hover:underline"
-                            onClick={() => handleOpenPreview(v)}
-                          >
-                            {v.voucherNo}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-bold">{emp?.name || "Unknown"}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
-                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
-                              <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm">{v.date}</TableCell>
-                          <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell>
-                            <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
-                              "text-[10px] font-bold px-2 py-0.5",
-                              v.status === "PAID" && "bg-emerald-600",
-                              v.status === "APPROVED" && "bg-blue-500 text-white border-none"
-                            )}>
-                              {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
-                              {v.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-2">
-                              {v.status === "APPROVED" ? (
-                                <>
-                                  <Button 
-                                    size="sm" 
-                                    className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
-                                    onClick={() => handlePayVoucher(v.id)}
-                                  >
-                                    <CreditCard className="w-3 h-3 mr-1" /> Pay
+                  </TableHeader>
+                  <TableBody>
+                    {payableVouchers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                          No approved vouchers ready for payment.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      payableVouchers.map((v) => {
+                        const emp = employees.find(e => e.id === v.employeeId);
+                        const firm = firms.find(f => f.id === emp?.firmId);
+                        const unit = plants.find(p => p.id === emp?.unitId);
+                        
+                        return (
+                          <TableRow key={v.id} className="hover:bg-slate-50/50">
+                            <TableCell 
+                              className="font-mono font-bold text-primary cursor-pointer hover:underline"
+                              onClick={() => handleOpenPreview(v)}
+                            >
+                              {v.voucherNo}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-bold">{emp?.name || "Unknown"}</span>
+                                <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
+                                <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
+                                <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm">{v.date}</TableCell>
+                            <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell>
+                              <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
+                                "text-[10px] font-bold px-2 py-0.5",
+                                v.status === "PAID" && "bg-emerald-600",
+                                v.status === "APPROVED" && "bg-blue-500 text-white border-none"
+                              )}>
+                                {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
+                                {v.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-2">
+                                {v.status === "APPROVED" ? (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
+                                      onClick={() => handlePayVoucher(v.id)}
+                                    >
+                                      <CreditCard className="w-3 h-3 mr-1" /> Pay
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
+                                      onClick={() => setVoucherToReject(v.id)}
+                                    >
+                                      <XCircle className="w-3 h-3 mr-1" /> Reject
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1" onClick={() => handleOpenPreview(v)}>
+                                    <Printer className="w-3 h-3" /> Print
                                   </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
-                                    onClick={() => setVoucherToReject(v.id)}
-                                  >
-                                    <XCircle className="w-3 h-3 mr-1" /> Reject
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1" onClick={() => handleOpenPreview(v)}>
-                                  <Printer className="w-3 h-3" /> Print
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
