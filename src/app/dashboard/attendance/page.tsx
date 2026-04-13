@@ -15,7 +15,8 @@ import {
   Building2,
   Navigation,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -44,6 +45,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { ATTENDANCE_RULES } from "@/lib/constants";
 
 export default function AttendancePage() {
   const { attendanceRecords, setAttendanceRecords, plants, holidays, setNotifications } = useData();
@@ -59,6 +62,11 @@ export default function AttendancePage() {
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
   const [manualType, setManualType] = useState<'FIELD' | 'WFH'>('FIELD');
+
+  // Admin Edit State
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedRecordToEdit, setSelectedRecordToEdit] = useState<any>(null);
+  const [editTimes, setEditTimes] = useState({ in: "", out: "" });
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -271,6 +279,76 @@ export default function AttendancePage() {
     toast({ title: "Check-Out Success", description: isAuto ? "Auto-checkout applied (8h rule)." : `Shift ended at ${finalOutTime}.` });
   };
 
+  // ADMIN EDIT LOGIC
+  const handleAdminEditClick = (rec: any) => {
+    setSelectedRecordToEdit(rec);
+    setEditTimes({ in: rec.inTime || "", out: rec.outTime || "" });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveAdminEdit = () => {
+    if (!selectedRecordToEdit || !currentUser) return;
+
+    const inTime = editTimes.in;
+    const outTime = editTimes.out;
+    
+    // Calculate Hours
+    let hours = 0;
+    if (inTime && outTime) {
+      const dummyDate = "2024-01-01 ";
+      const start = new Date(dummyDate + inTime);
+      const end = new Date(dummyDate + outTime);
+      const diffMs = end.getTime() - start.getTime();
+      if (!isNaN(diffMs) && diffMs >= 0) {
+        hours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+      }
+    }
+
+    // Determine Status
+    const status = hours > ATTENDANCE_RULES.PRESENT_THRESHOLD ? 'PRESENT' : (hours > 0 ? 'HALF_DAY' : 'ABSENT');
+
+    const isVirtual = selectedRecordToEdit.id.startsWith('virtual-');
+
+    if (isVirtual) {
+      // Create new record for the day if it was virtual
+      const newRec: AttendanceRecord = {
+        id: Math.random().toString(36).substr(2, 9),
+        employeeId: selectedRecordToEdit.employeeId,
+        employeeName: selectedRecordToEdit.employeeName,
+        date: selectedRecordToEdit.date,
+        inTime,
+        outTime,
+        hours,
+        status: status as any,
+        attendanceType: 'FIELD',
+        lat: 0,
+        lng: 0,
+        address: "Manually adjusted by Admin",
+        approved: true,
+        remark: "Manually posted by Super Admin"
+      };
+      setAttendanceRecords(prev => [...prev, newRec]);
+    } else {
+      // Update existing record
+      setAttendanceRecords(prev => prev.map(r => 
+        r.id === selectedRecordToEdit.id ? { 
+          ...r, 
+          inTime, 
+          outTime, 
+          hours, 
+          status: status as any,
+          remark: "Adjusted by Super Admin"
+        } : r
+      ));
+    }
+
+    addNotification(`ADMIN: ${currentUser.fullName} manually adjusted logs for ${selectedRecordToEdit.date}`);
+    setIsEditDialogOpen(false);
+    toast({ title: "Manual Adjustment Applied", description: "Record has been updated and recalculated." });
+  };
+
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
       {/* Reduced Clock Section - 50% smaller container */}
@@ -336,11 +414,12 @@ export default function AttendancePage() {
                 <TableHead className="font-bold">Working Hours</TableHead>
                 <TableHead className="font-bold">Type</TableHead>
                 <TableHead className="font-bold">Approval Status</TableHead>
+                {isSuperAdmin && <TableHead className="font-bold text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedHistory.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
               ) : (
                 paginatedHistory.map((h: any) => (
                   <TableRow key={h.id} className="hover:bg-slate-50/50">
@@ -375,6 +454,18 @@ export default function AttendancePage() {
                         <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600">Pending</Badge>
                       )}
                     </TableCell>
+                    {isSuperAdmin && (
+                      <TableCell className="text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-primary hover:bg-primary/5"
+                          onClick={() => handleAdminEditClick(h)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -467,6 +558,56 @@ export default function AttendancePage() {
             </div>
           </div>
           <DialogFooter><Button className="w-full h-12 rounded-xl font-black bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ADMIN EDIT DIALOG */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              Adjust Attendance Logs
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Employee</p>
+              <p className="font-bold text-slate-700">{selectedRecordToEdit?.employeeName}</p>
+              <p className="text-xs text-muted-foreground">{selectedRecordToEdit?.date}</p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold">In Time (24h)</Label>
+                <Input 
+                  type="time" 
+                  value={editTimes.in} 
+                  onChange={(e) => setEditTimes(prev => ({...prev, in: e.target.value}))}
+                  className="bg-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold">Out Time (24h)</Label>
+                <Input 
+                  type="time" 
+                  value={editTimes.out} 
+                  onChange={(e) => setEditTimes(prev => ({...prev, out: e.target.value}))}
+                  className="bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+              <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
+                Note: Updating these times will automatically recalculate working hours and status based on organization thresholds.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl">Cancel</Button>
+            <Button className="bg-primary px-8 rounded-xl font-bold" onClick={handleSaveAdminEdit}>Update Log</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
