@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -25,7 +24,7 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { AttendanceRecord, Plant } from "@/lib/types";
+import { AttendanceRecord, Plant, AppNotification } from "@/lib/types";
 import { useData } from "@/context/data-context";
 import { format, subDays, eachDayOfInterval, isSunday, isSameDay } from "date-fns";
 import {
@@ -45,7 +44,7 @@ import {
 import { Label } from "@/components/ui/label";
 
 export default function AttendancePage() {
-  const { attendanceRecords, setAttendanceRecords, plants, holidays } = useData();
+  const { attendanceRecords, setAttendanceRecords, plants, holidays, setNotifications } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   
@@ -153,6 +152,16 @@ export default function AttendancePage() {
     }).filter(Boolean).reverse();
   }, [currentUser, attendanceRecords, holidays]);
 
+  const addNotification = (message: string) => {
+    const newNotif: AppNotification = {
+      id: Math.random().toString(36).substr(2, 9),
+      message,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
+    };
+    setNotifications(prev => [newNotif, ...prev].slice(0, 50)); // Keep last 50 total
+  };
+
   const requestLocation = (type: "IN" | "OUT") => {
     setIsLoadingLocation(true);
     if (!("geolocation" in navigator)) {
@@ -204,6 +213,7 @@ export default function AttendancePage() {
     };
 
     setAttendanceRecords(prev => [...prev, newRecord]);
+    addNotification(`${currentUser.fullName} (${currentUser.username}) marked IN at ${time} (${type})`);
     setActiveDialog("NONE");
     toast({ title: "Check-In Success", description: "Attendance logged and sent for approval." });
   };
@@ -244,6 +254,7 @@ export default function AttendancePage() {
       } : r
     ));
 
+    addNotification(`${todayRecord.employeeName} (${todayRecord.employeeId}) marked OUT at ${finalOutTime} (Worked: ${finalHours}h)`);
     setActiveDialog("NONE");
     toast({ title: "Check-Out Success", description: isAuto ? "Auto-checkout applied (8h rule)." : `Shift ended at ${finalOutTime}.` });
   };

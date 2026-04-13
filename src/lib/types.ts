@@ -133,6 +133,13 @@ export interface AttendanceRecord {
   autoCheckout?: boolean;
 }
 
+export interface AppNotification {
+  id: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
+
 export interface SalaryPaymentRecord {
   amount: number;
   date: string;

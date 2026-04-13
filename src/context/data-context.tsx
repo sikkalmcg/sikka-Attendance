@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord, Firm, User, Holiday } from '@/lib/types';
+import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord, Firm, User, Holiday, AppNotification } from '@/lib/types';
 import { INITIAL_PLANTS, INITIAL_FIRMS, INITIAL_USERS, DEFAULT_EMPLOYEE } from '@/lib/mock-data';
 
 interface DataContextType {
@@ -21,6 +21,8 @@ interface DataContextType {
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   holidays: Holiday[];
   setHolidays: React.Dispatch<React.SetStateAction<Holiday[]>>;
+  notifications: AppNotification[];
+  setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -34,6 +36,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [firms, setFirms] = useState<Firm[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   
   const isLoaded = useRef(false);
 
@@ -46,6 +49,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const savedFirms = localStorage.getItem('app_firms');
     const savedUsers = localStorage.getItem('app_users');
     const savedHolidays = localStorage.getItem('app_holidays');
+    const savedNotifications = localStorage.getItem('app_notifications');
 
     setEmployees(savedEmps ? JSON.parse(savedEmps) : [DEFAULT_EMPLOYEE]);
     setAttendanceRecords(savedAtt ? JSON.parse(savedAtt) : []);
@@ -55,6 +59,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setFirms(savedFirms ? JSON.parse(savedFirms) : INITIAL_FIRMS);
     setUsers(savedUsers ? JSON.parse(savedUsers) : INITIAL_USERS);
     setHolidays(savedHolidays ? JSON.parse(savedHolidays) : []);
+    setNotifications(savedNotifications ? JSON.parse(savedNotifications) : []);
 
     isLoaded.current = true;
   }, []);
@@ -70,7 +75,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('app_firms', JSON.stringify(firms));
     localStorage.setItem('app_users', JSON.stringify(users));
     localStorage.setItem('app_holidays', JSON.stringify(holidays));
-  }, [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users, holidays]);
+    localStorage.setItem('app_notifications', JSON.stringify(notifications));
+  }, [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users, holidays, notifications]);
 
   const value = useMemo(() => ({
     employees, setEmployees,
@@ -80,8 +86,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     plants, setPlants,
     firms, setFirms,
     users, setUsers,
-    holidays, setHolidays
-  }), [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users, holidays]);
+    holidays, setHolidays,
+    notifications, setNotifications
+  }), [employees, attendanceRecords, vouchers, payrollRecords, plants, firms, users, holidays, notifications]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
