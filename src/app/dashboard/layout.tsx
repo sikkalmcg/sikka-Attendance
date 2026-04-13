@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { 
   SidebarProvider, 
@@ -27,7 +27,10 @@ import {
   CreditCard,
   BarChart3,
   CheckCircle2,
-  Clock
+  Clock,
+  User as UserIcon,
+  Camera,
+  Upload
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -37,11 +40,31 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 
 function HeaderActions() {
   const { notifications, setNotifications } = useData();
   const [user, setUser] = useState<any>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
@@ -60,6 +83,11 @@ function HeaderActions() {
     router.push("/login");
   };
 
+  const handleSaveProfile = (updatedUser: any) => {
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+  };
+
   if (!user) return null;
 
   return (
@@ -67,6 +95,7 @@ function HeaderActions() {
       <Popover onOpenChange={(open) => open && markAllRead()}>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
+            <Bell className="w-5 h-5 text-slate-50" stroke="currentColor" fill="none" className="text-slate-500" />
             <Bell className="w-5 h-5 text-slate-500" />
             {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
@@ -127,17 +156,124 @@ function HeaderActions() {
         </PopoverContent>
       </Popover>
 
-      <div className="flex items-center gap-3 pl-2">
-        <div className="text-right hidden sm:block">
-          <p className="text-sm font-bold leading-none">{user.fullName}</p>
-          <p className="text-xs text-muted-foreground mt-1 capitalize">{user.role?.replace(/_/g, " ")}</p>
-        </div>
-        <Avatar className="h-10 w-10 border-2 border-slate-100 shadow-sm transition-transform hover:scale-105">
-          <AvatarImage src={`https://picsum.photos/seed/${user.username}/40/40`} />
-          <AvatarFallback className="bg-primary/10 text-primary font-black">{user.fullName?.[0]}</AvatarFallback>
-        </Avatar>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <div className="flex items-center gap-3 pl-2 cursor-pointer group hover:bg-slate-50 p-1 rounded-xl transition-colors">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-bold text-slate-900 leading-none">{user.fullName}</p>
+              <p className="text-[10px] font-black text-primary mt-1.5 uppercase tracking-wider leading-none">{user.role?.replace(/_/g, " ")}</p>
+            </div>
+            <Avatar className="h-10 w-10 border border-slate-200 shadow-sm transition-transform group-hover:scale-105">
+              <AvatarImage src={user.avatar || `https://picsum.photos/seed/${user.username}/40/40`} />
+              <AvatarFallback className="bg-slate-100 text-slate-400 font-bold">{user.fullName?.[0]}</AvatarFallback>
+            </Avatar>
+          </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56 mt-2 rounded-xl shadow-xl">
+          <DropdownMenuLabel className="font-bold text-xs uppercase tracking-widest text-slate-400">My Account</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2 cursor-pointer py-2.5 font-semibold" onClick={() => setIsSettingsOpen(true)}>
+            <Settings className="w-4 h-4 text-slate-500" /> Settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2 cursor-pointer py-2.5 font-semibold text-rose-600 focus:text-rose-600 focus:bg-rose-50" onClick={handleLogout}>
+            <LogOut className="w-4 h-4" /> Logout
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ProfileSettingsDialog 
+        isOpen={isSettingsOpen} 
+        onOpenChange={setIsSettingsOpen} 
+        user={user} 
+        onSave={handleSaveProfile}
+      />
     </div>
+  );
+}
+
+function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen: boolean, onOpenChange: (o: boolean) => void, user: any, onSave: (u: any) => void }) {
+  const [name, setName] = useState(user.fullName);
+  const [avatar, setAvatar] = useState(user.avatar || "");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 200 * 1024) {
+        toast({ variant: "destructive", title: "File too large", description: "Profile photo must be under 200 KB." });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatar(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSave = () => {
+    if (!name.trim()) {
+      toast({ variant: "destructive", title: "Name required", description: "Please enter your full name." });
+      return;
+    }
+    onSave({ ...user, fullName: name, avatar });
+    onOpenChange(false);
+    toast({ title: "Profile Updated", description: "Your settings have been saved successfully." });
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserIcon className="w-5 h-5 text-primary" /> Profile Settings
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-8 py-6">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative group">
+              <Avatar className="h-24 w-24 border-4 border-white shadow-xl">
+                <AvatarImage src={avatar || `https://picsum.photos/seed/${user.username}/96/96`} />
+                <AvatarFallback className="text-2xl font-black bg-slate-100">{name?.[0]}</AvatarFallback>
+              </Avatar>
+              <Button 
+                size="icon" 
+                variant="secondary" 
+                className="absolute bottom-0 right-0 h-8 w-8 rounded-full shadow-lg border-2 border-white bg-primary text-white hover:bg-primary/90"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Camera className="w-4 h-4" />
+              </Button>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Max Size: 200 KB</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="font-bold text-xs uppercase text-slate-500 tracking-wider">Full Name</Label>
+              <Input 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                className="h-12 bg-slate-50 border-slate-200 rounded-xl font-bold"
+                placeholder="Enter your name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold text-xs uppercase text-slate-500 tracking-wider">Username (Read-only)</Label>
+              <Input value={user.username} disabled className="h-12 bg-slate-100 border-slate-200 rounded-xl font-mono text-xs italic" />
+            </div>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl font-bold">Cancel</Button>
+          <Button className="bg-primary rounded-xl font-bold px-8 shadow-lg shadow-primary/20" onClick={handleSave}>Save Changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

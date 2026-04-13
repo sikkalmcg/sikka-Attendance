@@ -8,6 +8,7 @@ export interface User {
   password?: string;
   permissions: string[];
   status: 'Active' | 'Inactive';
+  avatar?: string;
 }
 
 export interface Plant {
