@@ -187,6 +187,27 @@ export default function PayrollPage() {
     };
   };
 
+  const currentSummary = useMemo(() => {
+    if (!generateSalaryEmp) return null;
+    return getAttendanceSummary(generateSalaryEmp.employeeId);
+  }, [generateSalaryEmp]);
+
+  const estimatedFinalNet = useMemo(() => {
+    if (!generateSalaryEmp || !currentSummary) return 0;
+    
+    const earningDays = currentSummary.attendance + advanceLeaveValue;
+    const basic = generateSalaryEmp.salary.basic;
+    const incentiveAmt = Math.round(basic * (incentivePct / 100));
+    
+    const baseNetPayable = earningDays > 0 
+      ? Math.round((generateSalaryEmp.salary.netSalary / currentSummary.totalDays) * earningDays)
+      : 0;
+      
+    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / currentSummary.totalDays) * currentSummary.holidayWork);
+    
+    return baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
+  }, [generateSalaryEmp, currentSummary, advanceLeaveValue, incentivePct, advanceRecovery]);
+
   const handleAdjustLeave = () => {
     if (!adjustLeaveEmp || isProcessing) return;
     if (advanceLeaveValue > (adjustLeaveEmp.advanceLeaveBalance || 0)) {
@@ -239,40 +260,33 @@ export default function PayrollPage() {
   };
 
   const handlePostSalary = () => {
-    if (!generateSalaryEmp || isProcessing) return;
+    if (!generateSalaryEmp || isProcessing || !currentSummary) return;
     
     if (payrollRecords.some(p => p.slipNo === slipNo)) {
       toast({ variant: "destructive", title: "Duplicate Slip No", description: `Salary slip number ${slipNo} already exists.` });
       return;
     }
 
-    const summary = getAttendanceSummary(generateSalaryEmp.employeeId);
-    const earningDays = summary.attendance + advanceLeaveValue;
+    const earningDays = currentSummary.attendance + advanceLeaveValue;
     const basic = generateSalaryEmp.salary.basic;
     const incentiveAmt = Math.round(basic * (incentivePct / 100));
-    
-    const baseNetPayable = earningDays > 0 
-      ? Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * earningDays)
-      : 0;
-      
-    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * summary.holidayWork);
-    const finalNet = baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
+    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / currentSummary.totalDays) * currentSummary.holidayWork);
 
     const newPayrollRecord: PayrollRecord = {
       id: Math.random().toString(36).substr(2, 9),
       employeeId: generateSalaryEmp.employeeId,
       employeeName: generateSalaryEmp.name,
       month: selectedMonth,
-      attendance: summary.attendance,
-      absent: summary.absent,
+      attendance: currentSummary.attendance,
+      absent: currentSummary.absent,
       adjustLeave: advanceLeaveValue,
       totalEarningDays: earningDays,
       incentivePct: incentivePct,
       incentiveAmt: incentiveAmt,
-      holidayWorkDays: summary.holidayWork,
+      holidayWorkDays: currentSummary.holidayWork,
       holidayWorkAmt: holidayWorkingAmt,
       advanceRecovery: advanceRecovery,
-      netPayable: finalNet,
+      netPayable: estimatedFinalNet,
       status: 'DRAFT',
       createdAt: new Date().toISOString(),
       slipNo: slipNo,
@@ -699,11 +713,11 @@ export default function PayrollPage() {
                   <div className="grid grid-cols-6 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
                     <div className="text-center border-r">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Attendance</p>
-                      <p className="text-lg font-bold">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance}</p>
+                      <p className="text-lg font-bold">{currentSummary?.attendance || 0}</p>
                     </div>
                     <div className="text-center border-r">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Absent</p>
-                      <p className="text-lg font-bold text-rose-600">{getAttendanceSummary(generateSalaryEmp.employeeId).absent}</p>
+                      <p className="text-lg font-bold text-rose-600">{currentSummary?.absent || 0}</p>
                     </div>
                     <div className="text-center border-r">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Adjust Leave</p>
@@ -711,11 +725,11 @@ export default function PayrollPage() {
                     </div>
                     <div className="text-center border-r">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Holiday Work</p>
-                      <p className="text-lg font-bold text-amber-600">{getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork}</p>
+                      <p className="text-lg font-bold text-amber-600">{currentSummary?.holidayWork || 0}</p>
                     </div>
                     <div className="text-center border-r">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Earning Days</p>
-                      <p className="text-lg font-black text-primary">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue}</p>
+                      <p className="text-lg font-black text-primary">{(currentSummary?.attendance || 0) + advanceLeaveValue}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">Adv. Balance</p>
@@ -723,112 +737,83 @@ export default function PayrollPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                      <h4 className="text-sm font-bold border-b pb-2 flex items-center gap-2">
-                        <PlusCircle className="w-4 h-4 text-primary" /> Earnings & Adjustments
-                      </h4>
-                      <div className="space-y-4">
-                        <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
-                            <Label className="text-xs font-bold">Incentive %</Label>
-                            <div className="flex items-center gap-3">
-                              <Input 
-                                type="number" 
-                                className="bg-white h-10 font-bold" 
-                                placeholder="0"
-                                value={incentivePct}
-                                onChange={(e) => setIncentivePct(parseFloat(e.target.value) || 0)}
-                              />
-                              <div className="bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg font-bold text-xs whitespace-nowrap">
-                                +{formatCurrency(Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)))}
-                              </div>
-                            </div>
-                        </div>
-
-                        <div className="p-4 bg-rose-50 rounded-2xl space-y-2 border border-rose-100">
-                            <Label className="text-xs font-bold text-rose-900 flex items-center gap-2"><ArrowDownCircle className="w-3 h-3" /> Deduction Advance Salary (INR)</Label>
+                  <div className="space-y-6">
+                    <h4 className="text-sm font-bold border-b pb-2 flex items-center gap-2">
+                      <PlusCircle className="w-4 h-4 text-primary" /> Earnings & Adjustments
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
+                          <Label className="text-xs font-bold">Incentive %</Label>
+                          <div className="flex items-center gap-3">
                             <Input 
                               type="number" 
-                              className="bg-white h-10 font-bold border-rose-200" 
-                              placeholder="Amount to deduct"
-                              value={advanceRecovery}
-                              onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)}
+                              className="bg-white h-10 font-bold" 
+                              placeholder="0"
+                              value={incentivePct}
+                              onChange={(e) => setIncentivePct(parseFloat(e.target.value) || 0)}
                             />
-                        </div>
-
-                        <div className="p-4 bg-amber-50 rounded-2xl space-y-2 border border-amber-100">
-                            <div className="flex justify-between items-center">
-                              <Label className="text-xs font-bold text-amber-900">Holiday Work Pay</Label>
-                              <Badge className="bg-amber-500 text-[10px]">{getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork} Days</Badge>
+                            <div className="bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg font-bold text-xs whitespace-nowrap">
+                              +{formatCurrency(Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)))}
                             </div>
-                            <div className="flex items-center gap-3">
-                              <Input 
-                                className="bg-white/50 h-10 font-bold border-amber-200" 
-                                value={formatCurrency(Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork))}
-                                readOnly
-                              />
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Info className="w-5 h-5 text-amber-400 cursor-help" />
-                                  </TooltipTrigger>
-                                  <TooltipContent className="bg-slate-900 text-white">
-                                    <p className="text-xs">Formula: (Net Salary / 30) * Holiday Days</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                        </div>
+                          </div>
                       </div>
-                    </div>
 
-                    <div className="bg-slate-900 text-white rounded-3xl p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden h-full">
-                      <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Calculator size={120} />
+                      <div className="p-4 bg-rose-50 rounded-2xl space-y-2 border border-rose-100">
+                          <Label className="text-xs font-bold text-rose-900 flex items-center gap-2"><ArrowDownCircle className="w-3 h-3" /> Deduction Advance Salary (INR)</Label>
+                          <Input 
+                            type="number" 
+                            className="bg-white h-10 font-bold border-rose-200" 
+                            placeholder="Amount to deduct"
+                            value={advanceRecovery}
+                            onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)}
+                          />
                       </div>
-                      <div className="space-y-6">
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monthly CTC (Profile)</p>
-                            <p className="text-2xl font-bold">{formatCurrency(generateSalaryEmp.salary.monthlyCTC)}</p>
-                        </div>
-                        <div className="h-px bg-slate-800" />
-                        <div className="space-y-2">
-                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Estimated Net Payable</p>
-                            <h2 className="text-4xl font-black text-emerald-300">
-                              {formatCurrency(
-                                ( (getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue) > 0 
-                                  ? Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * (getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue))
-                                  : 0
-                                ) + 
-                                Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)) +
-                                Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork) -
-                                advanceRecovery
-                              )}
-                            </h2>
-                            <div className="flex flex-col gap-2 mt-4 text-xs">
-                              {advanceRecovery > 0 && (
-                                <div className="flex items-center gap-2 text-rose-400">
-                                  <ArrowDownCircle className="w-3 h-3" />
-                                  Deduction Advance Salary: -{formatCurrency(advanceRecovery)}
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2 text-slate-400 pt-2">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                                Statutory deductions (PF/ESIC) applied as per profile.
-                              </div>
-                            </div>
-                        </div>
+
+                      <div className="p-4 bg-amber-50 rounded-2xl space-y-2 border border-amber-100 md:col-span-2">
+                          <div className="flex justify-between items-center">
+                            <Label className="text-xs font-bold text-amber-900">Holiday Work Pay</Label>
+                            <Badge className="bg-amber-500 text-[10px]">{currentSummary?.holidayWork || 0} Days</Badge>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Input 
+                              className="bg-white/50 h-10 font-bold border-amber-200" 
+                              value={formatCurrency(Math.round((generateSalaryEmp.salary.netSalary / (currentSummary?.totalDays || 30)) * (currentSummary?.holidayWork || 0)))}
+                              readOnly
+                            />
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="w-5 h-5 text-amber-400 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-slate-900 text-white">
+                                  <p className="text-xs">Formula: (Net Salary / 30) * Holiday Days</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                       </div>
                     </div>
                   </div>
                 </div>
               </ScrollArea>
 
-              <DialogFooter className="p-6 border-t bg-slate-50">
-                 <Button variant="outline" className="h-12 px-8 font-bold" onClick={() => setGenerateSalaryEmp(null)}>Discard</Button>
-                 <Button className="h-12 px-12 bg-emerald-600 hover:bg-emerald-700 font-bold text-lg" onClick={handlePostSalary} disabled={isProcessing}>
-                    Finalize & Post Salary
-                 </Button>
+              <DialogFooter className="p-6 border-t bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-center gap-4">
+                 <div className="flex gap-10 items-center mr-auto">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monthly CTC (Profile)</p>
+                      <p className="text-xl font-bold">{formatCurrency(generateSalaryEmp.salary.monthlyCTC)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Estimated Net Payable</p>
+                      <p className="text-3xl font-black text-emerald-400">{formatCurrency(estimatedFinalNet)}</p>
+                    </div>
+                 </div>
+                 <div className="flex items-center gap-3 w-full sm:w-auto">
+                   <Button variant="outline" className="h-12 px-8 font-bold bg-white/10 border-white/20 text-white hover:bg-white/20" onClick={() => setGenerateSalaryEmp(null)}>Discard</Button>
+                   <Button className="h-12 px-12 bg-emerald-600 hover:bg-emerald-700 font-bold text-lg" onClick={handlePostSalary} disabled={isProcessing}>
+                      Finalize & Post Salary
+                   </Button>
+                 </div>
               </DialogFooter>
             </>
           )}
