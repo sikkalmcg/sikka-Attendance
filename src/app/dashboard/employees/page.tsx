@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -32,7 +33,8 @@ import {
   CheckCircle,
   XCircle,
   History,
-  FileText
+  FileText,
+  CalendarDays
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -41,6 +43,13 @@ import {
   DropdownMenuItem, 
   DropdownMenuSeparator 
 } from "@/components/ui/dropdown-menu";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, SalaryStructure } from "@/lib/types";
@@ -76,6 +85,11 @@ const MOCK_EMPLOYEES: Employee[] = [
   },
 ];
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June", 
+  "July", "August", "September", "October", "November", "December"
+];
+
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
   const [searchTerm, setSearchTerm] = useState("");
@@ -87,6 +101,7 @@ export default function EmployeesPage() {
   const [salaryHistory, setSalaryHistory] = useState<Employee | null>(null);
   
   const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0 });
+  const [effectiveMonth, setEffectiveMonth] = useState<string>("August");
 
   const filtered = employees.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -99,6 +114,9 @@ export default function EmployeesPage() {
   const handleIncreaseSalary = (emp: Employee) => {
     setSalaryRevision(emp);
     setRevisionData(emp.salary);
+    // Default to current month or next
+    const currentMonth = MONTHS[new Date().getMonth()];
+    setEffectiveMonth(currentMonth);
   };
 
   const calculateRevision = (field: keyof SalaryStructure, value: string) => {
@@ -112,7 +130,10 @@ export default function EmployeesPage() {
     if (!salaryRevision) return;
     setEmployees(prev => prev.map(e => e.id === salaryRevision.id ? { ...e, salary: revisionData } : e));
     setSalaryRevision(null);
-    toast({ title: "Salary Revision Posted", description: "The new salary structure has been updated in the system." });
+    toast({ 
+      title: "Salary Revision Posted", 
+      description: `New structure for ${salaryRevision.name} is effective from ${effectiveMonth}.` 
+    });
   };
 
   return (
@@ -207,7 +228,7 @@ export default function EmployeesPage() {
 
       {/* Salary Increase Modal */}
       <Dialog open={!!salaryRevision} onOpenChange={() => setSalaryRevision(null)}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Salary Revision - {salaryRevision?.name}</DialogTitle>
             <DialogDescription>Adjust structure and post updates to the payroll system.</DialogDescription>
@@ -237,7 +258,7 @@ export default function EmployeesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Revision Fields */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold flex items-center gap-2">
+                <h4 className="text-sm font-bold flex items-center gap-2 border-b pb-2">
                   <TrendingUp className="w-4 h-4 text-emerald-600" /> Revised Structure
                 </h4>
                 <div className="space-y-3">
@@ -257,12 +278,28 @@ export default function EmployeesPage() {
                     <Label>Other Allowance</Label>
                     <Input type="number" value={revisionData.allowance} onChange={(e) => calculateRevision('allowance', e.target.value)} />
                   </div>
+                  
+                  <div className="pt-4 border-t mt-4 space-y-2">
+                    <Label className="flex items-center gap-2 text-primary">
+                      <CalendarDays className="w-4 h-4" /> Effect from Month
+                    </Label>
+                    <Select value={effectiveMonth} onValueChange={setEffectiveMonth}>
+                      <SelectTrigger className="w-full bg-slate-50 font-medium">
+                        <SelectValue placeholder="Select effective month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MONTHS.map(m => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
               {/* Live Preview */}
               <div className="space-y-4">
-                <h4 className="text-sm font-bold">Calculation Summary</h4>
+                <h4 className="text-sm font-bold border-b pb-2">Calculation Summary</h4>
                 <div className="space-y-2 bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 h-full flex flex-col justify-center">
                   <div className="flex justify-between items-end border-b border-emerald-100 pb-4 mb-4">
                     <div>
@@ -284,6 +321,10 @@ export default function EmployeesPage() {
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Net Increment</span>
                       <span className="font-bold text-emerald-700">+{formatCurrency(revisionData.monthlyCTC - (salaryRevision?.salary.monthlyCTC || 0))}</span>
+                    </div>
+                    <div className="flex justify-between text-sm pt-2 border-t border-emerald-100/50 mt-2">
+                      <span className="text-muted-foreground italic">Effect from</span>
+                      <span className="font-bold text-emerald-900">{effectiveMonth}</span>
                     </div>
                   </div>
                 </div>
