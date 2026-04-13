@@ -53,7 +53,9 @@ import {
   User,
   ArrowDownCircle,
   FileText,
-  CalendarDays
+  CalendarDays,
+  Building2,
+  Factory
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -83,12 +85,13 @@ const generatePayrollMonths = () => {
 const PAYROLL_MONTHS = generatePayrollMonths();
 
 export default function PayrollPage() {
-  const { employees, setEmployees, attendanceRecords, payrollRecords, setPayrollRecords, vouchers } = useData();
+  const { employees, setEmployees, attendanceRecords, payrollRecords, setPayrollRecords, vouchers, firms, plants } = useData();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState("generate");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(PAYROLL_MONTHS[1]); // Default to previous month
+  const [selectedFirmId, setSelectedFirmId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Tracking for mandatory Adjust Leave step
@@ -134,13 +137,15 @@ export default function PayrollPage() {
   const filteredEmployees = useMemo(() => {
     return (employees || []).filter(emp => {
       const search = searchTerm.toLowerCase();
-      return (
+      const matchesSearch = (
         emp.name.toLowerCase().includes(search) ||
         emp.employeeId.toLowerCase().includes(search) ||
         emp.aadhaar.includes(search)
       );
+      const matchesFirm = selectedFirmId === "all" || emp.firmId === selectedFirmId;
+      return matchesSearch && matchesFirm;
     });
-  }, [employees, searchTerm]);
+  }, [employees, searchTerm, selectedFirmId]);
 
   const paidVouchers = useMemo(() => {
     return vouchers.filter(v => v.status === 'PAID').reverse();
@@ -231,7 +236,7 @@ export default function PayrollPage() {
     
     // Duplicate check for Slip No
     if (payrollRecords.some(p => p.slipNo === slipNo)) {
-      toast({ variant: "destructive", title: "Duplicate Slip No", description: "Salary slip number SIL00001 already exists." });
+      toast({ variant: "destructive", title: "Duplicate Slip No", description: `Salary slip number ${slipNo} already exists.` });
       return;
     }
 
@@ -319,7 +324,7 @@ export default function PayrollPage() {
         <TabsContent value="generate" className="mt-8 space-y-6">
           <Card className="border-none shadow-sm">
             <CardHeader className="bg-slate-50 border-b border-slate-100 px-6 py-4 rounded-t-xl">
-              <div className="flex flex-col md:flex-row items-center gap-4">
+              <div className="flex flex-col lg:flex-row items-center gap-4">
                 <div className="relative flex-1 w-full">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input 
@@ -329,20 +334,32 @@ export default function PayrollPage() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger className="w-full md:w-48 bg-white h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                  <Select value={selectedFirmId} onValueChange={setSelectedFirmId}>
+                    <SelectTrigger className="w-full sm:w-48 bg-white h-10">
+                      <SelectValue placeholder="Filter by Firm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Firms</SelectItem>
+                      {firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <SelectTrigger className="w-full sm:w-40 bg-white h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader className="bg-slate-50">
                   <TableRow>
+                    <TableHead className="font-bold">Firm / Unit</TableHead>
                     <TableHead className="font-bold">Employee Name / ID</TableHead>
                     <TableHead className="font-bold">Aadhaar No</TableHead>
                     <TableHead className="font-bold">Dept / Designation</TableHead>
@@ -355,9 +372,17 @@ export default function PayrollPage() {
                   {filteredEmployees.map((emp) => {
                     const isAdjusted = adjustedEmployees[emp.id];
                     const generated = isSalaryGenerated(emp.employeeId);
+                    const firm = firms.find(f => f.id === emp.firmId);
+                    const plant = plants.find(p => p.id === emp.unitId);
                     
                     return (
                       <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
+                            <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="font-bold">{emp.name}</span>
