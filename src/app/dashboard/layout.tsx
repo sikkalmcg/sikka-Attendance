@@ -36,6 +36,7 @@ import { DataProvider, useData } from "@/context/data-context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 function HeaderActions() {
   const { notifications, setNotifications } = useData();
@@ -150,27 +151,27 @@ function SidebarNav() {
     if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    router.push("/login");
-  };
-
   if (!user) return null;
 
   const menuItems = [
-    { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["SUPER_ADMIN", "ADMIN", "HR", "EMPLOYEE"] },
-    { title: "Mark Attendance", icon: UserCheck, path: "/dashboard/attendance", roles: ["EMPLOYEE", "SUPER_ADMIN"] },
-    { title: "Approvals", icon: FileText, path: "/dashboard/approvals", roles: ["SUPER_ADMIN", "ADMIN", "HR"] },
-    { title: "Employees", icon: Users, path: "/dashboard/employees", roles: ["SUPER_ADMIN", "ADMIN", "HR"] },
-    { title: "Payroll", icon: CreditCard, path: "/dashboard/payroll", roles: ["SUPER_ADMIN", "ADMIN", "HR"] },
-    { title: "Vouchers", icon: FileText, path: "/dashboard/vouchers", roles: ["SUPER_ADMIN", "ADMIN", "HR", "EMPLOYEE"] },
-    { title: "Holidays", icon: Calendar, path: "/dashboard/holidays", roles: ["SUPER_ADMIN", "ADMIN", "HR"] },
-    { title: "Reports", icon: BarChart3, path: "/dashboard/reports", roles: ["SUPER_ADMIN", "ADMIN", "HR"] },
-    { title: "Plants & Firms", icon: Factory, path: "/dashboard/settings/firms", roles: ["SUPER_ADMIN", "ADMIN"] },
-    { title: "Users", icon: Settings, path: "/dashboard/settings/users", roles: ["SUPER_ADMIN"] },
+    { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["SUPER_ADMIN", "ADMIN", "HR", "EMPLOYEE"], permission: "Dashboard" },
+    { title: "Mark Attendance", icon: UserCheck, path: "/dashboard/attendance", roles: ["EMPLOYEE", "SUPER_ADMIN"], permission: "Attendance" },
+    { title: "Approvals", icon: FileText, path: "/dashboard/approvals", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Approvals" },
+    { title: "Employees", icon: Users, path: "/dashboard/employees", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Employees" },
+    { title: "Payroll", icon: CreditCard, path: "/dashboard/payroll", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Payroll" },
+    { title: "Vouchers", icon: FileText, path: "/dashboard/vouchers", roles: ["SUPER_ADMIN", "ADMIN", "HR", "EMPLOYEE"], permission: "Vouchers" },
+    { title: "Holidays", icon: Calendar, path: "/dashboard/holidays", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Holidays" },
+    { title: "Reports", icon: BarChart3, path: "/dashboard/reports", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Reports" },
+    { title: "Plants & Firms", icon: Factory, path: "/dashboard/settings/firms", roles: ["SUPER_ADMIN", "ADMIN"], permission: "Settings" },
+    { title: "Users", icon: Settings, path: "/dashboard/settings/users", roles: ["SUPER_ADMIN"], permission: "Users" },
   ];
 
-  const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
+  const filteredMenu = menuItems.filter(item => {
+    const hasRole = item.roles.includes(user.role);
+    // Super Admin sees everything. Others need explicit permission strings matching the item.permission
+    const hasPermission = user.role === 'SUPER_ADMIN' || item.permission === 'Dashboard' || user.permissions?.includes(item.permission);
+    return hasRole && hasPermission;
+  });
 
   return (
     <>
@@ -200,7 +201,10 @@ function SidebarNav() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-4">
-        <Button variant="ghost" className="w-full justify-start text-rose-600 font-bold hover:bg-rose-50 hover:text-rose-700 group-data-[collapsible=icon]:p-2" onClick={handleLogout}>
+        <Button variant="ghost" className="w-full justify-start text-rose-600 font-bold hover:bg-rose-50 hover:text-rose-700 group-data-[collapsible=icon]:p-2" onClick={() => {
+          localStorage.removeItem("user");
+          router.push("/login");
+        }}>
           <LogOut className="w-5 h-5 mr-3 group-data-[collapsible=icon]:mr-0" />
           <span className="font-bold group-data-[collapsible=icon]:hidden">Logout</span>
         </Button>
@@ -255,8 +259,4 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </SidebarProvider>
     </DataProvider>
   );
-}
-
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(" ");
 }

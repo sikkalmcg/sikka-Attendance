@@ -69,3 +69,19 @@ export const DESIGNATIONS: Record<string, string[]> = {
     'Accountant'
   ]
 };
+
+/**
+ * List of all modules that can be toggled as permissions for users.
+ * Future modules added here will auto-appear in the User Management UI.
+ */
+export const APP_PERMISSIONS = [
+  "Attendance",
+  "Approvals",
+  "Employees",
+  "Payroll",
+  "Vouchers",
+  "Holidays",
+  "Reports",
+  "Settings",
+  "Users"
+];

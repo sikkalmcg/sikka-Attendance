@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,16 +50,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
 import { User, Role } from "@/lib/types";
-
-const AVAILABLE_PERMISSIONS = [
-  "Attendance",
-  "Payroll",
-  "Users",
-  "Vouchers",
-  "Employees",
-  "Holidays",
-  "Settings"
-];
+import { APP_PERMISSIONS } from "@/lib/constants";
 
 const INITIAL_USER_STATE: Partial<User> = {
   fullName: "",
@@ -341,7 +331,7 @@ export default function UserManagementPage() {
             <div className="col-span-2 space-y-3">
               <Label className="font-bold">Select Page Permissions</Label>
               <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                {AVAILABLE_PERMISSIONS.map(perm => (
+                {APP_PERMISSIONS.map(perm => (
                   <div key={perm} className="flex items-center space-x-2">
                     <Checkbox 
                       id={`perm-${perm}`} 

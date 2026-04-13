@@ -1,4 +1,5 @@
 import { Employee, Firm, User, Plant } from './types';
+import { APP_PERMISSIONS } from './constants';
 
 export const INITIAL_FIRMS: Firm[] = [
   { 
@@ -28,7 +29,7 @@ export const INITIAL_USERS: User[] = [
     fullName: "Ajay Somra", 
     username: "ajaysomra", 
     role: "SUPER_ADMIN", 
-    permissions: ["Dashboard", "Attendance", "Payroll", "Users", "Vouchers", "Employees", "Holidays", "Settings"],
+    permissions: ["Dashboard", ...APP_PERMISSIONS],
     status: "Active"
   },
   { 
@@ -36,7 +37,7 @@ export const INITIAL_USERS: User[] = [
     fullName: "Mayank Sharma", 
     username: "mayank.hr", 
     role: "HR", 
-    permissions: ["Attendance", "Payroll", "Employees", "Vouchers"],
+    permissions: ["Attendance", "Payroll", "Employees", "Vouchers", "Approvals"],
     status: "Active"
   }
 ];
