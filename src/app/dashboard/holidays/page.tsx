@@ -16,7 +16,10 @@ import {
   Clock,
   PartyPopper,
   ChevronRight,
-  CalendarCheck
+  CalendarCheck,
+  Pencil,
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
 import { 
   format, 
@@ -38,6 +41,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -54,13 +67,17 @@ export default function HolidaysPage() {
   const [targetDate, setTargetDate] = useState<Date | null>(null);
   const [holidayName, setHolidayName] = useState("");
   const [selectedPlantIds, setSelectedPlantIds] = useState<string[]>([]);
+  const [editingHolidayId, setEditingHolidayId] = useState<string | null>(null);
+
+  // Delete Alert State
+  const [holidayToDelete, setHolidayToDelete] = useState<Holiday | null>(null);
 
   // Load existing holidays and generate Sundays for current year
   useEffect(() => {
     const savedHolidays = localStorage.getItem('app_holidays');
     let baseHolidays: Holiday[] = savedHolidays ? JSON.parse(savedHolidays) : [];
 
-    // Filter out old auto-generated Sundays to regenerate for current year if needed
+    // Filter out old auto-generated Sundays
     baseHolidays = baseHolidays.filter(h => !h.auto);
 
     const year = currentMonth.getFullYear();
@@ -79,16 +96,13 @@ export default function HolidaysPage() {
         plantIds: plants.map(p => p.id) 
       }));
     
-    // Combine saved custom holidays with fresh Sundays
     setHolidays([...baseHolidays, ...sundays].sort((a, b) => a.date.localeCompare(b.date)));
   }, [plants, currentMonth.getFullYear()]);
 
   // Persist only custom holidays to localStorage
   useEffect(() => {
-    if (holidays.length > 0) {
-      const customOnly = holidays.filter(h => !h.auto);
-      localStorage.setItem('app_holidays', JSON.stringify(customOnly));
-    }
+    const customOnly = holidays.filter(h => !h.auto);
+    localStorage.setItem('app_holidays', JSON.stringify(customOnly));
   }, [holidays]);
 
   const handleDayClick = (date: Date) => {
@@ -100,8 +114,23 @@ export default function HolidaysPage() {
     const existing = holidays.find(h => h.date === dateStr && !h.auto);
     
     setTargetDate(date);
-    setHolidayName(existing?.name || "");
-    setSelectedPlantIds(existing?.plantIds || plants.map(p => p.id));
+    if (existing) {
+      setEditingHolidayId(existing.id);
+      setHolidayName(existing.name);
+      setSelectedPlantIds(existing.plantIds || plants.map(p => p.id));
+    } else {
+      setEditingHolidayId(null);
+      setHolidayName("");
+      setSelectedPlantIds(plants.map(p => p.id));
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleEditHoliday = (h: Holiday) => {
+    setTargetDate(parseISO(h.date));
+    setEditingHolidayId(h.id);
+    setHolidayName(h.name);
+    setSelectedPlantIds(h.plantIds || plants.map(p => p.id));
     setIsDialogOpen(true);
   };
 
@@ -113,22 +142,33 @@ export default function HolidaysPage() {
     }
 
     const dateStr = format(targetDate, "yyyy-MM-dd");
-    const newHoliday: Holiday = {
-      id: Math.random().toString(36).substr(2, 9),
-      date: dateStr,
-      name: holidayName,
-      type: 'FESTIVAL',
-      plantIds: selectedPlantIds,
-      auto: false
-    };
-
-    setHolidays(prev => {
-      const filtered = prev.filter(h => h.date !== dateStr);
-      return [...filtered, newHoliday].sort((a, b) => a.date.localeCompare(b.date));
-    });
+    
+    if (editingHolidayId) {
+      setHolidays(prev => prev.map(h => 
+        h.id === editingHolidayId ? { ...h, name: holidayName, plantIds: selectedPlantIds } : h
+      ));
+      toast({ title: "Holiday Updated" });
+    } else {
+      const newHoliday: Holiday = {
+        id: Math.random().toString(36).substr(2, 9),
+        date: dateStr,
+        name: holidayName,
+        type: 'FESTIVAL',
+        plantIds: selectedPlantIds,
+        auto: false
+      };
+      setHolidays(prev => [...prev, newHoliday].sort((a, b) => a.date.localeCompare(b.date)));
+      toast({ title: "Holiday Posted", description: `${holidayName} scheduled.` });
+    }
 
     setIsDialogOpen(false);
-    toast({ title: "Holiday Posted", description: `${holidayName} scheduled for ${format(targetDate, "dd-MMM-yyyy")}` });
+  };
+
+  const handleDeleteHoliday = () => {
+    if (!holidayToDelete) return;
+    setHolidays(prev => prev.filter(h => h.id !== holidayToDelete.id));
+    setHolidayToDelete(null);
+    toast({ variant: "destructive", title: "Holiday Deleted", description: "The festival record has been removed." });
   };
 
   const togglePlant = (plantId: string) => {
@@ -158,7 +198,7 @@ export default function HolidaysPage() {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Holiday Calendar {format(currentMonth, 'yyyy')}</h1>
-            <p className="text-muted-foreground">Click any date to schedule a custom holiday.</p>
+            <p className="text-muted-foreground">Manage organizational weekly offs and custom festival schedules.</p>
           </div>
         </div>
       </div>
@@ -225,7 +265,7 @@ export default function HolidaysPage() {
                       </div>
                     ) : (
                       monthlyData.custom.map((h) => (
-                        <div key={h.id} className="p-5 rounded-2xl border-2 border-primary/20 bg-white shadow-sm flex items-center justify-between group transition-all hover:shadow-md">
+                        <div key={h.id} className="p-5 rounded-2xl border-2 border-primary/20 bg-white shadow-sm flex items-center justify-between group transition-all hover:shadow-md relative overflow-hidden">
                           <div className="flex items-center gap-4">
                             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                               <PartyPopper className="w-5 h-5 text-primary" />
@@ -235,7 +275,17 @@ export default function HolidaysPage() {
                               <p className="text-xs text-muted-foreground font-bold">{format(parseISO(h.date), 'dd MMM (EEEE)')}</p>
                             </div>
                           </div>
-                          <Badge className="bg-primary hover:bg-primary font-black text-[9px] uppercase">Festival</Badge>
+                          <div className="flex items-center gap-2">
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 mr-2">
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleEditHoliday(h)}>
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 hover:text-rose-500" onClick={() => setHolidayToDelete(h)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                            <Badge className="bg-primary hover:bg-primary font-black text-[9px] uppercase shrink-0">Festival</Badge>
+                          </div>
                         </div>
                       ))
                     )}
@@ -276,7 +326,7 @@ export default function HolidaysPage() {
         </CardContent>
       </Card>
 
-      {/* Holiday Post Dialog */}
+      {/* Holiday Post/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -332,11 +382,36 @@ export default function HolidaysPage() {
 
           <DialogFooter className="gap-3 sm:gap-0 mt-2">
             <Button variant="ghost" className="h-12 rounded-2xl font-bold" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button className="bg-primary px-10 h-12 rounded-2xl font-black shadow-lg shadow-primary/20" onClick={handlePostHoliday}>Confirm Holiday</Button>
+            <Button className="bg-primary px-10 h-12 rounded-2xl font-black shadow-lg shadow-primary/20" onClick={handlePostHoliday}>
+              {editingHolidayId ? "Update Holiday" : "Confirm Holiday"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Alert */}
+      <AlertDialog open={!!holidayToDelete} onOpenChange={(open) => !open && setHolidayToDelete(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-rose-600" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">Confirm Removal</AlertDialogTitle>
+            <AlertDialogDescription className="text-center pt-2">
+              Are you sure you want to remove <strong>{holidayToDelete?.name}</strong> from the schedule? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteHoliday}
+              className="bg-rose-600 hover:bg-rose-700 font-bold"
+            >
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
-
