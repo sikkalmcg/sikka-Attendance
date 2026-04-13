@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -17,7 +18,8 @@ import {
   MapPin, 
   Pencil,
   AlertTriangle,
-  Banknote
+  Banknote,
+  Image as ImageIcon
 } from "lucide-react";
 import {
   AlertDialog,
@@ -41,6 +43,7 @@ import { Firm, Plant, FirmUnit } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function FirmsAndPlantsPage() {
   const { firms, setFirms, plants, setPlants } = useData();
@@ -54,6 +57,8 @@ export default function FirmsAndPlantsPage() {
 
   // Firm Form State
   const [firmDraft, setFirmDraft] = useState<Partial<Firm>>({ units: [] });
+  const [editingFirmId, setEditingFirmId] = useState<string | null>(null);
+  const [firmToRemove, setFirmToRemove] = useState<Firm | null>(null);
   const [unitDraft, setUnitDraft] = useState({ name: '', address: '' });
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -109,25 +114,44 @@ export default function FirmsAndPlantsPage() {
       toast({ variant: "destructive", title: "Validation Error", description: "Firm name and GSTIN are required." });
       return;
     }
-    const newFirm: Firm = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: firmDraft.name!,
-      gstin: firmDraft.gstin!,
-      pan: firmDraft.pan || '',
-      pfNo: firmDraft.pfNo || '',
-      esicNo: firmDraft.esicNo || '',
-      bankName: firmDraft.bankName || '',
-      accountNo: firmDraft.accountNo || '',
-      ifscCode: firmDraft.ifscCode || '',
-      units: firmDraft.units || []
-    };
-    setFirms(prev => [...prev, newFirm]);
-    setFirmDraft({ units: [] });
-    toast({ title: "Firm Registered", description: `${newFirm.name} added to repository.` });
+
+    setIsProcessing(true);
+    try {
+      if (editingFirmId) {
+        setFirms(prev => prev.map(f => f.id === editingFirmId ? { ...f, ...firmDraft } as Firm : f));
+        toast({ title: "Firm Updated", description: `${firmDraft.name} record updated.` });
+      } else {
+        const newFirm: Firm = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: firmDraft.name!,
+          gstin: firmDraft.gstin!,
+          pan: firmDraft.pan || '',
+          pfNo: firmDraft.pfNo || '',
+          esicNo: firmDraft.esicNo || '',
+          bankName: firmDraft.bankName || '',
+          accountNo: firmDraft.accountNo || '',
+          ifscCode: firmDraft.ifscCode || '',
+          units: firmDraft.units || []
+        };
+        setFirms(prev => [...prev, newFirm]);
+        toast({ title: "Firm Registered", description: `${newFirm.name} added to repository.` });
+      }
+      setFirmDraft({ units: [] });
+      setEditingFirmId(null);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRemoveFirm = () => {
+    if (!firmToRemove) return;
+    setFirms(prev => prev.filter(f => f.id !== firmToRemove.id));
+    setFirmToRemove(null);
+    toast({ title: "Firm Removed", description: "The legal entity record has been deleted." });
   };
 
   return (
-    <div className="space-y-10 pb-20 max-w-6xl mx-auto">
+    <div className="space-y-10 pb-20 max-w-7xl mx-auto">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Infrastructure Setup</h1>
         <p className="text-muted-foreground">Configure your organizational structure, plants, and geofencing.</p>
@@ -220,30 +244,26 @@ export default function FirmsAndPlantsPage() {
                   <TableRow>
                     <TableHead className="font-bold">Firm Name</TableHead>
                     <TableHead className="font-bold">Plant Name</TableHead>
-                    <TableHead className="font-bold">Radius (Meters)</TableHead>
+                    <TableHead className="font-bold text-center">Radius (Meters)</TableHead>
                     <TableHead className="font-bold">Location (Lat, Lng)</TableHead>
-                    <TableHead className="font-bold text-center">Status</TableHead>
                     <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {plants.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No plants registered yet.</TableCell>
+                      <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No plants registered yet.</TableCell>
                     </TableRow>
                   ) : (
                     plants.map((p) => (
                       <TableRow key={p.id} className="hover:bg-slate-50/50">
                         <TableCell className="font-medium">{firms.find(f => f.id === p.firmId)?.name || 'Unknown Firm'}</TableCell>
                         <TableCell className="font-bold">{p.name}</TableCell>
-                        <TableCell>{p.radius}m</TableCell>
+                        <TableCell className="text-center">{p.radius}m</TableCell>
                         <TableCell className="font-mono text-xs">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={p.active ? "bg-emerald-600" : "bg-slate-400"}>{p.active ? "Active" : "Inactive"}</Badge>
-                        </TableCell>
                         <TableCell className="text-right pr-6">
                           <div className="flex justify-end gap-2">
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {setEditingPlantId(p.id); setPlantDraft(p);}}>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {setEditingPlantId(p.id); setPlantDraft(p); window.scrollTo({ top: 0, behavior: 'smooth' });}}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setPlantToRemove(p)}>
@@ -265,7 +285,7 @@ export default function FirmsAndPlantsPage() {
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="bg-slate-50/50 border-b">
               <CardTitle className="text-xl flex items-center gap-2">
-                <Building2 className="w-6 h-6 text-primary" /> Firm Details & Statutory Setup
+                <Building2 className="w-6 h-6 text-primary" /> {editingFirmId ? 'Edit Firm Details' : 'Firm Details & Statutory Setup'}
               </CardTitle>
               <CardDescription>Setup legal entity and statutory compliance IDs.</CardDescription>
             </CardHeader>
@@ -380,9 +400,10 @@ export default function FirmsAndPlantsPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end pt-4">
+              <div className="flex justify-end pt-4 gap-3">
+                {editingFirmId && <Button variant="ghost" onClick={() => {setEditingFirmId(null); setFirmDraft({units: []});}}>Cancel</Button>}
                 <Button className="px-10 h-12 font-bold bg-slate-900 text-white hover:bg-slate-800 text-lg rounded-xl shadow-xl" onClick={handleRegisterFirm}>
-                  Finalize Firm Configuration
+                  {editingFirmId ? 'Update Firm Details' : 'Finalize Firm Configuration'}
                 </Button>
               </div>
             </CardContent>
@@ -396,70 +417,72 @@ export default function FirmsAndPlantsPage() {
               <h2 className="text-xl font-bold text-slate-900">Registered Firm History</h2>
             </div>
             
-            <div className="space-y-4">
-              {firms.map(f => (
-                <Card key={f.id} className="border-slate-200">
-                  <CardContent className="p-8">
-                    <div className="flex flex-col md:flex-row justify-between gap-6">
-                      <div className="space-y-4 flex-1">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
-                            <Building2 className="w-6 h-6 text-blue-600" />
-                          </div>
-                          <div>
-                            <h3 className="text-xl font-bold text-slate-900">{f.name}</h3>
-                            <div className="flex gap-2 mt-1">
-                              <Badge className="bg-blue-600 text-[10px] font-bold">ACTIVE ENTITY</Badge>
-                              <Badge variant="outline" className="text-[10px] font-bold border-blue-200 text-blue-700 bg-blue-50">REG: {f.id}</Badge>
+            <Card className="border-slate-200 overflow-hidden shadow-sm">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Firm logo / Name</TableHead>
+                    <TableHead className="font-bold">Units Name</TableHead>
+                    <TableHead className="font-bold">GSTIN</TableHead>
+                    <TableHead className="font-bold">PF Number</TableHead>
+                    <TableHead className="font-bold">ESIC Number</TableHead>
+                    <TableHead className="font-bold">Bank Name</TableHead>
+                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {firms.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No firms registered yet.</TableCell>
+                    </TableRow>
+                  ) : (
+                    firms.map((f) => (
+                      <TableRow key={f.id} className="hover:bg-slate-50/50">
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                              <Building2 className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-bold leading-tight">{f.name}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">ID: {f.id}</span>
                             </div>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tax Identity</p>
-                            <p className="text-xs font-bold mt-1">GSTIN: {f.gstin}</p>
-                            <p className="text-xs font-bold">PAN: {f.pan}</p>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {f.units.length > 0 ? f.units.map(u => (
+                              <Badge key={u.id} variant="secondary" className="text-[10px] bg-slate-100 text-slate-600 border-none font-medium">
+                                {u.name}
+                              </Badge>
+                            )) : <span className="text-xs text-muted-foreground">No Units</span>}
                           </div>
-                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Statutory ID</p>
-                            <p className="text-xs font-bold mt-1">PF: {f.pfNo}</p>
-                            <p className="text-xs font-bold">ESIC: {f.esicNo}</p>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{f.gstin}</TableCell>
+                        <TableCell className="font-mono text-xs">{f.pfNo || 'N/A'}</TableCell>
+                        <TableCell className="font-mono text-xs">{f.esicNo || 'N/A'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold">{f.bankName || 'N/A'}</span>
+                            <span className="text-[10px] text-muted-foreground">{f.ifscCode}</span>
                           </div>
-                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 col-span-2">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Banknote className="w-3 h-3" /> Banking Details</p>
-                            <div className="grid grid-cols-3 gap-2 mt-1">
-                              <div>
-                                <p className="text-[10px] text-muted-foreground uppercase">Bank</p>
-                                <p className="text-xs font-bold">{f.bankName || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-muted-foreground uppercase">A/C No</p>
-                                <p className="text-xs font-bold">{f.accountNo || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-muted-foreground uppercase">IFSC</p>
-                                <p className="text-xs font-bold">{f.ifscCode || 'N/A'}</p>
-                              </div>
-                            </div>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex justify-end gap-2">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {setEditingFirmId(f.id); setFirmDraft(f); window.scrollTo({ top: 0, behavior: 'smooth' });}}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setFirmToRemove(f)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
-                        </div>
-                      </div>
-                      <div className="md:w-64 space-y-3">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Registered Units</p>
-                        <div className="space-y-2">
-                          {f.units.map(u => (
-                            <div key={u.id} className="p-3 bg-slate-50 rounded-xl text-xs border border-slate-100">
-                              <p className="font-bold text-slate-700">{u.name}</p>
-                              <p className="text-muted-foreground leading-tight text-[10px]">{u.address}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
@@ -480,6 +503,30 @@ export default function FirmsAndPlantsPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleRemovePlant}
+              className="bg-rose-600 hover:bg-rose-700 font-bold"
+            >
+              Confirm Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Firm Confirmation Dialog */}
+      <AlertDialog open={!!firmToRemove} onOpenChange={(open) => !open && setFirmToRemove(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-rose-600" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">Confirm Firm Removal</AlertDialogTitle>
+            <AlertDialogDescription className="text-center pt-2">
+              Are you sure you want to remove <strong>{firmToRemove?.name}</strong>? This will permanently delete the statutory and banking record for this legal entity.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleRemoveFirm}
               className="bg-rose-600 hover:bg-rose-700 font-bold"
             >
               Confirm Remove
