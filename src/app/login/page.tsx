@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { SUPER_ADMIN_USER } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
+import Image from "next/image";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -43,16 +44,32 @@ export default function LoginPage() {
     }, 800);
   };
 
+  const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#E9EDF0] p-4 font-sans">
       {/* Main Container with Golden Border */}
       <div className="w-full max-w-[800px] aspect-[4/3] bg-[#E9EDF0] border-[12px] border-[#C59D2E] rounded-xl shadow-2xl relative flex flex-col p-12">
         
-        {/* Header Title */}
-        <div className="text-center mb-20">
+        {/* Header Logo & Title */}
+        <div className="text-center mb-12">
+          <div className="flex justify-center mb-6">
+            <div className="w-24 h-24 relative rounded-xl overflow-hidden shadow-lg border-2 border-white bg-white">
+              <Image 
+                src={logoUrl}
+                alt="Sikka Logo"
+                fill
+                className="object-cover"
+                priority
+              />
+            </div>
+          </div>
           <h1 className="text-4xl font-bold text-[#C59D2E] tracking-tight">
             Sikka Industries & Logistics
           </h1>
+          <p className="text-[10px] font-black text-primary mt-2 uppercase tracking-[0.3em]">
+            Enterprise Portal
+          </p>
         </div>
 
         {/* Login Form */}
@@ -110,12 +127,16 @@ export default function LoginPage() {
             copyright@ Sikka Industries & Logistics All rights Reserved
           </p>
           
-          {/* Logo Placeholder */}
-          <div className="w-16 h-16 bg-[#1A1A3A] flex items-center justify-center rounded-sm">
-            <svg viewBox="0 0 100 100" className="w-10 h-10 text-white fill-current">
-              <path d="M20,80 Q50,20 80,80" fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
-              <path d="M30,70 Q50,30 70,70" fill="none" stroke="white" strokeWidth="4" />
-            </svg>
+          {/* Official Logo Display in Footer */}
+          <div className="w-16 h-16 bg-[#1A1A3A] flex items-center justify-center rounded-sm overflow-hidden">
+            <div className="w-full h-full relative">
+              <Image 
+                src={logoUrl}
+                alt="Logo Small"
+                fill
+                className="object-cover"
+              />
+            </div>
           </div>
         </div>
 
