@@ -34,9 +34,6 @@ import {
   MapPin, 
   RotateCcw,
   Clock,
-  ChevronLeft,
-  ChevronRight,
-  Info,
   Building2,
   Home
 } from "lucide-react";
@@ -81,14 +78,15 @@ export default function ApprovalsPage() {
   const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
   const [editTimes, setEditTimes] = useState({ in: "", out: "" });
   const [rejectRemark, setRejectRemark] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const { toast } = useToast();
 
   const filteredRecords = useMemo(() => {
-    return attendanceRecords.filter(rec => {
-      const matchesSearch = 
-        rec.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        rec.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
+    return (attendanceRecords || []).filter(rec => {
+      const name = (rec.employeeName || "").toLowerCase();
+      const id = (rec.employeeId || "").toLowerCase();
+      const matchesSearch = name.includes(searchTerm.toLowerCase()) || id.includes(searchTerm.toLowerCase());
       const matchesTab = activeTab === "approved" ? rec.approved : !rec.approved;
       return matchesSearch && matchesTab;
     });
@@ -101,13 +99,25 @@ export default function ApprovalsPage() {
   );
 
   const handleApprove = (id: string) => {
-    setAttendanceRecords(prev => prev.map(r => r.id === id ? { ...r, approved: true } : r));
-    toast({ title: "Approved", description: "Record moved to approved list." });
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      setAttendanceRecords(prev => prev.map(r => r.id === id ? { ...r, approved: true } : r));
+      toast({ title: "Approved", description: "Record moved to approved list." });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRestore = (id: string) => {
-    setAttendanceRecords(prev => prev.map(r => r.id === id ? { ...r, approved: false } : r));
-    toast({ title: "Restored", description: "Record moved back to pending list." });
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      setAttendanceRecords(prev => prev.map(r => r.id === id ? { ...r, approved: false } : r));
+      toast({ title: "Restored", description: "Record moved back to pending list." });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleEditClick = (rec: AttendanceRecord) => {
@@ -117,23 +127,28 @@ export default function ApprovalsPage() {
   };
 
   const handleSaveEdit = () => {
-    if (!selectedRecord) return;
-    const newHours = calculateHours(editTimes.in, editTimes.out);
-    const newStatus = determineStatus(newHours);
-    
-    setAttendanceRecords(prev => prev.map(r => 
-      r.id === selectedRecord.id 
-        ? { 
-            ...r, 
-            inTime: editTimes.in, 
-            outTime: editTimes.out, 
-            hours: newHours,
-            status: newStatus as any
-          } 
-        : r
-    ));
-    setIsEditDialogOpen(false);
-    toast({ title: "Updated", description: `Attendance updated. New Status: ${newStatus}` });
+    if (!selectedRecord || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      const newHours = calculateHours(editTimes.in, editTimes.out);
+      const newStatus = determineStatus(newHours);
+      
+      setAttendanceRecords(prev => prev.map(r => 
+        r.id === selectedRecord.id 
+          ? { 
+              ...r, 
+              inTime: editTimes.in, 
+              outTime: editTimes.out, 
+              hours: newHours,
+              status: newStatus as any
+            } 
+          : r
+      ));
+      setIsEditDialogOpen(false);
+      toast({ title: "Updated", description: `Attendance updated. New Status: ${newStatus}` });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRejectClick = (rec: AttendanceRecord) => {
@@ -143,15 +158,22 @@ export default function ApprovalsPage() {
   };
 
   const handleConfirmReject = () => {
-    if (!selectedRecord || !rejectRemark.trim()) {
+    if (!selectedRecord || isProcessing) return;
+    if (!rejectRemark.trim()) {
       toast({ variant: "destructive", title: "Remark Required", description: "Please provide a reason for rejection." });
       return;
     }
-    setAttendanceRecords(prev => prev.map(r => 
-      r.id === selectedRecord.id ? { ...r, remark: rejectRemark } : r
-    ));
-    setIsRejectDialogOpen(false);
-    toast({ title: "Rejected", description: "Remark added to pending record." });
+    
+    setIsProcessing(true);
+    try {
+      setAttendanceRecords(prev => prev.map(r => 
+        r.id === selectedRecord.id ? { ...r, remark: rejectRemark } : r
+      ));
+      setIsRejectDialogOpen(false);
+      toast({ title: "Rejected", description: "Remark added to pending record." });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleShowMap = (rec: AttendanceRecord) => {
@@ -272,25 +294,25 @@ export default function ApprovalsPage() {
                           "text-rose-600 border-rose-200 bg-rose-50"
                         )}
                       >
-                        {rec.status.replace('_', ' ')}
+                        {(rec.status || "").replace('_', ' ')}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         {activeTab === "pending" ? (
                           <>
-                            <Button size="sm" variant="outline" onClick={() => handleEditClick(rec)}>
+                            <Button size="sm" variant="outline" onClick={() => handleEditClick(rec)} disabled={isProcessing}>
                               <Pencil className="w-3 h-3" />
                             </Button>
-                            <Button size="sm" variant="outline" className="text-rose-600 hover:bg-rose-50" onClick={() => handleRejectClick(rec)}>
+                            <Button size="sm" variant="outline" className="text-rose-600 hover:bg-rose-50" onClick={() => handleRejectClick(rec)} disabled={isProcessing}>
                               <XCircle className="w-3 h-3" />
                             </Button>
-                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApprove(rec.id)}>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApprove(rec.id)} disabled={isProcessing}>
                               <CheckCircle2 className="w-3 h-3" />
                             </Button>
                           </>
                         ) : (
-                          <Button size="sm" variant="outline" className="gap-1" onClick={() => handleRestore(rec.id)}>
+                          <Button size="sm" variant="outline" className="gap-1" onClick={() => handleRestore(rec.id)} disabled={isProcessing}>
                             <RotateCcw className="w-3 h-3" /> Restore
                           </Button>
                         )}
@@ -304,7 +326,45 @@ export default function ApprovalsPage() {
         </CardContent>
       </Card>
       
-      {/* (Rest of the dialogs remain the same as previous implementations) */}
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Attendance Times</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <Label>In Time (HH:mm)</Label>
+              <Input type="time" value={editTimes.in} onChange={(e) => setEditTimes(prev => ({...prev, in: e.target.value}))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Out Time (HH:mm)</Label>
+              <Input type="time" value={editTimes.out} onChange={(e) => setEditTimes(prev => ({...prev, out: e.target.value}))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={isProcessing}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Record</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Label>Rejection Remark</Label>
+            <Textarea placeholder="Enter reason for rejection..." value={rejectRemark} onChange={(e) => setRejectRemark(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRejectDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmReject} disabled={isProcessing}>Reject Record</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -164,11 +164,16 @@ export default function EmployeesPage() {
   const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[1]);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const filtered = useMemo(() => employees.filter(emp => 
-    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    emp.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.aadhaar.includes(searchTerm)
-  ), [employees, searchTerm]);
+  const filtered = useMemo(() => {
+    return (employees || []).filter(emp => {
+      if (!emp) return false;
+      const name = (emp.name || "").toLowerCase();
+      const id = (emp.employeeId || "").toLowerCase();
+      const aadhaar = (emp.aadhaar || "");
+      const search = searchTerm.toLowerCase();
+      return name.includes(search) || id.includes(search) || aadhaar.includes(search);
+    });
+  }, [employees, searchTerm]);
 
   const calculateSalaryMetrics = (
     basic: number, 
@@ -229,21 +234,25 @@ export default function EmployeesPage() {
 
   const handleRegistrationPost = async () => {
     if (isProcessing) return;
+
+    // Validation Check (Before setting isProcessing to true)
+    if (!formData.name || !formData.aadhaar || (formData.aadhaar || "").replace(/\s/g, '').length !== 12) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Name and 12-digit Aadhaar are mandatory." });
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
-      if (!formData.name || !formData.aadhaar || formData.aadhaar.replace(/\s/g, '').length !== 12) {
-        toast({ variant: "destructive", title: "Validation Error", description: "Name and 12-digit Aadhaar are mandatory." });
-        return;
-      }
-
       const joinDateObj = new Date(formData.joinDate || Date.now());
       const joinMonthStr = formatToMMM_YYYY(joinDateObj);
 
-      // Robust Employee ID Generation
       const getNextId = () => {
         if (editEmployee) return editEmployee.employeeId;
-        const nums = employees.map(e => parseInt(e.employeeId.split('S')[1]) || 0);
+        const nums = employees.map(e => {
+          const parts = (e.employeeId || "").split('S');
+          return parts.length > 1 ? parseInt(parts[1]) || 0 : 0;
+        });
         const max = nums.length > 0 ? Math.max(...nums) : 0;
         return `EMP-S${(max + 1).toString().padStart(4, '0')}`;
       };
@@ -348,8 +357,8 @@ export default function EmployeesPage() {
   };
 
   const increasePct = useMemo(() => {
-    if (!salaryRevision || !salaryRevision.salary || salaryRevision.salary.monthlyCTC === 0) return "0.0";
-    const diff = revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC;
+    if (!salaryRevision || !salaryRevision.salary || (salaryRevision.salary.monthlyCTC || 0) === 0) return "0.0";
+    const diff = (revisionData.monthlyCTC || 0) - (salaryRevision.salary.monthlyCTC || 0);
     const pct = (diff / salaryRevision.salary.monthlyCTC) * 100;
     return isNaN(pct) || !isFinite(pct) ? "0.0" : pct.toFixed(1);
   }, [salaryRevision, revisionData.monthlyCTC]);
@@ -367,6 +376,7 @@ export default function EmployeesPage() {
             setFormData({ ...INITIAL_FORM_DATA });
             setIsRegistrationOpen(true);
           }}
+          disabled={isProcessing}
         >
           <UserPlus className="w-4 h-4 mr-2" /> Add Employee
         </Button>
@@ -420,7 +430,7 @@ export default function EmployeesPage() {
                     </TableCell>
                     <TableCell className="text-sm">{emp.joinDate}</TableCell>
                     <TableCell className="text-right font-bold text-emerald-600">
-                      {formatCurrency(emp.salary.monthlyCTC)}
+                      {formatCurrency(emp.salary?.monthlyCTC || 0)}
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge 
@@ -435,12 +445,17 @@ export default function EmployeesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditEmployee(emp); setFormData({ ...emp }); setIsRegistrationOpen(true); }} title="Edit Profile">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => { setEditEmployee(emp); setFormData({ ...emp }); setIsRegistrationOpen(true); }} title="Edit Profile"
+                          disabled={isProcessing}
+                        >
                           <Pencil className="w-4 h-4 text-slate-500" />
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" disabled={isProcessing}>
                               <MoreHorizontal className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -505,13 +520,13 @@ export default function EmployeesPage() {
                         <Select value={formData.unitId} onValueChange={(v) => setFormData(prev => ({...prev, unitId: v}))}>
                           <SelectTrigger><SelectValue placeholder="Select Unit" /></SelectTrigger>
                           <SelectContent>
-                            {MOCK_FIRMS.find(f => f.id === formData.firmId)?.units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                            {(MOCK_FIRMS.find(f => f.id === formData.firmId)?.units || []).map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Employee ID</Label>
-                        <Input value={editEmployee ? editEmployee.employeeId : `EMP-S${(employees.length + 1).toString().padStart(4, '0')}`} disabled className="bg-slate-100 font-mono font-bold" />
+                        <Input value={editEmployee ? editEmployee.employeeId : "AUTO-GEN"} disabled className="bg-slate-100 font-mono font-bold" />
                       </div>
                       <div className="space-y-2">
                         <Label>Employee Name *</Label>
@@ -561,7 +576,7 @@ export default function EmployeesPage() {
                         <Select value={formData.designation} onValueChange={(v) => setFormData(prev => ({...prev, designation: v}))}>
                           <SelectTrigger><SelectValue placeholder="Select Designation" /></SelectTrigger>
                           <SelectContent>
-                            {formData.department && DESIGNATIONS[formData.department].map(des => <SelectItem key={des} value={des}>{des}</SelectItem>)}
+                            {formData.department && (DESIGNATIONS[formData.department] || []).map(des => <SelectItem key={des} value={des}>{des}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -743,17 +758,17 @@ export default function EmployeesPage() {
               <div className="space-y-6 py-4">
                 <div className="grid grid-cols-4 gap-4">
                   {[
-                    { label: "Basic", val: salaryRevision.salary.basic },
-                    { label: "HRA", val: salaryRevision.salary.hra },
-                    { label: "Allowance", val: salaryRevision.salary.allowance },
-                    { label: "Current CTC", val: salaryRevision.salary.monthlyCTC, highlight: true },
+                    { label: "Basic", val: salaryRevision.salary?.basic || 0 },
+                    { label: "HRA", val: salaryRevision.salary?.hra || 0 },
+                    { label: "Allowance", val: salaryRevision.salary?.allowance || 0 },
+                    { label: "Current CTC", val: salaryRevision.salary?.monthlyCTC || 0, highlight: true },
                   ].map((item, i) => (
                     <div key={i} className={cn(
                       "p-3 rounded-lg border text-center",
                       item.highlight ? "bg-primary/5 border-primary/20" : "bg-slate-50 border-slate-100"
                     )}>
                       <p className="text-[10px] font-bold text-muted-foreground uppercase">{item.label}</p>
-                      <p className={cn("text-sm font-bold", item.highlight && "text-primary")}>{formatCurrency(item.val || 0)}</p>
+                      <p className={cn("text-sm font-bold", item.highlight && "text-primary")}>{formatCurrency(item.val)}</p>
                     </div>
                   ))}
                 </div>
@@ -768,21 +783,21 @@ export default function EmployeesPage() {
                         <Label>Basic Salary</Label>
                         <Input type="number" value={revisionData.basic} onChange={(e) => {
                           const b = parseFloat(e.target.value) || 0;
-                          setRevisionData(prev => calculateSalaryMetrics(b, Math.round(b * 0.5), prev.allowance, salaryRevision.isGovComplianceEnabled, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
+                          setRevisionData(prev => calculateSalaryMetrics(b, Math.round(b * 0.5), prev.allowance, !!salaryRevision.isGovComplianceEnabled, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
                         }} />
                       </div>
                       <div className="grid grid-cols-2 gap-2 items-center">
                         <Label>HRA</Label>
                         <Input type="number" value={revisionData.hra} onChange={(e) => {
                           const h = parseFloat(e.target.value) || 0;
-                          setRevisionData(prev => calculateSalaryMetrics(prev.basic, h, prev.allowance, salaryRevision.isGovComplianceEnabled, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
+                          setRevisionData(prev => calculateSalaryMetrics(prev.basic, h, prev.allowance, !!salaryRevision.isGovComplianceEnabled, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
                         }} />
                       </div>
                       <div className="grid grid-cols-2 gap-2 items-center">
                         <Label>Other Allowance</Label>
                         <Input type="number" value={revisionData.allowance} onChange={(e) => {
                           const a = parseFloat(e.target.value) || 0;
-                          setRevisionData(prev => calculateSalaryMetrics(prev.basic, prev.hra, a, salaryRevision.isGovComplianceEnabled, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
+                          setRevisionData(prev => calculateSalaryMetrics(prev.basic, prev.hra, a, !!salaryRevision.isGovComplianceEnabled, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
                         }} />
                       </div>
                       
@@ -808,7 +823,7 @@ export default function EmployeesPage() {
                       <div className="flex justify-between items-end border-b border-emerald-100 pb-4 mb-4">
                         <div>
                           <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">New Monthly CTC</p>
-                          <h3 className="text-3xl font-bold text-emerald-900">{formatCurrency(revisionData.monthlyCTC)}</h3>
+                          <h3 className="text-3xl font-bold text-emerald-900">{formatCurrency(revisionData.monthlyCTC || 0)}</h3>
                         </div>
                         <div className="text-right">
                           <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Increase %</p>
@@ -818,8 +833,8 @@ export default function EmployeesPage() {
                         </div>
                       </div>
                       <div className="space-y-2 text-sm">
-                        <div className="flex justify-between"><span className="text-muted-foreground">Previous CTC</span><span>{formatCurrency(salaryRevision.salary.monthlyCTC)}</span></div>
-                        <div className="flex justify-between font-bold text-emerald-700"><span>Net Increment</span><span>+{formatCurrency(revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Previous CTC</span><span>{formatCurrency(salaryRevision.salary?.monthlyCTC || 0)}</span></div>
+                        <div className="flex justify-between font-bold text-emerald-700"><span>Net Increment</span><span>+{formatCurrency((revisionData.monthlyCTC || 0) - (salaryRevision.salary?.monthlyCTC || 0))}</span></div>
                       </div>
                     </div>
                   </div>
@@ -869,19 +884,19 @@ export default function EmployeesPage() {
                     <CardContent className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Basic Salary</p>
-                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary.basic || 0)}</p>
+                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary?.basic || 0)}</p>
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase">HRA</p>
-                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary.hra || 0)}</p>
+                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary?.hra || 0)}</p>
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Other Allowance</p>
-                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary.allowance || 0)}</p>
+                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary?.allowance || 0)}</p>
                       </div>
                       <div className="space-y-1 border-l border-slate-700 pl-4">
                         <p className="text-[10px] font-bold text-emerald-400 uppercase">Current Monthly CTC</p>
-                        <p className="text-xl font-bold text-emerald-300">{formatCurrency(viewHistoryEmployee.salary.monthlyCTC || 0)}</p>
+                        <p className="text-xl font-bold text-emerald-300">{formatCurrency(viewHistoryEmployee.salary?.monthlyCTC || 0)}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -942,43 +957,46 @@ export default function EmployeesPage() {
       {/* Toggle Status Confirmation Dialog */}
       <AlertDialog open={isToggleConfirmOpen} onOpenChange={setIsToggleConfirmOpen}>
         <AlertDialogContent className="sm:max-w-md">
-          <AlertDialogHeader>
-            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
-              <AlertTriangle className="w-6 h-6 text-rose-600" />
-            </div>
-            <AlertDialogTitle className="text-center text-xl">
-              Confirm {employeeToToggle?.active ? "Deactivation" : "Activation"}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-center pt-2">
-              Are you sure you want to {employeeToToggle?.active ? "deactivate" : "activate"} <strong>{employeeToToggle?.name}</strong>?
-              {employeeToToggle?.active ? 
-                " This user will lose immediate access to the login portal." : 
-                " This user will regain access to mark attendance and view records."
-              }
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
-            <AlertDialogCancel 
-              className="mt-0" 
-              onClick={() => { 
-                setIsToggleConfirmOpen(false); 
-                setEmployeeToToggle(null); 
-              }}
-              disabled={isProcessing}
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleToggleStatus}
-              disabled={isProcessing}
-              className={employeeToToggle?.active ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}
-            >
-              {isProcessing ? "Processing..." : `Confirm ${employeeToToggle?.active ? "Deactivate" : "Activate"}`}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {isToggleConfirmOpen && (
+            <>
+              <AlertDialogHeader>
+                <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                  <AlertTriangle className="w-6 h-6 text-rose-600" />
+                </div>
+                <AlertDialogTitle className="text-center text-xl">
+                  Confirm {employeeToToggle?.active ? "Deactivation" : "Activation"}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-center pt-2">
+                  Are you sure you want to {employeeToToggle?.active ? "deactivate" : "activate"} <strong>{employeeToToggle?.name}</strong>?
+                  {employeeToToggle?.active ? 
+                    " This user will lose immediate access to the login portal." : 
+                    " This user will regain access to mark attendance and view records."
+                  }
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
+                <AlertDialogCancel 
+                  className="mt-0" 
+                  onClick={() => { 
+                    setIsToggleConfirmOpen(false); 
+                    setEmployeeToToggle(null); 
+                  }}
+                  disabled={isProcessing}
+                >
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleToggleStatus}
+                  disabled={isProcessing}
+                  className={employeeToToggle?.active ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}
+                >
+                  {isProcessing ? "Processing..." : `Confirm ${employeeToToggle?.active ? "Deactivate" : "Activate"}`}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </div>
   );
 }
-
