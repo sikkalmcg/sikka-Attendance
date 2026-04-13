@@ -1,3 +1,4 @@
+
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'HR' | 'EMPLOYEE';
 
 export interface User {
@@ -5,7 +6,9 @@ export interface User {
   username: string;
   fullName: string;
   role: Role;
-  isSuperAdmin?: boolean;
+  password?: string;
+  permissions: string[];
+  status: 'Active' | 'Inactive';
 }
 
 export interface Plant {
