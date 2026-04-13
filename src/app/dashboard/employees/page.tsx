@@ -785,98 +785,102 @@ export default function EmployeesPage() {
       {/* Salary History Modal */}
       <Dialog open={!!viewHistoryEmployee} onOpenChange={(open) => { if (!open) setViewHistoryEmployee(null); }}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-6 border-b bg-slate-50/50">
-            <div className="flex justify-between items-start">
-              <div>
-                <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                  <History className="w-5 h-5 text-primary" />
-                  Salary Record: {viewHistoryEmployee?.name}
-                </DialogTitle>
-                <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground font-medium">
-                  <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-mono">{viewHistoryEmployee?.employeeId}</span>
-                  <span>•</span>
-                  <span>{viewHistoryEmployee?.department} / {viewHistoryEmployee?.designation}</span>
+          {viewHistoryEmployee && (
+            <>
+              <DialogHeader className="p-6 border-b bg-slate-50/50">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                      <History className="w-5 h-5 text-primary" />
+                      Salary Record: {viewHistoryEmployee.name}
+                    </DialogTitle>
+                    <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground font-medium">
+                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-mono">{viewHistoryEmployee.employeeId}</span>
+                      <span>•</span>
+                      <span>{viewHistoryEmployee.department} / {viewHistoryEmployee.designation}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Join Month</p>
+                    <p className="font-bold text-slate-700">{viewHistoryEmployee ? formatToMMM_YYYY(new Date(viewHistoryEmployee.joinDate)) : '---'}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Join Month</p>
-                <p className="font-bold text-slate-700">{viewHistoryEmployee ? formatToMMM_YYYY(new Date(viewHistoryEmployee.joinDate)) : '---'}</p>
-              </div>
-            </div>
-          </DialogHeader>
+              </DialogHeader>
 
-          <ScrollArea className="flex-1 p-6">
-            <div className="space-y-6">
-              {/* Top Summary Card */}
-              <Card className="border-none bg-slate-900 text-white shadow-lg">
-                <CardContent className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Basic Salary</p>
-                    <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee?.salary.basic || 0)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">HRA</p>
-                    <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee?.salary.hra || 0)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Other Allowance</p>
-                    <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee?.salary.allowance || 0)}</p>
-                  </div>
-                  <div className="space-y-1 border-l border-slate-700 pl-4">
-                    <p className="text-[10px] font-bold text-emerald-400 uppercase">Current Monthly CTC</p>
-                    <p className="text-xl font-bold text-emerald-300">{formatCurrency(viewHistoryEmployee?.salary.monthlyCTC || 0)}</p>
-                  </div>
-                </CardContent>
-              </Card>
+              <ScrollArea className="flex-1 p-6">
+                <div className="space-y-6">
+                  {/* Top Summary Card */}
+                  <Card className="border-none bg-slate-900 text-white shadow-lg">
+                    <CardContent className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Basic Salary</p>
+                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary.basic || 0)}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">HRA</p>
+                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary.hra || 0)}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Other Allowance</p>
+                        <p className="text-lg font-bold">{formatCurrency(viewHistoryEmployee.salary.allowance || 0)}</p>
+                      </div>
+                      <div className="space-y-1 border-l border-slate-700 pl-4">
+                        <p className="text-[10px] font-bold text-emerald-400 uppercase">Current Monthly CTC</p>
+                        <p className="text-xl font-bold text-emerald-300">{formatCurrency(viewHistoryEmployee.salary.monthlyCTC || 0)}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
 
-              {/* History Table */}
-              <div className="space-y-4">
-                <h4 className="font-bold text-sm flex items-center gap-2 text-slate-700">
-                  <History className="w-4 h-4" /> Salary History Timeline
-                </h4>
-                <div className="border rounded-xl overflow-hidden shadow-sm">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="font-bold">From Month</TableHead>
-                        <TableHead className="font-bold">To Month</TableHead>
-                        <TableHead className="font-bold text-right">Monthly CTC</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {viewHistoryEmployee?.salaryHistory.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                            No history records found.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        [...viewHistoryEmployee!.salaryHistory].reverse().map((entry, idx) => (
-                          <TableRow key={idx} className="hover:bg-slate-50/50">
-                            <TableCell className="font-medium">{entry.fromMonth}</TableCell>
-                            <TableCell>
-                              {entry.toMonth === "Present" ? (
-                                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Present</Badge>
-                              ) : (
-                                entry.toMonth
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right font-bold text-primary">
-                              {formatCurrency(entry.monthlyCTC)}
-                            </TableCell>
+                  {/* History Table */}
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-sm flex items-center gap-2 text-slate-700">
+                      <History className="w-4 h-4" /> Salary History Timeline
+                    </h4>
+                    <div className="border rounded-xl overflow-hidden shadow-sm">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="font-bold">From Month</TableHead>
+                            <TableHead className="font-bold">To Month</TableHead>
+                            <TableHead className="font-bold text-right">Monthly CTC</TableHead>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {!viewHistoryEmployee.salaryHistory || viewHistoryEmployee.salaryHistory.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                                No history records found.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            [...viewHistoryEmployee.salaryHistory].reverse().map((entry, idx) => (
+                              <TableRow key={idx} className="hover:bg-slate-50/50">
+                                <TableCell className="font-medium">{entry.fromMonth}</TableCell>
+                                <TableCell>
+                                  {entry.toMonth === "Present" ? (
+                                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Present</Badge>
+                                  ) : (
+                                    entry.toMonth
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right font-bold text-primary">
+                                  {formatCurrency(entry.monthlyCTC)}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
                 </div>
+              </ScrollArea>
+              
+              <div className="p-4 bg-slate-50 border-t flex justify-end">
+                <Button variant="outline" onClick={() => setViewHistoryEmployee(null)}>Close Record</Button>
               </div>
-            </div>
-          </ScrollArea>
-          
-          <div className="p-4 bg-slate-50 border-t flex justify-end">
-            <Button variant="outline" onClick={() => setViewHistoryEmployee(null)}>Close Record</Button>
-          </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
