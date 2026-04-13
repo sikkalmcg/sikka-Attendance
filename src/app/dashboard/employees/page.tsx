@@ -39,8 +39,7 @@ import {
   Banknote,
   ShieldCheck,
   ChevronRight,
-  User,
-  Fingerprint
+  User
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -57,7 +56,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, SalaryStructure, Firm } from "@/lib/types";
 import { DEPARTMENTS, DESIGNATIONS } from "@/lib/constants";
@@ -122,37 +121,40 @@ const MOCK_EMPLOYEES: Employee[] = [
 const generateMonthOptions = () => {
   const options = [];
   const date = new Date();
-  for (let i = 0; i < 15; i++) {
-    const mmm = date.toLocaleString('en-US', { month: 'short' });
-    const yyyy = date.getFullYear();
+  date.setDate(1); // Set to start of month to avoid overflow
+  for (let i = -1; i < 12; i++) {
+    const d = new Date(date.getFullYear(), date.getMonth() + i, 1);
+    const mmm = d.toLocaleString('en-US', { month: 'short' });
+    const yyyy = d.getFullYear();
     options.push(`${mmm}-${yyyy}`);
-    date.setMonth(date.getMonth() + 1);
   }
   return options;
 };
 
 const MONTH_OPTIONS = generateMonthOptions();
 
+const INITIAL_SALARY_STRUCTURE: SalaryStructure = { 
+  basic: 0, 
+  hra: 0, 
+  da: 0, 
+  allowance: 0, 
+  grossSalary: 0, 
+  employeePF: 0, 
+  employeeESIC: 0, 
+  employerPF: 0, 
+  employerESIC: 0, 
+  netSalary: 0, 
+  monthlyCTC: 0,
+  pfRateEmp: 12,
+  esicRateEmp: 0.75,
+  pfRateEx: 13,
+  esicRateEx: 3.25
+};
+
 const INITIAL_FORM_DATA: Partial<Employee> = {
   firmId: "f1",
   isGovComplianceEnabled: true,
-  salary: { 
-    basic: 0, 
-    hra: 0, 
-    da: 0, 
-    allowance: 0, 
-    grossSalary: 0, 
-    employeePF: 0, 
-    employeeESIC: 0, 
-    employerPF: 0, 
-    employerESIC: 0, 
-    netSalary: 0, 
-    monthlyCTC: 0,
-    pfRateEmp: 12,
-    esicRateEmp: 0.75,
-    pfRateEx: 13,
-    esicRateEx: 3.25
-  }
+  salary: INITIAL_SALARY_STRUCTURE
 };
 
 export default function EmployeesPage() {
@@ -165,12 +167,8 @@ export default function EmployeesPage() {
   const [salaryRevision, setSalaryRevision] = useState<Employee | null>(null);
   
   const [formData, setFormData] = useState<Partial<Employee>>(INITIAL_FORM_DATA);
-  const [revisionData, setRevisionData] = useState<SalaryStructure>({ 
-    basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0, grossSalary: 0, 
-    employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, 
-    netSalary: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 
-  });
-  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[0]);
+  const [revisionData, setRevisionData] = useState<SalaryStructure>(INITIAL_SALARY_STRUCTURE);
+  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[1]); // Default to current month
 
   const nextEmpId = useMemo(() => {
     if (employees.length === 0) return 'EMP-S0001';
@@ -201,6 +199,7 @@ export default function EmployeesPage() {
     if (compliance) {
       epf = Math.round(basic * (rates.pfEmp / 100));
       erpf = Math.round(basic * (rates.pfEx / 100));
+      // ESIC calculated on Basic Salary as per user requirement
       eesic = Math.round(basic * (rates.esicEmp / 100));
       eresic = Math.round(basic * (rates.esicEx / 100));
     }
@@ -226,7 +225,7 @@ export default function EmployeesPage() {
 
   const updateFormSalary = (field: string, val: number) => {
     setFormData(prev => {
-      const s = prev.salary || INITIAL_FORM_DATA.salary!;
+      const s = prev.salary || INITIAL_SALARY_STRUCTURE;
       const newBasic = field === 'basic' ? val : s.basic;
       const newHra = field === 'hra' ? val : (field === 'basic' ? Math.round(val * 0.5) : s.hra);
       const newAllowance = field === 'allowance' ? val : s.allowance;
@@ -264,6 +263,8 @@ export default function EmployeesPage() {
     });
 
     setIsRegistrationOpen(false);
+    setEditEmployee(null);
+    setFormData(INITIAL_FORM_DATA);
     toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${newEmp.name} has been saved.` });
   };
 
@@ -281,7 +282,8 @@ export default function EmployeesPage() {
   const increasePct = useMemo(() => {
     if (!salaryRevision || salaryRevision.salary.monthlyCTC === 0) return "0.0";
     const diff = revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC;
-    return ((diff / salaryRevision.salary.monthlyCTC) * 100).toFixed(1);
+    const pct = (diff / salaryRevision.salary.monthlyCTC) * 100;
+    return isNaN(pct) ? "0.0" : pct.toFixed(1);
   }, [salaryRevision, revisionData.monthlyCTC]);
 
   return (
@@ -387,11 +389,11 @@ export default function EmployeesPage() {
 
       {/* Registration Modal */}
       <Dialog open={isRegistrationOpen} onOpenChange={(open) => { 
-        setIsRegistrationOpen(open); 
-        if(!open) { 
+        if (!open) {
+          setIsRegistrationOpen(false);
           setEditEmployee(null); 
           setFormData(INITIAL_FORM_DATA); 
-        } 
+        }
       }}>
         <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-2">
@@ -536,7 +538,7 @@ export default function EmployeesPage() {
                       checked={formData.isGovComplianceEnabled} 
                       onCheckedChange={(c) => {
                         setFormData(prev => {
-                          const s = prev.salary || INITIAL_FORM_DATA.salary!;
+                          const s = prev.salary || INITIAL_SALARY_STRUCTURE;
                           return { 
                             ...prev, 
                             isGovComplianceEnabled: c,
@@ -635,7 +637,11 @@ export default function EmployeesPage() {
               <p className="text-xl font-bold text-emerald-300">{formatCurrency(formData.salary?.monthlyCTC || 0)}</p>
             </div>
             <div className="flex items-center justify-end gap-3 pr-4">
-              <Button variant="ghost" className="text-white hover:bg-slate-800" onClick={() => setIsRegistrationOpen(false)}>Cancel</Button>
+              <Button variant="ghost" className="text-white hover:bg-slate-800" onClick={() => {
+                setIsRegistrationOpen(false);
+                setEditEmployee(null);
+                setFormData(INITIAL_FORM_DATA);
+              }}>Cancel</Button>
               <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={handleRegistrationPost}>Post Employee</Button>
             </div>
           </div>
@@ -643,7 +649,7 @@ export default function EmployeesPage() {
       </Dialog>
 
       {/* Salary Revision Modal */}
-      <Dialog open={!!salaryRevision} onOpenChange={() => setSalaryRevision(null)}>
+      <Dialog open={!!salaryRevision} onOpenChange={(open) => { if (!open) setSalaryRevision(null); }}>
         <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Salary Revision - {salaryRevision?.name}</DialogTitle>
@@ -656,11 +662,14 @@ export default function EmployeesPage() {
                 { label: "Basic", val: salaryRevision?.salary.basic },
                 { label: "HRA", val: salaryRevision?.salary.hra },
                 { label: "Allowance", val: salaryRevision?.salary.allowance },
-                { label: "Current CTC", val: salaryRevision?.salary.monthlyCTC },
+                { label: "Current CTC", val: salaryRevision?.salary.monthlyCTC, highlight: true },
               ].map((item, i) => (
-                <div key={i} className="p-3 bg-slate-50 rounded-lg border text-center">
+                <div key={i} className={cn(
+                  "p-3 rounded-lg border text-center",
+                  item.highlight ? "bg-primary/5 border-primary/20" : "bg-slate-50 border-slate-100"
+                )}>
                   <p className="text-[10px] font-bold text-muted-foreground uppercase">{item.label}</p>
-                  <p className="text-sm font-bold">{formatCurrency(item.val || 0)}</p>
+                  <p className={cn("text-sm font-bold", item.highlight && "text-primary")}>{formatCurrency(item.val || 0)}</p>
                 </div>
               ))}
             </div>
