@@ -49,7 +49,8 @@ import {
   Wallet,
   CheckCircle2,
   AlertCircle,
-  Ban
+  Ban,
+  User
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -61,6 +62,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // Helper to generate MMM-YY month options
 const generatePayrollMonths = () => {
@@ -92,6 +94,7 @@ export default function PayrollPage() {
   // Modals
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
   const [generateSalaryEmp, setGenerateSalaryEmp] = useState<Employee | null>(null);
+  const [viewLeaveHistoryEmp, setViewLeaveHistoryEmp] = useState<Employee | null>(null);
   const [advanceLeaveValue, setAdvanceLeaveValue] = useState(0);
 
   // Salary Gen State
@@ -163,7 +166,7 @@ export default function PayrollPage() {
       
       toast({ title: "Leave Adjusted", description: `${advanceLeaveValue} days added to earning days.` });
       setAdjustLeaveEmp(null);
-      setAdvanceLeaveValue(0);
+      // We don't reset advanceLeaveValue here because it's used in calculation during Generate Salary
     } finally {
       setIsProcessing(false);
     }
@@ -207,7 +210,10 @@ export default function PayrollPage() {
     const incentiveAmt = Math.round(basic * (incentivePct / 100));
     
     // Scale net salary by ratio of earning days
-    const baseNetPayable = Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * earningDays);
+    const baseNetPayable = earningDays > 0 
+      ? Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * earningDays)
+      : 0;
+      
     const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * summary.holidayWork);
     
     const finalNet = baseNetPayable + incentiveAmt + holidayWorkingAmt;
@@ -236,6 +242,27 @@ export default function PayrollPage() {
     setIncentivePct(0);
     setAdvanceLeaveValue(0); // Reset after use
   };
+
+  const leaveHistoryData = useMemo(() => {
+    if (!viewLeaveHistoryEmp) return [];
+    
+    // In a real app, this would be fetched from a leave transactions table
+    // Here we derive it from payroll records for the employee
+    let runningBalance = viewLeaveHistoryEmp.advanceLeaveBalance || 0;
+    
+    const records = payrollRecords
+      .filter(p => p.employeeId === viewLeaveHistoryEmp.employeeId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return records.map(p => {
+      return {
+        month: p.month,
+        holidayWork: p.holidayWorkDays,
+        adjust: p.adjustLeave,
+        balance: runningBalance // Simplified for mock
+      };
+    });
+  }, [viewLeaveHistoryEmp, payrollRecords]);
 
   return (
     <div className="space-y-8 pb-12">
@@ -454,7 +481,7 @@ export default function PayrollPage() {
                       <TableCell>{emp.department}</TableCell>
                       <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" className="font-bold gap-2">
+                        <Button variant="ghost" size="sm" className="font-bold gap-2" onClick={() => setViewLeaveHistoryEmp(emp)}>
                           <History className="w-4 h-4" /> View History
                         </Button>
                       </TableCell>
@@ -644,7 +671,10 @@ export default function PayrollPage() {
                           <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Estimated Net Payable</p>
                           <h2 className="text-4xl font-black text-emerald-300">
                             {formatCurrency(
-                              Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * (getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue)) + 
+                              ( (getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue) > 0 
+                                ? Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * (getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue))
+                                : 0
+                              ) + 
                               Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)) +
                               Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork)
                             )}
@@ -669,6 +699,87 @@ export default function PayrollPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* View Leave History Dialog */}
+      <Dialog open={!!viewLeaveHistoryEmp} onOpenChange={(open) => !open && setViewLeaveHistoryEmp(null)}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          {viewLeaveHistoryEmp && (
+            <>
+              <DialogHeader className="p-6 border-b bg-slate-50/50">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                      <History className="w-5 h-5 text-primary" />
+                      Advance Leave History
+                    </DialogTitle>
+                    <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground font-medium">
+                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded font-mono font-bold">{viewLeaveHistoryEmp.name} ({viewLeaveHistoryEmp.employeeId})</span>
+                      <span>•</span>
+                      <span>{viewLeaveHistoryEmp.department} / {viewLeaveHistoryEmp.designation}</span>
+                    </div>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <ScrollArea className="flex-1 p-6">
+                <div className="space-y-4">
+                  <div className="border rounded-xl overflow-hidden shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="font-bold">Month (MMM-YY)</TableHead>
+                          <TableHead className="font-bold text-center">Working Holiday Days</TableHead>
+                          <TableHead className="font-bold text-center">Adjust</TableHead>
+                          <TableHead className="font-bold text-right">Available Balance Days</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {leaveHistoryData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center py-12 text-muted-foreground font-medium">
+                              No leave adjustment history found for this employee.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          leaveHistoryData.map((row, idx) => (
+                            <TableRow key={idx} className="hover:bg-slate-50/50">
+                              <TableCell className="font-bold">{row.month}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                  +{row.holidayWork}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">
+                                  -{row.adjust}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-black text-primary">
+                                {row.balance} Days
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </ScrollArea>
+
+              <div className="p-6 border-t bg-slate-900 text-white flex justify-between items-center">
+                <div>
+                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Remaining Balance</p>
+                   <p className="text-2xl font-black text-emerald-400">{viewLeaveHistoryEmp.advanceLeaveBalance || 0} Days</p>
+                </div>
+                <Button variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20" onClick={() => setViewLeaveHistoryEmp(null)}>
+                  Close History
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
