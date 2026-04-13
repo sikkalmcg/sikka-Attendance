@@ -24,6 +24,16 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Search, 
   MoreHorizontal, 
@@ -39,7 +49,8 @@ import {
   ShieldCheck,
   ChevronRight,
   User,
-  Info
+  Info,
+  AlertTriangle
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -181,6 +192,8 @@ export default function EmployeesPage() {
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [salaryRevision, setSalaryRevision] = useState<Employee | null>(null);
   const [viewHistoryEmployee, setViewHistoryEmployee] = useState<Employee | null>(null);
+  const [employeeToToggle, setEmployeeToToggle] = useState<Employee | null>(null);
+  const [isToggleConfirmOpen, setIsToggleConfirmOpen] = useState(false);
   
   const [formData, setFormData] = useState<Partial<Employee>>(INITIAL_FORM_DATA);
   const [revisionData, setRevisionData] = useState<SalaryStructure>(INITIAL_SALARY_STRUCTURE);
@@ -265,7 +278,7 @@ export default function EmployeesPage() {
       salaryHistory: editEmployee ? (formData.salaryHistory || []) : [
         { fromMonth: joinMonthStr, toMonth: "Present", monthlyCTC: formData.salary?.monthlyCTC || 0 }
       ],
-      active: true
+      active: editEmployee ? (formData.active ?? true) : true
     };
 
     setEmployees(prev => {
@@ -312,6 +325,22 @@ export default function EmployeesPage() {
     toast({ title: "Salary Revision Posted", description: `Updated for ${salaryRevision.name}` });
   };
 
+  const handleToggleStatus = () => {
+    if (!employeeToToggle) return;
+    
+    setEmployees(prev => prev.map(emp => 
+      emp.id === employeeToToggle.id ? { ...emp, active: !emp.active } : emp
+    ));
+    
+    toast({ 
+      title: employeeToToggle.active ? "Employee Deactivated" : "Employee Activated",
+      description: `${employeeToToggle.name} status updated successfully.`
+    });
+    
+    setIsToggleConfirmOpen(false);
+    setEmployeeToToggle(null);
+  };
+
   const increasePct = useMemo(() => {
     if (!salaryRevision || salaryRevision.salary.monthlyCTC === 0) return "0.0";
     const diff = revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC;
@@ -352,13 +381,14 @@ export default function EmployeesPage() {
                 <TableHead className="font-bold">Dept / Designation</TableHead>
                 <TableHead className="font-bold">Join Date</TableHead>
                 <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                <TableHead className="font-bold text-center">Status</TableHead>
                 <TableHead className="text-right font-bold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No employees found.</TableCell>
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No employees found.</TableCell>
                 </TableRow>
               ) : (
                 filtered.map((emp) => (
@@ -379,6 +409,17 @@ export default function EmployeesPage() {
                     <TableCell className="text-sm">{emp.joinDate}</TableCell>
                     <TableCell className="text-right font-bold text-emerald-600">
                       {formatCurrency(emp.salary.monthlyCTC)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge 
+                        variant="outline" 
+                        className={cn(
+                          "px-2 py-0.5 text-[10px] uppercase font-black",
+                          emp.active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                        )}
+                      >
+                        {emp.active ? "Active" : "De-active"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
@@ -402,8 +443,8 @@ export default function EmployeesPage() {
                             <DropdownMenuItem 
                               className={emp.active ? "text-rose-600" : "text-emerald-600"}
                               onClick={() => {
-                                setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, active: !e.active } : e));
-                                toast({ title: emp.active ? "Employee Deactivated" : "Employee Activated" });
+                                setEmployeeToToggle(emp);
+                                setIsToggleConfirmOpen(true);
                               }}
                             >
                               {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate</> : <><CheckCircle className="w-4 h-4 mr-2" /> Activate</>}
@@ -883,6 +924,36 @@ export default function EmployeesPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Toggle Status Confirmation Dialog */}
+      <AlertDialog open={isToggleConfirmOpen} onOpenChange={setIsToggleConfirmOpen}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-rose-600" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">
+              Confirm {employeeToToggle?.active ? "Deactivation" : "Activation"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center pt-2">
+              Are you sure you want to {employeeToToggle?.active ? "deactivate" : "activate"} <strong>{employeeToToggle?.name}</strong>?
+              {employeeToToggle?.active ? 
+                " This user will lose immediate access to the login portal." : 
+                " This user will regain access to mark attendance and view records."
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
+            <AlertDialogCancel className="mt-0">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleToggleStatus}
+              className={employeeToToggle?.active ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}
+            >
+              Confirm {employeeToToggle?.active ? "Deactivate" : "Activate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

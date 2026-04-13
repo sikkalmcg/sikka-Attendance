@@ -7,28 +7,42 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, User as UserIcon, Lock } from "lucide-react";
+import { ShieldCheck, User as UserIcon, Lock, AlertCircle } from "lucide-react";
 import { SUPER_ADMIN_USER } from "@/lib/constants";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+// In a real app, this would be a server-side check. 
+// For this prototype, we simulate a check for deactivated accounts.
+const DEACTIVATED_MOCK_USER = "123456789012"; // Example: Deactivated Aadhaar
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     // Simulated Authentication Logic
-    // In a real app, this would be a server action or API call
     setTimeout(() => {
       if (username === SUPER_ADMIN_USER.username && password === SUPER_ADMIN_USER.password) {
         localStorage.setItem("user", JSON.stringify({ ...SUPER_ADMIN_USER, id: "super-1" }));
         router.push("/dashboard");
         toast({ title: "Welcome back, Admin", description: "Login successful." });
       } else if (username.length === 12 && password.length === 10) {
+        
+        // CHECK STATUS SIMULATION
+        if (username === DEACTIVATED_MOCK_USER) {
+          setError("Your account has been deactivated by HR. Please contact administration.");
+          setLoading(false);
+          return;
+        }
+
         // Simple mock for employees (Aadhaar/Mobile)
         localStorage.setItem("user", JSON.stringify({
           id: "emp-mock",
@@ -60,6 +74,14 @@ export default function LoginPage() {
           <p className="text-muted-foreground mt-2">Sikka Industries & Logistics</p>
         </div>
 
+        {error && (
+          <Alert variant="destructive" className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Access Denied</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         <Card className="border-none shadow-xl shadow-slate-200/50">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold">Login</CardTitle>
@@ -73,7 +95,7 @@ export default function LoginPage() {
                   <UserIcon className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input 
                     id="username" 
-                    placeholder="Aadhaar Number" 
+                    placeholder="12-digit Aadhaar" 
                     className="pl-10"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -88,7 +110,7 @@ export default function LoginPage() {
                   <Input 
                     id="password" 
                     type="password" 
-                    placeholder="Mobile Number" 
+                    placeholder="10-digit Mobile" 
                     className="pl-10"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
