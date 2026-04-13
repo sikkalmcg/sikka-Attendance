@@ -39,19 +39,34 @@ export interface SalaryStructure {
   da: number;
   allowance: number;
   monthlyCTC: number;
+  employeePF: number;
+  employeeESIC: number;
+  employerPF: number;
+  employerESIC: number;
+  grossSalary: number;
+  netSalary: number;
 }
 
 export interface Employee {
   id: string;
   employeeId: string;
   name: string;
+  fatherName: string;
   aadhaar: string;
   pan: string;
   mobile: string;
+  address: string;
   department: string;
   designation: string;
   joinDate: string;
-  plantId: string;
+  firmId: string;
+  unitId: string;
+  bankName: string;
+  accountNo: string;
+  ifscCode: string;
+  isGovComplianceEnabled: boolean;
+  pfNumber?: string;
+  esicNumber?: string;
   salary: SalaryStructure;
   active: boolean;
 }

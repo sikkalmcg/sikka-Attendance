@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Table, 
   TableHeader, 
@@ -14,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { 
   Dialog, 
   DialogContent, 
@@ -31,7 +34,11 @@ import {
   CheckCircle,
   XCircle,
   History,
-  CalendarDays
+  CalendarDays,
+  Building2,
+  Banknote,
+  ShieldCheck,
+  ChevronRight
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -47,39 +54,63 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, SalaryStructure } from "@/lib/types";
+import { Employee, SalaryStructure, Firm } from "@/lib/types";
+import { DEPARTMENTS, DESIGNATIONS, STATUTORY_RATES } from "@/lib/constants";
+
+const MOCK_FIRMS: Firm[] = [
+  { 
+    id: "f1", 
+    name: "Sikka Industries Ltd.", 
+    gstin: "07AAAAA0000A1Z5", 
+    pan: "AAAAA0000A", 
+    pfNo: "DL/CPM/123", 
+    esicNo: "11000123", 
+    units: [
+      { id: "u1", name: "Okhla Unit 1", address: "Phase III, Okhla" },
+      { id: "u2", name: "Gurgaon Unit 2", address: "Sector 18, Gurgaon" }
+    ] 
+  }
+];
 
 const MOCK_EMPLOYEES: Employee[] = [
   { 
     id: "1", 
-    employeeId: "S10001", 
+    employeeId: "EMP-S0001", 
     name: "Ravi Kumar", 
+    fatherName: "Mr. Ramesh Kumar",
     aadhaar: "1234 5678 9012",
+    pan: "ABCDE1234F",
+    mobile: "9988776655", 
+    address: "New Delhi, India",
     department: "Production", 
     designation: "Engineer", 
-    mobile: "9988776655", 
-    pan: "ABCDE1234F",
     joinDate: "2023-01-15",
-    plantId: "plant-1",
-    salary: { basic: 15000, hra: 7500, da: 5000, allowance: 7500, monthlyCTC: 35000 },
+    firmId: "f1",
+    unitId: "u1",
+    bankName: "HDFC Bank",
+    accountNo: "50100123456789",
+    ifscCode: "HDFC0000123",
+    isGovComplianceEnabled: true,
+    pfNumber: "DL/CPM/123/001",
+    esicNumber: "11000123001",
+    salary: { 
+      basic: 15000, 
+      hra: 7500, 
+      da: 0, 
+      allowance: 7500, 
+      grossSalary: 30000,
+      employeePF: 1800,
+      employeeESIC: 0,
+      employerPF: 1950,
+      employerESIC: 0,
+      netSalary: 28200,
+      monthlyCTC: 31950 
+    },
     active: true 
-  },
-  { 
-    id: "2", 
-    employeeId: "S10002", 
-    name: "Anita Singh", 
-    aadhaar: "4321 8765 0987",
-    department: "HR", 
-    designation: "Manager", 
-    mobile: "8877665544", 
-    pan: "FGHIJ5678K",
-    joinDate: "2022-05-20",
-    plantId: "plant-1",
-    salary: { basic: 25000, hra: 12500, da: 10000, allowance: 7500, monthlyCTC: 55000 },
-    active: true 
-  },
+  }
 ];
 
 const MONTHS = [
@@ -92,11 +123,24 @@ export default function EmployeesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [salaryRevision, setSalaryRevision] = useState<Employee | null>(null);
-  const [salaryHistory, setSalaryHistory] = useState<Employee | null>(null);
   
-  const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0 });
+  // Registration Form State
+  const [formData, setFormData] = useState<Partial<Employee>>({
+    firmId: "f1",
+    isGovComplianceEnabled: true,
+    salary: { basic: 0, hra: 0, da: 0, allowance: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0, monthlyCTC: 0 }
+  });
+
+  const nextEmpId = useMemo(() => {
+    const lastId = employees.length > 0 ? parseInt(employees[employees.length - 1].employeeId.split('-S')[1]) : 0;
+    return `EMP-S${(lastId + 1).toString().padStart(4, '0')}`;
+  }, [employees]);
+
+  // Salary Revision State
+  const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0 });
   const [effectiveMonth, setEffectiveMonth] = useState<string>("August");
 
   const filtered = employees.filter(emp => 
@@ -105,30 +149,81 @@ export default function EmployeesPage() {
     emp.aadhaar.includes(searchTerm)
   );
 
-  const handleEditClick = (emp: Employee) => setEditEmployee(emp);
+  const calculateSalaryMetrics = (basic: number, hra: number, allowance: number, compliance: boolean) => {
+    const gross = basic + hra + allowance;
+    let epf = 0, eesic = 0, erpf = 0, eresic = 0;
+
+    if (compliance) {
+      epf = Math.round(basic * STATUTORY_RATES.PF_EMPLOYEE_RATE);
+      erpf = Math.round(basic * STATUTORY_RATES.PF_EMPLOYER_RATE);
+      
+      if (gross <= STATUTORY_RATES.ESIC_THRESHOLD) {
+        eesic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYEE_RATE);
+        eresic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYER_RATE);
+      }
+    }
+
+    return {
+      basic,
+      hra,
+      da: 0,
+      allowance,
+      grossSalary: gross,
+      employeePF: epf,
+      employeeESIC: eesic,
+      employerPF: erpf,
+      employerESIC: eresic,
+      netSalary: gross - epf - eesic,
+      monthlyCTC: gross + erpf + eresic
+    };
+  };
+
+  const updateFormSalary = (field: string, val: number) => {
+    const s = formData.salary || { basic: 0, hra: 0, allowance: 0 };
+    const newBasic = field === 'basic' ? val : (s.basic || 0);
+    const newHra = field === 'hra' ? val : (field === 'basic' ? Math.round(val * 0.5) : (s.hra || 0));
+    const newAllowance = field === 'allowance' ? val : (s.allowance || 0);
+    
+    setFormData(prev => ({
+      ...prev,
+      salary: calculateSalaryMetrics(newBasic, newHra, newAllowance, prev.isGovComplianceEnabled || false)
+    }));
+  };
+
+  const handleRegistrationPost = () => {
+    if (!formData.name || !formData.aadhaar || formData.aadhaar.replace(/\s/g, '').length !== 12) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Name and 12-digit Aadhaar are mandatory." });
+      return;
+    }
+
+    const newEmp: Employee = {
+      ...(formData as Employee),
+      id: editEmployee ? editEmployee.id : Math.random().toString(36).substr(2, 9),
+      employeeId: editEmployee ? editEmployee.employeeId : nextEmpId,
+      active: true
+    };
+
+    if (editEmployee) {
+      setEmployees(prev => prev.map(e => e.id === editEmployee.id ? newEmp : e));
+    } else {
+      setEmployees(prev => [...prev, newEmp]);
+    }
+
+    setIsRegistrationOpen(false);
+    setEditEmployee(null);
+    setFormData({ firmId: "f1", isGovComplianceEnabled: true });
+    toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${newEmp.name} has been saved.` });
+  };
+
+  const handleEditClick = (emp: Employee) => {
+    setEditEmployee(emp);
+    setFormData(emp);
+    setIsRegistrationOpen(true);
+  };
   
   const handleIncreaseSalary = (emp: Employee) => {
     setSalaryRevision(emp);
     setRevisionData(emp.salary);
-    const currentMonth = MONTHS[new Date().getMonth()];
-    setEffectiveMonth(currentMonth);
-  };
-
-  const calculateRevision = (field: keyof SalaryStructure, value: string) => {
-    const val = parseFloat(value) || 0;
-    const newData = { ...revisionData, [field]: val };
-    newData.monthlyCTC = newData.basic + newData.hra + newData.da + newData.allowance;
-    setRevisionData(newData);
-  };
-
-  const postSalaryUpdate = () => {
-    if (!salaryRevision) return;
-    setEmployees(prev => prev.map(e => e.id === salaryRevision.id ? { ...e, salary: revisionData } : e));
-    setSalaryRevision(null);
-    toast({ 
-      title: "Salary Revision Posted", 
-      description: `New structure for ${salaryRevision.name} is effective from ${effectiveMonth}.` 
-    });
   };
 
   return (
@@ -136,9 +231,9 @@ export default function EmployeesPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold">Employee Directory</h1>
-          <p className="text-muted-foreground">Manage workforce profiles and salary revisions.</p>
+          <p className="text-muted-foreground">Manage workforce profiles and statutory payroll compliance.</p>
         </div>
-        <Button className="font-bold shadow-lg shadow-primary/20">
+        <Button className="font-bold shadow-lg shadow-primary/20" onClick={() => setIsRegistrationOpen(true)}>
           <UserPlus className="w-4 h-4 mr-2" /> Add Employee
         </Button>
       </div>
@@ -202,7 +297,7 @@ export default function EmployeesPage() {
                           <DropdownMenuItem onClick={() => handleIncreaseSalary(emp)}>
                             <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setSalaryHistory(emp)}>
+                          <DropdownMenuItem>
                             <History className="w-4 h-4 mr-2" /> View Salary Record
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -220,7 +315,194 @@ export default function EmployeesPage() {
         </CardContent>
       </Card>
 
-      {/* Salary Increase Modal */}
+      {/* Registration Modal */}
+      <Dialog open={isRegistrationOpen} onOpenChange={(open) => { setIsRegistrationOpen(open); if(!open) { setEditEmployee(null); setFormData({ firmId: "f1", isGovComplianceEnabled: true }); } }}>
+        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 pb-2">
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <ShieldCheck className="w-6 h-6 text-primary" />
+              {editEmployee ? "Edit Employee Profile" : "New Employee Registration"}
+            </DialogTitle>
+            <DialogDescription>Fill all mandatory fields to generate system ID and payroll record.</DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 px-6">
+            <div className="space-y-8 pb-8">
+              {/* Section 1: Basic Details */}
+              <div className="space-y-4 pt-4">
+                <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <Building2 className="w-4 h-4" /> 1. Basic Details
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label>Firm Name</Label>
+                    <Select value={formData.firmId} onValueChange={(v) => setFormData({...formData, firmId: v, unitId: undefined})}>
+                      <SelectTrigger><SelectValue placeholder="Select Firm" /></SelectTrigger>
+                      <SelectContent>{MOCK_FIRMS.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Unit / Plant</Label>
+                    <Select value={formData.unitId} onValueChange={(v) => setFormData({...formData, unitId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select Unit" /></SelectTrigger>
+                      <SelectContent>
+                        {MOCK_FIRMS.find(f => f.id === formData.firmId)?.units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Employee ID</Label>
+                    <Input value={editEmployee ? editEmployee.employeeId : nextEmpId} disabled className="bg-slate-100 font-mono font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Employee Name *</Label>
+                    <Input placeholder="Enter full name" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Father's Name</Label>
+                    <Input placeholder="Enter father's name" value={formData.fatherName || ''} onChange={(e) => setFormData({...formData, fatherName: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Mobile Number *</Label>
+                    <Input placeholder="10-digit mobile" value={formData.mobile || ''} onChange={(e) => setFormData({...formData, mobile: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Aadhaar Number *</Label>
+                    <Input placeholder="12-digit number" value={formData.aadhaar || ''} onChange={(e) => setFormData({...formData, aadhaar: e.target.value})} maxLength={14} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>PAN Number</Label>
+                    <Input placeholder="ABCDE1234F" className="uppercase" value={formData.pan || ''} onChange={(e) => setFormData({...formData, pan: e.target.value.toUpperCase()})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Joining Date *</Label>
+                    <Input type="date" value={formData.joinDate || ''} onChange={(e) => setFormData({...formData, joinDate: e.target.value})} />
+                  </div>
+                  <div className="space-y-2 md:col-span-3">
+                    <Label>Residential Address</Label>
+                    <Textarea placeholder="Full address with pincode" value={formData.address || ''} onChange={(e) => setFormData({...formData, address: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Department */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <ChevronRight className="w-4 h-4" /> 2. Dept & Designation
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label>Department</Label>
+                    <Select value={formData.department} onValueChange={(v) => setFormData({...formData, department: v, designation: undefined})}>
+                      <SelectTrigger><SelectValue placeholder="Select Dept" /></SelectTrigger>
+                      <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Designation</Label>
+                    <Select value={formData.designation} onValueChange={(v) => setFormData({...formData, designation: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select Designation" /></SelectTrigger>
+                      <SelectContent>
+                        {formData.department && DESIGNATIONS[formData.department].map(des => <SelectItem key={des} value={des}>{des}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Salary */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <Banknote className="w-4 h-4" /> 3. Salary Structure
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label>Basic Salary *</Label>
+                    <Input type="number" value={formData.salary?.basic || ''} onChange={(e) => updateFormSalary('basic', parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>HRA (Editable)</Label>
+                    <Input type="number" value={formData.salary?.hra || ''} onChange={(e) => updateFormSalary('hra', parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Other Allowance</Label>
+                    <Input type="number" value={formData.salary?.allowance || ''} onChange={(e) => updateFormSalary('allowance', parseFloat(e.target.value) || 0)} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Banking */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <Banknote className="w-4 h-4" /> 4. Banking Details
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label>Bank Name</Label>
+                    <Input placeholder="e.g. HDFC, SBI" value={formData.bankName || ''} onChange={(e) => setFormData({...formData, bankName: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Account Number</Label>
+                    <Input type="number" placeholder="Enter account number" value={formData.accountNo || ''} onChange={(e) => setFormData({...formData, accountNo: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>IFSC Code</Label>
+                    <Input placeholder="HDFC0001234" className="uppercase" value={formData.ifscCode || ''} onChange={(e) => setFormData({...formData, ifscCode: e.target.value.toUpperCase()})} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 5: Compliance */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4" /> 5. Gov. Compliance (PF/ESIC)
+                  </h4>
+                  <div className="flex items-center space-x-2">
+                    <Label htmlFor="compliance-toggle">Applicable</Label>
+                    <Switch 
+                      id="compliance-toggle" 
+                      checked={formData.isGovComplianceEnabled} 
+                      onCheckedChange={(c) => {
+                        setFormData(prev => ({ ...prev, isGovComplianceEnabled: c }));
+                        updateFormSalary('basic', formData.salary?.basic || 0); // Trigger recalculate
+                      }} 
+                    />
+                  </div>
+                </div>
+                {formData.isGovComplianceEnabled && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <div className="space-y-2"><Label>PF Account Number</Label><Input value={formData.pfNumber || ''} onChange={(e) => setFormData({...formData, pfNumber: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>ESIC Account Number</Label><Input value={formData.esicNumber || ''} onChange={(e) => setFormData({...formData, esicNumber: e.target.value})} /></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </ScrollArea>
+
+          {/* Real-time Footer Stats */}
+          <div className="bg-slate-900 text-white p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gross Salary</p>
+              <p className="text-xl font-bold">{formatCurrency(formData.salary?.grossSalary || 0)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Net Payable</p>
+              <p className="text-xl font-bold text-rose-300">{formatCurrency(formData.salary?.netSalary || 0)}</p>
+            </div>
+            <div className="text-center border-l border-slate-700">
+              <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Monthly CTC</p>
+              <p className="text-xl font-bold text-emerald-300">{formatCurrency(formData.salary?.monthlyCTC || 0)}</p>
+            </div>
+            <div className="flex items-center justify-end gap-3 pr-4">
+              <Button variant="ghost" className="text-white hover:bg-slate-800" onClick={() => setIsRegistrationOpen(false)}>Cancel</Button>
+              <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={handleRegistrationPost}>Post Employee</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Salary Revision Modal */}
       <Dialog open={!!salaryRevision} onOpenChange={() => setSalaryRevision(null)}>
         <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
@@ -233,8 +515,8 @@ export default function EmployeesPage() {
               {[
                 { label: "Basic", val: salaryRevision?.salary.basic },
                 { label: "HRA", val: salaryRevision?.salary.hra },
-                { label: "DA", val: salaryRevision?.salary.da },
                 { label: "Allowance", val: salaryRevision?.salary.allowance },
+                { label: "Current CTC", val: salaryRevision?.salary.monthlyCTC },
               ].map((item, i) => (
                 <div key={i} className="p-3 bg-slate-50 rounded-lg border text-center">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase">{item.label}</p>
@@ -249,16 +531,27 @@ export default function EmployeesPage() {
                   <TrendingUp className="w-4 h-4 text-emerald-600" /> Revised Structure
                 </h4>
                 <div className="space-y-3">
-                  {['basic', 'hra', 'da', 'allowance'].map((field) => (
-                    <div key={field} className="grid grid-cols-2 gap-2 items-center">
-                      <Label className="capitalize">{field}</Label>
-                      <Input 
-                        type="number" 
-                        value={revisionData[field as keyof SalaryStructure]} 
-                        onChange={(e) => calculateRevision(field as keyof SalaryStructure, e.target.value)} 
-                      />
-                    </div>
-                  ))}
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <Label>Basic Salary</Label>
+                    <Input type="number" value={revisionData.basic} onChange={(e) => {
+                      const b = parseFloat(e.target.value) || 0;
+                      setRevisionData(prev => calculateSalaryMetrics(b, Math.round(b * 0.5), prev.allowance, salaryRevision?.isGovComplianceEnabled || false));
+                    }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <Label>HRA</Label>
+                    <Input type="number" value={revisionData.hra} onChange={(e) => {
+                      const h = parseFloat(e.target.value) || 0;
+                      setRevisionData(prev => calculateSalaryMetrics(prev.basic, h, prev.allowance, salaryRevision?.isGovComplianceEnabled || false));
+                    }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <Label>Other Allowance</Label>
+                    <Input type="number" value={revisionData.allowance} onChange={(e) => {
+                      const a = parseFloat(e.target.value) || 0;
+                      setRevisionData(prev => calculateSalaryMetrics(prev.basic, prev.hra, a, salaryRevision?.isGovComplianceEnabled || false));
+                    }} />
+                  </div>
                   
                   <div className="pt-4 border-t mt-4 space-y-2">
                     <Label className="flex items-center gap-2 text-primary">
@@ -302,28 +595,11 @@ export default function EmployeesPage() {
 
           <DialogFooter className="bg-slate-50 -m-6 mt-2 p-6 rounded-b-lg border-t">
             <Button variant="outline" onClick={() => setSalaryRevision(null)}>Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={postSalaryUpdate}>Post Update</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Profile Edit Modal */}
-      <Dialog open={!!editEmployee} onOpenChange={() => setEditEmployee(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Employee Registration / Edit</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="space-y-2 col-span-2 sm:col-span-1"><Label>Full Name</Label><Input defaultValue={editEmployee?.name} /></div>
-            <div className="space-y-2 col-span-2 sm:col-span-1"><Label>Aadhaar Number</Label><Input defaultValue={editEmployee?.aadhaar} /></div>
-            <div className="space-y-2 col-span-2 sm:col-span-1"><Label>Department</Label><Input defaultValue={editEmployee?.department} /></div>
-            <div className="space-y-2 col-span-2 sm:col-span-1"><Label>Designation</Label><Input defaultValue={editEmployee?.designation} /></div>
-            <div className="space-y-2 col-span-2 sm:col-span-1"><Label>Join Date</Label><Input type="date" defaultValue={editEmployee?.joinDate} /></div>
-            <div className="space-y-2 col-span-2 sm:col-span-1"><Label>Mobile Number</Label><Input defaultValue={editEmployee?.mobile} /></div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditEmployee(null)}>Cancel</Button>
-            <Button onClick={() => setEditEmployee(null)}>Update Profile</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={() => {
+              setEmployees(prev => prev.map(e => e.id === salaryRevision?.id ? { ...e, salary: revisionData } : e));
+              setSalaryRevision(null);
+              toast({ title: "Salary Revision Posted" });
+            }}>Post Update</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

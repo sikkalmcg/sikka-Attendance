@@ -24,4 +24,48 @@ export const STATUTORY_RATES = {
   PF_EMPLOYER_RATE: 0.13,
   ESIC_EMPLOYEE_RATE: 0.0075,
   ESIC_EMPLOYER_RATE: 0.0325,
+  ESIC_THRESHOLD: 21000,
+};
+
+export const DEPARTMENTS = [
+  'Warehousing',
+  'Production',
+  'Logistics',
+  'HR'
+];
+
+export const DESIGNATIONS: Record<string, string[]> = {
+  'Warehousing': [
+    'Warehouse Manager', 
+    'Assistant Warehouse Manager', 
+    'Store Keeper', 
+    'Inventory Manager', 
+    'Inventory Executive', 
+    'Warehouse Supervisor', 
+    'Data Entry Operator'
+  ],
+  'Production': [
+    'Production Manager', 
+    'Warehouse Manager', 
+    'Supervisor', 
+    'Shift In charge', 
+    'Machine Operator', 
+    'Senior Operator', 
+    'Technician', 
+    'Quality Inspector', 
+    'Quality Analyst', 
+    'Helper', 
+    'Packing Staff', 
+    'Security Guard'
+  ],
+  'Logistics': [
+    'Fleet Maintainer', 
+    'Fleet Planner', 
+    'Driver', 
+    'Fleet Helper'
+  ],
+  'HR': [
+    'HR Manager', 
+    'Accountant'
+  ]
 };
