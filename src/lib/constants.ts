@@ -14,8 +14,8 @@ export const ROLES = {
 };
 
 export const ATTENDANCE_RULES = {
-  PRESENT_THRESHOLD: 4.5, // Hours
-  HALF_DAY_THRESHOLD: 2,   // Hours
+  PRESENT_THRESHOLD: 3.0, // Hours > 3.0 is Present
+  HALF_DAY_THRESHOLD: 1.0,   // Hours
   AUTO_OUT_HOURS: 16,
 };
 

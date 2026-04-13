@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -8,14 +7,15 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, Calculator, Download, Search, CheckCircle2 } from "lucide-react";
+import { CreditCard, Calculator, Download, Search, CheckCircle2, Info } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { STATUTORY_RATES } from "@/lib/constants";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const MOCK_PAYROLL_DATA = [
-  { id: "1", employeeId: "S10001", name: "Ravi Kumar", baseSalary: 35000, payableDays: 26, totalDays: 31 },
-  { id: "2", employeeId: "S10002", name: "Anita Singh", baseSalary: 55000, payableDays: 31, totalDays: 31 },
-  { id: "3", employeeId: "S10004", name: "Sunil Sharma", baseSalary: 18000, payableDays: 24, totalDays: 31 },
+  { id: "1", employeeId: "S10001", name: "Ravi Kumar", baseSalary: 35000, presentDays: 24, halfDays: 4, totalDays: 31 },
+  { id: "2", employeeId: "S10002", name: "Anita Singh", baseSalary: 55000, presentDays: 31, halfDays: 0, totalDays: 31 },
+  { id: "3", employeeId: "S10004", name: "Sunil Sharma", baseSalary: 18000, presentDays: 20, halfDays: 8, totalDays: 31 },
 ];
 
 export default function PayrollPage() {
@@ -28,13 +28,16 @@ export default function PayrollPage() {
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       p.employeeId.toLowerCase().includes(searchTerm.toLowerCase())
     ).map(p => {
+      // Rule: Two Half Days = One Present Day
+      const payableDays = p.presentDays + (p.halfDays * 0.5);
+      
       const perDay = p.baseSalary / p.totalDays;
-      const gross = Math.round(perDay * p.payableDays);
+      const gross = Math.round(perDay * payableDays);
       const pf = Math.round(gross * STATUTORY_RATES.PF_EMPLOYEE_RATE);
       const esic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYEE_RATE);
       const net = gross - pf - esic;
       
-      return { ...p, gross, pf, esic, net };
+      return { ...p, payableDays, gross, pf, esic, net };
     });
   }, [searchTerm]);
 
@@ -122,7 +125,21 @@ export default function PayrollPage() {
             <TableHeader className="bg-slate-50">
               <TableRow>
                 <TableHead className="font-bold">Employee</TableHead>
-                <TableHead className="font-bold text-center">Days (P/T)</TableHead>
+                <TableHead className="font-bold text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    Payable Days
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Rule: 2 Half Days = 1 Present Day</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
                 <TableHead className="font-bold">Gross Salary</TableHead>
                 <TableHead className="font-bold text-rose-600">PF Ded.</TableHead>
                 <TableHead className="font-bold text-rose-600">ESIC Ded.</TableHead>
@@ -136,10 +153,16 @@ export default function PayrollPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-bold">{r.name}</span>
-                      <span className="text-xs font-mono text-primary">{r.employeeId}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-primary">{r.employeeId}</span>
+                        <span className="text-[10px] text-muted-foreground">(P: {r.presentDays}, H: {r.halfDays})</span>
+                      </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-center font-bold">{r.payableDays} / {r.totalDays}</TableCell>
+                  <TableCell className="text-center font-bold">
+                    {r.payableDays}
+                    <span className="text-muted-foreground font-normal text-xs ml-1">/ {r.totalDays}</span>
+                  </TableCell>
                   <TableCell className="font-semibold">{formatCurrency(r.gross)}</TableCell>
                   <TableCell className="text-rose-600 text-xs font-bold">{formatCurrency(r.pf)}</TableCell>
                   <TableCell className="text-rose-600 text-xs font-bold">{formatCurrency(r.esic)}</TableCell>

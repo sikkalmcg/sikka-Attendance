@@ -60,10 +60,9 @@ function calculateHours(inTime: string | null, outTime: string | null): number {
 // Helper to determine status based on hours
 function determineStatus(hours: number): 'PRESENT' | 'ABSENT' | 'HALF_DAY' {
   if (hours <= 0) return 'ABSENT';
-  // Rule: If employee Hours under 2:00 then Half day
-  if (hours < 2.0) return 'HALF_DAY';
-  if (hours < ATTENDANCE_RULES.PRESENT_THRESHOLD) return 'HALF_DAY';
-  return 'PRESENT';
+  // Rule: If hours > 3:00 then Present, else Half Day
+  if (hours > ATTENDANCE_RULES.PRESENT_THRESHOLD) return 'PRESENT';
+  return 'HALF_DAY';
 }
 
 interface AttendanceRecordWithMeta {
@@ -88,7 +87,7 @@ interface AttendanceRecordWithMeta {
 
 const INITIAL_MOCK_DATA: AttendanceRecordWithMeta[] = Array.from({ length: 45 }).map((_, i) => {
   const inTime = i % 15 === 0 ? null : "09:00 AM";
-  const outTime = i % 15 === 0 ? null : (i % 8 === 0 ? "10:30 AM" : "06:00 PM"); // i % 8 creates some < 2hr logs
+  const outTime = i % 15 === 0 ? null : (i % 8 === 0 ? "11:30 AM" : "06:00 PM"); 
   const hours = calculateHours(inTime, outTime);
   const status = determineStatus(hours);
   
@@ -410,9 +409,8 @@ export default function ApprovalsPage() {
                 <p className="text-xs text-slate-600 font-bold">Automatic Classification Rules:</p>
               </div>
               <ul className="text-[10px] text-slate-500 list-disc pl-5 space-y-1">
-                <li>Hours &lt; 2:00 → <strong>Half Day</strong></li>
-                <li>Hours between 2:00 and 4:30 → <strong>Half Day</strong></li>
-                <li>Hours &gt; 4:30 → <strong>Present</strong></li>
+                <li>Hours ≤ 3:00 → <strong>Half Day</strong></li>
+                <li>Hours > 3:00 → <strong>Present</strong></li>
               </ul>
             </div>
           </div>
