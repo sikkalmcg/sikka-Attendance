@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Card, 
   CardHeader, 
   CardTitle, 
   CardContent, 
-  CardDescription,
-  CardFooter
+  CardDescription
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -32,7 +32,6 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -44,22 +43,16 @@ import {
   CreditCard, 
   PlusCircle, 
   History, 
-  Info,
   Wallet,
   CheckCircle2,
-  AlertCircle,
-  Ban,
-  User,
-  ArrowDownCircle,
-  FileText,
   CalendarDays,
-  Building2,
-  Factory
+  ArrowDownCircle,
+  Building2
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, AttendanceRecord, PayrollRecord, Voucher } from "@/lib/types";
+import { Employee, PayrollRecord } from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
@@ -68,7 +61,6 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-// Helper to generate MMM-YY month options
 const generatePayrollMonths = () => {
   const options = [];
   const date = new Date();
@@ -84,54 +76,24 @@ const generatePayrollMonths = () => {
 const PAYROLL_MONTHS = generatePayrollMonths();
 
 export default function PayrollPage() {
-  const { employees, setEmployees, attendanceRecords, payrollRecords, setPayrollRecords, vouchers, firms, plants } = useData();
+  const router = useRouter();
+  const { employees, setEmployees, attendanceRecords, payrollRecords, vouchers, firms, plants } = useData();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState("generate");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState(PAYROLL_MONTHS[1]); // Default to previous month
+  const [selectedMonth, setSelectedMonth] = useState(PAYROLL_MONTHS[1]);
   const [selectedFirmId, setSelectedFirmId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Tracking for mandatory Adjust Leave step
   const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, boolean>>({});
-
-  // Modals
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
-  const [generateSalaryEmp, setGenerateSalaryEmp] = useState<Employee | null>(null);
   const [viewLeaveHistoryEmp, setViewLeaveHistoryEmp] = useState<Employee | null>(null);
   const [advanceLeaveValue, setAdvanceLeaveValue] = useState(0);
 
-  // Salary Gen State
-  const [incentivePct, setIncentivePct] = useState(0);
-  const [advanceRecovery, setAdvanceRecovery] = useState(0);
-  const [slipNo, setSlipNo] = useState("");
-  const [slipDate, setSlipDate] = useState(new Date().toISOString().split('T')[0]);
-
-  // Reset adjustment tracking when month changes
   useEffect(() => {
     setAdjustedEmployees({});
   }, [selectedMonth]);
-
-  // Auto-generate Slip No when modal opens
-  useEffect(() => {
-    if (generateSalaryEmp) {
-      const generateNextSlipNo = () => {
-        const silRecords = payrollRecords.filter(p => p.slipNo?.startsWith('SIL'));
-        if (silRecords.length === 0) return 'SIL00001';
-        
-        const numbers = silRecords.map(p => {
-          const numPart = p.slipNo?.replace('SIL', '') || "0";
-          return parseInt(numPart) || 0;
-        });
-        
-        const max = Math.max(...numbers);
-        return `SIL${(max + 1).toString().padStart(5, '0')}`;
-      };
-      setSlipNo(generateNextSlipNo());
-      setSlipDate(new Date().toISOString().split('T')[0]);
-    }
-  }, [generateSalaryEmp, payrollRecords]);
 
   const filteredEmployees = useMemo(() => {
     return (employees || []).filter(emp => {
@@ -150,32 +112,18 @@ export default function PayrollPage() {
     return vouchers.filter(v => v.status === 'PAID').reverse();
   }, [vouchers]);
 
-  // Check if salary is already generated for an employee in selected month
   const isSalaryGenerated = (empId: string) => {
     return payrollRecords.some(p => p.employeeId === empId && p.month === selectedMonth);
   };
 
-  const getAdvanceBalance = (empId: string) => {
-    const emp = employees.find(e => e.id === empId);
-    if (!emp) return 0;
-    const empVouchers = vouchers.filter(v => v.employeeId === empId && v.status === 'PAID');
-    const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
-    const totalRecovered = payrollRecords
-      .filter(p => p.employeeId === emp.employeeId)
-      .reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
-    return Math.max(0, totalAdv - totalRecovered);
-  };
-
-  // Attendance Logic for Selected Employee and Month
   const getAttendanceSummary = (empId: string) => {
     const records = attendanceRecords.filter(r => r.employeeId === empId || r.employeeId === "emp-mock");
     const presents = records.filter(r => r.status === 'PRESENT').length;
     const halfDays = records.filter(r => r.status === 'HALF_DAY').length;
     const holidays = records.filter(r => r.status === 'HOLIDAY').length;
     
-    // Rule: 2 Half Days = 1 Present Day
     const effectiveAttendance = presents + (halfDays * 0.5);
-    const totalDaysInMonth = 30; // Mock month length
+    const totalDaysInMonth = 30;
     const absent = totalDaysInMonth - effectiveAttendance - holidays;
 
     return {
@@ -185,28 +133,6 @@ export default function PayrollPage() {
       totalDays: totalDaysInMonth
     };
   };
-
-  const currentSummary = useMemo(() => {
-    if (!generateSalaryEmp) return null;
-    return getAttendanceSummary(generateSalaryEmp.employeeId);
-  }, [generateSalaryEmp]);
-
-  const estimatedFinalNet = useMemo(() => {
-    if (!generateSalaryEmp || !currentSummary) return 0;
-    
-    const earningDays = currentSummary.attendance + advanceLeaveValue;
-    const basic = generateSalaryEmp.salary.basic;
-    const incentiveAmt = Math.round(basic * (incentivePct / 100));
-    
-    const baseNetPayable = earningDays > 0 
-      ? Math.round((generateSalaryEmp.salary.netSalary / currentSummary.totalDays) * earningDays)
-      : 0;
-      
-    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / currentSummary.totalDays) * currentSummary.holidayWork);
-    
-    const final = baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
-    return Math.max(0, final);
-  }, [generateSalaryEmp, currentSummary, advanceLeaveValue, incentivePct, advanceRecovery]);
 
   const handleAdjustLeave = () => {
     if (!adjustLeaveEmp || isProcessing) return;
@@ -259,51 +185,8 @@ export default function PayrollPage() {
     }
   };
 
-  const handlePostSalary = () => {
-    if (!generateSalaryEmp || isProcessing || !currentSummary) return;
-    
-    if (payrollRecords.some(p => p.slipNo === slipNo)) {
-      toast({ variant: "destructive", title: "Duplicate Slip No", description: `Salary slip number ${slipNo} already exists.` });
-      return;
-    }
-
-    const earningDays = currentSummary.attendance + advanceLeaveValue;
-    const basic = generateSalaryEmp.salary.basic;
-    const incentiveAmt = Math.round(basic * (incentivePct / 100));
-    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / currentSummary.totalDays) * currentSummary.holidayWork);
-
-    const newPayrollRecord: PayrollRecord = {
-      id: Math.random().toString(36).substr(2, 9),
-      employeeId: generateSalaryEmp.employeeId,
-      employeeName: generateSalaryEmp.name,
-      month: selectedMonth,
-      attendance: currentSummary.attendance,
-      absent: currentSummary.absent,
-      adjustLeave: advanceLeaveValue,
-      totalEarningDays: earningDays,
-      incentivePct: incentivePct,
-      incentiveAmt: incentiveAmt,
-      holidayWorkDays: currentSummary.holidayWork,
-      holidayWorkAmt: holidayWorkingAmt,
-      advanceRecovery: advanceRecovery,
-      netPayable: estimatedFinalNet,
-      status: 'DRAFT',
-      createdAt: new Date().toISOString(),
-      slipNo: slipNo,
-      slipDate: slipDate
-    };
-
-    setPayrollRecords(prev => [...prev, newPayrollRecord]);
-    toast({ title: "Salary Generated", description: `Payroll entry created for ${generateSalaryEmp.name}` });
-    setGenerateSalaryEmp(null);
-    setIncentivePct(0);
-    setAdvanceLeaveValue(0);
-    setAdvanceRecovery(0);
-  };
-
   const leaveHistoryData = useMemo(() => {
     if (!viewLeaveHistoryEmp) return [];
-    
     let runningBalance = viewLeaveHistoryEmp.advanceLeaveBalance || 0;
     const records = payrollRecords
       .filter(p => p.employeeId === viewLeaveHistoryEmp.employeeId)
@@ -441,7 +324,11 @@ export default function PayrollPage() {
                                         "text-xs font-bold gap-1",
                                         isAdjusted && !generated ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
                                       )}
-                                      onClick={() => isAdjusted && !generated && setGenerateSalaryEmp(emp)}
+                                      onClick={() => {
+                                        if (isAdjusted && !generated) {
+                                          router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}`);
+                                        }
+                                      }}
                                       disabled={!isAdjusted || generated}
                                     >
                                       {generated ? <CheckCircle2 className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
@@ -482,7 +369,7 @@ export default function PayrollPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="advance" className="mt-8 space-y-6">
+        <TabsContent value="advance">
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50 border-b border-slate-100 p-6">
               <div className="flex items-center gap-3">
@@ -667,154 +554,6 @@ export default function PayrollPage() {
                   </div>
                 </div>
               </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Generate Salary Dialog */}
-      <Dialog open={!!generateSalaryEmp} onOpenChange={(open) => !open && setGenerateSalaryEmp(null)}>
-        <DialogContent className="sm:max-w-6xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          {generateSalaryEmp && (
-            <>
-              <DialogHeader className="p-6 border-b bg-slate-50/50">
-                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                   <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center"><Calculator className="text-primary" /></div>
-                     <div>
-                       <DialogTitle className="text-xl font-bold">Generate Salary • {selectedMonth}</DialogTitle>
-                       <DialogDescription>{generateSalaryEmp.name} ({generateSalaryEmp.employeeId})</DialogDescription>
-                     </div>
-                   </div>
-                   <div className="flex items-center gap-4 bg-white p-2 rounded-xl border shadow-sm">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-black text-slate-400 px-1">Salary Slip No</Label>
-                        <Input 
-                          value={slipNo} 
-                          readOnly
-                          className="h-9 w-32 font-mono font-bold text-xs bg-slate-100"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-black text-slate-400 px-1">Slip Dated</Label>
-                        <Input 
-                          type="date"
-                          value={slipDate} 
-                          onChange={(e) => setSlipDate(e.target.value)} 
-                          className="h-9 w-36 font-bold text-xs"
-                        />
-                      </div>
-                   </div>
-                 </div>
-              </DialogHeader>
-
-              <ScrollArea className="flex-1">
-                <div className="p-6 space-y-8">
-                  <div className="grid grid-cols-6 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                    <div className="text-center border-r">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Attendance</p>
-                      <p className="text-lg font-bold">{currentSummary?.attendance || 0}</p>
-                    </div>
-                    <div className="text-center border-r">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Absent</p>
-                      <p className="text-lg font-bold text-rose-600">{currentSummary?.absent || 0}</p>
-                    </div>
-                    <div className="text-center border-r">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Adjust Leave</p>
-                      <p className="text-lg font-bold text-primary">+{advanceLeaveValue}</p>
-                    </div>
-                    <div className="text-center border-r">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Holiday Work</p>
-                      <p className="text-lg font-bold text-amber-600">{currentSummary?.holidayWork || 0}</p>
-                    </div>
-                    <div className="text-center border-r">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Earning Days</p>
-                      <p className="text-lg font-black text-primary">{(currentSummary?.attendance || 0) + advanceLeaveValue}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] font-bold text-muted-foreground uppercase">Adv. Balance</p>
-                      <p className="text-lg font-bold text-rose-500">{formatCurrency(getAdvanceBalance(generateSalaryEmp.id))}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <h4 className="text-sm font-bold border-b pb-2 flex items-center gap-2">
-                      <PlusCircle className="w-4 h-4 text-primary" /> Earnings & Adjustments
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
-                          <Label className="text-xs font-bold">Incentive %</Label>
-                          <div className="flex items-center gap-3">
-                            <Input 
-                              type="number" 
-                              className="bg-white h-10 font-bold" 
-                              placeholder="0"
-                              value={incentivePct}
-                              onChange={(e) => setIncentivePct(parseFloat(e.target.value) || 0)}
-                            />
-                            <div className="bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg font-bold text-xs whitespace-nowrap">
-                              +{formatCurrency(Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)))}
-                            </div>
-                          </div>
-                      </div>
-
-                      <div className="p-4 bg-rose-50 rounded-2xl space-y-2 border border-rose-100">
-                          <Label className="text-xs font-bold text-rose-900 flex items-center gap-2"><ArrowDownCircle className="w-3 h-3" /> Deduction Advance Salary (INR)</Label>
-                          <Input 
-                            type="number" 
-                            className="bg-white h-10 font-bold border-rose-200" 
-                            placeholder="Amount to deduct"
-                            value={advanceRecovery}
-                            onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)}
-                          />
-                      </div>
-
-                      <div className="p-4 bg-amber-50 rounded-2xl space-y-2 border border-amber-100 md:col-span-2">
-                          <div className="flex justify-between items-center">
-                            <Label className="text-xs font-bold text-amber-900">Holiday Work Pay</Label>
-                            <Badge className="bg-amber-500 text-[10px]">{currentSummary?.holidayWork || 0} Days</Badge>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Input 
-                              className="bg-white/50 h-10 font-bold border-amber-200" 
-                              value={formatCurrency(Math.round((generateSalaryEmp.salary.netSalary / (currentSummary?.totalDays || 30)) * (currentSummary?.holidayWork || 0)))}
-                              readOnly
-                            />
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Info className="w-5 h-5 text-amber-400 cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent className="bg-slate-900 text-white">
-                                  <p className="text-xs">Formula: (Net Salary / 30) * Holiday Days</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </ScrollArea>
-
-              <DialogFooter className="p-6 border-t bg-slate-900 text-white flex flex-col sm:flex-row justify-between items-center gap-4">
-                 <div className="flex gap-10 items-center mr-auto">
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monthly CTC (Profile)</p>
-                      <p className="text-xl font-bold">{formatCurrency(generateSalaryEmp.salary.monthlyCTC)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Estimated Net Payable</p>
-                      <p className="text-3xl font-black text-emerald-400">{formatCurrency(estimatedFinalNet)}</p>
-                    </div>
-                 </div>
-                 <div className="flex items-center gap-3 w-full sm:w-auto">
-                   <Button variant="outline" className="h-12 px-8 font-bold bg-white/10 border-white/20 text-white hover:bg-white/20" onClick={() => setGenerateSalaryEmp(null)}>Discard</Button>
-                   <Button className="h-12 px-12 bg-emerald-600 hover:bg-emerald-700 font-bold text-lg" onClick={handlePostSalary} disabled={isProcessing}>
-                      Finalize & Post Salary
-                   </Button>
-                 </div>
-              </DialogFooter>
             </>
           )}
         </DialogContent>
