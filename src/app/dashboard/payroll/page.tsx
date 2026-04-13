@@ -555,7 +555,7 @@ export default function PayrollPage() {
               </DialogHeader>
 
               <div className="space-y-8 py-6">
-                <div className="grid grid-cols-4 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-5 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
                   <div className="text-center border-r">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Attendance</p>
                     <p className="text-lg font-bold">{getAttendanceSummary(generateSalaryEmp.employeeId).attendance}</p>
@@ -567,6 +567,10 @@ export default function PayrollPage() {
                   <div className="text-center border-r">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Adjust Leave</p>
                     <p className="text-lg font-bold text-primary">+{advanceLeaveValue}</p>
+                  </div>
+                  <div className="text-center border-r">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase">Holiday Work</p>
+                    <p className="text-lg font-bold text-amber-600">{getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Earning Days</p>
