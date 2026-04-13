@@ -10,14 +10,14 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { 
   Factory, 
   Building2, 
-  Upload, 
   Trash2, 
   PlusCircle, 
   History, 
   ShieldCheck, 
   MapPin, 
   Pencil,
-  AlertTriangle
+  AlertTriangle,
+  Banknote
 } from "lucide-react";
 import {
   AlertDialog,
@@ -116,6 +116,9 @@ export default function FirmsAndPlantsPage() {
       pan: firmDraft.pan || '',
       pfNo: firmDraft.pfNo || '',
       esicNo: firmDraft.esicNo || '',
+      bankName: firmDraft.bankName || '',
+      accountNo: firmDraft.accountNo || '',
+      ifscCode: firmDraft.ifscCode || '',
       units: firmDraft.units || []
     };
     setFirms(prev => [...prev, newFirm]);
@@ -313,6 +316,33 @@ export default function FirmsAndPlantsPage() {
                     onChange={(e) => setFirmDraft(p => ({...p, esicNo: e.target.value}))}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">Bank Name</Label>
+                  <Input 
+                    className="h-12 bg-white" 
+                    placeholder="e.g. HDFC Bank" 
+                    value={firmDraft.bankName || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, bankName: e.target.value}))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">Account Number</Label>
+                  <Input 
+                    className="h-12 bg-white" 
+                    placeholder="Enter bank account number" 
+                    value={firmDraft.accountNo || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, accountNo: e.target.value}))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">IFSC Code</Label>
+                  <Input 
+                    className="h-12 bg-white uppercase" 
+                    placeholder="HDFC0001234" 
+                    value={firmDraft.ifscCode || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, ifscCode: e.target.value.toUpperCase()}))}
+                  />
+                </div>
               </div>
 
               <div className="pt-8 border-t border-slate-100 space-y-6">
@@ -394,6 +424,23 @@ export default function FirmsAndPlantsPage() {
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Statutory ID</p>
                             <p className="text-xs font-bold mt-1">PF: {f.pfNo}</p>
                             <p className="text-xs font-bold">ESIC: {f.esicNo}</p>
+                          </div>
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 col-span-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Banknote className="w-3 h-3" /> Banking Details</p>
+                            <div className="grid grid-cols-3 gap-2 mt-1">
+                              <div>
+                                <p className="text-[10px] text-muted-foreground uppercase">Bank</p>
+                                <p className="text-xs font-bold">{f.bankName || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-muted-foreground uppercase">A/C No</p>
+                                <p className="text-xs font-bold">{f.accountNo || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-muted-foreground uppercase">IFSC</p>
+                                <p className="text-xs font-bold">{f.ifscCode || 'N/A'}</p>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

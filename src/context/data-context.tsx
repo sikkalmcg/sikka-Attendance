@@ -33,6 +33,9 @@ const INITIAL_FIRMS: Firm[] = [
     pan: "AAAAA0000A", 
     pfNo: "DL/CPM/123", 
     esicNo: "11000123", 
+    bankName: "HDFC Bank",
+    accountNo: "50100123456789",
+    ifscCode: "HDFC0000123",
     units: [
       { id: "u1", name: "Okhla Unit 1", address: "Phase III, Okhla" }
     ] 

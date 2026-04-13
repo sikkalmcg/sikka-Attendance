@@ -32,6 +32,9 @@ export interface Firm {
   pan: string;
   pfNo: string;
   esicNo: string;
+  bankName?: string;
+  accountNo?: string;
+  ifscCode?: string;
   units: FirmUnit[];
 }
 
