@@ -410,7 +410,7 @@ export default function ApprovalsPage() {
               </div>
               <ul className="text-[10px] text-slate-500 list-disc pl-5 space-y-1">
                 <li>Hours ≤ 3:00 → <strong>Half Day</strong></li>
-                <li>Hours > 3:00 → <strong>Present</strong></li>
+                <li>Hours &gt; 3:00 → <strong>Present</strong></li>
               </ul>
             </div>
           </div>
