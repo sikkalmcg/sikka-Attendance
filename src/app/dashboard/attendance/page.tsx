@@ -128,60 +128,56 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-4xl mx-auto">
+      <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-2xl mx-auto">
         <div className="h-2 bg-primary" />
         <CardHeader className="text-center py-4">
-          <CardTitle className="text-2xl font-bold flex items-center justify-center gap-2">
-            <ShieldCheck className="text-primary w-6 h-6" /> Gateway Check-In
+          <CardTitle className="text-xl font-bold flex items-center justify-center gap-2">
+            <ShieldCheck className="text-primary w-5 h-5" /> Gateway Check-In
           </CardTitle>
-          <CardDescription className="text-xs">Sikka Industries & Logistics Secure Portal</CardDescription>
+          <CardDescription className="text-[10px]">Sikka Industries & Logistics Secure Portal</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 px-8 pb-8 pt-0">
+        <CardContent className="space-y-6 px-6 pb-6 pt-0">
           
-          {/* High Visibility Clock - Reduced size significantly */}
-          <div className="py-8 px-6 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center space-y-3 shadow-xl border-4 border-slate-800">
-            <div className="flex items-center gap-2 text-emerald-400">
-              <Timer className="w-4 h-4 animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em]">Live System Time</span>
-            </div>
+          {/* Refined Clock - Light Blue Theme, Smaller size */}
+          <div className="py-4 px-4 rounded-2xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-2 shadow-sm border-2 border-sky-100 max-w-md mx-auto">
             {currentTime ? (
               <div className="text-center">
-                <h2 className="text-6xl font-black tracking-tighter font-mono text-white leading-none">
+                <h2 className="text-5xl font-black tracking-tighter font-mono text-sky-900 leading-none">
                   {format(currentTime, "HH:mm")}
                 </h2>
-                <p className="text-lg font-bold text-slate-400 mt-2 flex items-center justify-center gap-2">
-                  <Calendar className="w-4 h-4" /> {format(currentTime, "dd-MMMM-yyyy")}
+                <p className="text-sm font-bold text-sky-700 mt-1 flex items-center justify-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}
                 </p>
               </div>
             ) : (
-              <div className="h-16 flex items-center justify-center">
-                <span className="text-slate-500 text-sm font-bold">Synchronizing...</span>
+              <div className="h-12 flex items-center justify-center">
+                <span className="text-sky-300 text-xs font-bold animate-pulse">Synchronizing...</span>
               </div>
             )}
-            <div className="pt-2 flex items-center gap-2 text-[9px] text-slate-500 font-mono bg-white/5 px-3 py-1 rounded-full border border-white/10">
-              <MapPin className="w-2.5 h-2.5" /> {address}
+            <div className="pt-1 flex items-center gap-1.5 text-[8px] text-sky-600 font-mono bg-white/40 px-2 py-0.5 rounded-full border border-sky-100">
+              <MapPin className="w-2 h-2" /> {address}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-50 text-center border border-slate-100">
-              <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mb-1">CURRENT STATUS</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-2xl bg-slate-50 text-center border border-slate-100">
+              <p className="text-[8px] text-muted-foreground font-black uppercase tracking-widest mb-0.5">CURRENT STATUS</p>
               <p className={cn(
-                "font-black text-xl",
+                "font-black text-lg",
                 attendanceStatus === 'IN' ? "text-emerald-600" : attendanceStatus === 'OUT' ? "text-rose-600" : "text-slate-400"
               )}>
                 {attendanceStatus === 'NONE' ? 'STATIONARY' : `LOGGED ${attendanceStatus}`}
               </p>
             </div>
-            <div className="p-4 rounded-2xl bg-slate-50 text-center border border-slate-100">
-              <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest mb-1">LOGGED AT</p>
-              <p className="font-black text-xl font-mono text-slate-900">{checkInTime || '--:--'}</p>
+            <div className="p-3 rounded-2xl bg-slate-50 text-center border border-slate-100">
+              <p className="text-[8px] text-muted-foreground font-black uppercase tracking-widest mb-0.5">LOGGED AT</p>
+              <p className="font-black text-lg font-mono text-slate-900">{checkInTime || '--:--'}</p>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-3">
             <Button 
-              className="flex-1 h-16 text-xl font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95" 
+              className="flex-1 h-12 text-lg font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200 transition-all active:scale-95" 
               disabled={attendanceStatus !== "NONE" || !location} 
               onClick={handleCheckIn}
             >
@@ -189,7 +185,7 @@ export default function AttendancePage() {
             </Button>
             <Button 
               variant="destructive" 
-              className="flex-1 h-16 text-xl font-black rounded-xl shadow-lg shadow-rose-200 transition-all active:scale-95" 
+              className="flex-1 h-12 text-lg font-black rounded-xl shadow-md shadow-rose-200 transition-all active:scale-95" 
               disabled={attendanceStatus !== "IN"} 
               onClick={handleCheckOut}
             >
