@@ -34,7 +34,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogDescription,
+  DialogDescription, 
   DialogFooter
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -91,9 +91,10 @@ export default function PayrollPage() {
   const { employees, setEmployees, attendanceRecords, payrollRecords, setPayrollRecords, vouchers, firms, plants } = useData();
   const { toast } = useToast();
 
+  const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState(PAYROLL_MONTHS[1]);
+  const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedFirmId, setSelectedFirmId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -110,7 +111,7 @@ export default function PayrollPage() {
 
   // Form States for Payments
   const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState("");
   const [paymentType, setPaymentType] = useState<'BANKING' | 'CASH' | 'CHEQUE'>('BANKING');
   const [paymentRef, setPaymentRef] = useState("");
 
@@ -123,6 +124,12 @@ export default function PayrollPage() {
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
   const [viewLeaveHistoryEmp, setViewLeaveHistoryEmp] = useState<Employee | null>(null);
   const [advanceLeaveValue, setAdvanceLeaveValue] = useState(0);
+
+  useEffect(() => {
+    setIsMounted(true);
+    setSelectedMonth(PAYROLL_MONTHS[1]);
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+  }, []);
 
   useEffect(() => {
     setAdjustedEmployees({});
@@ -323,6 +330,8 @@ export default function PayrollPage() {
       window.print();
     }, 500);
   };
+
+  if (!isMounted) return null;
 
   return (
     <div className="space-y-8 pb-12 print:hidden">

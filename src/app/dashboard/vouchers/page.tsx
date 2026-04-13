@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -51,9 +51,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function VouchersPage() {
   const { employees, firms, plants, vouchers, setVouchers } = useData();
+  const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("create");
   const [searchTerm, setSearchTerm] = useState("");
-  const [voucherDate, setVoucherDate] = useState(new Date().toISOString().split('T')[0]);
+  const [voucherDate, setVoucherDate] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -65,6 +66,11 @@ export default function VouchersPage() {
 
   // State for Rejection Confirmation
   const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+    setVoucherDate(new Date().toISOString().split('T')[0]);
+  }, []);
 
   // Selected Employee Details
   const selectedEmployee = useMemo(() => 
@@ -81,6 +87,7 @@ export default function VouchersPage() {
 
   // Dynamic FY Sequential Voucher Number Calculation
   const voucherNo = useMemo(() => {
+    if (!voucherDate) return "SIL-XXXXXX-XXXXX";
     const d = new Date(voucherDate);
     if (isNaN(d.getTime())) return "SIL-XXXXXX-XXXXX";
     
@@ -146,7 +153,7 @@ export default function VouchersPage() {
 
     const newVoucher: Voucher = {
       id: Math.random().toString(36).substr(2, 9),
-      voucherNo: voucherNo, // Uses the sequentially calculated number
+      voucherNo: voucherNo, 
       employeeId: selectedEmployeeId,
       date: voucherDate,
       amount: parseFloat(amount),
@@ -189,6 +196,8 @@ export default function VouchersPage() {
     if (!previewVoucher) return;
     window.print();
   };
+
+  if (!isMounted) return null;
 
   return (
     <div className="space-y-6 print:hidden">

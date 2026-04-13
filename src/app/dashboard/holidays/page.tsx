@@ -58,8 +58,9 @@ export default function HolidaysPage() {
   const { toast } = useToast();
   const { plants, holidays, setHolidays } = useData();
   
-  // Track currently viewed month in calendar
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  // Stable initial state for hydration, update after mount
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date(2024, 0, 1));
+  const [isMounted, setIsMounted] = useState(false);
   
   // Dialog State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -71,8 +72,14 @@ export default function HolidaysPage() {
   // Delete Alert State
   const [holidayToDelete, setHolidayToDelete] = useState<Holiday | null>(null);
 
+  useEffect(() => {
+    setIsMounted(true);
+    setCurrentMonth(new Date());
+  }, []);
+
   // Auto-generate Sundays for current year if not present
   useEffect(() => {
+    if (!isMounted) return;
     const year = currentMonth.getFullYear();
     const start = startOfYear(new Date(year, 0, 1));
     const end = endOfYear(new Date(year, 11, 31));
@@ -96,7 +103,7 @@ export default function HolidaysPage() {
       if (newSundays.length === 0) return prev;
       return [...prev, ...newSundays].sort((a, b) => a.date.localeCompare(b.date));
     });
-  }, [plants, currentMonth.getFullYear(), setHolidays]);
+  }, [plants, currentMonth.getFullYear(), setHolidays, isMounted]);
 
   const handleDayClick = (date: Date) => {
     if (isSunday(date)) {
@@ -174,13 +181,16 @@ export default function HolidaysPage() {
 
   // Grouped monthly holidays
   const monthlyData = useMemo(() => {
+    if (!isMounted) return { custom: [], weeklyOffs: [], total: 0 };
     const currentItems = holidays.filter(h => isSameMonth(parseISO(h.date), currentMonth));
     return {
       custom: currentItems.filter(h => !h.auto),
       weeklyOffs: currentItems.filter(h => h.auto),
       total: currentItems.length
     };
-  }, [holidays, currentMonth]);
+  }, [holidays, currentMonth, isMounted]);
+
+  if (!isMounted) return null;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 px-4">

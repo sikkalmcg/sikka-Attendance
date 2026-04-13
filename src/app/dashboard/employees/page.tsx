@@ -147,6 +147,7 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 
 export default function EmployeesPage() {
   const { employees, setEmployees } = useData();
+  const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
 
@@ -161,8 +162,13 @@ export default function EmployeesPage() {
   // Form States
   const [formData, setFormData] = useState<Partial<Employee>>({ ...INITIAL_FORM_DATA });
   const [revisionData, setRevisionData] = useState<SalaryStructure>({ ...INITIAL_SALARY_STRUCTURE });
-  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[1]);
+  const [effectiveMonth, setEffectiveMonth] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    setEffectiveMonth(MONTH_OPTIONS[1]);
+  }, []);
 
   const filtered = useMemo(() => {
     return (employees || []).filter(emp => {
@@ -362,6 +368,8 @@ export default function EmployeesPage() {
     const pct = (diff / salaryRevision.salary.monthlyCTC) * 100;
     return isNaN(pct) || !isFinite(pct) ? "0.0" : pct.toFixed(1);
   }, [salaryRevision, revisionData.monthlyCTC]);
+
+  if (!isMounted) return null;
 
   return (
     <div className="space-y-6 pb-12">

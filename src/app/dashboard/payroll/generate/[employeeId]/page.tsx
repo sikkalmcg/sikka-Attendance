@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
@@ -22,7 +23,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/toast/use-toast";
 import { PayrollRecord } from "@/lib/types";
 import {
   Tooltip,
@@ -46,7 +47,11 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   const [incentivePct, setIncentivePct] = useState(0);
   const [advanceRecovery, setAdvanceRecovery] = useState(0);
   const [slipNo, setSlipNo] = useState("");
-  const [slipDate, setSlipDate] = useState(new Date().toISOString().split('T')[0]);
+  const [slipDate, setSlipDate] = useState("");
+
+  useEffect(() => {
+    setSlipDate(new Date().toISOString().split('T')[0]);
+  }, []);
 
   const employee = useMemo(() => employees.find(e => e.id === employeeId), [employees, employeeId]);
 
