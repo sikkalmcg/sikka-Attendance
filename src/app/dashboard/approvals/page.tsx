@@ -40,12 +40,12 @@ import {
   Home
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ATTENDANCE_RULES } from "@/lib/constants";
 
 // Helper to calculate hours between two time strings
 function calculateHours(inTime: string | null, outTime: string | null): number {
   if (!inTime || !outTime) return 0;
   try {
-    // Basic calculation assuming same day
     const dummyDate = "2024-01-01 ";
     const start = new Date(dummyDate + inTime.replace(/(AM|PM)/, " $1"));
     const end = new Date(dummyDate + outTime.replace(/(AM|PM)/, " $1"));
@@ -55,6 +55,15 @@ function calculateHours(inTime: string | null, outTime: string | null): number {
   } catch (e) {
     return 0;
   }
+}
+
+// Helper to determine status based on hours
+function determineStatus(hours: number): 'PRESENT' | 'ABSENT' | 'HALF_DAY' {
+  if (hours <= 0) return 'ABSENT';
+  // Rule: If employee Hours under 2:00 then Half day
+  if (hours < 2.0) return 'HALF_DAY';
+  if (hours < ATTENDANCE_RULES.PRESENT_THRESHOLD) return 'HALF_DAY';
+  return 'PRESENT';
 }
 
 interface AttendanceRecordWithMeta {
@@ -78,16 +87,20 @@ interface AttendanceRecordWithMeta {
 }
 
 const INITIAL_MOCK_DATA: AttendanceRecordWithMeta[] = Array.from({ length: 45 }).map((_, i) => {
-  const statusValue = i % 15 === 0 ? "ABSENT" : i % 8 === 0 ? "HALF_DAY" : "PRESENT";
+  const inTime = i % 15 === 0 ? null : "09:00 AM";
+  const outTime = i % 15 === 0 ? null : (i % 8 === 0 ? "10:30 AM" : "06:00 PM"); // i % 8 creates some < 2hr logs
+  const hours = calculateHours(inTime, outTime);
+  const status = determineStatus(hours);
+  
   return {
     id: `rec-${i}`,
     employeeId: `S100${10 + i}`,
     employeeName: ["Ravi Kumar", "Anita Singh", "Deepak Verma", "Sunil Sharma", "Meena Devi"][i % 5],
     date: "2024-08-20",
-    inTime: statusValue === 'ABSENT' ? null : "09:00 AM",
-    outTime: statusValue === 'ABSENT' ? null : (i % 3 === 0 ? "06:00 PM" : "05:30 PM"),
-    hours: statusValue === 'ABSENT' ? 0 : (i % 3 === 0 ? 9.0 : 8.5),
-    status: statusValue as 'PRESENT' | 'ABSENT' | 'HALF_DAY',
+    inTime,
+    outTime,
+    hours,
+    status,
     attendanceType: i % 4 === 0 ? 'WFH' : 'OFFICE',
     inLat: 28.5355 + (Math.random() - 0.5) * 0.01,
     inLng: 77.2639 + (Math.random() - 0.5) * 0.01,
@@ -152,13 +165,21 @@ export default function ApprovalsPage() {
   const handleSaveEdit = () => {
     if (!selectedRecord) return;
     const newHours = calculateHours(editTimes.in, editTimes.out);
+    const newStatus = determineStatus(newHours);
+    
     setRecords(prev => prev.map(r => 
       r.id === selectedRecord.id 
-        ? { ...r, inTime: editTimes.in, outTime: editTimes.out, hours: newHours } 
+        ? { 
+            ...r, 
+            inTime: editTimes.in, 
+            outTime: editTimes.out, 
+            hours: newHours,
+            status: newStatus 
+          } 
         : r
     ));
     setIsEditDialogOpen(false);
-    toast({ title: "Updated", description: "Attendance times and hours updated." });
+    toast({ title: "Updated", description: `Attendance updated. New Status: ${newStatus}` });
   };
 
   const handleRejectClick = (rec: AttendanceRecordWithMeta) => {
@@ -222,7 +243,7 @@ export default function ApprovalsPage() {
                 <TableHead className="font-bold">Employee</TableHead>
                 <TableHead className="font-bold">Date</TableHead>
                 <TableHead className="font-bold">IN / OUT</TableHead>
-                <TableHead className="font-bold">Hours</TableHead>
+                <TableHead className="font-bold text-center">Hours</TableHead>
                 <TableHead className="font-bold">GPS</TableHead>
                 <TableHead className="font-bold">Type</TableHead>
                 <TableHead className="font-bold">Status</TableHead>
@@ -253,8 +274,8 @@ export default function ApprovalsPage() {
                         <Badge variant="outline" className="font-mono">{rec.outTime || "--:--"}</Badge>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 font-bold">
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1 font-bold">
                         <Clock className="w-3 h-3 text-slate-400" />
                         {rec.hours}h
                       </div>
@@ -383,9 +404,16 @@ export default function ApprovalsPage() {
                 />
               </div>
             </div>
-            <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-2">
-              <Info className="w-4 h-4 text-blue-500" />
-              <p className="text-xs text-slate-600">Hours will be automatically recalculated upon saving.</p>
+            <div className="bg-slate-50 p-3 rounded-lg space-y-2">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-blue-500" />
+                <p className="text-xs text-slate-600 font-bold">Automatic Classification Rules:</p>
+              </div>
+              <ul className="text-[10px] text-slate-500 list-disc pl-5 space-y-1">
+                <li>Hours &lt; 2:00 → <strong>Half Day</strong></li>
+                <li>Hours between 2:00 and 4:30 → <strong>Half Day</strong></li>
+                <li>Hours &gt; 4:30 → <strong>Present</strong></li>
+              </ul>
             </div>
           </div>
           <DialogFooter>
@@ -426,7 +454,6 @@ export default function ApprovalsPage() {
             <DialogDescription>Full location history for {selectedRecord?.employeeName} on {selectedRecord?.date}.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            {/* IN Location */}
             <div className="space-y-4 border rounded-xl p-4 bg-slate-50/50">
               <div className="flex items-center gap-2 text-primary">
                 <CheckCircle2 className="w-4 h-4" />
@@ -442,7 +469,6 @@ export default function ApprovalsPage() {
               </div>
             </div>
 
-            {/* OUT Location */}
             <div className="space-y-4 border rounded-xl p-4 bg-slate-50/50">
               <div className="flex items-center gap-2 text-rose-600">
                 <XCircle className="w-4 h-4" />
