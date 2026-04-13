@@ -19,7 +19,8 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter 
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { 
   Search, 
@@ -29,7 +30,9 @@ import {
   Pencil,
   Eye,
   CheckCircle,
-  XCircle
+  XCircle,
+  History,
+  FileText
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -81,6 +84,8 @@ export default function EmployeesPage() {
   // Modal States
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [salaryRevision, setSalaryRevision] = useState<Employee | null>(null);
+  const [salaryHistory, setSalaryHistory] = useState<Employee | null>(null);
+  
   const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0 });
 
   const filtered = employees.filter(emp => 
@@ -107,11 +112,11 @@ export default function EmployeesPage() {
     if (!salaryRevision) return;
     setEmployees(prev => prev.map(e => e.id === salaryRevision.id ? { ...e, salary: revisionData } : e));
     setSalaryRevision(null);
-    toast({ title: "Salary Updated", description: "The new salary structure has been posted to payroll." });
+    toast({ title: "Salary Revision Posted", description: "The new salary structure has been updated in the system." });
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold">Employee Directory</h1>
@@ -169,7 +174,7 @@ export default function EmployeesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditClick(emp)}>
+                      <Button variant="ghost" size="icon" onClick={() => handleEditClick(emp)} title="Edit Profile">
                         <Pencil className="w-4 h-4 text-slate-500" />
                       </Button>
                       <DropdownMenu>
@@ -182,8 +187,8 @@ export default function EmployeesPage() {
                           <DropdownMenuItem onClick={() => handleIncreaseSalary(emp)}>
                             <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Eye className="w-4 h-4 mr-2" /> View Salary Record
+                          <DropdownMenuItem onClick={() => setSalaryHistory(emp)}>
+                            <History className="w-4 h-4 mr-2" /> View Salary Record
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className={emp.active ? "text-rose-600" : "text-emerald-600"}>
@@ -202,100 +207,178 @@ export default function EmployeesPage() {
 
       {/* Salary Increase Modal */}
       <Dialog open={!!salaryRevision} onOpenChange={() => setSalaryRevision(null)}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Salary Revision - {salaryRevision?.name}</DialogTitle>
+            <DialogDescription>Adjust structure and post updates to the payroll system.</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-6 py-4">
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold uppercase text-muted-foreground">Current Structure</h4>
-              <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <div className="flex justify-between text-sm"><span>Basic</span> <span>{formatCurrency(salaryRevision?.salary.basic || 0)}</span></div>
-                <div className="flex justify-between text-sm"><span>HRA</span> <span>{formatCurrency(salaryRevision?.salary.hra || 0)}</span></div>
-                <div className="flex justify-between text-sm"><span>DA</span> <span>{formatCurrency(salaryRevision?.salary.da || 0)}</span></div>
-                <div className="flex justify-between text-sm"><span>Allowances</span> <span>{formatCurrency(salaryRevision?.salary.allowance || 0)}</span></div>
-                <div className="pt-2 mt-2 border-t font-bold flex justify-between"><span>Total CTC</span> <span>{formatCurrency(salaryRevision?.salary.monthlyCTC || 0)}</span></div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold uppercase text-muted-foreground">Revised Structure</h4>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2 items-center">
-                  <Label>Basic</Label>
-                  <Input type="number" value={revisionData.basic} onChange={(e) => calculateRevision('basic', e.target.value)} />
-                </div>
-                <div className="grid grid-cols-2 gap-2 items-center">
-                  <Label>HRA</Label>
-                  <Input type="number" value={revisionData.hra} onChange={(e) => calculateRevision('hra', e.target.value)} />
-                </div>
-                <div className="grid grid-cols-2 gap-2 items-center">
-                  <Label>DA</Label>
-                  <Input type="number" value={revisionData.da} onChange={(e) => calculateRevision('da', e.target.value)} />
-                </div>
-                <div className="grid grid-cols-2 gap-2 items-center">
-                  <Label>Allowances</Label>
-                  <Input type="number" value={revisionData.allowance} onChange={(e) => calculateRevision('allowance', e.target.value)} />
-                </div>
-              </div>
-            </div>
-          </div>
           
-          <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-emerald-700 uppercase">New Monthly CTC</p>
-              <h3 className="text-xl font-bold text-emerald-900">{formatCurrency(revisionData.monthlyCTC)}</h3>
+          <div className="space-y-6 py-4">
+            {/* Current Structure Header */}
+            <div className="grid grid-cols-4 gap-4">
+              <div className="p-3 bg-slate-50 rounded-lg border text-center">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Curr Basic</p>
+                <p className="text-sm font-bold">{formatCurrency(salaryRevision?.salary.basic || 0)}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border text-center">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Curr HRA</p>
+                <p className="text-sm font-bold">{formatCurrency(salaryRevision?.salary.hra || 0)}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border text-center">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Curr DA</p>
+                <p className="text-sm font-bold">{formatCurrency(salaryRevision?.salary.da || 0)}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg border text-center">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Curr Allow.</p>
+                <p className="text-sm font-bold">{formatCurrency(salaryRevision?.salary.allowance || 0)}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-bold text-emerald-700 uppercase">Increase %</p>
-              <h3 className="text-xl font-bold text-emerald-900">
-                {salaryRevision ? (((revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC) / salaryRevision.salary.monthlyCTC) * 100).toFixed(1) : 0}%
-              </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Revision Fields */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" /> Revised Structure
+                </h4>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <Label>Basic Salary</Label>
+                    <Input type="number" value={revisionData.basic} onChange={(e) => calculateRevision('basic', e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <Label>HRA</Label>
+                    <Input type="number" value={revisionData.hra} onChange={(e) => calculateRevision('hra', e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <Label>DA</Label>
+                    <Input type="number" value={revisionData.da} onChange={(e) => calculateRevision('da', e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <Label>Other Allowance</Label>
+                    <Input type="number" value={revisionData.allowance} onChange={(e) => calculateRevision('allowance', e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold">Calculation Summary</h4>
+                <div className="space-y-2 bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 h-full flex flex-col justify-center">
+                  <div className="flex justify-between items-end border-b border-emerald-100 pb-4 mb-4">
+                    <div>
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">New Monthly CTC</p>
+                      <h3 className="text-3xl font-bold text-emerald-900">{formatCurrency(revisionData.monthlyCTC)}</h3>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Increase %</p>
+                      <h3 className="text-3xl font-bold text-emerald-900">
+                        {salaryRevision ? (((revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC) / salaryRevision.salary.monthlyCTC) * 100).toFixed(1) : 0}%
+                      </h3>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Previous CTC</span>
+                      <span className="font-medium">{formatCurrency(salaryRevision?.salary.monthlyCTC || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Net Increment</span>
+                      <span className="font-bold text-emerald-700">+{formatCurrency(revisionData.monthlyCTC - (salaryRevision?.salary.monthlyCTC || 0))}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="bg-slate-50 -m-6 mt-2 p-6 rounded-b-lg border-t">
             <Button variant="outline" onClick={() => setSalaryRevision(null)}>Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={postSalaryUpdate}>Post Update</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 px-8" onClick={postSalaryUpdate}>Post Update</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Salary Record History Modal */}
+      <Dialog open={!!salaryHistory} onOpenChange={() => setSalaryHistory(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Salary Record History - {salaryHistory?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="border rounded-xl overflow-hidden">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead>Effective Date</TableHead>
+                    <TableHead>CTC</TableHead>
+                    <TableHead className="text-right">Increment</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                   <TableRow>
+                    <TableCell className="font-medium">01-Aug-2024</TableCell>
+                    <TableCell>{formatCurrency(salaryHistory?.salary.monthlyCTC || 0)}</TableCell>
+                    <TableCell className="text-right text-emerald-600 font-bold">New Revision</TableCell>
+                  </TableRow>
+                  <TableRow className="bg-slate-50/50">
+                    <TableCell className="font-medium">15-Jan-2023</TableCell>
+                    <TableCell>{formatCurrency((salaryHistory?.salary.monthlyCTC || 0) * 0.9)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground italic">Joining Salary</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSalaryHistory(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit Employee Modal */}
       <Dialog open={!!editEmployee} onOpenChange={() => setEditEmployee(null)}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Employee Profile</DialogTitle>
+            <DialogTitle>Employee Registration / Edit</DialogTitle>
+            <DialogDescription>Modify core profile details for {editEmployee?.name}.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label>Full Name</Label>
               <Input defaultValue={editEmployee?.name} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label>Aadhaar Number</Label>
               <Input defaultValue={editEmployee?.aadhaar} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label>Department</Label>
               <Input defaultValue={editEmployee?.department} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label>Designation</Label>
               <Input defaultValue={editEmployee?.designation} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label>Join Date</Label>
               <Input type="date" defaultValue={editEmployee?.joinDate} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2 sm:col-span-1">
               <Label>Mobile Number</Label>
               <Input defaultValue={editEmployee?.mobile} />
+            </div>
+            <div className="space-y-2 col-span-2 sm:col-span-1">
+              <Label>PAN Number</Label>
+              <Input defaultValue={editEmployee?.pan} />
+            </div>
+            <div className="space-y-2 col-span-2 sm:col-span-1">
+              <Label>Assigned Plant</Label>
+              <Input defaultValue="Okhla Plant" disabled className="bg-slate-50" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditEmployee(null)}>Cancel</Button>
-            <Button onClick={() => setEditEmployee(null)}>Save Changes</Button>
+            <Button onClick={() => setEditEmployee(null)}>Update Profile</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
