@@ -91,12 +91,19 @@ export default function AttendancePage() {
       const dateStr = format(date, 'yyyy-MM-dd');
       const existingRecord = (attendanceRecords || []).find(r => r.employeeId === currentUser.username && r.date === dateStr);
       
-      if (existingRecord) return existingRecord;
-
-      // Virtual Record Generation for History Clarity
       const isSun = isSunday(date);
       const holiday = (holidays || []).find(h => h.date === dateStr);
-      
+      const isNonWorkingDay = isSun || !!holiday;
+      const nonWorkingDayLabel = isSun ? "WEEKLY_OFF" : (holiday ? "HOLIDAY" : null);
+
+      if (existingRecord) {
+        return {
+          ...existingRecord,
+          isNonWorkingDay,
+          nonWorkingDayLabel
+        };
+      }
+
       if (isSameDay(date, today)) return null;
 
       if (isSun) {
@@ -107,7 +114,9 @@ export default function AttendancePage() {
           date: dateStr,
           status: 'WEEKLY_OFF',
           attendanceType: '--',
-          approved: true
+          approved: true,
+          isNonWorkingDay: true,
+          nonWorkingDayLabel: "WEEKLY_OFF"
         } as any;
       }
 
@@ -119,7 +128,9 @@ export default function AttendancePage() {
           date: dateStr,
           status: 'HOLIDAY',
           attendanceType: '--',
-          approved: true
+          approved: true,
+          isNonWorkingDay: true,
+          nonWorkingDayLabel: "HOLIDAY"
         } as any;
       }
 
@@ -134,7 +145,8 @@ export default function AttendancePage() {
         approved: true,
         hours: 0,
         inTime: null,
-        outTime: null
+        outTime: null,
+        isNonWorkingDay: false
       } as any;
     }).filter(Boolean).reverse();
   }, [currentUser, attendanceRecords, holidays]);
@@ -321,7 +333,14 @@ export default function AttendancePage() {
                       {h.status === 'ABSENT' ? (
                         <Badge variant="destructive" className="border-none font-bold uppercase text-[9px]">Absent</Badge>
                       ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
-                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">{h.status}</Badge>
+                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">{h.status.replace('_', ' ')}</Badge>
+                      ) : h.isNonWorkingDay ? (
+                        <Badge variant="secondary" className={cn(
+                          "border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600",
+                          h.approved && "bg-emerald-50 text-emerald-700"
+                        )}>
+                          {h.status === 'HALF_DAY' ? 'Holiday Half day' : 'Holiday Present'}
+                        </Badge>
                       ) : h.approved ? (
                         <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px]">Approved</Badge>
                       ) : (
