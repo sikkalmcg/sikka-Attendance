@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -645,7 +646,6 @@ export default function PayrollPage() {
           </Card>
         </TabsContent>
 
-        {/* Advance Salary and Leave tabs remain as is... */}
         <TabsContent value="advance">
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50 border-b border-slate-100 p-6">
@@ -888,7 +888,6 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Leave and history modals remain as is... */}
       <Dialog open={!!adjustLeaveEmp} onOpenChange={(open) => !open && setAdjustLeaveEmp(null)}>
         <DialogContent className="sm:max-w-3xl">
           {adjustLeaveEmp && (
@@ -981,107 +980,148 @@ function SalarySlip({ printRec, employees, firms, plants }: any) {
   const plant = plants.find((p: any) => p.id === emp?.unitId);
 
   return (
-    <div className="fixed inset-0 bg-white z-[999] p-10 font-serif text-slate-900 hidden print:block overflow-auto">
-      <div className="max-w-4xl mx-auto border-4 border-slate-900 p-8 space-y-8">
-        {/* Header */}
+    <div className="fixed inset-0 bg-white z-[999] font-serif text-slate-900 hidden print:block overflow-auto p-[1cm]">
+      <div className="w-full max-w-[210mm] mx-auto border-4 border-slate-900 p-8 space-y-8 min-h-[297mm]">
+        {/* 1. Top Header Section */}
         <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6">
-          <div className="flex items-center gap-4">
-            {firm?.logo && <img src={firm.logo} alt="Logo" className="w-16 h-16 object-contain" />}
+          <div className="flex items-center gap-5">
+            <div className="w-20 h-20 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden border">
+              {firm?.logo ? (
+                <img src={firm.logo} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <Building2 className="w-10 h-10 text-slate-300" />
+              )}
+            </div>
             <div>
-              <h1 className="text-2xl font-black uppercase">{firm?.name || "Sikka Industries Ltd."}</h1>
-              <p className="text-sm font-medium">{plant?.name || "Okhla Unit 1"}</p>
-              <p className="text-xs text-slate-500 italic">{plant?.address || "Phase III, Okhla, New Delhi"}</p>
+              <h1 className="text-2xl font-black uppercase leading-tight">{firm?.name || "Sikka Industries Ltd."}</h1>
+              <p className="text-sm font-bold text-slate-700">{plant?.name || "Okhla Unit 1"}</p>
+              <p className="text-xs text-slate-500 italic max-w-xs">{plant?.address || "Phase III, Okhla, New Delhi"}</p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-bold">Slip No: <span className="font-mono">{printRec.slipNo}</span></p>
-            <p className="text-sm font-bold">Slip Date: {printRec.slipDate}</p>
-          </div>
-        </div>
-
-        <div className="text-center py-2 bg-slate-900 text-white rounded">
-          <h2 className="text-lg font-black uppercase tracking-widest">Salary Slip for {printRec.month}</h2>
-        </div>
-
-        {/* Employee Details */}
-        <div className="grid grid-cols-2 gap-px bg-slate-900 border border-slate-900">
-          <DetailRow label="Employee ID" value={printRec.employeeId} />
-          <DetailRow label="Employee Name" value={printRec.employeeName} />
-          <DetailRow label="Father Name" value={emp?.fatherName || "N/A"} />
-          <DetailRow label="Join Date" value={emp?.joinDate || "N/A"} />
-          <DetailRow label="Department" value={emp?.department || "N/A"} />
-          <DetailRow label="Designation" value={emp?.designation || "N/A"} />
-          <DetailRow label="PF Number" value={emp?.pfNumber || "N/A"} />
-          <DetailRow label="ESIC Number" value={emp?.esicNumber || "N/A"} />
-        </div>
-
-        {/* Salary Structure */}
-        <div className="grid grid-cols-2 gap-8">
-          <div className="space-y-4">
-            <h3 className="font-bold border-b-2 border-slate-900 pb-1">Earnings Structure</h3>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between"><span>Basic Salary</span><span>{formatCurrency(emp?.salary.basic || 0)}</span></div>
-              <div className="flex justify-between"><span>HRA</span><span>{formatCurrency(emp?.salary.hra || 0)}</span></div>
-              <div className="flex justify-between"><span>Other Allowance</span><span>{formatCurrency(emp?.salary.allowance || 0)}</span></div>
+          <div className="text-right space-y-1">
+            <div className="flex justify-end gap-2 text-sm">
+              <span className="font-bold text-slate-500">Slip No:</span>
+              <span className="font-mono font-bold text-slate-900">{printRec.slipNo}</span>
+            </div>
+            <div className="flex justify-end gap-2 text-sm">
+              <span className="font-bold text-slate-500">Slip Date:</span>
+              <span className="font-bold text-slate-900">{printRec.slipDate}</span>
             </div>
           </div>
+        </div>
+
+        {/* 2. Title Section */}
+        <div className="text-center py-3 bg-slate-900 text-white rounded shadow-sm">
+          <h2 className="text-xl font-black uppercase tracking-[0.2em]">Salary Slip for the Month of {printRec.month}</h2>
+        </div>
+
+        {/* 3. Employee Identity Details (Table Format) */}
+        <div className="grid grid-cols-2 border-2 border-slate-900">
+          <DetailCell label="Employee ID" value={printRec.employeeId} />
+          <DetailCell label="Employee Name" value={printRec.employeeName} />
+          <DetailCell label="Father Name" value={emp?.fatherName || "N/A"} />
+          <DetailCell label="Joining Date" value={emp?.joinDate || "N/A"} />
+          <DetailCell label="Department" value={emp?.department || "N/A"} />
+          <DetailCell label="Designation" value={emp?.designation || "N/A"} />
+          <DetailCell label="PF Account Number" value={emp?.pfNumber || "N/A"} />
+          <DetailCell label="ESIC Number" value={emp?.esicNumber || "N/A"} />
+        </div>
+
+        {/* 4 & 5. Salary Structure & Compliance Section */}
+        <div className="grid grid-cols-2 gap-8 pt-4">
           <div className="space-y-4">
-            <h3 className="font-bold border-b-2 border-slate-900 pb-1">Statutory Compliance</h3>
+            <h3 className="font-black text-sm uppercase tracking-wider border-b-2 border-slate-900 pb-1">4. Salary Structure</h3>
+            <div className="space-y-2 text-sm font-medium">
+              <div className="flex justify-between border-b border-slate-100 pb-1">
+                <span className="text-slate-500 uppercase text-[10px]">Basic Salary</span>
+                <span className="font-bold">{formatCurrency(emp?.salary.basic || 0)}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-100 pb-1">
+                <span className="text-slate-500 uppercase text-[10px]">HRA (House Rent Allowance)</span>
+                <span className="font-bold">{formatCurrency(emp?.salary.hra || 0)}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-100 pb-1">
+                <span className="text-slate-500 uppercase text-[10px]">Other Allowance</span>
+                <span className="font-bold">{formatCurrency(emp?.salary.allowance || 0)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="font-black text-sm uppercase tracking-wider border-b-2 border-slate-900 pb-1">5. Compliance Section</h3>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Status:</span>
+              <Badge variant="outline" className="rounded-none font-black text-[10px] uppercase py-0 px-2 border-slate-900">
+                {emp?.isGovComplianceEnabled ? "Applicable" : "Not Applicable"}
+              </Badge>
+            </div>
+            
             {emp?.isGovComplianceEnabled ? (
-              <div className="space-y-3">
-                <div className="p-2 bg-slate-50 border rounded space-y-1 text-[10px]">
-                  <p className="font-black border-b border-slate-200 pb-0.5 mb-1 uppercase">Employee Contribution</p>
-                  <div className="flex justify-between"><span>PF Amount</span><span>{formatCurrency(printRec.pfAmountEmployee)}</span></div>
-                  <div className="flex justify-between"><span>ESIC Amount</span><span>{formatCurrency(printRec.esicAmountEmployee)}</span></div>
+              <div className="grid grid-cols-1 gap-4">
+                <div className="p-3 bg-slate-50 border border-slate-200 space-y-2">
+                  <p className="text-[9px] font-black text-slate-400 border-b border-slate-200 pb-1 uppercase">Employee Contribution</p>
+                  <div className="flex justify-between text-xs"><span>PF Amount</span><span className="font-bold">{formatCurrency(printRec.pfAmountEmployee)}</span></div>
+                  <div className="flex justify-between text-xs"><span>ESIC Amount</span><span className="font-bold">{formatCurrency(printRec.esicAmountEmployee)}</span></div>
                 </div>
-                <div className="p-2 bg-slate-50 border rounded space-y-1 text-[10px]">
-                  <p className="font-black border-b border-slate-200 pb-0.5 mb-1 uppercase">Employer Contribution</p>
-                  <div className="flex justify-between"><span>PF Amount</span><span>{formatCurrency(printRec.pfAmountEmployer)}</span></div>
-                  <div className="flex justify-between"><span>ESIC Amount</span><span>{formatCurrency(printRec.esicAmountEmployer)}</span></div>
+                <div className="p-3 bg-slate-50 border border-slate-200 space-y-2">
+                  <p className="text-[9px] font-black text-slate-400 border-b border-slate-200 pb-1 uppercase">Employer Contribution</p>
+                  <div className="flex justify-between text-xs"><span>PF Amount</span><span className="font-bold">{formatCurrency(printRec.pfAmountEmployer)}</span></div>
+                  <div className="flex justify-between text-xs"><span>ESIC Amount</span><span className="font-bold">{formatCurrency(printRec.esicAmountEmployer)}</span></div>
                 </div>
               </div>
             ) : (
-              <p className="text-xs italic text-slate-500">Not Applicable</p>
+              <div className="p-10 border border-dashed border-slate-200 flex items-center justify-center italic text-xs text-slate-400">
+                Statutory deductions not applicable for this profile.
+              </div>
             )}
           </div>
         </div>
 
-        {/* Summary */}
-        <div className="bg-slate-50 p-6 border-2 border-slate-900 rounded-xl grid grid-cols-3 gap-4">
-          <div className="text-center">
-            <p className="text-[10px] font-black uppercase text-slate-500">Earning Days</p>
-            <p className="text-xl font-bold">{printRec.totalEarningDays}</p>
+        {/* 6. Salary Summary Section */}
+        <div className="bg-slate-900 text-white p-6 grid grid-cols-3 gap-6 rounded-lg shadow-md mt-6">
+          <div className="text-center border-r border-slate-700 pr-6">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Earning Days</p>
+            <p className="text-2xl font-black">{printRec.totalEarningDays}</p>
           </div>
-          <div className="text-center border-x-2 border-slate-200">
-            <p className="text-[10px] font-black uppercase text-primary">Net Pay for Month</p>
-            <p className="text-2xl font-black text-primary">{formatCurrency(printRec.netPayable)}</p>
+          <div className="text-center border-r border-slate-700 px-6">
+            <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-1">Net Pay for the Month</p>
+            <p className="text-3xl font-black text-emerald-400 tracking-tight">{formatCurrency(printRec.netPayable)}</p>
           </div>
-          <div className="text-center">
-            <p className="text-[10px] font-black uppercase text-slate-500">Monthly CTC</p>
-            <p className="text-xl font-bold">{formatCurrency(emp?.salary.monthlyCTC || 0)}</p>
+          <div className="text-center pl-6">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Monthly CTC</p>
+            <p className="text-2xl font-black text-slate-200">{formatCurrency(emp?.salary.monthlyCTC || 0)}</p>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-between items-end pt-12">
-          <div className="space-y-1">
-             <div className="w-48 border-b-2 border-slate-900" />
-             <p className="text-xs font-bold text-center">Authorized Signature</p>
+        {/* 7. Footer Section */}
+        <div className="flex justify-between items-end pt-20">
+          <div className="space-y-2 text-center">
+            <div className="w-56 border-b-2 border-slate-900 mb-2" />
+            <p className="text-sm font-black uppercase tracking-tighter">Authorized Signature</p>
           </div>
-          <div className="text-right">
-             <p className="text-[9px] text-slate-400 italic">This is a system-generated salary slip and is considered an original document.</p>
+          <div className="max-w-[300px] text-right">
+             <div className="w-16 h-16 border-2 border-slate-100 rounded-lg ml-auto mb-2 flex items-center justify-center opacity-30">
+                <span className="text-[8px] font-bold text-center uppercase leading-tight">Digital<br/>Seal</span>
+             </div>
           </div>
+        </div>
+
+        {/* 8. End Note */}
+        <div className="mt-auto pt-10 border-t border-slate-100 text-center">
+          <p className="text-[10px] text-slate-400 font-bold italic uppercase tracking-wider">
+            👉 This is a system-generated salary slip and is considered an original document.
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-function DetailRow({ label, value }: { label: string, value: any }) {
+function DetailCell({ label, value }: { label: string, value: any }) {
   return (
-    <div className="flex items-center bg-white p-2">
-      <span className="text-[10px] font-black uppercase text-slate-400 w-32 shrink-0">{label}:</span>
-      <span className="text-xs font-bold text-slate-900">{value}</span>
+    <div className="flex items-center p-3 border border-slate-900">
+      <span className="text-[10px] font-black uppercase text-slate-500 w-36 shrink-0 tracking-tighter">{label}:</span>
+      <span className="text-xs font-bold text-slate-900 uppercase truncate">{value}</span>
     </div>
   );
 }
