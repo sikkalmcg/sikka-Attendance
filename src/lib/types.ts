@@ -91,6 +91,7 @@ export interface Holiday {
   name: string;
   type: 'FESTIVAL' | 'NATIONAL_HOLIDAY' | 'COMPANY_HOLIDAY' | 'WEEKLY_OFF';
   auto?: boolean;
+  plantIds?: string[];
 }
 
 export interface Voucher {

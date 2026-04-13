@@ -6,20 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Plus, 
   CalendarDays,
   Sun,
-  ShieldCheck
+  ShieldCheck,
+  Building2,
+  X
 } from "lucide-react";
 import { 
   format, 
@@ -31,19 +26,39 @@ import {
   isSameDay 
 } from "date-fns";
 import { cn } from "@/lib/utils";
-import { Holiday } from "@/lib/types";
+import { Holiday, Plant } from "@/lib/types";
+import { useData } from "@/context/data-context";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const CURRENT_YEAR = 2025;
 
 export default function HolidaysPage() {
   const { toast } = useToast();
+  const { plants } = useData();
   const [holidays, setHolidays] = useState<Holiday[]>([]);
-  const [festivalName, setFestivalName] = useState("");
-  const [holidayType, setHolidayType] = useState<string>("FESTIVAL");
-  const [selectedDates, setSelectedDates] = useState<Date[] | undefined>([]);
+  
+  // Dialog State
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [targetDate, setTargetDate] = useState<Date | null>(null);
+  const [holidayName, setHolidayName] = useState("");
+  const [selectedPlantIds, setSelectedPlantIds] = useState<string[]>([]);
 
   // Initialize with Sundays of the year
   useEffect(() => {
+    const savedHolidays = localStorage.getItem('app_holidays');
+    if (savedHolidays) {
+      setHolidays(JSON.parse(savedHolidays));
+      return;
+    }
+
     const start = startOfYear(new Date(CURRENT_YEAR, 0, 1));
     const end = endOfYear(new Date(CURRENT_YEAR, 11, 31));
     const days = eachDayOfInterval({ start, end });
@@ -55,201 +70,216 @@ export default function HolidaysPage() {
         date: format(d, "yyyy-MM-dd"),
         name: "Weekly Off",
         type: "WEEKLY_OFF",
-        auto: true
+        auto: true,
+        plantIds: plants.map(p => p.id) // Default all plants for weekly off
       }));
     
     setHolidays(sundays);
-  }, []);
+  }, [plants]);
 
-  const handleAddHolidays = () => {
-    if (!festivalName.trim()) {
-      toast({ 
-        variant: "destructive", 
-        title: "Missing Name", 
-        description: "Please enter a festival or holiday name." 
-      });
+  useEffect(() => {
+    if (holidays.length > 0) {
+      localStorage.setItem('app_holidays', JSON.stringify(holidays));
+    }
+  }, [holidays]);
+
+  const handleDayClick = (date: Date) => {
+    // Prevent selecting dates outside current year
+    if (date.getFullYear() !== CURRENT_YEAR) return;
+
+    const dateStr = format(date, "yyyy-MM-dd");
+    const existing = holidays.find(h => h.date === dateStr && !h.auto);
+    
+    setTargetDate(date);
+    setHolidayName(existing?.name || "");
+    setSelectedPlantIds(existing?.plantIds || []);
+    setIsDialogOpen(true);
+  };
+
+  const handlePostHoliday = () => {
+    if (!targetDate) return;
+    if (!holidayName.trim()) {
+      toast({ variant: "destructive", title: "Missing Name", description: "Please enter a holiday name." });
       return;
     }
-    if (!selectedDates || selectedDates.length === 0) {
-      toast({ 
-        variant: "destructive", 
-        title: "No Dates", 
-        description: "Please select at least one date from the calendar." 
-      });
-      return;
-    }
 
-    const updatedHolidays = [...holidays];
-    let addedCount = 0;
-    let conflictFound = false;
+    const dateStr = format(targetDate, "yyyy-MM-dd");
+    const newHoliday: Holiday = {
+      id: Math.random().toString(36).substr(2, 9),
+      date: dateStr,
+      name: holidayName,
+      type: 'FESTIVAL',
+      plantIds: selectedPlantIds,
+      auto: false
+    };
 
-    for (const dateObj of selectedDates) {
-      const dateStr = format(dateObj, "yyyy-MM-dd");
-      
-      const existingIndex = updatedHolidays.findIndex(h => h.date === dateStr);
-      
-      if (existingIndex !== -1) {
-        const existing = updatedHolidays[existingIndex];
-        // If it's a manual holiday (not auto Weekly Off), don't allow duplicate
-        if (!existing.auto) {
-           conflictFound = true;
-           continue;
-        }
-        
-        // Priority Rule: Festival overrides Auto Weekly Off
-        updatedHolidays[existingIndex] = {
-          id: Math.random().toString(36).substr(2, 9),
-          date: dateStr,
-          name: festivalName,
-          type: holidayType as any,
-          auto: false
-        };
-      } else {
-        updatedHolidays.push({
-          id: Math.random().toString(36).substr(2, 9),
-          date: dateStr,
-          name: festivalName,
-          type: holidayType as any,
-          auto: false
-        });
-      }
-      addedCount++;
-    }
+    setHolidays(prev => {
+      // Priority: Festival overrides any existing holiday (including auto weekly off)
+      const filtered = prev.filter(h => h.date !== dateStr);
+      return [...filtered, newHoliday];
+    });
 
-    if (conflictFound) {
-      toast({ 
-        variant: "destructive", 
-        title: "Holiday Conflict", 
-        description: "Some dates already have manual holidays scheduled." 
-      });
-    }
+    setIsDialogOpen(false);
+    toast({ title: "Holiday Posted", description: `${holidayName} scheduled for ${format(targetDate, "dd-MMM-yyyy")}` });
+  };
 
-    if (addedCount > 0) {
-      setHolidays(updatedHolidays);
-      setFestivalName("");
-      setSelectedDates([]);
-      toast({ title: "Holidays Registered", description: `${addedCount} date(s) updated in the calendar.` });
-    }
+  const togglePlant = (plantId: string) => {
+    setSelectedPlantIds(prev => 
+      prev.includes(plantId) 
+        ? prev.filter(id => id !== plantId) 
+        : [...prev, plantId]
+    );
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 max-w-6xl mx-auto pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Holiday Management</h1>
-          <p className="text-muted-foreground">Schedule festivals and manage plant-wide weekly offs.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight text-center sm:text-left">Holiday Management</h1>
+          <p className="text-muted-foreground text-center sm:text-left">Click a date to schedule festivals or company holidays.</p>
         </div>
       </div>
 
-      <Card className="shadow-xl border-slate-200 overflow-hidden">
+      <Card className="shadow-xl border-slate-200 overflow-hidden bg-white">
         <CardHeader className="bg-slate-50 border-b border-slate-100 p-8 text-center">
           <div className="flex flex-col items-center gap-3">
             <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
-              <Plus className="w-8 h-8 text-primary" />
+              <CalendarDays className="w-7 h-7 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-2xl font-bold">Add Festival / Holidays</CardTitle>
-              <CardDescription>Setup company holidays and festival schedules for {CURRENT_YEAR}.</CardDescription>
+              <CardTitle className="text-2xl font-bold">Holiday Calendar {CURRENT_YEAR}</CardTitle>
+              <CardDescription>Select a date to manage location-specific holidays.</CardDescription>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-10">
-          <div className="flex flex-col items-center space-y-12 max-w-4xl mx-auto">
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-3">
-                <Label className="text-sm font-bold text-slate-700">Festival / Holiday Name</Label>
-                <Input 
-                  placeholder="e.g. Diwali, Holi, Republic Day..." 
-                  className="h-14 text-lg bg-slate-50 border-slate-200 focus:bg-white transition-all"
-                  value={festivalName}
-                  onChange={(e) => setFestivalName(e.target.value)}
-                />
-              </div>
+        <CardContent className="p-4 sm:p-10">
+          <div className="flex justify-center">
+            <Calendar
+              mode="single"
+              onDayClick={handleDayClick}
+              className="rounded-3xl border-2 border-slate-100 p-4 sm:p-10 bg-white shadow-inner max-w-full"
+              initialFocus
+              defaultMonth={new Date(CURRENT_YEAR, 0)}
+              modifiers={{
+                sunday: (date) => isSunday(date),
+                holiday: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && !h.auto),
+                autoWeekly: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && h.auto)
+              }}
+              modifiersClassNames={{
+                sunday: "text-rose-500 font-black",
+                holiday: "bg-primary text-white hover:bg-primary/90 rounded-2xl font-bold",
+                autoWeekly: "bg-slate-50 text-slate-400 cursor-help"
+              }}
+              components={{
+                DayContent: ({ date }) => {
+                  const dateStr = format(date, "yyyy-MM-dd");
+                  const holiday = holidays.find(h => h.date === dateStr);
+                  
+                  return (
+                    <div className="flex flex-col items-center justify-center h-full w-full relative group">
+                      <span className="z-10">{date.getDate()}</span>
+                      {holiday && (
+                        <div className="hidden sm:flex flex-col items-center absolute -bottom-1 w-full overflow-hidden text-[8px] leading-tight px-1 text-center pointer-events-none">
+                          <span className={cn(
+                            "truncate w-full font-bold",
+                            holiday.auto ? "text-slate-300" : "text-primary-foreground"
+                          )}>
+                            {holiday.name}
+                          </span>
+                          {!holiday.auto && holiday.plantIds && holiday.plantIds.length > 0 && (
+                            <span className="truncate w-full text-white/70">
+                              {holiday.plantIds.length === plants.length ? "All Plants" : `${holiday.plantIds.length} Plants`}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+              }}
+            />
+          </div>
 
-              <div className="space-y-3">
-                <Label className="text-sm font-bold text-slate-700">Holiday Type</Label>
-                <Select value={holidayType} onValueChange={setHolidayType}>
-                  <SelectTrigger className="h-14 bg-slate-50 border-slate-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FESTIVAL">Festival</SelectItem>
-                    <SelectItem value="NATIONAL_HOLIDAY">National Holiday</SelectItem>
-                    <SelectItem value="COMPANY_HOLIDAY">Company Holiday</SelectItem>
-                    <SelectItem value="WEEKLY_OFF">Weekly Off</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="flex flex-wrap justify-center gap-8 pt-10 border-t mt-10">
+            <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              <div className="w-3 h-3 rounded-full bg-primary" /> Festival / Holiday
             </div>
-
-            <div className="w-full space-y-4">
-              <Label className="text-sm font-bold text-slate-700 flex items-center justify-center gap-2 mb-2">
-                <CalendarDays className="w-5 h-5 text-primary" /> Select Holiday Dates
-              </Label>
-              <div className="border-2 border-slate-100 rounded-[2.5rem] p-10 bg-white shadow-inner flex justify-center">
-                <Calendar
-                  mode="multiple"
-                  selected={selectedDates}
-                  onSelect={setSelectedDates}
-                  className="rounded-md"
-                  initialFocus
-                  defaultMonth={new Date(CURRENT_YEAR, 0)}
-                  modifiers={{
-                    sunday: (date) => isSunday(date),
-                    holiday: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && !h.auto),
-                    autoWeekly: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && h.auto)
-                  }}
-                  modifiersClassNames={{
-                    sunday: "text-rose-500 font-black",
-                    holiday: "bg-primary text-white hover:bg-primary/90 rounded-full font-bold",
-                    autoWeekly: "bg-slate-100 text-slate-400 cursor-help"
-                  }}
-                />
-              </div>
-              <div className="flex flex-wrap justify-center gap-8 pt-6">
-                <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <div className="w-3 h-3 rounded-full bg-primary" /> Festival
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <div className="w-3 h-3 rounded-full bg-slate-100" /> Weekly Off
-                </div>
-                <div className="flex items-center gap-2 text-[10px] font-black text-rose-500 uppercase tracking-widest">
-                  <Sun className="w-3 h-3" /> Sunday
-                </div>
-              </div>
+            <div className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              <div className="w-3 h-3 rounded-full bg-slate-50 border" /> Weekly Off
             </div>
-
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-              <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100/50 space-y-3">
-                <div className="flex items-center gap-2 text-primary">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span className="text-xs font-black uppercase tracking-widest">Automation Rules</span>
-                </div>
-                <div className="text-xs text-slate-600 space-y-2 font-medium leading-relaxed">
-                  <p>• <span className="text-rose-600 font-bold">Sundays</span> are auto-marked as Weekly Off.</p>
-                  <p>• Adding a <span className="text-primary font-bold">Festival</span> on Sunday overrides auto-off.</p>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 justify-center">
-                <Button 
-                  className="w-full h-14 font-bold bg-primary shadow-lg shadow-primary/20 rounded-2xl text-lg" 
-                  onClick={handleAddHolidays}
-                >
-                  Confirm & Add Holidays
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  className="w-full h-12 font-bold rounded-xl text-slate-500" 
-                  onClick={() => { setFestivalName(""); setSelectedDates([]); }}
-                >
-                  Clear Selection
-                </Button>
-              </div>
+            <div className="flex items-center gap-2 text-[10px] font-black text-rose-500 uppercase tracking-widest">
+              <Sun className="w-3 h-3" /> Sunday
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Holiday Post Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-primary" />
+              {targetDate ? format(targetDate, "dd-MMM-yyyy") : "Select Date"}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            <div className="space-y-2">
+              <Label className="font-bold">Holiday Name</Label>
+              <Input 
+                placeholder="e.g. Diwali, Holi, Anniversary..." 
+                value={holidayName} 
+                onChange={(e) => setHolidayName(e.target.value)}
+                className="h-12"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="font-bold flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-primary" /> Applicable Plants
+              </Label>
+              <Card className="border-slate-100 shadow-none">
+                <ScrollArea className="h-[200px] p-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2 pb-2 border-b">
+                      <Checkbox 
+                        id="select-all" 
+                        checked={selectedPlantIds.length === plants.length}
+                        onCheckedChange={(checked) => {
+                          setSelectedPlantIds(checked ? plants.map(p => p.id) : []);
+                        }}
+                      />
+                      <label htmlFor="select-all" className="text-sm font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                        Select All Plants
+                      </label>
+                    </div>
+                    {plants.map((plant) => (
+                      <div key={plant.id} className="flex items-center space-x-3">
+                        <Checkbox 
+                          id={plant.id} 
+                          checked={selectedPlantIds.includes(plant.id)}
+                          onCheckedChange={() => togglePlant(plant.id)}
+                        />
+                        <div className="grid gap-1 leading-none">
+                          <label htmlFor={plant.id} className="text-sm font-medium leading-none">
+                            {plant.name}
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </Card>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+            <Button className="bg-primary px-8 font-bold" onClick={handlePostHoliday}>Post Holiday</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
