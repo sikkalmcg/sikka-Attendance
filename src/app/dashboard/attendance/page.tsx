@@ -138,7 +138,7 @@ export default function AttendancePage() {
         </CardHeader>
         <CardContent className="space-y-6 px-6 pb-6 pt-0">
           
-          {/* Refined Clock - Light Blue Theme, Smaller size */}
+          {/* Refined Clock - Light Blue Theme, Compact Size */}
           <div className="py-4 px-4 rounded-2xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-2 shadow-sm border-2 border-sky-100 max-w-md mx-auto">
             {currentTime ? (
               <div className="text-center">
@@ -154,27 +154,9 @@ export default function AttendancePage() {
                 <span className="text-sky-300 text-xs font-bold animate-pulse">Synchronizing...</span>
               </div>
             )}
-            <div className="pt-1 flex items-center gap-1.5 text-[8px] text-sky-600 font-mono bg-white/40 px-2 py-0.5 rounded-full border border-sky-100">
-              <MapPin className="w-2 h-2" /> {address}
-            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-2xl bg-slate-50 text-center border border-slate-100">
-              <p className="text-[8px] text-muted-foreground font-black uppercase tracking-widest mb-0.5">CURRENT STATUS</p>
-              <p className={cn(
-                "font-black text-lg",
-                attendanceStatus === 'IN' ? "text-emerald-600" : attendanceStatus === 'OUT' ? "text-rose-600" : "text-slate-400"
-              )}>
-                {attendanceStatus === 'NONE' ? 'STATIONARY' : `LOGGED ${attendanceStatus}`}
-              </p>
-            </div>
-            <div className="p-3 rounded-2xl bg-slate-50 text-center border border-slate-100">
-              <p className="text-[8px] text-muted-foreground font-black uppercase tracking-widest mb-0.5">LOGGED AT</p>
-              <p className="font-black text-lg font-mono text-slate-900">{checkInTime || '--:--'}</p>
-            </div>
-          </div>
-
+          {/* Action Buttons Only */}
           <div className="flex flex-col sm:flex-row gap-3">
             <Button 
               className="flex-1 h-12 text-lg font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200 transition-all active:scale-95" 
