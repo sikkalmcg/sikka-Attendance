@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -118,11 +119,9 @@ const MOCK_EMPLOYEES: Employee[] = [
   }
 ];
 
-// Generate Effect from Month options in MMM-YYYY format
 const generateMonthOptions = () => {
   const options = [];
   const date = new Date();
-  // Show from current month up to next 12 months
   for (let i = 0; i < 15; i++) {
     const mmm = date.toLocaleString('en-US', { month: 'short' });
     const yyyy = date.getFullYear();
@@ -134,6 +133,28 @@ const generateMonthOptions = () => {
 
 const MONTH_OPTIONS = generateMonthOptions();
 
+const INITIAL_FORM_DATA: Partial<Employee> = {
+  firmId: "f1",
+  isGovComplianceEnabled: true,
+  salary: { 
+    basic: 0, 
+    hra: 0, 
+    da: 0, 
+    allowance: 0, 
+    grossSalary: 0, 
+    employeePF: 0, 
+    employeeESIC: 0, 
+    employerPF: 0, 
+    employerESIC: 0, 
+    netSalary: 0, 
+    monthlyCTC: 0,
+    pfRateEmp: 12,
+    esicRateEmp: 0.75,
+    pfRateEx: 13,
+    esicRateEx: 3.25
+  }
+};
+
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>(MOCK_EMPLOYEES);
   const [searchTerm, setSearchTerm] = useState("");
@@ -143,37 +164,23 @@ export default function EmployeesPage() {
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [salaryRevision, setSalaryRevision] = useState<Employee | null>(null);
   
-  // Registration Form State
-  const [formData, setFormData] = useState<Partial<Employee>>({
-    firmId: "f1",
-    isGovComplianceEnabled: true,
-    salary: { 
-      basic: 0, 
-      hra: 0, 
-      da: 0, 
-      allowance: 0, 
-      grossSalary: 0, 
-      employeePF: 0, 
-      employeeESIC: 0, 
-      employerPF: 0, 
-      employerESIC: 0, 
-      netSalary: 0, 
-      monthlyCTC: 0,
-      pfRateEmp: 12,
-      esicRateEmp: 0.75,
-      pfRateEx: 13,
-      esicRateEx: 3.25
-    }
+  const [formData, setFormData] = useState<Partial<Employee>>(INITIAL_FORM_DATA);
+  const [revisionData, setRevisionData] = useState<SalaryStructure>({ 
+    basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0, grossSalary: 0, 
+    employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, 
+    netSalary: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 
   });
+  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[0]);
 
   const nextEmpId = useMemo(() => {
-    const lastId = employees.length > 0 ? parseInt(employees[employees.length - 1].employeeId.split('-S')[1]) : 0;
-    return `EMP-S${(lastId + 1).toString().padStart(4, '0')}`;
+    if (employees.length === 0) return 'EMP-S0001';
+    const ids = employees.map(e => {
+      const match = e.employeeId.match(/EMP-S(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    });
+    const maxId = Math.max(...ids);
+    return `EMP-S${(maxId + 1).toString().padStart(4, '0')}`;
   }, [employees]);
-
-  // Salary Revision State
-  const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 });
-  const [effectiveMonth, setEffectiveMonth] = useState<string>(MONTH_OPTIONS[0]);
 
   const filtered = employees.filter(emp => 
     emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -194,8 +201,6 @@ export default function EmployeesPage() {
     if (compliance) {
       epf = Math.round(basic * (rates.pfEmp / 100));
       erpf = Math.round(basic * (rates.pfEx / 100));
-      
-      // Calculate ESIC as percentage of Basic Salary as per user request
       eesic = Math.round(basic * (rates.esicEmp / 100));
       eresic = Math.round(basic * (rates.esicEx / 100));
     }
@@ -220,23 +225,24 @@ export default function EmployeesPage() {
   };
 
   const updateFormSalary = (field: string, val: number) => {
-    const s = formData.salary || { basic: 0, hra: 0, allowance: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 };
-    
-    const newBasic = field === 'basic' ? val : (s.basic || 0);
-    const newHra = field === 'hra' ? val : (field === 'basic' ? Math.round(val * 0.5) : (s.hra || 0));
-    const newAllowance = field === 'allowance' ? val : (s.allowance || 0);
-    
-    const newRates = {
-      pfEmp: field === 'pfRateEmp' ? val : s.pfRateEmp,
-      esicEmp: field === 'esicRateEmp' ? val : s.esicRateEmp,
-      pfEx: field === 'pfRateEx' ? val : s.pfRateEx,
-      esicEx: field === 'esicRateEx' ? val : s.esicRateEx,
-    };
-    
-    setFormData(prev => ({
-      ...prev,
-      salary: calculateSalaryMetrics(newBasic, newHra, newAllowance, prev.isGovComplianceEnabled || false, newRates)
-    }));
+    setFormData(prev => {
+      const s = prev.salary || INITIAL_FORM_DATA.salary!;
+      const newBasic = field === 'basic' ? val : s.basic;
+      const newHra = field === 'hra' ? val : (field === 'basic' ? Math.round(val * 0.5) : s.hra);
+      const newAllowance = field === 'allowance' ? val : s.allowance;
+      
+      const newRates = {
+        pfEmp: field === 'pfRateEmp' ? val : s.pfRateEmp,
+        esicEmp: field === 'esicRateEmp' ? val : s.esicRateEmp,
+        pfEx: field === 'pfRateEx' ? val : s.pfRateEx,
+        esicEx: field === 'esicRateEx' ? val : s.esicRateEx,
+      };
+      
+      return {
+        ...prev,
+        salary: calculateSalaryMetrics(newBasic, newHra, newAllowance, prev.isGovComplianceEnabled || false, newRates)
+      };
+    });
   };
 
   const handleRegistrationPost = () => {
@@ -252,15 +258,12 @@ export default function EmployeesPage() {
       active: true
     };
 
-    if (editEmployee) {
-      setEmployees(prev => prev.map(e => e.id === editEmployee.id ? newEmp : e));
-    } else {
-      setEmployees(prev => [...prev, newEmp]);
-    }
+    setEmployees(prev => {
+      if (editEmployee) return prev.map(e => e.id === editEmployee.id ? newEmp : e);
+      return [...prev, newEmp];
+    });
 
     setIsRegistrationOpen(false);
-    setEditEmployee(null);
-    setFormData({ firmId: "f1", isGovComplianceEnabled: true });
     toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${newEmp.name} has been saved.` });
   };
 
@@ -274,6 +277,12 @@ export default function EmployeesPage() {
     setSalaryRevision(emp);
     setRevisionData(emp.salary);
   };
+
+  const increasePct = useMemo(() => {
+    if (!salaryRevision || salaryRevision.salary.monthlyCTC === 0) return "0.0";
+    const diff = revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC;
+    return ((diff / salaryRevision.salary.monthlyCTC) * 100).toFixed(1);
+  }, [salaryRevision, revisionData.monthlyCTC]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -312,60 +321,78 @@ export default function EmployeesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((emp) => (
-                <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-bold">{emp.name}</span>
-                      <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{emp.department}</span>
-                      <span className="text-xs text-muted-foreground">{emp.designation}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm">{emp.joinDate}</TableCell>
-                  <TableCell className="text-right font-bold text-emerald-600">
-                    {formatCurrency(emp.salary.monthlyCTC)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEditClick(emp)} title="Edit Profile">
-                        <Pencil className="w-4 h-4 text-slate-500" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-52">
-                          <DropdownMenuItem onClick={() => handleIncreaseSalary(emp)}>
-                            <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <History className="w-4 h-4 mr-2" /> View Salary Record
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className={emp.active ? "text-rose-600" : "text-emerald-600"}>
-                            {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate</> : <><CheckCircle className="w-4 h-4 mr-2" /> Activate</>}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No employees found.</TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filtered.map((emp) => (
+                  <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-bold">{emp.name}</span>
+                        <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{emp.department}</span>
+                        <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">{emp.joinDate}</TableCell>
+                    <TableCell className="text-right font-bold text-emerald-600">
+                      {formatCurrency(emp.salary.monthlyCTC)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleEditClick(emp)} title="Edit Profile">
+                          <Pencil className="w-4 h-4 text-slate-500" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem onClick={() => handleIncreaseSalary(emp)}>
+                              <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <History className="w-4 h-4 mr-2" /> View Salary Record
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className={emp.active ? "text-rose-600" : "text-emerald-600"}
+                              onClick={() => {
+                                setEmployees(prev => prev.map(e => e.id === emp.id ? { ...e, active: !e.active } : e));
+                                toast({ title: emp.active ? "Employee Deactivated" : "Employee Activated" });
+                              }}
+                            >
+                              {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate</> : <><CheckCircle className="w-4 h-4 mr-2" /> Activate</>}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
       {/* Registration Modal */}
-      <Dialog open={isRegistrationOpen} onOpenChange={(open) => { setIsRegistrationOpen(open); if(!open) { setEditEmployee(null); setFormData({ firmId: "f1", isGovComplianceEnabled: true, salary: { basic: 0, hra: 0, da: 0, allowance: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0, monthlyCTC: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 } }); } }}>
+      <Dialog open={isRegistrationOpen} onOpenChange={(open) => { 
+        setIsRegistrationOpen(open); 
+        if(!open) { 
+          setEditEmployee(null); 
+          setFormData(INITIAL_FORM_DATA); 
+        } 
+      }}>
         <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
@@ -377,7 +404,6 @@ export default function EmployeesPage() {
           
           <ScrollArea className="flex-1 px-6">
             <div className="space-y-8 pb-8">
-              {/* Section 1: Basic Details */}
               <div className="space-y-4 pt-4">
                 <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
                   <Building2 className="w-4 h-4" /> 1. Basic Details
@@ -385,14 +411,14 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <Label>Firm Name</Label>
-                    <Select value={formData.firmId} onValueChange={(v) => setFormData({...formData, firmId: v, unitId: undefined})}>
+                    <Select value={formData.firmId} onValueChange={(v) => setFormData(prev => ({...prev, firmId: v, unitId: undefined}))}>
                       <SelectTrigger><SelectValue placeholder="Select Firm" /></SelectTrigger>
                       <SelectContent>{MOCK_FIRMS.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Unit / Plant</Label>
-                    <Select value={formData.unitId} onValueChange={(v) => setFormData({...formData, unitId: v})}>
+                    <Select value={formData.unitId} onValueChange={(v) => setFormData(prev => ({...prev, unitId: v}))}>
                       <SelectTrigger><SelectValue placeholder="Select Unit" /></SelectTrigger>
                       <SelectContent>
                         {MOCK_FIRMS.find(f => f.id === formData.firmId)?.units.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
@@ -405,36 +431,35 @@ export default function EmployeesPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Employee Name *</Label>
-                    <Input placeholder="Enter full name" value={formData.name || ''} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                    <Input placeholder="Enter full name" value={formData.name || ''} onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Father Name</Label>
-                    <Input placeholder="Enter father's name" value={formData.fatherName || ''} onChange={(e) => setFormData({...formData, fatherName: e.target.value})} />
+                    <Input placeholder="Enter father's name" value={formData.fatherName || ''} onChange={(e) => setFormData(prev => ({...prev, fatherName: e.target.value}))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Mobile Number *</Label>
-                    <Input placeholder="10-digit mobile" value={formData.mobile || ''} onChange={(e) => setFormData({...formData, mobile: e.target.value})} />
+                    <Input placeholder="10-digit mobile" value={formData.mobile || ''} onChange={(e) => setFormData(prev => ({...prev, mobile: e.target.value}))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Aadhaar Number *</Label>
-                    <Input placeholder="12-digit number" value={formData.aadhaar || ''} onChange={(e) => setFormData({...formData, aadhaar: e.target.value})} maxLength={12} />
+                    <Input placeholder="12-digit number" value={formData.aadhaar || ''} onChange={(e) => setFormData(prev => ({...prev, aadhaar: e.target.value}))} maxLength={12} />
                   </div>
                   <div className="space-y-2">
                     <Label>PAN Number</Label>
-                    <Input placeholder="AAAAA9999A" className="uppercase" value={formData.pan || ''} onChange={(e) => setFormData({...formData, pan: e.target.value.toUpperCase()})} />
+                    <Input placeholder="AAAAA9999A" className="uppercase" value={formData.pan || ''} onChange={(e) => setFormData(prev => ({...prev, pan: e.target.value.toUpperCase()}))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Joining Date *</Label>
-                    <Input type="date" value={formData.joinDate || ''} onChange={(e) => setFormData({...formData, joinDate: e.target.value})} />
+                    <Input type="date" value={formData.joinDate || ''} onChange={(e) => setFormData(prev => ({...prev, joinDate: e.target.value}))} />
                   </div>
                   <div className="space-y-2 md:col-span-3">
                     <Label>Residential Address</Label>
-                    <Textarea placeholder="Full address with pincode" value={formData.address || ''} onChange={(e) => setFormData({...formData, address: e.target.value})} />
+                    <Textarea placeholder="Full address with pincode" value={formData.address || ''} onChange={(e) => setFormData(prev => ({...prev, address: e.target.value}))} />
                   </div>
                 </div>
               </div>
 
-              {/* Section 2: Department */}
               <div className="space-y-4">
                 <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
                   <ChevronRight className="w-4 h-4" /> 2. Dept & Designation
@@ -442,14 +467,14 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Department</Label>
-                    <Select value={formData.department} onValueChange={(v) => setFormData({...formData, department: v, designation: undefined})}>
+                    <Select value={formData.department} onValueChange={(v) => setFormData(prev => ({...prev, department: v, designation: undefined}))}>
                       <SelectTrigger><SelectValue placeholder="Select Dept" /></SelectTrigger>
                       <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Designation</Label>
-                    <Select value={formData.designation} onValueChange={(v) => setFormData({...formData, designation: v})}>
+                    <Select value={formData.designation} onValueChange={(v) => setFormData(prev => ({...prev, designation: v}))}>
                       <SelectTrigger><SelectValue placeholder="Select Designation" /></SelectTrigger>
                       <SelectContent>
                         {formData.department && DESIGNATIONS[formData.department].map(des => <SelectItem key={des} value={des}>{des}</SelectItem>)}
@@ -459,7 +484,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* Section 3: Salary */}
               <div className="space-y-4">
                 <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
                   <Banknote className="w-4 h-4" /> 3. Salary Structure
@@ -480,7 +504,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* Section 4: Banking */}
               <div className="space-y-4">
                 <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
                   <Banknote className="w-4 h-4" /> 4. Banking Details
@@ -488,20 +511,19 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <Label>Bank Name</Label>
-                    <Input placeholder="e.g. HDFC, SBI" value={formData.bankName || ''} onChange={(e) => setFormData({...formData, bankName: e.target.value})} />
+                    <Input placeholder="e.g. HDFC, SBI" value={formData.bankName || ''} onChange={(e) => setFormData(prev => ({...prev, bankName: e.target.value}))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Account Number</Label>
-                    <Input type="number" placeholder="Enter account number" value={formData.accountNo || ''} onChange={(e) => setFormData({...formData, accountNo: e.target.value})} />
+                    <Input type="number" placeholder="Enter account number" value={formData.accountNo || ''} onChange={(e) => setFormData(prev => ({...prev, accountNo: e.target.value}))} />
                   </div>
                   <div className="space-y-2">
                     <Label>IFSC Code</Label>
-                    <Input placeholder="HDFC0001234" className="uppercase" value={formData.ifscCode || ''} onChange={(e) => setFormData({...formData, ifscCode: e.target.value.toUpperCase()})} />
+                    <Input placeholder="HDFC0001234" className="uppercase" value={formData.ifscCode || ''} onChange={(e) => setFormData(prev => ({...prev, ifscCode: e.target.value.toUpperCase()}))} />
                   </div>
                 </div>
               </div>
 
-              {/* Section 5: Compliance */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
@@ -513,8 +535,16 @@ export default function EmployeesPage() {
                       id="compliance-toggle" 
                       checked={formData.isGovComplianceEnabled} 
                       onCheckedChange={(c) => {
-                        setFormData(prev => ({ ...prev, isGovComplianceEnabled: c }));
-                        updateFormSalary('basic', formData.salary?.basic || 0); // Trigger recalculate
+                        setFormData(prev => {
+                          const s = prev.salary || INITIAL_FORM_DATA.salary!;
+                          return { 
+                            ...prev, 
+                            isGovComplianceEnabled: c,
+                            salary: calculateSalaryMetrics(s.basic, s.hra, s.allowance, c, { 
+                              pfEmp: s.pfRateEmp, esicEmp: s.esicRateEmp, pfEx: s.pfRateEx, esicEx: s.esicRateEx 
+                            })
+                          };
+                        });
                       }} 
                     />
                   </div>
@@ -524,11 +554,11 @@ export default function EmployeesPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                       <div className="space-y-2">
                         <Label>PF Account Number</Label>
-                        <Input value={formData.pfNumber || ''} onChange={(e) => setFormData({...formData, pfNumber: e.target.value})} />
+                        <Input value={formData.pfNumber || ''} onChange={(e) => setFormData(prev => ({...prev, pfNumber: e.target.value}))} />
                       </div>
                       <div className="space-y-2">
                         <Label>ESIC Account Number</Label>
-                        <Input value={formData.esicNumber || ''} onChange={(e) => setFormData({...formData, esicNumber: e.target.value})} />
+                        <Input value={formData.esicNumber || ''} onChange={(e) => setFormData(prev => ({...prev, esicNumber: e.target.value}))} />
                       </div>
                     </div>
 
@@ -591,7 +621,6 @@ export default function EmployeesPage() {
             </div>
           </ScrollArea>
 
-          {/* Real-time Footer Stats */}
           <div className="bg-slate-900 text-white p-6 grid grid-cols-2 md:grid-cols-4 gap-4 flex-shrink-0">
             <div className="text-center">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gross Salary</p>
@@ -691,7 +720,7 @@ export default function EmployeesPage() {
                     <div className="text-right">
                       <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Increase %</p>
                       <h3 className="text-3xl font-bold text-emerald-900">
-                        {salaryRevision ? (((revisionData.monthlyCTC - salaryRevision.salary.monthlyCTC) / salaryRevision.salary.monthlyCTC) * 100).toFixed(1) : 0}%
+                        {increasePct}%
                       </h3>
                     </div>
                   </div>
