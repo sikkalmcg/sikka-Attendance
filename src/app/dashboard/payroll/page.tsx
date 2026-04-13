@@ -65,7 +65,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
 const generatePayrollMonths = () => {
@@ -353,109 +353,112 @@ export default function PayrollPage() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-bold">Firm / Unit</TableHead>
-                    <TableHead className="font-bold">Employee Name / ID</TableHead>
-                    <TableHead className="font-bold">Aadhaar No</TableHead>
-                    <TableHead className="font-bold">Dept / Designation</TableHead>
-                    <TableHead className="font-bold">Month</TableHead>
-                    <TableHead className="font-bold text-right">Monthly CTC</TableHead>
-                    <TableHead className="text-right font-bold">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEmployees.map((emp) => {
-                    const isAdjusted = adjustedEmployees[emp.id];
-                    const generated = isSalaryGenerated(emp.employeeId);
-                    const firm = firms.find(f => f.id === emp.firmId);
-                    const plant = plants.find(p => p.id === emp.unitId);
-                    
-                    return (
-                      <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
-                            <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-bold">{emp.name}</span>
-                            <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{emp.department}</span>
-                            <span className="text-xs text-muted-foreground">{emp.designation}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-emerald-600">
-                          {formatCurrency(emp.salary.monthlyCTC)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              disabled={generated}
-                              className={cn(
-                                "text-xs font-bold gap-1 border-primary/20",
-                                isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5",
-                                generated && "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
-                              )}
-                              onClick={() => !generated && setAdjustLeaveEmp(emp)}
-                            >
-                              <CalendarClock className="w-3 h-3" /> 
-                              {generated ? "Locked" : isAdjusted ? "Reviewed" : "Adjust Leave"}
-                            </Button>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="inline-block">
-                                    <Button 
-                                      size="sm" 
-                                      className={cn(
-                                        "text-xs font-bold gap-1",
-                                        isAdjusted && !generated ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                                      )}
-                                      onClick={() => {
-                                        if (isAdjusted && !generated) {
-                                          router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}`);
-                                        }
-                                      }}
-                                      disabled={!isAdjusted || generated}
-                                    >
-                                      {generated ? <CheckCircle2 className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
-                                      {generated ? "Generated" : "Generate Salary"}
-                                    </Button>
-                                  </div>
-                                </TooltipTrigger>
-                                {!isAdjusted && !generated && (
-                                  <TooltipContent>
-                                    <p className="text-xs">Review leave before generating salary</p>
-                                  </TooltipContent>
+              <ScrollArea className="w-full">
+                <Table className="min-w-[1200px]">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-bold">Firm / Unit</TableHead>
+                      <TableHead className="font-bold">Employee Name / ID</TableHead>
+                      <TableHead className="font-bold">Aadhaar No</TableHead>
+                      <TableHead className="font-bold">Dept / Designation</TableHead>
+                      <TableHead className="font-bold">Month</TableHead>
+                      <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEmployees.map((emp) => {
+                      const isAdjusted = adjustedEmployees[emp.id];
+                      const generated = isSalaryGenerated(emp.employeeId);
+                      const firm = firms.find(f => f.id === emp.firmId);
+                      const plant = plants.find(p => p.id === emp.unitId);
+                      
+                      return (
+                        <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
+                              <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold">{emp.name}</span>
+                              <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">{emp.department}</span>
+                              <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-emerald-600">
+                            {formatCurrency(emp.salary.monthlyCTC)}
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                disabled={generated}
+                                className={cn(
+                                  "text-xs font-bold gap-1 border-primary/20",
+                                  isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5",
+                                  generated && "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
                                 )}
-                                {generated && (
-                                  <TooltipContent>
-                                    <p className="text-xs">Salary record already exists</p>
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                                onClick={() => !generated && setAdjustLeaveEmp(emp)}
+                              >
+                                <CalendarClock className="w-3 h-3" /> 
+                                {generated ? "Locked" : isAdjusted ? "Reviewed" : "Adjust Leave"}
+                              </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="inline-block">
+                                      <Button 
+                                        size="sm" 
+                                        className={cn(
+                                          "text-xs font-bold gap-1",
+                                          isAdjusted && !generated ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                        )}
+                                        onClick={() => {
+                                          if (isAdjusted && !generated) {
+                                            router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}`);
+                                          }
+                                        }}
+                                        disabled={!isAdjusted || generated}
+                                      >
+                                        {generated ? <CheckCircle2 className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
+                                        {generated ? "Generated" : "Generate Salary"}
+                                      </Button>
+                                    </div>
+                                  </TooltipTrigger>
+                                  {!isAdjusted && !generated && (
+                                    <TooltipContent>
+                                      <p className="text-xs">Review leave before generating salary</p>
+                                    </TooltipContent>
+                                  )}
+                                  {generated && (
+                                    <TooltipContent>
+                                      <p className="text-xs">Salary record already exists</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
@@ -485,7 +488,7 @@ export default function PayrollPage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table>
+                <Table className="min-w-[1800px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       <TableHead className="font-bold whitespace-nowrap">Firm / Unit</TableHead>
@@ -494,20 +497,22 @@ export default function PayrollPage() {
                       <TableHead className="font-bold whitespace-nowrap">Dept / Desig</TableHead>
                       <TableHead className="font-bold text-center">Month</TableHead>
                       <TableHead className="font-bold text-center">Days</TableHead>
-                      <TableHead className="font-bold text-right">Net Payable</TableHead>
-                      <TableHead className="font-bold text-right">Sal. Paid</TableHead>
-                      <TableHead className="font-bold text-center">Sal. Paid Date</TableHead>
-                      <TableHead className="font-bold text-right">PF (Emp+Ex)</TableHead>
-                      <TableHead className="font-bold text-right">PF Paid</TableHead>
-                      <TableHead className="font-bold text-right">ESIC (Emp+Ex)</TableHead>
-                      <TableHead className="font-bold text-right">ESIC Paid</TableHead>
+                      <TableHead className="font-bold text-right">Net Payable Amount</TableHead>
+                      <TableHead className="font-bold text-right">Salary Paid Amount</TableHead>
+                      <TableHead className="font-bold text-center">Salary Paid Date</TableHead>
+                      <TableHead className="font-bold text-right">PF Amount (Emp+Ex)</TableHead>
+                      <TableHead className="font-bold text-right">PF Paid Amount</TableHead>
+                      <TableHead className="font-bold text-center">PF Paid Date</TableHead>
+                      <TableHead className="font-bold text-right">ESIC Amount (Emp+Ex)</TableHead>
+                      <TableHead className="font-bold text-right">ESIC Paid Amount</TableHead>
+                      <TableHead className="font-bold text-center">ESIC Paid Date</TableHead>
                       <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {finalizedSalaries.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={14} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell>
+                        <TableCell colSpan={16} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell>
                       </TableRow>
                     ) : (
                       finalizedSalaries.map((p) => {
@@ -581,6 +586,7 @@ export default function PayrollPage() {
                                  {formatCurrency(p.pfPaidAmountEmployee + p.pfPaidAmountEmployer)}
                                </span>
                             </TableCell>
+                            <TableCell className="text-center text-[10px]">{p.pfPaidDate || "--"}</TableCell>
                             <TableCell className="text-right text-xs font-medium">{formatCurrency(p.esicAmountEmployee + p.esicAmountEmployer)}</TableCell>
                             <TableCell className="text-right">
                                <span className={cn(
@@ -590,6 +596,7 @@ export default function PayrollPage() {
                                  {formatCurrency(p.esicPaidAmountEmployee + p.esicPaidAmountEmployer)}
                                </span>
                             </TableCell>
+                            <TableCell className="text-center text-[10px]">{p.esicPaidDate || "--"}</TableCell>
                             <TableCell className="text-right pr-6">
                               <div className="flex justify-end gap-1">
                                 <Button 
@@ -641,6 +648,7 @@ export default function PayrollPage() {
                     )}
                   </TableBody>
                 </Table>
+                <ScrollBar orientation="horizontal" />
               </ScrollArea>
             </CardContent>
           </Card>
@@ -658,68 +666,71 @@ export default function PayrollPage() {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-bold">Voucher No</TableHead>
-                    <TableHead className="font-bold">Voucher Date</TableHead>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Dept / Desig</TableHead>
-                    <TableHead className="text-right font-bold">Adv. Amount</TableHead>
-                    <TableHead className="text-right font-bold">Paid Amount</TableHead>
-                    <TableHead className="text-right font-bold">Deduction Advance Salary</TableHead>
-                    <TableHead className="text-center font-bold">Slip No</TableHead>
-                    <TableHead className="text-center font-bold">Sal. Month</TableHead>
-                    <TableHead className="text-right font-bold">Remaining</TableHead>
-                    <TableHead className="text-center font-bold">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paidVouchers.length === 0 ? (
+              <ScrollArea className="w-full">
+                <Table className="min-w-[1200px]">
+                  <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center py-20 text-muted-foreground">
-                        No paid advance salary records found.
-                      </TableCell>
+                      <TableHead className="font-bold">Voucher No</TableHead>
+                      <TableHead className="font-bold">Voucher Date</TableHead>
+                      <TableHead className="font-bold">Employee Name</TableHead>
+                      <TableHead className="font-bold">Dept / Desig</TableHead>
+                      <TableHead className="text-right font-bold">Adv. Amount</TableHead>
+                      <TableHead className="text-right font-bold">Paid Amount</TableHead>
+                      <TableHead className="text-right font-bold">Deduction Advance Salary</TableHead>
+                      <TableHead className="text-center font-bold">Slip No</TableHead>
+                      <TableHead className="text-center font-bold">Sal. Month</TableHead>
+                      <TableHead className="text-right font-bold">Remaining</TableHead>
+                      <TableHead className="text-center font-bold">Status</TableHead>
                     </TableRow>
-                  ) : (
-                    paidVouchers.map(v => {
-                      const emp = employees.find(e => e.id === v.employeeId);
-                      const recoveries = payrollRecords.filter(p => p.employeeId === (emp?.employeeId || v.employeeId));
-                      const totalRecovered = recoveries.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
-                      const remaining = v.amount - totalRecovered;
-                      const lastRecovery = recoveries[recoveries.length - 1];
+                  </TableHeader>
+                  <TableBody>
+                    {paidVouchers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={11} className="text-center py-20 text-muted-foreground">
+                          No paid advance salary records found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paidVouchers.map(v => {
+                        const emp = employees.find(e => e.id === v.employeeId);
+                        const recoveries = payrollRecords.filter(p => p.employeeId === (emp?.employeeId || v.employeeId));
+                        const totalRecovered = recoveries.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+                        const remaining = v.amount - totalRecovered;
+                        const lastRecovery = recoveries[recoveries.length - 1];
 
-                      return (
-                        <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
-                          <TableCell className="text-sm">{v.date}</TableCell>
-                          <TableCell className="font-bold">{emp?.name || v.employeeId}</TableCell>
-                          <TableCell className="text-xs">
-                            <div className="flex flex-col">
-                              <span>{emp?.department || "--"}</span>
-                              <span className="text-muted-foreground">{emp?.designation || "--"}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-right font-bold text-rose-600">{formatCurrency(totalRecovered)}</TableCell>
-                          <TableCell className="text-center font-mono text-[10px]">{lastRecovery ? lastRecovery.slipNo : "--"}</TableCell>
-                          <TableCell className="text-center font-bold text-xs">{lastRecovery ? lastRecovery.month : "--"}</TableCell>
-                          <TableCell className="text-right font-black text-primary">{formatCurrency(Math.max(0, remaining))}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={remaining <= 0 ? "default" : "outline"} className={cn(
-                              "text-[10px] font-black",
-                              remaining <= 0 ? "bg-emerald-600" : "text-amber-600 border-amber-200 bg-amber-50"
-                            )}>
-                              {remaining <= 0 ? "COMPLETE" : "PENDING DEDUCTION"}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                        return (
+                          <TableRow key={v.id} className="hover:bg-slate-50/50">
+                            <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
+                            <TableCell className="text-sm">{v.date}</TableCell>
+                            <TableCell className="font-bold">{emp?.name || v.employeeId}</TableCell>
+                            <TableCell className="text-xs">
+                              <div className="flex flex-col">
+                                <span>{emp?.department || "--"}</span>
+                                <span className="text-muted-foreground">{emp?.designation || "--"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-right font-bold text-rose-600">{formatCurrency(totalRecovered)}</TableCell>
+                            <TableCell className="text-center font-mono text-[10px]">{lastRecovery ? lastRecovery.slipNo : "--"}</TableCell>
+                            <TableCell className="text-center font-bold text-xs">{lastRecovery ? lastRecovery.month : "--"}</TableCell>
+                            <TableCell className="text-right font-black text-primary">{formatCurrency(Math.max(0, remaining))}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={remaining <= 0 ? "default" : "outline"} className={cn(
+                                "text-[10px] font-black",
+                                remaining <= 0 ? "bg-emerald-600" : "text-amber-600 border-amber-200 bg-amber-50"
+                              )}>
+                                {remaining <= 0 ? "COMPLETE" : "PENDING DEDUCTION"}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
@@ -727,34 +738,37 @@ export default function PayrollPage() {
         <TabsContent value="leave" className="mt-8 space-y-6">
           <Card className="border-none shadow-sm overflow-hidden">
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Employee ID</TableHead>
-                    <TableHead className="font-bold">Department</TableHead>
-                    <TableHead className="font-bold">Designation</TableHead>
-                    <TableHead className="font-bold text-center">Available Balance</TableHead>
-                    <TableHead className="text-right font-bold">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {employees.map(emp => (
-                    <TableRow key={emp.id}>
-                      <TableCell className="font-bold">{emp.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{emp.employeeId}</TableCell>
-                      <TableCell>{emp.department}</TableCell>
-                      <TableCell>{emp.designation}</TableCell>
-                      <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" className="font-bold gap-2" onClick={() => setViewLeaveHistoryEmp(emp)}>
-                          <History className="w-4 h-4" /> View History
-                        </Button>
-                      </TableCell>
+              <ScrollArea className="w-full">
+                <Table className="min-w-[1000px]">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-bold">Employee Name</TableHead>
+                      <TableHead className="font-bold">Employee ID</TableHead>
+                      <TableHead className="font-bold">Department</TableHead>
+                      <TableHead className="font-bold">Designation</TableHead>
+                      <TableHead className="font-bold text-center">Available Balance</TableHead>
+                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {employees.map(emp => (
+                      <TableRow key={emp.id}>
+                        <TableCell className="font-bold">{emp.name}</TableCell>
+                        <TableCell className="font-mono text-xs">{emp.employeeId}</TableCell>
+                        <TableCell>{emp.department}</TableCell>
+                        <TableCell>{emp.designation}</TableCell>
+                        <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
+                        <TableCell className="text-right pr-6">
+                          <Button variant="ghost" size="sm" className="font-bold gap-2" onClick={() => setViewLeaveHistoryEmp(emp)}>
+                            <History className="w-4 h-4" /> View History
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
