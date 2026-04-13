@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -72,14 +71,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <DataProvider>
       <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <Sidebar className="border-r border-slate-200">
+        <div className="flex min-h-screen w-full bg-background overflow-hidden">
+          <Sidebar collapsible="icon" className="border-r border-slate-200">
             <SidebarHeader className="p-4">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-lg">S</span>
                 </div>
-                <span className="font-bold text-lg tracking-tight">Sikka HR</span>
+                <span className="font-bold text-lg tracking-tight group-data-[collapsible=icon]:hidden">Sikka HR</span>
               </div>
             </SidebarHeader>
             <SidebarContent className="px-2">
@@ -93,22 +92,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       className="h-11 px-3"
                     >
                       <item.icon className="w-5 h-5 mr-3" />
-                      <span className="font-medium">{item.title}</span>
+                      <span className="font-medium group-data-[collapsible=icon]:hidden">{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
             </SidebarContent>
             <SidebarFooter className="p-4">
-              <Button variant="ghost" className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleLogout}>
-                <LogOut className="w-5 h-5 mr-3" />
-                <span className="font-medium">Logout</span>
+              <Button variant="ghost" className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive group-data-[collapsible=icon]:p-2" onClick={handleLogout}>
+                <LogOut className="w-5 h-5 mr-3 group-data-[collapsible=icon]:mr-0" />
+                <span className="font-medium group-data-[collapsible=icon]:hidden">Logout</span>
               </Button>
             </SidebarFooter>
           </Sidebar>
 
-          <SidebarInset className="flex flex-col flex-1">
-            <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white sticky top-0 z-10">
+          <SidebarInset className="flex flex-col flex-1 h-screen overflow-hidden">
+            <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white shrink-0 z-20">
               <div className="flex items-center gap-4">
                 <SidebarTrigger />
                 <Separator orientation="vertical" className="h-6" />
@@ -135,13 +134,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             </header>
 
-            <main className="flex-1 p-6 overflow-auto">
-              <div className="max-w-7xl mx-auto space-y-6">
+            <main className="flex-1 p-6 overflow-y-auto bg-slate-50/50">
+              <div className="max-w-7xl mx-auto">
                 {children}
               </div>
             </main>
             
-            <footer className="h-12 border-t border-slate-100 flex items-center justify-center px-6 bg-slate-50 text-xs text-muted-foreground">
+            <footer className="h-12 border-t border-slate-100 flex items-center justify-center px-6 bg-white text-xs text-muted-foreground shrink-0">
               © Sikka Industries & Logistics – Version 1.0
             </footer>
           </SidebarInset>
