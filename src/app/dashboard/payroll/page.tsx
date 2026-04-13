@@ -510,7 +510,7 @@ export default function PayrollPage() {
                        <div className="flex flex-col gap-2">
                           <div className="flex gap-2">
                             <Button className="flex-1 bg-primary font-bold" onClick={handleAdjustLeave} disabled={isProcessing}>Add Leave</Button>
-                            <Button variant="outline" className="flex-1 border-slate-700 text-white hover:bg-slate-800" onClick={handleMarkNotRequired}>Not Required</Button>
+                            <Button className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold border-none" onClick={handleMarkNotRequired}>Not Required</Button>
                           </div>
                           <Button variant="ghost" className="w-full text-slate-400 hover:text-white" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
                        </div>
