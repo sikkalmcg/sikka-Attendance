@@ -129,6 +129,14 @@ export default function UserManagementPage() {
 
   const handleDeleteUser = () => {
     if (!userToAction) return;
+    
+    // Safety check for Super Admin
+    if (userToAction.role === 'SUPER_ADMIN') {
+      toast({ variant: "destructive", title: "Action Denied", description: "The Super Admin account cannot be deleted." });
+      setIsDeleteAlertOpen(false);
+      return;
+    }
+
     setIsProcessing(true);
     try {
       setUsers(prev => prev.filter(u => u.id !== userToAction.id));
@@ -262,6 +270,7 @@ export default function UserManagementPage() {
                           <DropdownMenuItem 
                             className="text-rose-600"
                             onClick={() => { setUserToAction(user); setIsDeleteAlertOpen(true); }}
+                            disabled={user.role === 'SUPER_ADMIN'}
                           >
                             <Trash2 className="w-4 h-4 mr-2" /> Remove User
                           </DropdownMenuItem>
@@ -301,6 +310,7 @@ export default function UserManagementPage() {
                 placeholder="john.doe" 
                 value={formData.username || ""} 
                 onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase()}))}
+                disabled={editingUser?.role === 'SUPER_ADMIN'}
               />
             </div>
             {!editingUser && (
@@ -316,12 +326,19 @@ export default function UserManagementPage() {
             )}
             <div className="space-y-2">
               <Label className="font-bold">System Role</Label>
-              <Select value={formData.role} onValueChange={(v: Role) => setFormData(p => ({...p, role: v}))}>
+              <Select 
+                value={formData.role} 
+                onValueChange={(v: Role) => setFormData(p => ({...p, role: v}))}
+                disabled={editingUser?.role === 'SUPER_ADMIN'}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                  {/* The Super Admin role is unique and cannot be assigned to new accounts */}
+                  {editingUser?.role === 'SUPER_ADMIN' && (
+                    <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+                  )}
                   <SelectItem value="ADMIN">Admin</SelectItem>
                   <SelectItem value="HR">HR</SelectItem>
                 </SelectContent>
@@ -337,6 +354,7 @@ export default function UserManagementPage() {
                       id={`perm-${perm}`} 
                       checked={formData.permissions?.includes(perm)}
                       onCheckedChange={() => togglePermission(perm)}
+                      disabled={editingUser?.role === 'SUPER_ADMIN'}
                     />
                     <label htmlFor={`perm-${perm}`} className="text-sm font-medium leading-none cursor-pointer">
                       {perm}
