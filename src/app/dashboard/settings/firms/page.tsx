@@ -18,7 +18,9 @@ import {
   MapPin, 
   Pencil,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Upload,
+  X
 } from "lucide-react";
 import {
   AlertDialog,
@@ -59,8 +61,27 @@ export default function FirmsAndPlantsPage() {
   const [unitDraft, setUnitDraft] = useState({ name: '', address: '' });
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 500 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File too large",
+        description: "Logo must be under 500KB."
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFirmDraft(prev => ({ ...prev, logo: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleRegisterPlant = () => {
-    // Robust validation for coordinates and required fields
     if (!plantDraft.name || !plantDraft.firmId || plantDraft.lat === undefined || plantDraft.lng === undefined) {
       toast({ 
         variant: "destructive", 
@@ -89,8 +110,6 @@ export default function FirmsAndPlantsPage() {
         };
         setPlants(prev => [...prev, newPlant]);
         toast({ title: "Plant Registered", description: `${newPlant.name} is now live for geofencing.` });
-        
-        // Reset name and coordinates but keep firmId for potential consecutive entries
         setPlantDraft({ 
           radius: 700, 
           firmId: plantDraft.firmId 
@@ -147,6 +166,7 @@ export default function FirmsAndPlantsPage() {
         const newFirm: Firm = {
           id: Math.random().toString(36).substr(2, 9),
           name: firmDraft.name!,
+          logo: firmDraft.logo,
           gstin: firmDraft.gstin!,
           pan: firmDraft.pan || '',
           pfNo: firmDraft.pfNo || '',
@@ -339,78 +359,110 @@ export default function FirmsAndPlantsPage() {
               <CardDescription>Setup legal entity and statutory compliance IDs.</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-10">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-2 md:col-span-2">
-                  <Label className="font-bold">Legal Name *</Label>
-                  <Input 
-                    className="h-12 bg-white" 
-                    placeholder="Sikka Industries Ltd." 
-                    value={firmDraft.name || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, name: e.target.value}))}
-                  />
+              <div className="flex flex-col md:flex-row gap-8 items-start">
+                <div className="space-y-2 w-full md:w-1/4">
+                  <Label className="font-bold">Firm Logo</Label>
+                  <div className="relative group">
+                    <div className="w-full aspect-square bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden">
+                      {firmDraft.logo ? (
+                        <>
+                          <img src={firmDraft.logo} alt="Logo Preview" className="w-full h-full object-cover" />
+                          <button 
+                            className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => setFirmDraft(prev => ({...prev, logo: undefined}))}
+                          >
+                            <X className="w-4 h-4 text-rose-500" />
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-slate-400 p-4 text-center">
+                          <Upload className="w-8 h-8" />
+                          <span className="text-xs font-medium">Upload (Max 500KB)</span>
+                        </div>
+                      )}
+                    </div>
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      className="absolute inset-0 opacity-0 cursor-pointer" 
+                      onChange={handleLogoUpload}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">GSTIN *</Label>
-                  <Input 
-                    className="h-12 bg-white uppercase" 
-                    placeholder="07AAAAA0000A1Z5" 
-                    value={firmDraft.gstin || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, gstin: e.target.value.toUpperCase()}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">PAN</Label>
-                  <Input 
-                    className="h-12 bg-white uppercase" 
-                    placeholder="AAAAA0000A" 
-                    value={firmDraft.pan || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, pan: e.target.value.toUpperCase()}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">PF Number</Label>
-                  <Input 
-                    className="h-12 bg-white" 
-                    placeholder="DL/CPM/123/..." 
-                    value={firmDraft.pfNo || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, pfNo: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">ESIC Number</Label>
-                  <Input 
-                    className="h-12 bg-white" 
-                    placeholder="11000123..." 
-                    value={firmDraft.esicNo || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, esicNo: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">Bank Name</Label>
-                  <Input 
-                    className="h-12 bg-white" 
-                    placeholder="e.g. HDFC Bank" 
-                    value={firmDraft.bankName || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, bankName: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">Account Number</Label>
-                  <Input 
-                    className="h-12 bg-white" 
-                    placeholder="Enter bank account number" 
-                    value={firmDraft.accountNo || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, accountNo: e.target.value}))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">IFSC Code</Label>
-                  <Input 
-                    className="h-12 bg-white uppercase" 
-                    placeholder="HDFC0001234" 
-                    value={firmDraft.ifscCode || ''} 
-                    onChange={(e) => setFirmDraft(p => ({...p, ifscCode: e.target.value.toUpperCase()}))}
-                  />
+
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="font-bold">Legal Name *</Label>
+                    <Input 
+                      className="h-12 bg-white" 
+                      placeholder="Sikka Industries Ltd." 
+                      value={firmDraft.name || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, name: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">GSTIN *</Label>
+                    <Input 
+                      className="h-12 bg-white uppercase" 
+                      placeholder="07AAAAA0000A1Z5" 
+                      value={firmDraft.gstin || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, gstin: e.target.value.toUpperCase()}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">PAN</Label>
+                    <Input 
+                      className="h-12 bg-white uppercase" 
+                      placeholder="AAAAA0000A" 
+                      value={firmDraft.pan || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, pan: e.target.value.toUpperCase()}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">PF Number</Label>
+                    <Input 
+                      className="h-12 bg-white" 
+                      placeholder="DL/CPM/123/..." 
+                      value={firmDraft.pfNo || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, pfNo: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">ESIC Number</Label>
+                    <Input 
+                      className="h-12 bg-white" 
+                      placeholder="11000123..." 
+                      value={firmDraft.esicNo || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, esicNo: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">Bank Name</Label>
+                    <Input 
+                      className="h-12 bg-white" 
+                      placeholder="e.g. HDFC Bank" 
+                      value={firmDraft.bankName || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, bankName: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">Account Number</Label>
+                    <Input 
+                      className="h-12 bg-white" 
+                      placeholder="Enter bank account number" 
+                      value={firmDraft.accountNo || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, accountNo: e.target.value}))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">IFSC Code</Label>
+                    <Input 
+                      className="h-12 bg-white uppercase" 
+                      placeholder="HDFC0001234" 
+                      value={firmDraft.ifscCode || ''} 
+                      onChange={(e) => setFirmDraft(p => ({...p, ifscCode: e.target.value.toUpperCase()}))}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -476,7 +528,7 @@ export default function FirmsAndPlantsPage() {
               <Table>
                 <TableHeader className="bg-slate-50">
                   <TableRow>
-                    <TableHead className="font-bold">Firm logo / Name</TableHead>
+                    <TableHead className="font-bold">Firm Logo / Name</TableHead>
                     <TableHead className="font-bold">Units Name</TableHead>
                     <TableHead className="font-bold">GSTIN</TableHead>
                     <TableHead className="font-bold">PF Number</TableHead>
@@ -495,8 +547,12 @@ export default function FirmsAndPlantsPage() {
                       <TableRow key={f.id} className="hover:bg-slate-50/50">
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                              <Building2 className="w-5 h-5 text-blue-600" />
+                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
+                              {f.logo ? (
+                                <img src={f.logo} alt={f.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Building2 className="w-5 h-5 text-blue-600" />
+                              )}
                             </div>
                             <div className="flex flex-col">
                               <span className="font-bold leading-tight">{f.name}</span>
