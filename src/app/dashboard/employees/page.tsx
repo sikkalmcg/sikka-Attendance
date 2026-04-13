@@ -104,11 +104,11 @@ const MOCK_EMPLOYEES: Employee[] = [
       allowance: 7500, 
       grossSalary: 30000,
       employeePF: 1800,
-      employeeESIC: 0,
+      employeeESIC: 113,
       employerPF: 1950,
-      employerESIC: 0,
-      netSalary: 28200,
-      monthlyCTC: 31950,
+      employerESIC: 488,
+      netSalary: 28087,
+      monthlyCTC: 32438,
       pfRateEmp: 12,
       esicRateEmp: 0.75,
       pfRateEx: 13,
@@ -184,10 +184,9 @@ export default function EmployeesPage() {
       epf = Math.round(basic * (rates.pfEmp / 100));
       erpf = Math.round(basic * (rates.pfEx / 100));
       
-      if (gross <= STATUTORY_RATES.ESIC_THRESHOLD) {
-        eesic = Math.round(gross * (rates.esicEmp / 100));
-        eresic = Math.round(gross * (rates.esicEx / 100));
-      }
+      // Calculate ESIC as percentage of Basic Salary as per user request
+      eesic = Math.round(basic * (rates.esicEmp / 100));
+      eresic = Math.round(basic * (rates.esicEx / 100));
     }
 
     return {
