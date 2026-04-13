@@ -205,9 +205,12 @@ export default function PayrollPage() {
     
     const basic = generateSalaryEmp.salary.basic;
     const incentiveAmt = Math.round(basic * (incentivePct / 100));
-    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / 30) * summary.holidayWork);
     
-    const finalNet = generateSalaryEmp.salary.netSalary + incentiveAmt + holidayWorkingAmt;
+    // Scale net salary by ratio of earning days
+    const baseNetPayable = Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * earningDays);
+    const holidayWorkingAmt = Math.round((generateSalaryEmp.salary.netSalary / summary.totalDays) * summary.holidayWork);
+    
+    const finalNet = baseNetPayable + incentiveAmt + holidayWorkingAmt;
 
     const newPayrollRecord: PayrollRecord = {
       id: Math.random().toString(36).substr(2, 9),
@@ -601,7 +604,7 @@ export default function PayrollPage() {
                           <div className="flex items-center gap-3">
                             <Input 
                               className="bg-white/50 h-10 font-bold border-amber-200" 
-                              value={formatCurrency(Math.round((generateSalaryEmp.salary.netSalary / 30) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork))}
+                              value={formatCurrency(Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork))}
                               readOnly
                             />
                             <TooltipProvider>
@@ -633,9 +636,9 @@ export default function PayrollPage() {
                           <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Estimated Net Payable</p>
                           <h2 className="text-4xl font-black text-emerald-300">
                             {formatCurrency(
-                              generateSalaryEmp.salary.netSalary + 
+                              Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * (getAttendanceSummary(generateSalaryEmp.employeeId).attendance + advanceLeaveValue)) + 
                               Math.round(generateSalaryEmp.salary.basic * (incentivePct / 100)) +
-                              Math.round((generateSalaryEmp.salary.netSalary / 30) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork)
+                              Math.round((generateSalaryEmp.salary.netSalary / getAttendanceSummary(generateSalaryEmp.employeeId).totalDays) * getAttendanceSummary(generateSalaryEmp.employeeId).holidayWork)
                             )}
                           </h2>
                           <div className="flex items-center gap-2 text-xs text-slate-400 pt-2">
