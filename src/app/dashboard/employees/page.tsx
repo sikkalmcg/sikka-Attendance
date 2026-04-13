@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -109,7 +108,11 @@ const MOCK_EMPLOYEES: Employee[] = [
       employerPF: 1950,
       employerESIC: 0,
       netSalary: 28200,
-      monthlyCTC: 31950 
+      monthlyCTC: 31950,
+      pfRateEmp: 12,
+      esicRateEmp: 0.75,
+      pfRateEx: 13,
+      esicRateEx: 3.25
     },
     active: true 
   }
@@ -133,7 +136,23 @@ export default function EmployeesPage() {
   const [formData, setFormData] = useState<Partial<Employee>>({
     firmId: "f1",
     isGovComplianceEnabled: true,
-    salary: { basic: 0, hra: 0, da: 0, allowance: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0, monthlyCTC: 0 }
+    salary: { 
+      basic: 0, 
+      hra: 0, 
+      da: 0, 
+      allowance: 0, 
+      grossSalary: 0, 
+      employeePF: 0, 
+      employeeESIC: 0, 
+      employerPF: 0, 
+      employerESIC: 0, 
+      netSalary: 0, 
+      monthlyCTC: 0,
+      pfRateEmp: 12,
+      esicRateEmp: 0.75,
+      pfRateEx: 13,
+      esicRateEx: 3.25
+    }
   });
 
   const nextEmpId = useMemo(() => {
@@ -142,7 +161,7 @@ export default function EmployeesPage() {
   }, [employees]);
 
   // Salary Revision State
-  const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0 });
+  const [revisionData, setRevisionData] = useState<SalaryStructure>({ basic: 0, hra: 0, da: 0, allowance: 0, monthlyCTC: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 });
   const [effectiveMonth, setEffectiveMonth] = useState<string>("August");
 
   const filtered = employees.filter(emp => 
@@ -151,22 +170,23 @@ export default function EmployeesPage() {
     emp.aadhaar.includes(searchTerm)
   );
 
-  const calculateSalaryMetrics = (basic: number, hra: number, allowance: number, compliance: boolean) => {
+  const calculateSalaryMetrics = (
+    basic: number, 
+    hra: number, 
+    allowance: number, 
+    compliance: boolean,
+    rates: { pfEmp: number, esicEmp: number, pfEx: number, esicEx: number }
+  ) => {
     const gross = basic + hra + allowance;
     let epf = 0, eesic = 0, erpf = 0, eresic = 0;
 
     if (compliance) {
-      // Employee PF: 12% of Basic
-      epf = Math.round(basic * STATUTORY_RATES.PF_EMPLOYEE_RATE);
-      // Employer PF: 13% of Basic
-      erpf = Math.round(basic * STATUTORY_RATES.PF_EMPLOYER_RATE);
+      epf = Math.round(basic * (rates.pfEmp / 100));
+      erpf = Math.round(basic * (rates.pfEx / 100));
       
-      // ESIC applicable if gross <= threshold (usually 21,000)
       if (gross <= STATUTORY_RATES.ESIC_THRESHOLD) {
-        // Employee ESIC: 0.75% of Gross
-        eesic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYEE_RATE);
-        // Employer ESIC: 3.25% of Gross
-        eresic = Math.round(gross * STATUTORY_RATES.ESIC_EMPLOYER_RATE);
+        eesic = Math.round(gross * (rates.esicEmp / 100));
+        eresic = Math.round(gross * (rates.esicEx / 100));
       }
     }
 
@@ -181,19 +201,31 @@ export default function EmployeesPage() {
       employerPF: erpf,
       employerESIC: eresic,
       netSalary: gross - epf - eesic,
-      monthlyCTC: gross + erpf + eresic
+      monthlyCTC: gross + erpf + eresic,
+      pfRateEmp: rates.pfEmp,
+      esicRateEmp: rates.esicEmp,
+      pfRateEx: rates.pfEx,
+      esicRateEx: rates.esicEx
     };
   };
 
   const updateFormSalary = (field: string, val: number) => {
-    const s = formData.salary || { basic: 0, hra: 0, allowance: 0 };
+    const s = formData.salary || { basic: 0, hra: 0, allowance: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 };
+    
     const newBasic = field === 'basic' ? val : (s.basic || 0);
     const newHra = field === 'hra' ? val : (field === 'basic' ? Math.round(val * 0.5) : (s.hra || 0));
     const newAllowance = field === 'allowance' ? val : (s.allowance || 0);
     
+    const newRates = {
+      pfEmp: field === 'pfRateEmp' ? val : s.pfRateEmp,
+      esicEmp: field === 'esicRateEmp' ? val : s.esicRateEmp,
+      pfEx: field === 'pfRateEx' ? val : s.pfRateEx,
+      esicEx: field === 'esicRateEx' ? val : s.esicRateEx,
+    };
+    
     setFormData(prev => ({
       ...prev,
-      salary: calculateSalaryMetrics(newBasic, newHra, newAllowance, prev.isGovComplianceEnabled || false)
+      salary: calculateSalaryMetrics(newBasic, newHra, newAllowance, prev.isGovComplianceEnabled || false, newRates)
     }));
   };
 
@@ -323,7 +355,7 @@ export default function EmployeesPage() {
       </Card>
 
       {/* Registration Modal */}
-      <Dialog open={isRegistrationOpen} onOpenChange={(open) => { setIsRegistrationOpen(open); if(!open) { setEditEmployee(null); setFormData({ firmId: "f1", isGovComplianceEnabled: true }); } }}>
+      <Dialog open={isRegistrationOpen} onOpenChange={(open) => { setIsRegistrationOpen(open); if(!open) { setEditEmployee(null); setFormData({ firmId: "f1", isGovComplianceEnabled: true, salary: { basic: 0, hra: 0, da: 0, allowance: 0, grossSalary: 0, employeePF: 0, employeeESIC: 0, employerPF: 0, employerESIC: 0, netSalary: 0, monthlyCTC: 0, pfRateEmp: 12, esicRateEmp: 0.75, pfRateEx: 13, esicRateEx: 3.25 } }); } }}>
         <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
@@ -491,29 +523,53 @@ export default function EmployeesPage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 space-y-3">
+                      <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 space-y-4">
                         <h5 className="text-xs font-bold text-emerald-800 flex items-center gap-2"><User className="w-3 h-3" /> Employee Contribution</h5>
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-emerald-600 font-bold uppercase">PF (12%)</p>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] text-emerald-600 font-bold uppercase">PF %</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 text-xs bg-white" 
+                              value={formData.salary?.pfRateEmp || 12} 
+                              onChange={(e) => updateFormSalary('pfRateEmp', parseFloat(e.target.value) || 0)}
+                            />
                             <p className="text-sm font-bold">{formatCurrency(formData.salary?.employeePF || 0)}</p>
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-emerald-600 font-bold uppercase">ESIC (0.75%)</p>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] text-emerald-600 font-bold uppercase">ESIC %</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 text-xs bg-white" 
+                              value={formData.salary?.esicRateEmp || 0.75} 
+                              onChange={(e) => updateFormSalary('esicRateEmp', parseFloat(e.target.value) || 0)}
+                            />
                             <p className="text-sm font-bold">{formatCurrency(formData.salary?.employeeESIC || 0)}</p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-3">
+                      <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 space-y-4">
                         <h5 className="text-xs font-bold text-blue-800 flex items-center gap-2"><Building2 className="w-3 h-3" /> Employer Contribution</h5>
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-blue-600 font-bold uppercase">PF (13%)</p>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] text-blue-600 font-bold uppercase">PF %</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 text-xs bg-white" 
+                              value={formData.salary?.pfRateEx || 13} 
+                              onChange={(e) => updateFormSalary('pfRateEx', parseFloat(e.target.value) || 0)}
+                            />
                             <p className="text-sm font-bold">{formatCurrency(formData.salary?.employerPF || 0)}</p>
                           </div>
-                          <div className="space-y-1">
-                            <p className="text-[10px] text-blue-600 font-bold uppercase">ESIC (3.25%)</p>
+                          <div className="space-y-2">
+                            <Label className="text-[10px] text-blue-600 font-bold uppercase">ESIC %</Label>
+                            <Input 
+                              type="number" 
+                              className="h-8 text-xs bg-white" 
+                              value={formData.salary?.esicRateEx || 3.25} 
+                              onChange={(e) => updateFormSalary('esicRateEx', parseFloat(e.target.value) || 0)}
+                            />
                             <p className="text-sm font-bold">{formatCurrency(formData.salary?.employerESIC || 0)}</p>
                           </div>
                         </div>
@@ -580,21 +636,21 @@ export default function EmployeesPage() {
                     <Label>Basic Salary</Label>
                     <Input type="number" value={revisionData.basic} onChange={(e) => {
                       const b = parseFloat(e.target.value) || 0;
-                      setRevisionData(prev => calculateSalaryMetrics(b, Math.round(b * 0.5), prev.allowance, salaryRevision?.isGovComplianceEnabled || false));
+                      setRevisionData(prev => calculateSalaryMetrics(b, Math.round(b * 0.5), prev.allowance, salaryRevision?.isGovComplianceEnabled || false, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
                     }} />
                   </div>
                   <div className="grid grid-cols-2 gap-2 items-center">
                     <Label>HRA</Label>
                     <Input type="number" value={revisionData.hra} onChange={(e) => {
                       const h = parseFloat(e.target.value) || 0;
-                      setRevisionData(prev => calculateSalaryMetrics(prev.basic, h, prev.allowance, salaryRevision?.isGovComplianceEnabled || false));
+                      setRevisionData(prev => calculateSalaryMetrics(prev.basic, h, prev.allowance, salaryRevision?.isGovComplianceEnabled || false, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
                     }} />
                   </div>
                   <div className="grid grid-cols-2 gap-2 items-center">
                     <Label>Other Allowance</Label>
                     <Input type="number" value={revisionData.allowance} onChange={(e) => {
                       const a = parseFloat(e.target.value) || 0;
-                      setRevisionData(prev => calculateSalaryMetrics(prev.basic, prev.hra, a, salaryRevision?.isGovComplianceEnabled || false));
+                      setRevisionData(prev => calculateSalaryMetrics(prev.basic, prev.hra, a, salaryRevision?.isGovComplianceEnabled || false, { pfEmp: prev.pfRateEmp, esicEmp: prev.esicRateEmp, pfEx: prev.pfRateEx, esicEx: prev.esicRateEx }));
                     }} />
                   </div>
                   

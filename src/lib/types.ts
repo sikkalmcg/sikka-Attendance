@@ -45,6 +45,10 @@ export interface SalaryStructure {
   employerESIC: number;
   grossSalary: number;
   netSalary: number;
+  pfRateEmp: number;
+  esicRateEmp: number;
+  pfRateEx: number;
+  esicRateEx: number;
 }
 
 export interface Employee {
