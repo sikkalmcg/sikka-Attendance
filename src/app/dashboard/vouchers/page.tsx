@@ -12,12 +12,14 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Wallet, Plus, CreditCard, Search, XCircle, CheckCircle, Clock, Building2, Factory } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
+import { Voucher } from "@/lib/types";
 
 export default function VouchersPage() {
   const { employees, firms, plants, vouchers, setVouchers } = useData();
   const [activeTab, setActiveTab] = useState("create");
+  const [searchTerm, setSearchTerm] = useState("");
   const [voucherDate, setVoucherDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [amount, setAmount] = useState("");
@@ -37,20 +39,29 @@ export default function VouchersPage() {
     plants.find(p => p.id === selectedEmployee?.unitId), 
   [plants, selectedEmployee]);
 
-  // Dynamic FY Calculation based on Indian Financial Year (Apr-Mar)
+  const filteredVouchers = useMemo(() => {
+    return vouchers.filter(v => {
+      const emp = employees.find(e => e.id === v.employeeId);
+      const search = searchTerm.toLowerCase();
+      return (
+        v.voucherNo.toLowerCase().includes(search) ||
+        (emp?.name || "").toLowerCase().includes(search) ||
+        (emp?.employeeId || "").toLowerCase().includes(search)
+      );
+    }).reverse();
+  }, [vouchers, searchTerm, employees]);
+
+  // Dynamic FY Calculation
   const voucherNo = useMemo(() => {
     const d = new Date(voucherDate);
     if (isNaN(d.getTime())) return "--------";
     
-    const month = d.getMonth(); // 0-indexed (3 is April)
+    const month = d.getMonth();
     const year = d.getFullYear();
-    
     const startYear = month < 3 ? year - 1 : year;
     const endYear = startYear + 1;
     const fyPrefix = `${startYear}${(endYear % 100).toString().padStart(2, '0')}`;
-    
-    // Concatenate with a mock serial number for display
-    return `${fyPrefix}${Math.floor(10000 + Math.random() * 90000)}`;
+    return `VCH-${fyPrefix}-${Math.floor(1000 + Math.random() * 9000)}`;
   }, [voucherDate]);
 
   const handleCreateVoucher = (e: React.FormEvent) => {
@@ -65,27 +76,33 @@ export default function VouchersPage() {
       return;
     }
 
-    const newVoucher = {
+    const newVoucher: Voucher = {
       id: Math.random().toString(36).substr(2, 9),
       voucherNo: voucherNo,
       employeeId: selectedEmployeeId,
-      employeeName: selectedEmployee?.name || "Unknown",
-      firmName: associatedFirm?.name || "N/A",
-      unitName: associatedUnit?.name || "N/A",
       date: voucherDate,
       amount: parseFloat(amount),
       purpose: purpose,
-      status: "PENDING" as const
+      status: "PENDING"
     };
 
-    // In a real app we'd add to context, here we simulate it
-    toast({ title: "Voucher Created", description: `Voucher #${voucherNo} has been generated.` });
+    setVouchers(prev => [...prev, newVoucher]);
+    toast({ title: "Voucher Created", description: `Voucher #${voucherNo} generated.` });
     
-    // Reset fields
     setSelectedEmployeeId("");
     setAmount("");
     setPurpose("");
     setActiveTab("payment");
+  };
+
+  const handlePayVoucher = (id: string) => {
+    setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'PAID' } : v));
+    toast({ title: "Voucher Paid", description: "Voucher marked as paid and added to payroll ledger." });
+  };
+
+  const handleCancelVoucher = (id: string) => {
+    setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'CANCELLED' } : v));
+    toast({ variant: "destructive", title: "Voucher Cancelled", description: "Voucher has been voided." });
   };
 
   return (
@@ -159,7 +176,6 @@ export default function VouchersPage() {
                     />
                   </div>
 
-                  {/* Auto-populated Fields */}
                   <div className="space-y-2">
                     <Label className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
                       <Building2 className="w-3 h-3" /> Associated Firm (Auto)
@@ -212,7 +228,12 @@ export default function VouchersPage() {
                 </div>
                 <div className="relative w-80">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search voucher, employee or unit..." className="pl-10 h-10 bg-white" />
+                  <Input 
+                    placeholder="Search voucher, employee or unit..." 
+                    className="pl-10 h-10 bg-white"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
               </div>
             </CardHeader>
@@ -230,15 +251,14 @@ export default function VouchersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {/* We map actual context vouchers if they existed, here using mock for display */}
-                  {vouchers.length === 0 ? (
+                  {filteredVouchers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                        No vouchers recorded for the current period.
+                        No vouchers found.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    vouchers.map((v) => {
+                    filteredVouchers.map((v) => {
                       const emp = employees.find(e => e.id === v.employeeId);
                       const firm = firms.find(f => f.id === emp?.firmId);
                       const unit = plants.find(p => p.id === emp?.unitId);
@@ -261,26 +281,36 @@ export default function VouchersPage() {
                           <TableCell className="text-sm">{v.date}</TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                           <TableCell>
-                            <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
+                            <Badge variant={v.status === "PAID" ? "default" : v.status === "CANCELLED" ? "destructive" : "secondary"} className={cn(
                               "text-[10px] font-bold px-2 py-0.5",
-                              v.status === "PAID" ? "bg-emerald-600" : "bg-amber-500 text-white border-none"
+                              v.status === "PAID" && "bg-emerald-600",
+                              v.status === "PENDING" && "bg-amber-500 text-white border-none"
                             )}>
-                              {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : <Clock className="w-3 h-3 mr-1" />}
+                              {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : v.status === "PENDING" ? <Clock className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
                               {v.status}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right pr-6">
                             {v.status === "PENDING" ? (
                               <div className="flex justify-end gap-2">
-                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs">
+                                <Button 
+                                  size="sm" 
+                                  className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
+                                  onClick={() => handlePayVoucher(v.id)}
+                                >
                                   <CreditCard className="w-3 h-3 mr-1" /> Pay
                                 </Button>
-                                <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 text-xs">
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
+                                  onClick={() => handleCancelVoucher(v.id)}
+                                >
                                   <XCircle className="w-3 h-3 mr-1" /> Cancel
                                 </Button>
                               </div>
                             ) : (
-                              <Button size="sm" variant="outline" className="h-8 text-xs">View Details</Button>
+                              <Button size="sm" variant="outline" className="h-8 text-xs font-medium">View Details</Button>
                             )}
                           </TableCell>
                         </TableRow>

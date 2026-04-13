@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -52,7 +53,13 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, AttendanceRecord, PayrollRecord } from "@/lib/types";
+import { Employee, AttendanceRecord, PayrollRecord, Voucher } from "@/lib/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Helper to generate MMM-YY month options
 const generatePayrollMonths = () => {
@@ -70,7 +77,7 @@ const generatePayrollMonths = () => {
 const PAYROLL_MONTHS = generatePayrollMonths();
 
 export default function PayrollPage() {
-  const { employees, setEmployees, attendanceRecords, payrollRecords, setPayrollRecords } = useData();
+  const { employees, setEmployees, attendanceRecords, payrollRecords, setPayrollRecords, vouchers } = useData();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState("generate");
@@ -97,10 +104,12 @@ export default function PayrollPage() {
     });
   }, [employees, searchTerm]);
 
+  const paidVouchers = useMemo(() => {
+    return vouchers.filter(v => v.status === 'PAID').reverse();
+  }, [vouchers]);
+
   // Attendance Logic for Selected Employee and Month
   const getAttendanceSummary = (empId: string) => {
-    // Note: In a real app, we would match records strictly by month
-    // For this prototype, we'll simulate based on mock attendance records
     const records = attendanceRecords.filter(r => r.employeeId === empId || r.employeeId === "emp-mock");
     const presents = records.filter(r => r.status === 'PRESENT').length;
     const halfDays = records.filter(r => r.status === 'HALF_DAY').length;
@@ -207,10 +216,10 @@ export default function PayrollPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4 max-w-2xl bg-slate-100 p-1 rounded-xl h-12">
-          <TabsTrigger value="generate" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Generate Salary</TabsTrigger>
-          <TabsTrigger value="payment" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Salary Payment</TabsTrigger>
-          <TabsTrigger value="advance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Advance Payment</TabsTrigger>
-          <TabsTrigger value="leave" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Advance Leave</TabsTrigger>
+          <TabsTrigger value="generate" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Generate Salary</TabsTrigger>
+          <TabsTrigger value="payment" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Salary Payment</TabsTrigger>
+          <TabsTrigger value="advance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Advance Salary</TabsTrigger>
+          <TabsTrigger value="leave" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Advance Leave</TabsTrigger>
         </TabsList>
 
         <TabsContent value="generate" className="mt-8 space-y-6">
@@ -307,14 +316,57 @@ export default function PayrollPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="advance">
-          <div className="flex items-center justify-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-             <div className="text-center space-y-3">
-              <div className="mx-auto w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center"><Wallet className="text-slate-400" /></div>
-              <h3 className="font-bold text-slate-500">Advance Ledger Ready</h3>
-              <p className="text-sm text-muted-foreground">Record cash advances for tracking in monthly payroll.</p>
-            </div>
-          </div>
+        <TabsContent value="advance" className="mt-8 space-y-6">
+          <Card className="border-none shadow-sm overflow-hidden">
+            <CardHeader className="bg-slate-50 border-b border-slate-100 p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-50 rounded-lg"><Wallet className="w-5 h-5 text-emerald-600" /></div>
+                <div>
+                  <CardTitle className="text-lg font-bold">Paid Advance Ledger</CardTitle>
+                  <CardDescription>Track cash advances paid via vouchers.</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Voucher No</TableHead>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Date Paid</TableHead>
+                    <TableHead className="font-bold">Purpose</TableHead>
+                    <TableHead className="text-right font-bold">Amount</TableHead>
+                    <TableHead className="text-center font-bold">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paidVouchers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-20 text-muted-foreground">
+                        No paid advance salary records found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    paidVouchers.map(v => {
+                      const emp = employees.find(e => e.id === v.employeeId);
+                      return (
+                        <TableRow key={v.id} className="hover:bg-slate-50/50">
+                          <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
+                          <TableCell className="font-bold">{emp?.name || v.employeeId}</TableCell>
+                          <TableCell className="text-sm">{v.date}</TableCell>
+                          <TableCell className="text-sm italic">{v.purpose}</TableCell>
+                          <TableCell className="text-right font-black text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-emerald-600 border-none font-bold">PAID</Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="leave" className="mt-8 space-y-6">
@@ -393,7 +445,7 @@ export default function PayrollPage() {
                           <p className="text-[10px] text-rose-400 font-bold">Max allowed: {adjustLeaveEmp.advanceLeaveBalance || 0} days</p>
                        </div>
                        <div className="flex gap-2">
-                          <Button className="flex-1 bg-primary" onClick={handleAdjustLeave} disabled={isProcessing}>Add Leave</Button>
+                          <Button className="flex-1 bg-primary font-bold" onClick={handleAdjustLeave} disabled={isProcessing}>Add Leave</Button>
                           <Button variant="ghost" className="flex-1 text-white" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
                        </div>
                     </div>
