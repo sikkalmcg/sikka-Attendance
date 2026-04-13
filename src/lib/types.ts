@@ -14,6 +14,8 @@ export interface Plant {
   lat: number;
   lng: number;
   radius: number; // In meters
+  firmId: string;
+  active: boolean;
 }
 
 export interface FirmUnit {

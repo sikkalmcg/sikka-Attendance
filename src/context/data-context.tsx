@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord } from '@/lib/types';
+import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord, Firm } from '@/lib/types';
 
 interface DataContextType {
   employees: Employee[];
@@ -13,13 +13,30 @@ interface DataContextType {
   payrollRecords: PayrollRecord[];
   setPayrollRecords: React.Dispatch<React.SetStateAction<PayrollRecord[]>>;
   plants: Plant[];
+  setPlants: React.Dispatch<React.SetStateAction<Plant[]>>;
+  firms: Firm[];
+  setFirms: React.Dispatch<React.SetStateAction<Firm[]>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const MOCK_PLANTS: Plant[] = [
-  { id: "plant-1", name: "Okhla Phase III Plant", lat: 28.5355, lng: 77.2639, radius: 700 },
-  { id: "plant-2", name: "Gurgaon Sec 18 Plant", lat: 28.4595, lng: 77.0266, radius: 700 },
+const INITIAL_PLANTS: Plant[] = [
+  { id: "plant-1", name: "Okhla Phase III Plant", lat: 28.5355, lng: 77.2639, radius: 700, firmId: "f1", active: true },
+  { id: "plant-2", name: "Gurgaon Sec 18 Plant", lat: 28.4595, lng: 77.0266, radius: 700, firmId: "f1", active: true },
+];
+
+const INITIAL_FIRMS: Firm[] = [
+  { 
+    id: "f1", 
+    name: "Sikka Industries Ltd.", 
+    gstin: "07AAAAA0000A1Z5", 
+    pan: "AAAAA0000A", 
+    pfNo: "DL/CPM/123", 
+    esicNo: "11000123", 
+    units: [
+      { id: "u1", name: "Okhla Unit 1", address: "Phase III, Okhla" }
+    ] 
+  }
 ];
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -27,6 +44,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
+  const [plants, setPlants] = useState<Plant[]>([]);
+  const [firms, setFirms] = useState<Firm[]>([]);
 
   // Load initial data from localStorage if available, otherwise use defaults
   useEffect(() => {
@@ -34,11 +53,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const savedAtt = localStorage.getItem('app_attendance');
     const savedVouchers = localStorage.getItem('app_vouchers');
     const savedPayroll = localStorage.getItem('app_payroll');
+    const savedPlants = localStorage.getItem('app_plants');
+    const savedFirms = localStorage.getItem('app_firms');
 
     if (savedEmps) {
       setEmployees(JSON.parse(savedEmps));
     } else {
-      // Default mock employee
       const defaultEmp: Employee = { 
         id: "1", 
         employeeId: "EMP-S0001", 
@@ -74,6 +94,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (savedAtt) setAttendanceRecords(JSON.parse(savedAtt));
     if (savedVouchers) setVouchers(JSON.parse(savedVouchers));
     if (savedPayroll) setPayrollRecords(JSON.parse(savedPayroll));
+    if (savedPlants) setPlants(JSON.parse(savedPlants)); else setPlants(INITIAL_PLANTS);
+    if (savedFirms) setFirms(JSON.parse(savedFirms)); else setFirms(INITIAL_FIRMS);
   }, []);
 
   // Save to localStorage whenever state changes
@@ -82,15 +104,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('app_attendance', JSON.stringify(attendanceRecords));
     localStorage.setItem('app_vouchers', JSON.stringify(vouchers));
     localStorage.setItem('app_payroll', JSON.stringify(payrollRecords));
-  }, [employees, attendanceRecords, vouchers, payrollRecords]);
+    localStorage.setItem('app_plants', JSON.stringify(plants));
+    localStorage.setItem('app_firms', JSON.stringify(firms));
+  }, [employees, attendanceRecords, vouchers, payrollRecords, plants, firms]);
 
   const value = useMemo(() => ({
     employees, setEmployees,
     attendanceRecords, setAttendanceRecords,
     vouchers, setVouchers,
     payrollRecords, setPayrollRecords,
-    plants: MOCK_PLANTS
-  }), [employees, attendanceRecords, vouchers, payrollRecords]);
+    plants, setPlants,
+    firms, setFirms
+  }), [employees, attendanceRecords, vouchers, payrollRecords, plants, firms]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

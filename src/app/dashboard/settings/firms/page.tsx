@@ -1,44 +1,130 @@
-
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Factory, Building2, Upload, Trash2, PlusCircle, History, Clock, ShieldCheck, MapPin } from "lucide-react";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { 
+  Factory, 
+  Building2, 
+  Upload, 
+  Trash2, 
+  PlusCircle, 
+  History, 
+  ShieldCheck, 
+  MapPin, 
+  Pencil,
+  AlertTriangle
+} from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Firm, Plant, FirmUnit } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useData } from "@/context/data-context";
 
 export default function FirmsAndPlantsPage() {
+  const { firms, setFirms, plants, setPlants } = useData();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("plants");
 
-  const [firms, setFirms] = useState<Firm[]>([
-    { id: "1", name: "Sikka Industries Ltd.", gstin: "07AAAAA0000A1Z5", pan: "AAAAA0000A", pfNo: "DL/CPM/123", esicNo: "11000123", units: [
-      { id: "u1", name: "Okhla Unit 1", address: "Phase III, Okhla" }
-    ] }
-  ]);
-  const [plants] = useState<Plant[]>([
-    { id: "1", name: "Okhla Phase III Plant", lat: 28.5355, lng: 77.2639, radius: 700 },
-    { id: "2", name: "Gurgaon Unit 2", lat: 28.4595, lng: 77.0266, radius: 700 }
-  ]);
+  // Plant Form State
+  const [plantDraft, setPlantDraft] = useState<Partial<Plant>>({ radius: 700 });
+  const [editingPlantId, setEditingPlantId] = useState<string | null>(null);
+  const [plantToRemove, setPlantToRemove] = useState<Plant | null>(null);
 
-  const [units, setUnits] = useState<FirmUnit[]>([]);
+  // Firm Form State
+  const [firmDraft, setFirmDraft] = useState<Partial<Firm>>({ units: [] });
   const [unitDraft, setUnitDraft] = useState({ name: '', address: '' });
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleRegisterPlant = () => {
+    if (!plantDraft.name || !plantDraft.lat || !plantDraft.lng || !plantDraft.firmId) {
+      toast({ variant: "destructive", title: "Missing Fields", description: "Please fill all required plant details." });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      if (editingPlantId) {
+        setPlants(prev => prev.map(p => p.id === editingPlantId ? { ...p, ...plantDraft } as Plant : p));
+        toast({ title: "Plant Updated", description: `${plantDraft.name} configuration saved.` });
+      } else {
+        const newPlant: Plant = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: plantDraft.name!,
+          lat: Number(plantDraft.lat),
+          lng: Number(plantDraft.lng),
+          radius: Number(plantDraft.radius),
+          firmId: plantDraft.firmId!,
+          active: true
+        };
+        setPlants(prev => [...prev, newPlant]);
+        toast({ title: "Plant Registered", description: `${newPlant.name} is now live for geofencing.` });
+      }
+      setPlantDraft({ radius: 700 });
+      setEditingPlantId(null);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRemovePlant = () => {
+    if (!plantToRemove) return;
+    setPlants(prev => prev.filter(p => p.id !== plantToRemove.id));
+    setPlantToRemove(null);
+    toast({ title: "Plant Removed", description: "The infrastructure node has been deleted." });
+  };
 
   const addUnit = () => {
     if (!unitDraft.name || !unitDraft.address) return;
-    setUnits([...units, { id: Date.now().toString(), ...unitDraft }]);
+    setFirmDraft(prev => ({
+      ...prev,
+      units: [...(prev.units || []), { id: Date.now().toString(), ...unitDraft }]
+    }));
     setUnitDraft({ name: '', address: '' });
-    toast({ title: "Unit Added", description: "Unit has been added to the firm draft." });
+  };
+
+  const handleRegisterFirm = () => {
+    if (!firmDraft.name || !firmDraft.gstin) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Firm name and GSTIN are required." });
+      return;
+    }
+    const newFirm: Firm = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: firmDraft.name!,
+      gstin: firmDraft.gstin!,
+      pan: firmDraft.pan || '',
+      pfNo: firmDraft.pfNo || '',
+      esicNo: firmDraft.esicNo || '',
+      units: firmDraft.units || []
+    };
+    setFirms(prev => [...prev, newFirm]);
+    setFirmDraft({ units: [] });
+    toast({ title: "Firm Registered", description: `${newFirm.name} added to repository.` });
   };
 
   return (
-    <div className="space-y-10 pb-20 max-w-5xl mx-auto">
+    <div className="space-y-10 pb-20 max-w-6xl mx-auto">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Infrastructure Setup</h1>
         <p className="text-muted-foreground">Configure your organizational structure, plants, and geofencing.</p>
@@ -55,38 +141,68 @@ export default function FirmsAndPlantsPage() {
           <Card className="border-slate-200 shadow-sm">
             <CardHeader className="bg-slate-50/50 border-b">
               <CardTitle className="text-xl flex items-center gap-2">
-                <Factory className="w-6 h-6 text-primary" /> New Plant Registration
+                <Factory className="w-6 h-6 text-primary" /> {editingPlantId ? 'Edit Plant' : 'New Plant Registration'}
               </CardTitle>
               <CardDescription>Setup a new manufacturing or logistics unit with geofencing.</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <div className="space-y-2">
-                  <Label className="font-bold">Plant Name</Label>
-                  <Input placeholder="e.g. Okhla Unit 3" className="h-12 bg-white" />
+                  <Label className="font-bold">Associated Firm *</Label>
+                  <Select value={plantDraft.firmId} onValueChange={(v) => setPlantDraft(p => ({...p, firmId: v}))}>
+                    <SelectTrigger className="h-12 bg-white">
+                      <SelectValue placeholder="Select Firm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-bold">Plant Name *</Label>
+                  <Input 
+                    placeholder="e.g. Okhla Unit 3" 
+                    className="h-12 bg-white" 
+                    value={plantDraft.name || ''} 
+                    onChange={(e) => setPlantDraft(p => ({...p, name: e.target.value}))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">Radius (Meters)</Label>
-                  <Input value="700" disabled className="h-12 bg-slate-100 font-bold" />
+                  <Input value={plantDraft.radius} disabled className="h-12 bg-slate-100 font-bold" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="font-bold">Latitude</Label>
-                  <Input placeholder="28.5355" className="h-12 bg-white font-mono" />
+                  <Label className="font-bold">Latitude *</Label>
+                  <Input 
+                    placeholder="28.5355" 
+                    className="h-12 bg-white font-mono" 
+                    type="number" 
+                    step="any"
+                    value={plantDraft.lat || ''} 
+                    onChange={(e) => setPlantDraft(p => ({...p, lat: Number(e.target.value)}))}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label className="font-bold">Longitude</Label>
-                  <Input placeholder="77.2639" className="h-12 bg-white font-mono" />
+                  <Label className="font-bold">Longitude *</Label>
+                  <Input 
+                    placeholder="77.2639" 
+                    className="h-12 bg-white font-mono" 
+                    type="number" 
+                    step="any"
+                    value={plantDraft.lng || ''} 
+                    onChange={(e) => setPlantDraft(p => ({...p, lng: Number(e.target.value)}))}
+                  />
                 </div>
               </div>
-              <div className="flex justify-end pt-4">
-                <Button className="px-10 h-12 font-bold bg-primary text-lg rounded-xl shadow-lg shadow-primary/20">
-                  Register Plant
+              <div className="flex justify-end pt-4 gap-3">
+                {editingPlantId && <Button variant="ghost" onClick={() => {setEditingPlantId(null); setPlantDraft({radius: 700});}}>Cancel</Button>}
+                <Button className="px-10 h-12 font-bold bg-primary text-lg rounded-xl shadow-lg shadow-primary/20" onClick={handleRegisterPlant}>
+                  {editingPlantId ? 'Update Plant' : 'Register Plant'}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Plant History Footer Section */}
           <div className="space-y-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
@@ -95,36 +211,49 @@ export default function FirmsAndPlantsPage() {
               <h2 className="text-xl font-bold text-slate-900">Plant Registration History</h2>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {plants.map((p, i) => (
-                <Card key={p.id} className="border-slate-200 hover:border-emerald-200 transition-colors">
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-emerald-50 rounded-lg">
-                          <Factory className="w-5 h-5 text-emerald-600" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-900">{p.name}</p>
-                          <p className="text-[10px] font-mono text-muted-foreground">ID: PLANT-00{p.id}</p>
-                        </div>
-                      </div>
-                      <Badge className="bg-emerald-600 font-bold">Active</Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                      <div>
-                        <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Coordinates</p>
-                        <p className="text-xs font-mono font-bold text-slate-700">{p.lat}, {p.lng}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Geofence</p>
-                        <p className="text-xs font-bold text-slate-700">{p.radius}m Radius</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <Card className="border-slate-200 overflow-hidden shadow-sm">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Firm Name</TableHead>
+                    <TableHead className="font-bold">Plant Name</TableHead>
+                    <TableHead className="font-bold">Radius (Meters)</TableHead>
+                    <TableHead className="font-bold">Location (Lat, Lng)</TableHead>
+                    <TableHead className="font-bold text-center">Status</TableHead>
+                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {plants.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No plants registered yet.</TableCell>
+                    </TableRow>
+                  ) : (
+                    plants.map((p) => (
+                      <TableRow key={p.id} className="hover:bg-slate-50/50">
+                        <TableCell className="font-medium">{firms.find(f => f.id === p.firmId)?.name || 'Unknown Firm'}</TableCell>
+                        <TableCell className="font-bold">{p.name}</TableCell>
+                        <TableCell>{p.radius}m</TableCell>
+                        <TableCell className="font-mono text-xs">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge className={p.active ? "bg-emerald-600" : "bg-slate-400"}>{p.active ? "Active" : "Inactive"}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex justify-end gap-2">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {setEditingPlantId(p.id); setPlantDraft(p);}}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setPlantToRemove(p)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
           </div>
         </TabsContent>
 
@@ -138,31 +267,51 @@ export default function FirmsAndPlantsPage() {
               <CardDescription>Setup legal entity and statutory compliance IDs.</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-10">
-              <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-[2rem] bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group">
-                <Upload className="w-12 h-12 text-slate-400 group-hover:text-primary transition-colors" />
-                <span className="text-sm font-bold mt-4 text-slate-500">Upload Entity Logo</span>
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2 md:col-span-2">
-                  <Label className="font-bold">Legal Name</Label>
-                  <Input className="h-12 bg-white" placeholder="Sikka Industries Ltd." />
+                  <Label className="font-bold">Legal Name *</Label>
+                  <Input 
+                    className="h-12 bg-white" 
+                    placeholder="Sikka Industries Ltd." 
+                    value={firmDraft.name || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, name: e.target.value}))}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label className="font-bold">GSTIN</Label>
-                  <Input className="h-12 bg-white uppercase" placeholder="07AAAAA0000A1Z5" />
+                  <Label className="font-bold">GSTIN *</Label>
+                  <Input 
+                    className="h-12 bg-white uppercase" 
+                    placeholder="07AAAAA0000A1Z5" 
+                    value={firmDraft.gstin || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, gstin: e.target.value.toUpperCase()}))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">PAN</Label>
-                  <Input className="h-12 bg-white uppercase" placeholder="AAAAA0000A" />
+                  <Input 
+                    className="h-12 bg-white uppercase" 
+                    placeholder="AAAAA0000A" 
+                    value={firmDraft.pan || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, pan: e.target.value.toUpperCase()}))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">PF Number</Label>
-                  <Input className="h-12 bg-white" placeholder="DL/CPM/123/..." />
+                  <Input 
+                    className="h-12 bg-white" 
+                    placeholder="DL/CPM/123/..." 
+                    value={firmDraft.pfNo || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, pfNo: e.target.value}))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="font-bold">ESIC Number</Label>
-                  <Input className="h-12 bg-white" placeholder="11000123..." />
+                  <Input 
+                    className="h-12 bg-white" 
+                    placeholder="11000123..." 
+                    value={firmDraft.esicNo || ''} 
+                    onChange={(e) => setFirmDraft(p => ({...p, esicNo: e.target.value}))}
+                  />
                 </div>
               </div>
 
@@ -187,13 +336,13 @@ export default function FirmsAndPlantsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {units.map(u => (
+                  {(firmDraft.units || []).map(u => (
                     <div key={u.id} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                       <div className="min-w-0">
                         <p className="font-bold text-slate-900">{u.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{u.address}</p>
                       </div>
-                      <Button variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50" onClick={() => setUnits(units.filter(x => x.id !== u.id))}>
+                      <Button variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50" onClick={() => setFirmDraft(p => ({...p, units: (p.units || []).filter(x => x.id !== u.id)}))}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -202,20 +351,19 @@ export default function FirmsAndPlantsPage() {
               </div>
 
               <div className="flex justify-end pt-4">
-                <Button className="px-10 h-12 font-bold bg-slate-900 text-white hover:bg-slate-800 text-lg rounded-xl shadow-xl">
-                  Finalize Configuration
+                <Button className="px-10 h-12 font-bold bg-slate-900 text-white hover:bg-slate-800 text-lg rounded-xl shadow-xl" onClick={handleRegisterFirm}>
+                  Finalize Firm Configuration
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Firm History Footer Section */}
           <div className="space-y-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100">
                 <ShieldCheck className="w-5 h-5 text-blue-600" />
               </div>
-              <h2 className="text-xl font-bold text-slate-900">Firm Entity History</h2>
+              <h2 className="text-xl font-bold text-slate-900">Registered Firm History</h2>
             </div>
             
             <div className="space-y-4">
@@ -223,7 +371,7 @@ export default function FirmsAndPlantsPage() {
                 <Card key={f.id} className="border-slate-200">
                   <CardContent className="p-8">
                     <div className="flex flex-col md:flex-row justify-between gap-6">
-                      <div className="space-y-4">
+                      <div className="space-y-4 flex-1">
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
                             <Building2 className="w-6 h-6 text-blue-600" />
@@ -268,6 +416,30 @@ export default function FirmsAndPlantsPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Remove Plant Confirmation Dialog */}
+      <AlertDialog open={!!plantToRemove} onOpenChange={(open) => !open && setPlantToRemove(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-rose-600" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">Confirm Plant Removal</AlertDialogTitle>
+            <AlertDialogDescription className="text-center pt-2">
+              Are you sure you want to remove <strong>{plantToRemove?.name}</strong>? This action cannot be undone and will affect geofencing attendance for this location.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleRemovePlant}
+              className="bg-rose-600 hover:bg-rose-700 font-bold"
+            >
+              Confirm Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
