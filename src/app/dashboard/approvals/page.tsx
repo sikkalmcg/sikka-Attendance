@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo } from "react";
@@ -40,7 +39,7 @@ import {
   Building2,
   Home
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 // Helper to calculate hours between two time strings
 function calculateHours(inTime: string | null, outTime: string | null): number {
@@ -66,8 +65,8 @@ interface AttendanceRecordWithMeta {
   inTime: string | null;
   outTime: string | null;
   hours: number;
-  status: string;
-  attendanceType: 'OFFICE' | 'WFH';
+  status: 'PRESENT' | 'ABSENT' | 'HALF_DAY';
+  attendanceType: 'OFFICE' | 'WFH' | 'FIELD';
   inLat: number;
   inLng: number;
   inAddress: string;
@@ -78,25 +77,28 @@ interface AttendanceRecordWithMeta {
   remark?: string;
 }
 
-const INITIAL_MOCK_DATA: AttendanceRecordWithMeta[] = Array.from({ length: 45 }).map((_, i) => ({
-  id: `rec-${i}`,
-  employeeId: `S100${10 + i}`,
-  employeeName: ["Ravi Kumar", "Anita Singh", "Deepak Verma", "Sunil Sharma", "Meena Devi"][i % 5],
-  date: "2024-08-20",
-  inTime: "09:00 AM",
-  outTime: i % 3 === 0 ? "06:00 PM" : "05:30 PM",
-  hours: i % 3 === 0 ? 9.0 : 8.5,
-  status: "PRESENT",
-  attendanceType: i % 4 === 0 ? 'WFH' : 'OFFICE',
-  inLat: 28.5355 + (Math.random() - 0.5) * 0.01,
-  inLng: 77.2639 + (Math.random() - 0.5) * 0.01,
-  inAddress: "Okhla Industrial Estate, Phase III, New Delhi",
-  outLat: 28.5355 + (Math.random() - 0.5) * 0.01,
-  outLng: 77.2639 + (Math.random() - 0.5) * 0.01,
-  outAddress: "Okhla Industrial Estate, Phase III, New Delhi",
-  approved: i < 15, // First 15 are approved
-  remark: i === 20 ? "Late entry due to rain" : ""
-}));
+const INITIAL_MOCK_DATA: AttendanceRecordWithMeta[] = Array.from({ length: 45 }).map((_, i) => {
+  const statusValue = i % 15 === 0 ? "ABSENT" : i % 8 === 0 ? "HALF_DAY" : "PRESENT";
+  return {
+    id: `rec-${i}`,
+    employeeId: `S100${10 + i}`,
+    employeeName: ["Ravi Kumar", "Anita Singh", "Deepak Verma", "Sunil Sharma", "Meena Devi"][i % 5],
+    date: "2024-08-20",
+    inTime: statusValue === 'ABSENT' ? null : "09:00 AM",
+    outTime: statusValue === 'ABSENT' ? null : (i % 3 === 0 ? "06:00 PM" : "05:30 PM"),
+    hours: statusValue === 'ABSENT' ? 0 : (i % 3 === 0 ? 9.0 : 8.5),
+    status: statusValue as 'PRESENT' | 'ABSENT' | 'HALF_DAY',
+    attendanceType: i % 4 === 0 ? 'WFH' : 'OFFICE',
+    inLat: 28.5355 + (Math.random() - 0.5) * 0.01,
+    inLng: 77.2639 + (Math.random() - 0.5) * 0.01,
+    inAddress: "Okhla Industrial Estate, Phase III, New Delhi",
+    outLat: 28.5355 + (Math.random() - 0.5) * 0.01,
+    outLng: 77.2639 + (Math.random() - 0.5) * 0.01,
+    outAddress: "Okhla Industrial Estate, Phase III, New Delhi",
+    approved: i < 15,
+    remark: i === 20 ? "Late entry due to rain" : ""
+  };
+});
 
 export default function ApprovalsPage() {
   const [records, setRecords] = useState<AttendanceRecordWithMeta[]>(INITIAL_MOCK_DATA);
@@ -222,14 +224,15 @@ export default function ApprovalsPage() {
                 <TableHead className="font-bold">IN / OUT</TableHead>
                 <TableHead className="font-bold">Hours</TableHead>
                 <TableHead className="font-bold">GPS</TableHead>
-                <TableHead className="font-bold">Attendance Type</TableHead>
+                <TableHead className="font-bold">Type</TableHead>
+                <TableHead className="font-bold">Status</TableHead>
                 <TableHead className="text-right font-bold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedRecords.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                     No records found in this category.
                   </TableCell>
                 </TableRow>
@@ -273,11 +276,28 @@ export default function ApprovalsPage() {
                           <div className="flex items-center gap-1">
                             <Home className="w-3 h-3" /> WFH
                           </div>
-                        ) : (
+                        ) : rec.attendanceType === 'OFFICE' ? (
                           <div className="flex items-center gap-1">
                             <Building2 className="w-3 h-3" /> Office
                           </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" /> Field
+                          </div>
                         )}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant="outline" 
+                        className={cn(
+                          "text-[10px] uppercase font-bold px-2 py-0 h-5",
+                          rec.status === 'PRESENT' ? "text-emerald-600 border-emerald-200 bg-emerald-50" :
+                          rec.status === 'HALF_DAY' ? "text-amber-600 border-amber-200 bg-amber-50" :
+                          "text-rose-600 border-rose-200 bg-rose-50"
+                        )}
+                      >
+                        {rec.status.replace('_', ' ')}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
