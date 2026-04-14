@@ -19,7 +19,8 @@ import {
   PlusCircle, 
   Info,
   ArrowDownCircle,
-  ChevronLeft
+  ChevronLeft,
+  AlertCircle
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -84,7 +85,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     return Math.max(0, totalAdv - totalRecovered);
   }, [employee, vouchers, payrollRecords]);
 
-  // Set default deduction to full advance balance
+  // Set default deduction to full advance balance (capped by logic later)
   useEffect(() => {
     setAdvanceRecovery(advanceBalance);
   }, [advanceBalance]);
@@ -108,7 +109,8 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     };
   }, [employee, attendanceRecords]);
 
-  const estimatedFinalNet = useMemo(() => {
+  // Validation Logic: Calculate Net before deductions
+  const netPayBeforeDeduction = useMemo(() => {
     if (!employee || !currentSummary) return 0;
     
     const earningDays = currentSummary.attendance;
@@ -121,12 +123,17 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       
     const holidayWorkingAmt = Math.round((employee.salary.netSalary / currentSummary.totalDays) * currentSummary.holidayWork);
     
-    const final = baseNetPayable + incentiveAmt + holidayWorkingAmt - advanceRecovery;
-    return Math.max(0, final);
-  }, [employee, currentSummary, incentivePct, advanceRecovery]);
+    return baseNetPayable + incentiveAmt + holidayWorkingAmt;
+  }, [employee, currentSummary, incentivePct]);
+
+  const estimatedFinalNet = useMemo(() => {
+    return Math.max(0, netPayBeforeDeduction - advanceRecovery);
+  }, [netPayBeforeDeduction, advanceRecovery]);
+
+  const isDeductionError = advanceRecovery > netPayBeforeDeduction;
 
   const handlePostSalary = () => {
-    if (!employee || isProcessing || !currentSummary) return;
+    if (!employee || isProcessing || !currentSummary || isDeductionError) return;
     
     if (payrollRecords.some(p => p.slipNo === slipNo)) {
       toast({ variant: "destructive", title: "Duplicate Slip No", description: `Salary slip number ${slipNo} already exists.` });
@@ -210,19 +217,46 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <StatBox label="ATTENDANCE" value={currentSummary?.attendance || 0} color="text-slate-900" />
             <StatBox label="ABSENT" value={currentSummary?.absent || 0} color="text-rose-600" />
-            <StatBox label="ADV. BALANCE" value={formatCurrency(advanceBalance - advanceRecovery)} color="text-rose-500" symbol="₹" />
+            <StatBox label="ADV. BALANCE" value={formatCurrency(advanceBalance - advanceRecovery)} color="text-rose-500" />
           </div>
 
           <div className="space-y-6">
             <h4 className="text-sm font-bold flex items-center gap-2 border-b pb-3">Earnings & Adjustments</h4>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="p-6 bg-white border border-slate-200 rounded-2xl">
-                <Label>Incentive %</Label>
-                <Input type="number" value={incentivePct} onChange={(e) => setIncentivePct(parseFloat(e.target.value) || 0)} />
+                <Label className="font-bold text-xs uppercase text-slate-500 tracking-wider">Incentive %</Label>
+                <Input 
+                  type="number" 
+                  value={incentivePct} 
+                  onChange={(e) => setIncentivePct(parseFloat(e.target.value) || 0)} 
+                  className="h-12 bg-slate-50 border-slate-200 font-bold text-lg mt-2"
+                />
               </div>
-              <div className="p-6 bg-rose-50/30 rounded-2xl border-2 border-dashed border-rose-200">
-                <Label>Deduction Advance (INR)</Label>
-                <Input type="number" value={advanceRecovery} onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)} />
+              <div className={cn(
+                "p-6 rounded-2xl border-2 border-dashed transition-colors",
+                isDeductionError ? "bg-rose-50 border-rose-300" : "bg-white border-slate-200"
+              )}>
+                <Label className={cn(
+                  "font-bold text-xs uppercase tracking-wider",
+                  isDeductionError ? "text-rose-600" : "text-slate-500"
+                )}>
+                  Deduction Advance (INR)
+                </Label>
+                <Input 
+                  type="number" 
+                  value={advanceRecovery} 
+                  onChange={(e) => setAdvanceRecovery(parseFloat(e.target.value) || 0)} 
+                  className={cn(
+                    "h-12 font-bold text-lg mt-2",
+                    isDeductionError ? "bg-white border-rose-500 focus-visible:ring-rose-500" : "bg-slate-50 border-slate-200"
+                  )}
+                />
+                {isDeductionError && (
+                  <p className="flex items-center gap-1.5 text-[10px] text-rose-600 font-black uppercase tracking-widest mt-3">
+                    <AlertCircle className="w-3 h-3" />
+                    Deduction amount cannot be greater than Net Pay ({formatCurrency(netPayBeforeDeduction)})
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -231,22 +265,36 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
 
       <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center border-t border-slate-800">
         <div className="space-y-1">
-          <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Net Payable</p>
-          <p className="text-3xl font-black text-emerald-400">{formatCurrency(estimatedFinalNet)}</p>
+          <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Final Net Payable</p>
+          <p className={cn(
+            "text-3xl font-black transition-colors",
+            isDeductionError ? "text-rose-400" : "text-emerald-400"
+          )}>
+            {formatCurrency(estimatedFinalNet)}
+          </p>
         </div>
-        <Button className="h-12 px-12 bg-emerald-600 hover:bg-emerald-700 font-black" onClick={handlePostSalary} disabled={isProcessing}>
-          Finalize & Post Salary
+        <Button 
+          className={cn(
+            "h-12 px-12 font-black transition-all",
+            isDeductionError 
+              ? "bg-slate-700 text-slate-400 cursor-not-allowed" 
+              : "bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-900/20"
+          )} 
+          onClick={handlePostSalary} 
+          disabled={isProcessing || isDeductionError}
+        >
+          {isDeductionError ? "Fix Deduction Error" : "Finalize & Post Salary"}
         </Button>
       </div>
     </div>
   );
 }
 
-function StatBox({ label, value, color, symbol }: { label: string, value: string | number, color: string, symbol?: string }) {
+function StatBox({ label, value, color }: { label: string, value: string | number, color: string }) {
   return (
-    <div className="bg-white p-4 rounded-2xl text-center border border-slate-200">
-      <p className="text-[9px] font-black text-slate-400 uppercase mb-1">{label}</p>
-      <div className={cn("text-lg font-bold", color)}>{symbol}{value}</div>
+    <div className="bg-white p-4 rounded-2xl text-center border border-slate-200 shadow-sm">
+      <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">{label}</p>
+      <div className={cn("text-lg font-black", color)}>{value}</div>
     </div>
   );
 }
