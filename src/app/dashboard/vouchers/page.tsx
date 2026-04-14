@@ -691,7 +691,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
       </div>
 
-      {/* Employee Grid */}
+      {/* Employee Grid - Reduced padding p-6 -> p-3 for 40% height reduction */}
       <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 mt-6">
         <DetailCell label="Employee ID" value={emp?.employeeId} />
         <DetailCell label="Employee Name" value={emp?.name} />
@@ -701,29 +701,29 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <DetailCell label="Mobile Number" value={emp?.mobile} />
       </div>
 
-      {/* Payment Details */}
+      {/* Payment Details - Reduced paddings */}
       <div className="grid grid-cols-1 border-2 border-slate-900 mt-10">
-        <div className="p-6 border-b-2 border-slate-900 flex items-center justify-between bg-white">
+        <div className="p-4 border-b-2 border-slate-900 flex items-center justify-between bg-white">
           <span className="font-black uppercase text-sm tracking-widest">Amount (In Figures)</span>
           <span className="text-4xl font-black text-slate-900">{formatCurrency(voucher.amount)}</span>
         </div>
-        <div className="p-6 bg-slate-50 flex items-start gap-6 border-b-2 border-slate-900">
+        <div className="p-3 bg-slate-50 flex items-start gap-6 border-b-2 border-slate-900">
           <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Amount in Words:</span>
           <span className="text-lg font-bold italic underline decoration-slate-300 underline-offset-8 leading-relaxed">
             {numberToIndianWords(voucher.amount)}
           </span>
         </div>
-        <div className="p-6 flex items-start gap-6 bg-white border-b-2 border-slate-900">
+        <div className="p-3 flex items-start gap-6 bg-white border-b-2 border-slate-900">
           <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Purpose:</span>
           <span className="text-lg font-medium text-slate-800 leading-relaxed">{voucher.purpose}</span>
         </div>
         {/* Payment Mode and Ref Number Row */}
         <div className="grid grid-cols-2 divide-x-2 divide-slate-900">
-          <div className="p-6 flex items-center gap-6 bg-slate-50">
+          <div className="p-3 flex items-center gap-6 bg-slate-50">
             <span className="font-black uppercase text-[10px] w-32 shrink-0 text-slate-500 tracking-widest">Payment Mode:</span>
             <span className="text-base font-black text-slate-900 uppercase">{voucher.paymentMode || "---"}</span>
           </div>
-          <div className="p-6 flex items-center gap-6 bg-slate-50">
+          <div className="p-3 flex items-center gap-6 bg-slate-50">
             <span className="font-black uppercase text-[10px] w-32 shrink-0 text-slate-500 tracking-widest">Ref Number:</span>
             <span className="text-base font-mono font-bold text-slate-900">{voucher.paymentReference || "---"}</span>
           </div>
@@ -765,7 +765,7 @@ function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
 
 function DetailCell({ label, value }: { label: string, value: any }) {
   return (
-    <div className="flex items-center p-6 bg-white">
+    <div className="flex items-center p-3 bg-white">
       <span className="text-[10px] font-black uppercase text-slate-400 w-40 shrink-0 tracking-widest whitespace-nowrap">{label}:</span>
       <span className="text-base font-black text-slate-900 uppercase tracking-tight leading-none">{value || "---"}</span>
     </div>
