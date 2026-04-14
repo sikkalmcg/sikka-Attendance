@@ -371,6 +371,9 @@ export default function VouchersPage() {
                           <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
                           <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
+                                <Download className="w-3 h-3" /> Download
+                              </Button>
                               <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleApproveVoucher(v.id)}>
                                 <CheckCircle className="w-3 h-3 mr-1.5" /> Approve
                               </Button>
@@ -635,7 +638,6 @@ export default function VouchersPage() {
 function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
   const emp = employees.find((e: any) => e.id === voucher.employeeId);
   const firm = firms.find((f: any) => f.id === emp?.firmId);
-  const plant = plants.find((p: any) => p.id === emp?.unitId);
   const formattedDate = voucher.date ? format(parseISO(voucher.date), 'dd-MMM-yyyy') : "---";
 
   return (
@@ -652,7 +654,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
           </div>
           <div className="space-y-1">
             <h1 className="text-2xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
-            <p className="text-sm font-black text-slate-700 uppercase tracking-widest">{plant?.name || "CORPORATE UNIT"}</p>
             <div className="space-y-0.5">
               <p className="text-xs text-slate-500 font-bold italic max-w-md">{firm?.registeredAddress || "Address details not available"}</p>
               <p className="text-xs font-black text-slate-900 flex gap-2">
