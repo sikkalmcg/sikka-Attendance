@@ -103,7 +103,7 @@ export default function UserManagementPage() {
 
   const passwordStrength = useMemo(() => {
     const p = formData.password || "";
-    if (!p) return { score: 0, label: "None", color: "bg-slate-200" };
+    if (!p) return { score: 0, label: "NONE", color: "bg-slate-200" };
     
     let score = 0;
     if (p.length >= 8) score++;
@@ -111,9 +111,9 @@ export default function UserManagementPage() {
     if ((p.match(/[0-9]/g) || []).length >= 3) score++;
     if (/[@#$%&]/.test(p)) score++;
 
-    if (score <= 1) return { score, label: "Weak", color: "bg-rose-500" };
-    if (score <= 3) return { score, label: "Medium", color: "bg-amber-500" };
-    return { score, label: "Strong", color: "bg-emerald-500" };
+    if (score <= 1) return { score, label: "WEAK", color: "bg-rose-500" };
+    if (score <= 3) return { score, label: "MEDIUM", color: "bg-amber-500" };
+    return { score, label: "STRONG", color: "bg-emerald-500" };
   }, [formData.password]);
 
   const handleOpenModal = (user?: User) => {
@@ -287,7 +287,7 @@ export default function UserManagementPage() {
       </Card>
 
       <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="text-xl font-black flex items-center gap-2">
               <ShieldCheck className="w-6 h-6 text-primary" />
@@ -299,41 +299,43 @@ export default function UserManagementPage() {
           <ScrollArea className="flex-1 p-6">
             <div className="space-y-8">
               {/* Identity Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase text-slate-400">Full Name *</Label>
-                  <Input 
-                    value={formData.fullName || ""} 
-                    onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
-                    placeholder="Enter official name"
-                    className="h-11 bg-slate-50 border-slate-200 font-bold"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-black uppercase text-slate-400">Username *</Label>
-                  <Input 
-                    value={formData.username || ""} 
-                    onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
-                    disabled={editingUser?.role === 'SUPER_ADMIN'} 
-                    placeholder="e.g. john.doe"
-                    className="h-11 bg-slate-50 border-slate-200 font-mono"
-                  />
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Full Name *</Label>
+                    <Input 
+                      value={formData.fullName || ""} 
+                      onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
+                      placeholder="Enter official name"
+                      className="h-12 bg-slate-50 border-slate-200 font-bold focus-visible:ring-primary"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Username *</Label>
+                    <Input 
+                      value={formData.username || ""} 
+                      onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
+                      disabled={editingUser?.role === 'SUPER_ADMIN'} 
+                      placeholder="e.g. john.doe"
+                      className="h-12 bg-slate-50 border-slate-200 font-mono focus-visible:ring-primary"
+                    />
+                  </div>
                 </div>
                 
                 {!editingUser && (
-                  <div className="md:col-span-2 space-y-4">
+                  <div className="space-y-4 pt-2">
                     <div className="space-y-2">
-                      <Label className="text-xs font-black uppercase text-slate-400">Secure Password *</Label>
+                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Secure Password *</Label>
                       <div className="relative">
                         <Input 
                           type={showPassword ? "text" : "password"}
                           value={formData.password || ""} 
                           onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
                           placeholder="8-16 chars, 1 Upper, 3 Digits, 1 Special"
-                          className="h-11 bg-slate-50 border-slate-200 font-mono pr-10"
+                          className="h-12 bg-slate-50 border-slate-200 font-mono pr-10 focus-visible:ring-primary"
                         />
                         <button 
-                          className="absolute right-3 top-3 text-slate-400 hover:text-primary transition-colors"
+                          className="absolute right-3 top-3.5 text-slate-400 hover:text-primary transition-colors"
                           onClick={() => setShowPassword(!showPassword)}
                         >
                           {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -342,10 +344,10 @@ export default function UserManagementPage() {
                     </div>
                     
                     {/* Password Strength Indicator */}
-                    <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] font-black uppercase text-slate-400">Strength Indicator</span>
-                        <span className={cn("text-[10px] font-black uppercase", passwordStrength.label === 'Strong' ? "text-emerald-600" : passwordStrength.label === 'Medium' ? "text-amber-600" : "text-rose-600")}>
+                    <div className="space-y-3 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Strength Indicator</span>
+                        <span className={cn("text-[10px] font-black uppercase tracking-widest", passwordStrength.label === 'STRONG' ? "text-emerald-600" : passwordStrength.label === 'MEDIUM' ? "text-amber-600" : "text-rose-600")}>
                           {passwordStrength.label}
                         </span>
                       </div>
@@ -361,29 +363,29 @@ export default function UserManagementPage() {
               </div>
 
               {/* Permissions Section */}
-              <div className="space-y-4 pt-4 border-t">
+              <div className="space-y-6 pt-6 border-t">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-black uppercase tracking-wider text-slate-900">Assign Page Access</h3>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">Assign Page Access</h3>
                     <p className="text-[10px] text-muted-foreground font-bold">Select the modules this user can view and interact with.</p>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-tighter" onClick={selectAllPermissions}>Select All</Button>
-                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-tighter text-rose-500" onClick={clearAllPermissions}>Clear</Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100" onClick={selectAllPermissions}>Select All</Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50" onClick={clearAllPermissions}>Clear</Button>
                   </div>
                 </div>
 
                 <div className="relative">
-                  <SearchIcon className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <SearchIcon className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                   <Input 
                     placeholder="Search modules..." 
-                    className="pl-10 h-10 bg-slate-50 border-slate-200 rounded-lg text-sm"
+                    className="pl-10 h-11 bg-slate-50 border-slate-200 rounded-xl text-sm"
                     value={permissionSearch}
                     onChange={(e) => setPermissionSearch(e.target.value)}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {filteredPermissions.map(perm => {
                     const isSelected = formData.permissions?.includes(perm);
                     return (
@@ -391,9 +393,9 @@ export default function UserManagementPage() {
                         key={perm}
                         onClick={() => togglePermission(perm)}
                         className={cn(
-                          "flex items-center justify-between p-3 rounded-xl border-2 transition-all cursor-pointer",
+                          "flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer group",
                           isSelected 
-                            ? "bg-primary/5 border-primary text-primary" 
+                            ? "bg-primary/5 border-primary text-primary shadow-sm" 
                             : "bg-white border-slate-100 text-slate-500 hover:border-slate-200"
                         )}
                       >
@@ -403,7 +405,7 @@ export default function UserManagementPage() {
                             <Check className="w-3 h-3" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 bg-slate-50 border border-slate-200 rounded-full" />
+                          <div className="w-5 h-5 bg-slate-50 border border-slate-200 rounded-full group-hover:border-slate-300 transition-colors" />
                         )}
                       </div>
                     );
@@ -413,15 +415,17 @@ export default function UserManagementPage() {
             </div>
           </ScrollArea>
 
-          <DialogFooter className="p-6 bg-slate-50 border-t">
-            <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-xl font-bold h-12 px-8">Cancel</Button>
-            <Button 
-              onClick={handleSaveUser} 
-              disabled={isProcessing}
-              className="bg-primary rounded-xl font-black h-12 px-12 shadow-lg shadow-primary/20"
-            >
-              {isProcessing ? "Processing..." : editingUser ? "Save Changes" : "Create Secure User"}
-            </Button>
+          <DialogFooter className="p-6 bg-slate-50 border-t shrink-0">
+            <div className="flex justify-end gap-3 w-full">
+              <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-xl font-bold h-12 px-8">Cancel</Button>
+              <Button 
+                onClick={handleSaveUser} 
+                disabled={isProcessing}
+                className="bg-primary rounded-xl font-black h-12 px-12 shadow-lg shadow-primary/20"
+              >
+                {isProcessing ? "Processing..." : editingUser ? "Save Changes" : "Create Secure User"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
