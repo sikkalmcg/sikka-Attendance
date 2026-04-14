@@ -28,13 +28,14 @@ export default function LoginPage() {
         router.push("/dashboard");
         toast({ title: "Welcome back, Admin", description: "Login successful." });
       } else if (username.length === 12 && password.length === 10) {
-        // Simple mock for employees (Aadhaar/Mobile)
+        // Employee Login (Aadhaar/Mobile mock)
         localStorage.setItem("user", JSON.stringify({
           id: "emp-mock",
           username,
           fullName: "Employee Name",
           role: "EMPLOYEE"
         }));
+        // Redirect Employee strictly to Attendance module
         router.push("/dashboard/attendance");
         toast({ title: "Welcome", description: "Successfully logged in." });
       } else {

@@ -103,72 +103,74 @@ function HeaderActions() {
 
   return (
     <div className="flex items-center gap-5">
-      <Popover onOpenChange={(open) => open && markAllRead()}>
-        <PopoverTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
-            <Bell className="w-5 h-5 text-slate-500" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
-                {unreadCount}
-              </span>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-80 p-0 overflow-hidden rounded-2xl shadow-2xl border-none mt-2" align="end">
-          <div className="bg-primary p-4 text-white flex items-center justify-between">
-            <div>
-              <h3 className="font-black text-sm uppercase tracking-widest">Notifications</h3>
-              <p className="text-[10px] text-white/70 font-bold">Latest activity logs</p>
-            </div>
-            {unreadCount > 0 && (
-              <Badge variant="secondary" className="bg-white/20 text-white border-none font-bold text-[10px]">
-                {unreadCount} New
-              </Badge>
-            )}
-          </div>
-          <ScrollArea className="max-h-[400px]">
-            {latestNotifications.length === 0 ? (
-              <div className="p-10 text-center space-y-3">
-                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
-                  <Bell className="w-6 h-6 text-slate-300" />
-                </div>
-                <p className="text-xs text-muted-foreground font-bold">No notifications yet.</p>
+      {user.role !== 'EMPLOYEE' && (
+        <Popover onOpenChange={(open) => open && markAllRead()}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
+              <Bell className="w-5 h-5 text-slate-500" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
+                  {unreadCount}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-0 overflow-hidden rounded-2xl shadow-2xl border-none mt-2" align="end">
+            <div className="bg-primary p-4 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-sm uppercase tracking-widest">Notifications</h3>
+                <p className="text-[10px] text-white/70 font-bold">Latest activity logs</p>
               </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {latestNotifications.map((n) => (
-                  <div key={n.id} className={cn(
-                    "p-4 flex gap-3 items-start hover:bg-slate-50 transition-colors",
-                    !n.read && "bg-primary/5"
-                  )}>
-                    <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-                      n.message.includes("marked IN") ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
-                    )}>
-                      {n.message.includes("marked IN") ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold text-slate-700 leading-relaxed">{n.message}</p>
-                      <p className="text-[10px] text-muted-foreground font-medium">{n.timestamp}</p>
-                    </div>
+              {unreadCount > 0 && (
+                <Badge variant="secondary" className="bg-white/20 text-white border-none font-bold text-[10px]">
+                  {unreadCount} New
+                </Badge>
+              )}
+            </div>
+            <ScrollArea className="max-h-[400px]">
+              {latestNotifications.length === 0 ? (
+                <div className="p-10 text-center space-y-3">
+                  <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
+                    <Bell className="w-6 h-6 text-slate-300" />
                   </div>
-                ))}
+                  <p className="text-xs text-muted-foreground font-bold">No notifications yet.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {latestNotifications.map((n) => (
+                    <div key={n.id} className={cn(
+                      "p-4 flex gap-3 items-start hover:bg-slate-50 transition-colors",
+                      !n.read && "bg-primary/5"
+                    )}>
+                      <div className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
+                        n.message.includes("marked IN") ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                      )}>
+                        {n.message.includes("marked IN") ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-slate-700 leading-relaxed">{n.message}</p>
+                        <p className="text-[10px] text-muted-foreground font-medium">{n.timestamp}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+            {latestNotifications.length > 0 && (
+              <div className="p-3 bg-slate-50 border-t text-center">
+                <Button 
+                  variant="ghost" 
+                  className="text-[10px] font-black uppercase tracking-widest text-primary h-8 w-full hover:bg-primary/5" 
+                  onClick={handleClearLogs}
+                >
+                  Clear All Logs
+                </Button>
               </div>
             )}
-          </ScrollArea>
-          {latestNotifications.length > 0 && (
-            <div className="p-3 bg-slate-50 border-t text-center">
-              <Button 
-                variant="ghost" 
-                className="text-[10px] font-black uppercase tracking-widest text-primary h-8 w-full hover:bg-primary/5" 
-                onClick={handleClearLogs}
-              >
-                Clear All Logs
-              </Button>
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
+          </PopoverContent>
+        </Popover>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -304,12 +306,12 @@ function SidebarNav() {
   if (!user) return null;
 
   const menuItems = [
-    { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["SUPER_ADMIN", "ADMIN", "HR", "EMPLOYEE"], permission: "Dashboard" },
-    { title: "Mark Attendance", icon: UserCheck, path: "/dashboard/attendance", roles: ["EMPLOYEE", "SUPER_ADMIN"], permission: "Attendance" },
+    { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Dashboard" },
+    { title: "Mark Attendance", icon: UserCheck, path: "/dashboard/attendance", roles: ["EMPLOYEE", "SUPER_ADMIN", "ADMIN", "HR"], permission: "Attendance" },
     { title: "Approvals", icon: FileText, path: "/dashboard/approvals", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Approvals" },
     { title: "Employees", icon: Users, path: "/dashboard/employees", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Employees" },
     { title: "Payroll", icon: CreditCard, path: "/dashboard/payroll", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Payroll" },
-    { title: "Vouchers", icon: FileText, path: "/dashboard/vouchers", roles: ["SUPER_ADMIN", "ADMIN", "HR", "EMPLOYEE"], permission: "Vouchers" },
+    { title: "Vouchers", icon: FileText, path: "/dashboard/vouchers", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Vouchers" },
     { title: "Holidays", icon: Calendar, path: "/dashboard/holidays", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Holidays" },
     { title: "Reports", icon: BarChart3, path: "/dashboard/reports", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Reports" },
     { title: "Plants & Firms", icon: Factory, path: "/dashboard/settings/firms", roles: ["SUPER_ADMIN", "ADMIN"], permission: "Settings" },
@@ -318,7 +320,6 @@ function SidebarNav() {
 
   const filteredMenu = menuItems.filter(item => {
     const hasRole = item.roles.includes(user.role);
-    // Super Admin sees everything. Others need explicit permission strings matching the item.permission
     const hasPermission = user.role === 'SUPER_ADMIN' || item.permission === 'Dashboard' || user.permissions?.includes(item.permission);
     return hasRole && hasPermission;
   });
@@ -371,8 +372,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const savedUser = localStorage.getItem("user");
     if (!savedUser) {
       router.push("/login");
+      return;
     }
-  }, [router]);
+
+    const user = JSON.parse(savedUser);
+    
+    // Strict RBAC Redirection for Employees
+    if (user.role === 'EMPLOYEE') {
+      const isAttendancePage = pathname === '/dashboard/attendance';
+      if (!isAttendancePage) {
+        router.push("/dashboard/attendance");
+      }
+    }
+  }, [router, pathname]);
 
   return (
     <DataProvider>
