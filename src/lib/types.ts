@@ -113,6 +113,8 @@ export interface Voucher {
   status: 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED';
   createdByName?: string;
   approvedByName?: string;
+  paymentMode?: 'CASH' | 'BANKING';
+  paymentReference?: string;
 }
 
 export interface AttendanceRecord {

@@ -81,6 +81,8 @@ export default function VouchersPage() {
   const [voucherToPay, setVoucherToPay] = useState<Voucher | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState("");
+  const [payMode, setPayMode] = useState<'CASH' | 'BANKING'>('BANKING');
+  const [payRef, setPayRef] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
@@ -199,6 +201,8 @@ export default function VouchersPage() {
     setVoucherToPay(v);
     setPayAmount(v.amount.toString());
     setPayDate(new Date().toISOString().split('T')[0]);
+    setPayMode('BANKING');
+    setPayRef("");
     setIsPayDialogOpen(true);
   };
 
@@ -207,7 +211,9 @@ export default function VouchersPage() {
     updateRecord('vouchers', voucherToPay.id, { 
       status: 'PAID',
       date: payDate,
-      amount: parseFloat(payAmount)
+      amount: parseFloat(payAmount),
+      paymentMode: payMode,
+      paymentReference: payMode === 'BANKING' ? payRef : ""
     });
     toast({ title: "Payment Recorded" });
     setIsPayDialogOpen(false);
@@ -217,14 +223,14 @@ export default function VouchersPage() {
   const handleExportExcel = (type: 'PENDING' | 'PAYMENT') => {
     const data = type === 'PENDING' ? filteredPendingVouchers : filteredPayableVouchers;
     if (data.length === 0) return;
-    const headers = ["Voucher No", "Date", "Employee Name", "Dept", "Desig", "Amount", "Purpose", "Created By", "Approved By", "Status"];
+    const headers = ["Voucher No", "Date", "Employee Name", "Dept", "Desig", "Amount", "Purpose", "Created By", "Approved By", "Status", "Pay Mode", "Ref No"];
     const csvContent = [
       headers.join(","),
       ...data.map(v => {
         const emp = employees.find(e => e.id === v.employeeId);
         return [
           v.voucherNo, v.date, `"${emp?.name || ""}"`, `"${emp?.department || ""}"`, `"${emp?.designation || ""}"`, v.amount, `"${v.purpose}"`,
-          `"${v.createdByName || ""}"`, `"${v.approvedByName || "--"}"`, v.status
+          `"${v.createdByName || ""}"`, `"${v.approvedByName || "--"}"`, v.status, `"${v.paymentMode || ""}"`, `"${v.paymentReference || ""}"`
         ].join(",");
       })
     ].join("\n");
@@ -330,7 +336,7 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Department / Designation</TableHead>
+                    <TableHead className="font-bold">Dept / Designation</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
                     <TableHead className="font-bold text-primary">Created By</TableHead>
@@ -411,7 +417,9 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Department / Designation</TableHead>
+                    <TableHead className="font-bold">Dept / Desig</TableHead>
+                    <TableHead className="font-bold">Mode</TableHead>
+                    <TableHead className="font-bold">Ref No</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
                     <TableHead className="font-bold text-primary">Created By</TableHead>
                     <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
@@ -421,7 +429,7 @@ export default function VouchersPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedPayable.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
                   ) : (
                     paginatedPayable.map((v) => {
                       const emp = employees.find(e => e.id === v.employeeId);
@@ -431,9 +439,15 @@ export default function VouchersPage() {
                           <TableCell className="font-bold">{emp?.name || "..."}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-xs font-bold">{emp?.department || "--"}</span>
-                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
+                              <span className="text-[10px] font-bold">{emp?.department || "--"}</span>
+                              <span className="text-[9px] text-muted-foreground">{emp?.designation || "--"}</span>
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-[10px] font-black">{v.paymentMode || "--"}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-[10px] font-mono font-medium text-slate-500">{v.paymentReference || "--"}</span>
                           </TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                           <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
@@ -525,6 +539,29 @@ export default function VouchersPage() {
                 className="h-14 bg-slate-50 border-slate-200 font-bold" 
               />
             </div>
+            <div className="space-y-2">
+              <Label className="font-black text-xs uppercase text-slate-500 tracking-wider">Payment Mode</Label>
+              <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
+                <SelectTrigger className="h-14 bg-slate-50 border-slate-200 font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CASH">Cash</SelectItem>
+                  <SelectItem value="BANKING">Banking</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {payMode === 'BANKING' && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                <Label className="font-black text-xs uppercase text-slate-500 tracking-wider">Reference Number</Label>
+                <Input 
+                  placeholder="UTR / Transaction ID" 
+                  value={payRef} 
+                  onChange={(e) => setPayRef(e.target.value)} 
+                  className="h-14 bg-slate-50 border-slate-200 font-bold" 
+                />
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2 border-t pt-6">
             <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="rounded-xl font-bold">Cancel</Button>
