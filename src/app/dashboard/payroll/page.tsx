@@ -65,7 +65,9 @@ import {
   X,
   Download,
   Eye,
-  BadgeCheck
+  BadgeCheck,
+  Mail,
+  Globe
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -152,6 +154,7 @@ export default function PayrollPage() {
   }, [selectedMonth]);
 
   const filteredEmployees = useMemo(() => {
+    // Sort: Latest first (descending by ID/Date)
     const sorted = [...(employees || [])].sort((a, b) => (b.id || "").localeCompare(a.id || ""));
 
     return sorted.filter(emp => {
@@ -659,7 +662,7 @@ export default function PayrollPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Main Adjust Leave Dialog */}
+      {/* Main Adjust Leave Dialog ... remains unchanged */}
       <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => !o && setAdjustLeaveEmp(null)}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {adjustLeaveEmp && (
@@ -803,7 +806,7 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Sub-Adjustment Balance Picker */}
+      {/* Sub-Adjustment Balance Picker ... remains unchanged */}
       <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
@@ -836,9 +839,9 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Pay Salary Dialog */}
+      {/* Pay Salary Dialog ... remains unchanged */}
       <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-4xl">
           {paySalaryRec && (
             <>
               <DialogHeader>
@@ -1008,13 +1011,13 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         )}
       </div>
 
-      {/* Monthly Earnings & Deductions Table */}
+      {/* Monthly Earnings & Deductions Table - Box length auto adjustable */}
       <div className="border-2 border-slate-900 overflow-hidden">
         <div className="grid grid-cols-2 bg-slate-900 text-white font-black text-xs uppercase tracking-widest text-center py-2 divide-x-2 divide-white">
           <div>Monthly Earnings</div>
           <div>Deductions</div>
         </div>
-        <div className="grid grid-cols-2 divide-x-2 border-slate-900 min-h-[200px]">
+        <div className="grid grid-cols-2 divide-x-2 border-slate-900">
           <div className="divide-y divide-slate-200">
             {earnings.map((e, i) => (
               <div key={i} className="flex justify-between px-4 py-2 text-xs">
@@ -1044,13 +1047,13 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      {/* Net Salary Summary */}
-      <div className="border-2 border-slate-900 p-6 bg-slate-900 text-white flex justify-between items-center rounded-sm shadow-xl">
+      {/* Net Salary Summary - Background color removed */}
+      <div className="border-2 border-slate-900 p-6 bg-white text-slate-900 flex justify-between items-center rounded-sm shadow-sm">
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Net Salary Payable</p>
-          <p className="text-xs font-bold italic text-slate-400">({numberToIndianWords(record.netPayable)})</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Net Salary Payable</p>
+          <p className="text-xs font-bold italic text-slate-500">({numberToIndianWords(record.netPayable)})</p>
         </div>
-        <div className="text-4xl font-black text-white">
+        <div className="text-4xl font-black text-slate-900">
           {formatCurrency(record.netPayable)}
         </div>
       </div>
