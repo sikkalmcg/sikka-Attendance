@@ -58,8 +58,7 @@ export default function HolidaysPage() {
   const { toast } = useToast();
   const { plants, holidays, addRecord, updateRecord, deleteRecord, setRecord } = useData();
   
-  // Stable initial state for hydration, update after mount
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date(2024, 0, 1));
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [isMounted, setIsMounted] = useState(false);
   
   // Dialog State
@@ -74,35 +73,37 @@ export default function HolidaysPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    setCurrentMonth(new Date());
   }, []);
 
-  // Auto-generate Sundays for current year
+  // Auto-generate Sundays for current year - Optimized to prevent infinite loop
   useEffect(() => {
-    if (!isMounted) return;
+    if (!isMounted || plants.length === 0) return;
+    
     const year = currentMonth.getFullYear();
     const start = startOfYear(new Date(year, 0, 1));
     const end = endOfYear(new Date(year, 11, 31));
     const days = eachDayOfInterval({ start, end });
     
-    const sundays = days
-      .filter(d => isSunday(d))
-      .map(d => ({
-        id: `sun-${format(d, "yyyy-MM-dd")}`,
-        date: format(d, "yyyy-MM-dd"),
-        name: "Weekly Off",
-        type: "WEEKLY_OFF" as any,
-        auto: true,
-        plantIds: plants.map(p => p.id) 
-      }));
+    const allPlantIds = plants.map(p => p.id);
     
-    // Use setRecord for idempotency
-    sundays.forEach(s => {
-      if (!holidays.some(h => h.date === s.date)) {
-        setRecord('holidays', s.id, s);
-      }
-    });
-  }, [plants, currentMonth.getFullYear(), holidays, setRecord, isMounted]);
+    days
+      .filter(d => isSunday(d))
+      .forEach(d => {
+        const dateStr = format(d, "yyyy-MM-dd");
+        const id = `sun-${dateStr}`;
+        // Only trigger if not already existing to minimize feedback loop
+        if (!holidays.some(h => h.date === dateStr)) {
+          setRecord('holidays', id, {
+            id,
+            date: dateStr,
+            name: "Weekly Off",
+            type: "WEEKLY_OFF",
+            auto: true,
+            plantIds: allPlantIds
+          });
+        }
+      });
+  }, [plants.length, currentMonth.getFullYear(), holidays.length, isMounted]);
 
   const handleDayClick = (date: Date) => {
     if (isSunday(date)) {
@@ -178,7 +179,6 @@ export default function HolidaysPage() {
     );
   };
 
-  // Grouped monthly holidays
   const monthlyData = useMemo(() => {
     if (!isMounted) return { custom: [], weeklyOffs: [], total: 0 };
     const currentItems = holidays.filter(h => isSameMonth(parseISO(h.date), currentMonth));
