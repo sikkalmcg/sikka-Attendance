@@ -50,27 +50,23 @@ import { Input } from "@/components/ui/input";
 import { ATTENDANCE_RULES } from "@/lib/constants";
 
 export default function AttendancePage() {
-  const { attendanceRecords, setAttendanceRecords, plants, holidays, setNotifications } = useData();
+  const { attendanceRecords, addRecord, updateRecord, plants, holidays } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   
-  // Interaction State
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT">("NONE");
   
-  // Location Detection State
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
   const [manualType, setManualType] = useState<'FIELD' | 'WFH'>('FIELD');
 
-  // Admin Edit State
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedRecordToEdit, setSelectedRecordToEdit] = useState<any>(null);
   const [editTimes, setEditTimes] = useState({ in: "", out: "" });
 
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
 
@@ -81,20 +77,17 @@ export default function AttendancePage() {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
     
-    // Defer date initialization to avoid hydration mismatch
     setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Today's Status Check
   const todayRecord = useMemo(() => {
     if (!currentUser) return null;
     const todayStr = new Date().toISOString().split('T')[0];
     return (attendanceRecords || []).find(r => r.employeeId === currentUser.username && r.date === todayStr);
   }, [currentUser, attendanceRecords]);
 
-  // History Filter with Auto-Absent Logic (Last 45 Days)
   const history = useMemo(() => {
     if (!currentUser) return [];
     
@@ -121,7 +114,6 @@ export default function AttendancePage() {
         };
       }
 
-      // Don't show today as absent if it hasn't happened yet
       if (isSameDay(date, today)) return null;
 
       if (isSun) {
@@ -152,7 +144,6 @@ export default function AttendancePage() {
         } as any;
       }
 
-      // Default: Absent
       return {
         id: `virtual-abs-${dateStr}`,
         employeeId: currentUser.username,
@@ -174,16 +165,6 @@ export default function AttendancePage() {
     const start = (currentPage - 1) * rowsPerPage;
     return history.slice(start, start + rowsPerPage);
   }, [history, currentPage]);
-
-  const addNotification = (message: string) => {
-    const newNotif: AppNotification = {
-      id: Math.random().toString(36).substr(2, 9),
-      message,
-      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
-      read: false
-    };
-    setNotifications(prev => [newNotif, ...prev].slice(0, 50)); // Keep last 50 total
-  };
 
   const requestLocation = (type: "IN" | "OUT") => {
     setIsLoadingLocation(true);
@@ -218,8 +199,7 @@ export default function AttendancePage() {
     const today = new Date().toISOString().split('T')[0];
     const type = detectedPlant ? 'OFFICE' : manualType;
 
-    const newRecord: AttendanceRecord = {
-      id: Math.random().toString(36).substr(2, 9),
+    const newRecord: Partial<AttendanceRecord> = {
       employeeId: currentUser.username,
       employeeName: currentUser.fullName,
       date: today,
@@ -235,8 +215,12 @@ export default function AttendancePage() {
       approved: false 
     };
 
-    setAttendanceRecords(prev => [...prev, newRecord]);
-    addNotification(`${currentUser.fullName} (${currentUser.username}) marked IN at ${time} (${type})`);
+    addRecord('attendance', newRecord);
+    addRecord('notifications', {
+      message: `${currentUser.fullName} (${currentUser.username}) marked IN at ${time} (${type})`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
+    });
     setActiveDialog("NONE");
     toast({ title: "Check-In Success", description: "Attendance logged and sent for approval." });
   };
@@ -246,7 +230,6 @@ export default function AttendancePage() {
     const time = format(new Date(), "HH:mm");
     const typeOut = detectedPlant ? 'OFFICE' : manualType;
     
-    // Auto Rule: If Check-Out is > 16h after Check-In, set fixed 8h
     const inDateTime = new Date(`${todayRecord.date} ${todayRecord.inTime}`);
     const outDateTime = new Date(`${todayRecord.date} ${time}`);
     const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
@@ -256,33 +239,32 @@ export default function AttendancePage() {
     let isAuto = false;
 
     if (diffHours > 16) {
-      // Auto-Checkout Logic
       const autoOutDate = new Date(inDateTime.getTime() + (8 * 60 * 60 * 1000));
       finalOutTime = format(autoOutDate, "HH:mm");
       finalHours = 8.0;
       isAuto = true;
     }
 
-    setAttendanceRecords(prev => prev.map(r => 
-      r.id === todayRecord.id ? { 
-        ...r, 
-        outTime: finalOutTime, 
-        hours: finalHours,
-        attendanceTypeOut: typeOut,
-        latOut: currentGPS.lat,
-        lngOut: currentGPS.lng,
-        addressOut: detectedAddress,
-        outPlant: detectedPlant?.name || typeOut,
-        autoCheckout: isAuto
-      } : r
-    ));
+    updateRecord('attendance', todayRecord.id, { 
+      outTime: finalOutTime, 
+      hours: finalHours,
+      attendanceTypeOut: typeOut,
+      latOut: currentGPS.lat,
+      lngOut: currentGPS.lng,
+      addressOut: detectedAddress,
+      outPlant: detectedPlant?.name || typeOut,
+      autoCheckout: isAuto
+    });
 
-    addNotification(`${todayRecord.employeeName} (${todayRecord.employeeId}) marked OUT at ${finalOutTime} (Worked: ${finalHours}h)`);
+    addRecord('notifications', {
+      message: `${todayRecord.employeeName} (${todayRecord.employeeId}) marked OUT at ${finalOutTime} (Worked: ${finalHours}h)`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
+    });
     setActiveDialog("NONE");
     toast({ title: "Check-Out Success", description: isAuto ? "Auto-checkout applied (8h rule)." : `Shift ended at ${finalOutTime}.` });
   };
 
-  // ADMIN EDIT LOGIC
   const handleAdminEditClick = (rec: any) => {
     setSelectedRecordToEdit(rec);
     setEditTimes({ in: rec.inTime || "", out: rec.outTime || "" });
@@ -295,7 +277,6 @@ export default function AttendancePage() {
     const inTime = editTimes.in;
     const outTime = editTimes.out;
     
-    // Calculate Hours
     let hours = 0;
     if (inTime && outTime) {
       const dummyDate = "2024-01-01 ";
@@ -307,15 +288,11 @@ export default function AttendancePage() {
       }
     }
 
-    // Determine Status
     const status = hours > ATTENDANCE_RULES.PRESENT_THRESHOLD ? 'PRESENT' : (hours > 0 ? 'HALF_DAY' : 'ABSENT');
-
     const isVirtual = selectedRecordToEdit.id.startsWith('virtual-');
 
     if (isVirtual) {
-      // Create new record for the day if it was virtual
-      const newRec: AttendanceRecord = {
-        id: Math.random().toString(36).substr(2, 9),
+      addRecord('attendance', {
         employeeId: selectedRecordToEdit.employeeId,
         employeeName: selectedRecordToEdit.employeeName,
         date: selectedRecordToEdit.date,
@@ -329,23 +306,22 @@ export default function AttendancePage() {
         address: "Manually adjusted by Admin",
         approved: true,
         remark: "Manually posted by Super Admin"
-      };
-      setAttendanceRecords(prev => [...prev, newRec]);
+      });
     } else {
-      // Update existing record
-      setAttendanceRecords(prev => prev.map(r => 
-        r.id === selectedRecordToEdit.id ? { 
-          ...r, 
-          inTime, 
-          outTime, 
-          hours, 
-          status: status as any,
-          remark: "Adjusted by Super Admin"
-        } : r
-      ));
+      updateRecord('attendance', selectedRecordToEdit.id, { 
+        inTime, 
+        outTime, 
+        hours, 
+        status: status as any,
+        remark: "Adjusted by Super Admin"
+      });
     }
 
-    addNotification(`ADMIN: ${currentUser.fullName} manually adjusted logs for ${selectedRecordToEdit.date}`);
+    addRecord('notifications', {
+      message: `ADMIN: ${currentUser.fullName} manually adjusted logs for ${selectedRecordToEdit.date}`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
+    });
     setIsEditDialogOpen(false);
     toast({ title: "Manual Adjustment Applied", description: "Record has been updated and recalculated." });
   };
@@ -356,7 +332,6 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
-      {/* Reduced Clock Section - 50% smaller container */}
       <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-md mx-auto">
         <div className="h-1 bg-primary" />
         <CardHeader className="text-center py-4">
@@ -365,7 +340,6 @@ export default function AttendancePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6 px-6 pb-8 pt-0">
-          {/* Light Blue Compact Clock Box */}
           <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
             {currentTime ? (
               <div className="text-center">
@@ -400,7 +374,6 @@ export default function AttendancePage() {
         </CardContent>
       </Card>
 
-      {/* History Table - Filtered to last 45 days with Pagination */}
       <div className="space-y-4 max-w-6xl mx-auto pt-6">
         <div className="flex items-center justify-between">
           <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
@@ -566,7 +539,6 @@ export default function AttendancePage() {
         </DialogContent>
       </Dialog>
 
-      {/* ADMIN EDIT DIALOG */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
