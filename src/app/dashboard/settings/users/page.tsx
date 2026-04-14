@@ -90,7 +90,10 @@ export default function UserManagementPage() {
   }, []);
 
   const filteredUsers = useMemo(() => {
-    return (users || []).filter(u => {
+    // SORT FIRST: Latest entry first
+    const sorted = [...(users || [])].reverse();
+
+    return sorted.filter(u => {
       const nameMatch = u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
       const userMatch = u.username.toLowerCase().includes(searchTerm.toLowerCase());
       return nameMatch || userMatch;
@@ -323,7 +326,7 @@ export default function UserManagementPage() {
               
               {!editingUser && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                  <div className="space-y-2">
+                  <div className="space-y-2 w-full">
                     <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Secure Password *</Label>
                     <div className="relative">
                       <Input 
@@ -343,7 +346,7 @@ export default function UserManagementPage() {
                   </div>
                   
                   {/* Password Strength Indicator */}
-                  <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-0 md:mt-0">
+                  <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-0 w-full">
                     <div className="flex justify-between items-center">
                       <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
                       <Badge className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", 

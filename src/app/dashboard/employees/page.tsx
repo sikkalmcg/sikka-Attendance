@@ -155,7 +155,14 @@ export default function EmployeesPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    return (employees || []).filter(emp => {
+    // SORT FIRST: Latest entry first based on createdAt or joinDate
+    const sorted = [...(employees || [])].sort((a, b) => {
+      const aVal = a.createdAt || a.joinDate || "";
+      const bVal = b.createdAt || b.joinDate || "";
+      return bVal.localeCompare(aVal);
+    });
+
+    return sorted.filter(emp => {
       if (!emp) return false;
       const name = (emp.name || "").toLowerCase();
       const id = (emp.employeeId || "").toLowerCase();

@@ -97,7 +97,14 @@ export default function ApprovalsPage() {
   }, []);
 
   const filteredRecords = useMemo(() => {
-    return (attendanceRecords || []).filter(rec => {
+    // SORT FIRST: Latest entry first based on date and inTime
+    const sorted = [...(attendanceRecords || [])].sort((a, b) => {
+      const dateCompare = b.date.localeCompare(a.date);
+      if (dateCompare !== 0) return dateCompare;
+      return (b.inTime || "").localeCompare(a.inTime || "");
+    });
+
+    return sorted.filter(rec => {
       const name = (rec.employeeName || "").toLowerCase();
       const id = (rec.employeeId || "").toLowerCase();
       const matchesSearch = name.includes(searchTerm.toLowerCase()) || id.includes(searchTerm.toLowerCase());

@@ -131,6 +131,7 @@ export default function AttendancePage() {
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
     
+    // ADMIN OVERVIEW: Sort by date and time (descending)
     if (isAdminRole) {
       const limitDate = subDays(new Date(), 45);
       return (attendanceRecords || [])
@@ -141,9 +142,14 @@ export default function AttendancePage() {
             return false;
           }
         })
-        .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
+        .sort((a, b) => {
+          const dateCompare = b.date.localeCompare(a.date);
+          if (dateCompare !== 0) return dateCompare;
+          return (b.inTime || "").localeCompare(a.inTime || "");
+        });
     }
 
+    // EMPLOYEE HISTORY: Calendar logic sorted descending
     const today = new Date();
     const fortyFiveDaysAgo = subDays(today, 45);
     fortyFiveDaysAgo.setHours(0, 0, 0, 0);

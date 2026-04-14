@@ -414,7 +414,7 @@ export default function FirmsAndPlantsPage() {
                       <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No plants registered yet.</TableCell>
                     </TableRow>
                   ) : (
-                    plants.map((p) => (
+                    [...plants].reverse().map((p) => (
                       <TableRow key={p.id} className="hover:bg-slate-50/50">
                         <TableCell className="font-medium">{firms.find(f => f.id === p.firmId)?.name || 'Unknown Firm'}</TableCell>
                         <TableCell className="font-bold">{p.name}</TableCell>
@@ -678,7 +678,7 @@ export default function FirmsAndPlantsPage() {
                       <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No firms registered yet.</TableCell>
                     </TableRow>
                   ) : (
-                    firms.map((f) => (
+                    [...firms].reverse().map((f) => (
                       <TableRow key={f.id} className="hover:bg-slate-50/50">
                         <TableCell>
                           <div className="flex items-center gap-3">
