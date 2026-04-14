@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -52,6 +53,7 @@ export default function AttendancePage() {
   const { attendanceRecords, setAttendanceRecords, plants, holidays, setNotifications } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   
   // Interaction State
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
@@ -75,6 +77,7 @@ export default function AttendancePage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    setIsMounted(true);
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
     
@@ -346,6 +349,8 @@ export default function AttendancePage() {
     setIsEditDialogOpen(false);
     toast({ title: "Manual Adjustment Applied", description: "Record has been updated and recalculated." });
   };
+
+  if (!isMounted) return null;
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
 

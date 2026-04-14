@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,7 @@ export default function FirmsAndPlantsPage() {
   const { firms, setFirms, plants, setPlants } = useData();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("plants");
+  const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Plant Form State
@@ -61,6 +62,10 @@ export default function FirmsAndPlantsPage() {
   const [firmToRemove, setFirmToRemove] = useState<Firm | null>(null);
   const [unitDraft, setUnitDraft] = useState({ name: '', address: '' });
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -210,6 +215,8 @@ export default function FirmsAndPlantsPage() {
   const triggerFileUpload = () => {
     fileInputRef.current?.click();
   };
+
+  if (!isMounted) return null;
 
   return (
     <div className="space-y-10 pb-20 max-w-7xl mx-auto">
