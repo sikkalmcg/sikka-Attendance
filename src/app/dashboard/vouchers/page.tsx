@@ -26,7 +26,8 @@ import {
   User as UserIcon,
   ChevronLeft,
   ChevronRight,
-  FileSpreadsheet
+  FileSpreadsheet,
+  X
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -216,13 +217,13 @@ export default function VouchersPage() {
   const handleExportExcel = (type: 'PENDING' | 'PAYMENT') => {
     const data = type === 'PENDING' ? filteredPendingVouchers : filteredPayableVouchers;
     if (data.length === 0) return;
-    const headers = ["Voucher No", "Date", "Employee Name", "Amount", "Purpose", "Created By", "Approved By", "Status"];
+    const headers = ["Voucher No", "Date", "Employee Name", "Dept", "Desig", "Amount", "Purpose", "Created By", "Approved By", "Status"];
     const csvContent = [
       headers.join(","),
       ...data.map(v => {
         const emp = employees.find(e => e.id === v.employeeId);
         return [
-          v.voucherNo, v.date, `"${emp?.name || ""}"`, v.amount, `"${v.purpose}"`,
+          v.voucherNo, v.date, `"${emp?.name || ""}"`, `"${emp?.department || ""}"`, `"${emp?.designation || ""}"`, v.amount, `"${v.purpose}"`,
           `"${v.createdByName || ""}"`, `"${v.approvedByName || "--"}"`, v.status
         ].join(",");
       })
@@ -329,6 +330,7 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Department / Designation</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
                     <TableHead className="font-bold text-primary">Created By</TableHead>
@@ -337,7 +339,7 @@ export default function VouchersPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedPending.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No pending vouchers.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending vouchers.</TableCell></TableRow>
                   ) : (
                     paginatedPending.map((v) => {
                       const emp = employees.find(e => e.id === v.employeeId);
@@ -345,13 +347,23 @@ export default function VouchersPage() {
                         <TableRow key={v.id} className="hover:bg-slate-50/50">
                           <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
                           <TableCell className="font-bold">{emp?.name || "..."}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold">{emp?.department || "--"}</span>
+                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
+                            </div>
+                          </TableCell>
                           <TableCell className="text-sm">{v.date}</TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                           <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
                           <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-2">
-                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs" onClick={() => handleApproveVoucher(v.id)}><CheckCircle className="w-3 h-3 mr-1" /> Approve</Button>
-                              <Button size="sm" variant="ghost" className="text-rose-600 h-8 text-xs" onClick={() => setVoucherToReject(v.id)}><XCircle className="w-3 h-3 mr-1" /> Reject</Button>
+                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleApproveVoucher(v.id)}>
+                                <CheckCircle className="w-3 h-3 mr-1.5" /> Approve
+                              </Button>
+                              <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold px-3" onClick={() => setVoucherToReject(v.id)}>
+                                <XCircle className="w-3 h-3 mr-1.5" /> Reject
+                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -399,6 +411,7 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Department / Designation</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
                     <TableHead className="font-bold text-primary">Created By</TableHead>
                     <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
@@ -408,7 +421,7 @@ export default function VouchersPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedPayable.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
                   ) : (
                     paginatedPayable.map((v) => {
                       const emp = employees.find(e => e.id === v.employeeId);
@@ -416,6 +429,12 @@ export default function VouchersPage() {
                         <TableRow key={v.id} className="hover:bg-slate-50/50">
                           <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
                           <TableCell className="font-bold">{emp?.name || "..."}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold">{emp?.department || "--"}</span>
+                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
+                            </div>
+                          </TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                           <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
                           <TableCell className="text-xs font-bold text-emerald-600">{v.approvedByName || "--"}</TableCell>
@@ -427,9 +446,13 @@ export default function VouchersPage() {
                           <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-2">
                               {v.status === "APPROVED" ? (
-                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs" onClick={() => handleOpenPayDialog(v)}><CreditCard className="w-3 h-3 mr-1" /> Pay</Button>
+                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
+                                  <CreditCard className="w-3 h-3 mr-1.5" /> Pay
+                                </Button>
                               ) : (
-                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}><Printer className="w-3 h-3 mr-1" /> Print</Button>
+                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>
+                                  <Printer className="w-3 h-3 mr-1.5" /> Print
+                                </Button>
                               )}
                             </div>
                           </TableCell>
@@ -525,12 +548,17 @@ export default function VouchersPage() {
               </div>
               <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Voucher Preview</DialogTitle>
             </div>
-            <Button 
-              className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20 mr-8" 
-              onClick={() => window.print()}
-            >
-              <Download className="w-5 h-5" /> Download PDF
-            </Button>
+            <div className="flex items-center gap-3 mr-8">
+              <Button 
+                className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
+                onClick={() => window.print()}
+              >
+                <Download className="w-5 h-5" /> Download PDF
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setIsPreviewOpen(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </DialogHeader>
           
           <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
