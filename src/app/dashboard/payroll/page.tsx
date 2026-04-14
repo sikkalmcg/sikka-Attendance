@@ -941,19 +941,29 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
 
   return (
     <div className="text-slate-900 space-y-8 font-calibri">
-      {/* Centered Top Title */}
-      <div className="text-center pb-6">
-        <div className="flex justify-center mb-4">
+      {/* Top Header Layout: Logo Left, Title Center */}
+      <div className="flex items-start mb-8 relative">
+        <div className="w-24 shrink-0">
           {firm?.logo ? (
-            <img src={firm.logo} className="h-16 object-contain" alt="Firm Logo" />
+            <img src={firm.logo} className="h-16 object-contain" alt="Logo" />
           ) : (
             <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center border-2 border-slate-900">
               <Building2 className="w-8 h-8 text-slate-400" />
             </div>
           )}
         </div>
+        <div className="flex-1 text-center">
+          <h2 className="text-2xl font-black uppercase tracking-[0.2em] underline underline-offset-8 decoration-2 text-slate-900">
+            PAYROLL SLIP - {record.month}
+          </h2>
+        </div>
+        <div className="w-24 shrink-0" /> {/* Spacer for balance */}
+      </div>
+
+      {/* Branding Section Centered */}
+      <div className="text-center space-y-1">
         <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
-        <p className="text-[11px] font-bold text-slate-600 uppercase mt-1 max-w-2xl mx-auto leading-relaxed">{firm?.registeredAddress || "Address details not available"}</p>
+        <p className="text-[11px] font-bold text-slate-600 uppercase max-w-2xl mx-auto leading-relaxed">{firm?.registeredAddress || "Address details not available"}</p>
         <div className="flex justify-center gap-8 mt-3 text-[11px] font-black uppercase tracking-widest text-slate-900">
           <span>GSTIN: {firm?.gstin || "---"}</span>
           <span>PF: ---</span>
@@ -961,20 +971,28 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      <div className="text-center">
-        <h2 className="text-xl font-black uppercase tracking-[0.2em] underline underline-offset-4 decoration-2">PAYROLL SLIP - {record.month}</h2>
+      {/* Slip Details Above Grid (Right Aligned) */}
+      <div className="flex justify-end gap-8 text-[10px] font-black uppercase tracking-widest pr-2">
+        <div className="flex gap-2">
+          <span className="text-slate-400">Slip Number:</span>
+          <span className="text-slate-900">{record.slipNo}</span>
+        </div>
+        <div className="flex gap-2">
+          <span className="text-slate-400">Slip Date:</span>
+          <span className="text-slate-900">{record.slipDate ? format(parseISO(record.slipDate), 'dd-MMM-yyyy') : "---"}</span>
+        </div>
       </div>
 
-      {/* Employee Info Grid */}
+      {/* Employee Identity Grid */}
       <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 overflow-hidden">
         <SlipDetailCell label="Employee ID" value={record.employeeId} />
         <SlipDetailCell label="Employee Name" value={record.employeeName} />
         <SlipDetailCell label="Department" value={employee?.department} />
         <SlipDetailCell label="Designation" value={employee?.designation} />
-        <SlipDetailCell label="Slip Number" value={record.slipNo} />
-        <SlipDetailCell label="Slip Date" value={record.slipDate ? format(parseISO(record.slipDate), 'dd-MMM-yyyy') : "---"} />
-        <SlipDetailCell label="Bank Name" value={employee?.bankName} />
-        <SlipDetailCell label="Account No" value={employee?.accountNo} />
+        <SlipDetailCell label="Aadhaar Number" value={employee?.aadhaar} />
+        <SlipDetailCell label="Monthly CTC" value={employee?.salary?.monthlyCTC ? formatCurrency(employee.salary.monthlyCTC) : "---"} />
+        <SlipDetailCell label="Attendance" value={`${record.totalEarningDays} Days`} />
+        <SlipDetailCell label="Leaves/Absent" value={`${record.absent} Days`} />
         
         {employee?.isGovComplianceEnabled && (
           <>
@@ -982,20 +1000,15 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
             <SlipDetailCell label="ESIC Number" value={employee?.esicNumber || "---"} />
           </>
         )}
-        
-        <SlipDetailCell label="Monthly CTC" value={employee?.salary?.monthlyCTC ? formatCurrency(employee.salary.monthlyCTC) : "---"} />
-        <SlipDetailCell label="Attendance" value={`${record.totalEarningDays} Days`} />
-        <SlipDetailCell label="Leaves/Absent" value={`${record.absent} Days`} />
       </div>
 
-      {/* Earnings & Deductions Table */}
+      {/* Monthly Earnings & Deductions Table */}
       <div className="border-2 border-slate-900 overflow-hidden">
         <div className="grid grid-cols-2 bg-slate-900 text-white font-black text-xs uppercase tracking-widest text-center py-2 divide-x-2 divide-white">
           <div>Monthly Earnings</div>
           <div>Deductions</div>
         </div>
         <div className="grid grid-cols-2 divide-x-2 border-slate-900 min-h-[200px]">
-          {/* Earnings Column */}
           <div className="divide-y divide-slate-200">
             {earnings.map((e, i) => (
               <div key={i} className="flex justify-between px-4 py-2 text-xs">
@@ -1004,7 +1017,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
               </div>
             ))}
           </div>
-          {/* Deductions Column */}
           <div className="divide-y divide-slate-200">
             {deductions.map((d, i) => (
               <div key={i} className="flex justify-between px-4 py-2 text-xs">
@@ -1061,7 +1073,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
 function SlipDetailCell({ label, value }: { label: string, value: any }) {
   return (
     <div className="flex items-start px-4 py-3 bg-white gap-2 font-calibri">
-      <span className="text-[10px] font-black uppercase text-slate-400 w-28 shrink-0 tracking-widest leading-normal">{label}:</span>
+      <span className="text-[10px] font-black uppercase text-slate-400 w-32 shrink-0 tracking-widest leading-normal">{label}:</span>
       <span className="text-sm font-bold text-slate-900 uppercase leading-normal break-words flex-1">{value || "---"}</span>
     </div>
   );
