@@ -88,6 +88,10 @@
   }
 
   /* Specialized scrollbar for popups/previews */
+  .custom-blue-scrollbar [data-radix-scroll-area-thumb] {
+    @apply bg-primary/80 opacity-100 min-h-[40px] w-[8px] !important;
+  }
+  
   .custom-blue-scrollbar ::-webkit-scrollbar-thumb {
     @apply bg-primary rounded-full;
   }
@@ -101,9 +105,14 @@
     visibility: visible;
   }
   .print-only {
-    position: absolute;
+    position: fixed;
     left: 0;
     top: 0;
     width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    z-index: 9999;
+    background: white;
   }
 }

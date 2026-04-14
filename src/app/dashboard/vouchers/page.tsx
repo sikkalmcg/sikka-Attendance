@@ -88,11 +88,6 @@ export default function VouchersPage() {
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
 
-  // Selected Employee Details
-  const selectedEmployee = useMemo(() => 
-    employees.find(e => e.id === selectedEmployeeId), 
-  [employees, selectedEmployeeId]);
-
   // Dynamic FY Sequential Voucher Number Calculation
   const voucherNo = useMemo(() => {
     if (!voucherDate) return "SIL-XXXXXX-XXXXX";
@@ -522,7 +517,7 @@ export default function VouchersPage() {
 
       {/* Preview Dialog */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="sm:max-w-5xl max-h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+        <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
           <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -538,8 +533,8 @@ export default function VouchersPage() {
             </Button>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
-            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-16 min-h-[297mm] border border-slate-100 rounded-sm">
+          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar" style={{ overflowY: 'auto' }}>
+            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-16 min-h-[297mm] border-4 border-slate-900 rounded-sm">
               {previewVoucher && <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />}
             </div>
           </ScrollArea>
@@ -547,7 +542,11 @@ export default function VouchersPage() {
       </Dialog>
 
       {/* Hidden Print Container */}
-      {previewVoucher && <div className="hidden print:block"><AdvanceVoucherPrint voucher={previewVoucher} employees={employees} firms={firms} plants={plants} /></div>}
+      {previewVoucher && (
+        <div className="hidden print:block print-only">
+          <AdvanceVoucherPrint voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />
+        </div>
+      )}
     </div>
   );
 }
@@ -665,10 +664,8 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
 
 function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
   return (
-    <div className="fixed inset-0 bg-white z-[999] p-[1.5cm] overflow-visible">
-      <div className="w-full max-w-[210mm] mx-auto border-4 border-slate-900 p-16 min-h-[297mm] bg-white">
-        <AdvanceVoucherContent voucher={voucher} employees={employees} firms={firms} plants={plants} />
-      </div>
+    <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
+      <AdvanceVoucherContent voucher={voucher} employees={employees} firms={firms} plants={plants} />
     </div>
   );
 }
