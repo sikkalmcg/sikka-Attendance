@@ -95,7 +95,6 @@ function HeaderActions() {
       <Popover onOpenChange={(open) => open && markAllRead()}>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
-            <Bell className="w-5 h-5 text-slate-50" stroke="currentColor" fill="none" className="text-slate-500" />
             <Bell className="w-5 h-5 text-slate-500" />
             {unreadCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
