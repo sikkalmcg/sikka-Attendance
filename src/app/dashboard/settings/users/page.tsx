@@ -131,26 +131,22 @@ export default function UserManagementPage() {
   const validateUserForm = () => {
     const { fullName, username, password, permissions } = formData;
 
-    // Name Validation
     if (!fullName || !/^[a-zA-Z\s]+$/.test(fullName) || fullName.length < 3) {
       toast({ variant: "destructive", title: "Invalid Name", description: "Alphabets and spaces only (min 3 chars)." });
       return false;
     }
 
-    // Username Validation
     if (!username || username.length < 5 || /\s/.test(username) || !/^[a-z0-9]+$/.test(username)) {
       toast({ variant: "destructive", title: "Invalid Username", description: "Min 5 chars, lowercase and numbers only, no spaces." });
       return false;
     }
 
-    // Uniqueness Check
     const exists = users.find(u => u.username === username && u.id !== editingUser?.id);
     if (exists) {
       toast({ variant: "destructive", title: "Duplicate Username", description: "This username is already taken." });
       return false;
     }
 
-    // Password Validation (only for new users)
     if (!editingUser) {
       if (!password || password.length < 8 || password.length > 16) {
         toast({ variant: "destructive", title: "Invalid Password", description: "Password must be 8-16 characters." });
@@ -287,75 +283,86 @@ export default function UserManagementPage() {
       </Card>
 
       <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-6 pb-2">
-            <DialogTitle className="text-xl font-black flex items-center gap-2">
-              <ShieldCheck className="w-6 h-6 text-primary" />
-              {editingUser ? `Edit Access: ${editingUser.fullName}` : "Create New Managed User"}
-            </DialogTitle>
-            <DialogDescription>Define identity and assign modular page permissions.</DialogDescription>
+        <DialogContent className="sm:max-w-4xl max-h-[95vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          <DialogHeader className="p-8 pb-4 shrink-0 border-b bg-white z-10">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <DialogTitle className="text-2xl font-black flex items-center gap-3 text-slate-900">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <ShieldCheck className="w-6 h-6 text-primary" />
+                  </div>
+                  {editingUser ? `Edit Access: ${editingUser.fullName}` : "Create New Managed User"}
+                </DialogTitle>
+                <DialogDescription className="text-slate-500 font-medium">Define identity and assign modular page permissions.</DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 p-6">
-            <div className="space-y-8">
+          <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30">
+            <div className="space-y-10 pb-8 pr-4">
               {/* Identity Section */}
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Full Name *</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Full Name *</Label>
                     <Input 
                       value={formData.fullName || ""} 
                       onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
                       placeholder="Enter official name"
-                      className="h-12 bg-slate-50 border-slate-200 font-bold focus-visible:ring-primary"
+                      className="h-14 bg-white border-slate-200 font-bold text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Username *</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Username *</Label>
                     <Input 
                       value={formData.username || ""} 
                       onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
                       disabled={editingUser?.role === 'SUPER_ADMIN'} 
                       placeholder="e.g. john.doe"
-                      className="h-12 bg-slate-50 border-slate-200 font-mono focus-visible:ring-primary"
+                      className="h-14 bg-white border-slate-200 font-mono text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary disabled:bg-slate-100 disabled:text-slate-400"
                     />
                   </div>
                 </div>
                 
                 {!editingUser && (
-                  <div className="space-y-4 pt-2">
+                  <div className="space-y-6 pt-2">
                     <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Secure Password *</Label>
+                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Secure Password *</Label>
                       <div className="relative">
                         <Input 
                           type={showPassword ? "text" : "password"}
                           value={formData.password || ""} 
                           onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
                           placeholder="8-16 chars, 1 Upper, 3 Digits, 1 Special"
-                          className="h-12 bg-slate-50 border-slate-200 font-mono pr-10 focus-visible:ring-primary"
+                          className="h-14 bg-white border-slate-200 font-mono text-lg pr-14 rounded-xl shadow-sm focus-visible:ring-primary"
                         />
                         <button 
-                          className="absolute right-3 top-3.5 text-slate-400 hover:text-primary transition-colors"
+                          type="button"
+                          className="absolute right-4 top-4 text-slate-400 hover:text-primary transition-colors"
                           onClick={() => setShowPassword(!showPassword)}
                         >
-                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
                         </button>
                       </div>
                     </div>
                     
                     {/* Password Strength Indicator */}
-                    <div className="space-y-3 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                       <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Strength Indicator</span>
-                        <span className={cn("text-[10px] font-black uppercase tracking-widest", passwordStrength.label === 'STRONG' ? "text-emerald-600" : passwordStrength.label === 'MEDIUM' ? "text-amber-600" : "text-rose-600")}>
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
+                        <Badge className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", 
+                          passwordStrength.label === 'STRONG' ? "bg-emerald-500" : 
+                          passwordStrength.label === 'MEDIUM' ? "bg-amber-500" : 
+                          passwordStrength.label === 'WEAK' ? "bg-rose-500" : "bg-slate-200 text-slate-500"
+                        )}>
                           {passwordStrength.label}
-                        </span>
+                        </Badge>
                       </div>
-                      <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden flex gap-1">
-                        <div className={cn("h-full transition-all duration-500", passwordStrength.score >= 1 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500", passwordStrength.score >= 2 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500", passwordStrength.score >= 3 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500", passwordStrength.score >= 4 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex gap-1.5">
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 1 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 2 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 3 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 4 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
                       </div>
                     </div>
                   </div>
@@ -363,29 +370,29 @@ export default function UserManagementPage() {
               </div>
 
               {/* Permissions Section */}
-              <div className="space-y-6 pt-6 border-t">
+              <div className="space-y-6 pt-8 border-t border-slate-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">Assign Page Access</h3>
-                    <p className="text-[10px] text-muted-foreground font-bold">Select the modules this user can view and interact with.</p>
+                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Assign Page Access</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Select the modules this user can view and interact with.</p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100" onClick={selectAllPermissions}>Select All</Button>
-                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50" onClick={clearAllPermissions}>Clear</Button>
+                  <div className="flex gap-3">
+                    <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg" onClick={selectAllPermissions}>Select All</Button>
+                    <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions}>Clear</Button>
                   </div>
                 </div>
 
                 <div className="relative">
-                  <SearchIcon className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                  <SearchIcon className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
                   <Input 
-                    placeholder="Search modules..." 
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 rounded-xl text-sm"
+                    placeholder="Search available modules..." 
+                    className="pl-12 h-14 bg-white border-slate-200 rounded-xl text-base shadow-sm focus-visible:ring-primary"
                     value={permissionSearch}
                     onChange={(e) => setPermissionSearch(e.target.value)}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredPermissions.map(perm => {
                     const isSelected = formData.permissions?.includes(perm);
                     return (
@@ -393,19 +400,19 @@ export default function UserManagementPage() {
                         key={perm}
                         onClick={() => togglePermission(perm)}
                         className={cn(
-                          "flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer group",
+                          "flex items-center justify-between p-5 rounded-2xl border-2 transition-all cursor-pointer group select-none",
                           isSelected 
-                            ? "bg-primary/5 border-primary text-primary shadow-sm" 
-                            : "bg-white border-slate-100 text-slate-500 hover:border-slate-200"
+                            ? "bg-primary/5 border-primary text-primary shadow-md translate-y-[-2px]" 
+                            : "bg-white border-slate-100 text-slate-500 hover:border-slate-300 hover:bg-slate-50 shadow-sm"
                         )}
                       >
-                        <span className="text-xs font-bold">{perm}</span>
+                        <span className="text-sm font-black tracking-tight">{perm}</span>
                         {isSelected ? (
-                          <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center text-white">
-                            <Check className="w-3 h-3" />
+                          <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/30">
+                            <Check className="w-4 h-4 stroke-[3px]" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 bg-slate-50 border border-slate-200 rounded-full group-hover:border-slate-300 transition-colors" />
+                          <div className="w-6 h-6 bg-slate-50 border-2 border-slate-200 rounded-full group-hover:border-slate-400 transition-colors" />
                         )}
                       </div>
                     );
@@ -415,13 +422,13 @@ export default function UserManagementPage() {
             </div>
           </ScrollArea>
 
-          <DialogFooter className="p-6 bg-slate-50 border-t shrink-0">
-            <div className="flex justify-end gap-3 w-full">
-              <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-xl font-bold h-12 px-8">Cancel</Button>
+          <DialogFooter className="p-8 bg-slate-50 border-t shrink-0 z-10">
+            <div className="flex justify-end gap-4 w-full">
+              <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-xl font-bold h-14 px-10 text-slate-500 hover:bg-slate-200">Cancel</Button>
               <Button 
                 onClick={handleSaveUser} 
                 disabled={isProcessing}
-                className="bg-primary rounded-xl font-black h-12 px-12 shadow-lg shadow-primary/20"
+                className="bg-primary hover:bg-primary/90 rounded-xl font-black h-14 px-16 shadow-xl shadow-primary/30 text-lg"
               >
                 {isProcessing ? "Processing..." : editingUser ? "Save Changes" : "Create Secure User"}
               </Button>
@@ -432,43 +439,46 @@ export default function UserManagementPage() {
 
       {/* Reset Password Dialog */}
       <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
           <DialogHeader>
-            <DialogTitle>Update Credentials</DialogTitle>
-            <DialogDescription>Reset password for {userToAction?.username}</DialogDescription>
+            <DialogTitle className="text-xl font-black flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" />
+              Update Credentials
+            </DialogTitle>
+            <DialogDescription className="font-medium">Reset password for <strong>{userToAction?.username}</strong></DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+          <div className="py-6 space-y-4">
             <div className="space-y-2">
-              <Label>New Secure Password</Label>
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">New Secure Password</Label>
               <Input 
                 type="password"
                 placeholder="Enter new password"
-                className="h-11 bg-slate-50"
+                className="h-12 bg-slate-50 border-slate-200 rounded-xl font-mono"
                 value={formData.password || ""}
                 onChange={(e) => setFormData(p => ({...p, password: e.target.value}))}
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsResetPasswordOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveUser} disabled={isProcessing}>Update Password</Button>
+          <DialogFooter className="bg-slate-50 -m-6 mt-2 p-6 rounded-b-2xl border-t gap-2">
+            <Button variant="ghost" onClick={() => setIsResetPasswordOpen(false)} className="rounded-xl font-bold">Cancel</Button>
+            <Button onClick={handleSaveUser} disabled={isProcessing} className="bg-primary rounded-xl font-black px-8">Update Password</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-rose-500" />
-              Confirm User Deactivation
-            </AlertDialogTitle>
-            <AlertDialogDescription>
+            <div className="mx-auto w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-rose-500" />
+            </div>
+            <AlertDialogTitle className="text-center text-2xl font-black">Confirm User Deactivation</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 font-medium pt-2">
               Are you sure you want to remove <strong>{userToAction?.fullName}</strong>? They will lose all access to assigned pages immediately.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-8 pb-4">
+            <AlertDialogCancel className="rounded-xl font-bold h-12 px-8">Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => {
                 if (userToAction) {
@@ -477,7 +487,7 @@ export default function UserManagementPage() {
                   setIsDeleteAlertOpen(false);
                 }
               }} 
-              className="bg-rose-600 hover:bg-rose-700"
+              className="bg-rose-600 hover:bg-rose-700 rounded-xl font-black h-12 px-8 shadow-lg shadow-rose-100"
             >
               Confirm Deactivation
             </AlertDialogAction>
