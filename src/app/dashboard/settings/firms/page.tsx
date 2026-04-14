@@ -110,7 +110,6 @@ export default function FirmsAndPlantsPage() {
 
   const handleGstinChange = (val: string) => {
     const cleanGstin = val.toUpperCase().replace(/\s/g, '');
-    let pan = firmDraft.pan || '';
     let stateName = firmDraft.stateName || '';
     let stateCode = firmDraft.stateCode || '';
 
@@ -120,14 +119,9 @@ export default function FirmsAndPlantsPage() {
       stateName = STATE_CODES[code] || stateName;
     }
 
-    if (cleanGstin.length >= 12) {
-      pan = cleanGstin.substring(2, 12);
-    }
-
     setFirmDraft(prev => ({
       ...prev,
       gstin: cleanGstin,
-      pan: pan,
       stateName: stateName,
       stateCode: stateCode
     }));
@@ -517,15 +511,6 @@ export default function FirmsAndPlantsPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="font-bold">PAN</Label>
-                      <Input 
-                        className="h-12 bg-white uppercase font-bold text-primary" 
-                        placeholder="Enter PAN" 
-                        value={firmDraft.pan || ''} 
-                        onChange={(e) => setFirmDraft(p => ({...p, pan: e.target.value.toUpperCase()}))}
-                      />
-                    </div>
-                    <div className="space-y-2">
                       <Label className="font-bold">State Name</Label>
                       <Input 
                         className="h-12 bg-white font-bold" 
@@ -665,7 +650,7 @@ export default function FirmsAndPlantsPage() {
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead className="font-bold">Firm Logo / Name</TableHead>
-                    <TableHead className="font-bold">GSTIN / PAN</TableHead>
+                    <TableHead className="font-bold">GSTIN</TableHead>
                     <TableHead className="font-bold">State (Code)</TableHead>
                     <TableHead className="font-bold">Units</TableHead>
                     <TableHead className="font-bold text-right">PF / ESIC</TableHead>
@@ -696,10 +681,7 @@ export default function FirmsAndPlantsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-mono text-xs font-bold text-primary">{f.gstin}</span>
-                            <span className="font-mono text-[10px] text-slate-400">{f.pan}</span>
-                          </div>
+                          <span className="font-mono text-xs font-bold text-primary">{f.gstin}</span>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">

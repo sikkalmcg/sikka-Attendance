@@ -954,9 +954,9 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
             </div>
           )}
         </div>
-        <h1 className="text-2xl font-black uppercase tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h1>
+        <h1 className="text-2xl font-black uppercase tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
         <p className="text-xs font-bold text-slate-500 uppercase mt-1">{firm?.registeredAddress}</p>
-        <div className="flex justify-center gap-6 mt-2 text-[10px] font-black uppercase tracking-widest">
+        <div className="flex justify-center gap-10 mt-2 text-[10px] font-black uppercase tracking-widest">
           <span>GSTIN: {firm?.gstin || "---"}</span>
           <span>PF: {firm?.pfNo || "---"}</span>
           <span>ESIC: {firm?.esicNo || "---"}</span>
@@ -987,7 +987,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
           <div>Earnings</div>
           <div>Deductions</div>
         </div>
-        <div className="grid grid-cols-2 divide-x-2 divide-slate-900 min-h-[200px]">
+        <div className="grid grid-cols-2 divide-x-2 border-slate-900 min-h-[200px]">
           {/* Earnings Column */}
           <div className="divide-y divide-slate-200">
             {earnings.map((e, i) => (

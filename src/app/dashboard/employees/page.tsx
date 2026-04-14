@@ -559,10 +559,6 @@ export default function EmployeesPage() {
                         <Input placeholder="12-digit number" value={formData.aadhaar || ''} onChange={(e) => setFormData(prev => ({...prev, aadhaar: e.target.value}))} maxLength={12} />
                       </div>
                       <div className="space-y-2">
-                        <Label>PAN Number</Label>
-                        <Input placeholder="AAAAA9999A" className="uppercase" value={formData.pan || ''} onChange={(e) => setFormData(prev => ({...prev, pan: e.target.value.toUpperCase()}))} />
-                      </div>
-                      <div className="space-y-2">
                         <Label>Joining Date *</Label>
                         <Input type="date" value={formData.joinDate || ''} onChange={(e) => setFormData(prev => ({...prev, joinDate: e.target.value}))} />
                       </div>
