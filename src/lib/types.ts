@@ -38,6 +38,9 @@ export interface Firm {
   bankName?: string;
   accountNo?: string;
   ifscCode?: string;
+  registeredAddress?: string;
+  stateName?: string;
+  stateCode?: string;
   units: FirmUnit[];
 }
 

@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { 
@@ -20,7 +21,8 @@ import {
   AlertTriangle,
   Loader2,
   Upload,
-  X
+  X,
+  Info
 } from "lucide-react";
 import {
   AlertDialog,
@@ -44,6 +46,45 @@ import { Firm, Plant } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { useData } from "@/context/data-context";
 
+const STATE_CODES: Record<string, string> = {
+  "01": "Jammu and Kashmir",
+  "02": "Himachal Pradesh",
+  "03": "Punjab",
+  "04": "Chandigarh",
+  "05": "Uttarakhand",
+  "06": "Haryana",
+  "07": "Delhi",
+  "08": "Rajasthan",
+  "09": "Uttar Pradesh",
+  "10": "Bihar",
+  "11": "Sikkim",
+  "12": "Arunachal Pradesh",
+  "13": "Nagaland",
+  "14": "Manipur",
+  "15": "Mizoram",
+  "16": "Tripura",
+  "17": "Meghalaya",
+  "18": "Assam",
+  "19": "West Bengal",
+  "20": "Jharkhand",
+  "21": "Odisha",
+  "22": "Chhattisgarh",
+  "23": "Madhya Pradesh",
+  "24": "Gujarat",
+  "26": "Dadra and Nagar Haveli and Daman and Diu",
+  "27": "Maharashtra",
+  "29": "Karnataka",
+  "30": "Goa",
+  "31": "Lakshadweep",
+  "32": "Kerala",
+  "33": "Tamil Nadu",
+  "34": "Puducherry",
+  "35": "Andaman and Nicobar Islands",
+  "36": "Telangana",
+  "37": "Andhra Pradesh",
+  "38": "Ladakh",
+};
+
 export default function FirmsAndPlantsPage() {
   const { firms, plants, addRecord, updateRecord, deleteRecord } = useData();
   const { toast } = useToast();
@@ -66,6 +107,31 @@ export default function FirmsAndPlantsPage() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const handleGstinChange = (val: string) => {
+    const cleanGstin = val.toUpperCase().replace(/\s/g, '');
+    let pan = firmDraft.pan || '';
+    let stateName = firmDraft.stateName || '';
+    let stateCode = firmDraft.stateCode || '';
+
+    if (cleanGstin.length >= 2) {
+      const code = cleanGstin.substring(0, 2);
+      stateCode = code;
+      stateName = STATE_CODES[code] || "Invalid Code";
+    }
+
+    if (cleanGstin.length >= 12) {
+      pan = cleanGstin.substring(2, 12);
+    }
+
+    setFirmDraft(prev => ({
+      ...prev,
+      gstin: cleanGstin,
+      pan: pan,
+      stateName: stateName,
+      stateCode: stateCode
+    }));
+  };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,24 +242,28 @@ export default function FirmsAndPlantsPage() {
 
     setIsProcessing(true);
     try {
+      const firmData = {
+        name: firmDraft.name!,
+        logo: firmDraft.logo || null,
+        gstin: firmDraft.gstin!,
+        pan: firmDraft.pan || '',
+        pfNo: firmDraft.pfNo || '',
+        esicNo: firmDraft.esicNo || '',
+        bankName: firmDraft.bankName || '',
+        accountNo: firmDraft.accountNo || '',
+        ifscCode: firmDraft.ifscCode || '',
+        registeredAddress: firmDraft.registeredAddress || '',
+        stateName: firmDraft.stateName || '',
+        stateCode: firmDraft.stateCode || '',
+        units: firmDraft.units || []
+      };
+
       if (editingFirmId) {
-        updateRecord('firms', editingFirmId, firmDraft);
+        updateRecord('firms', editingFirmId, firmData);
         toast({ title: "Firm Updated", description: `${firmDraft.name} record updated.` });
       } else {
-        const newFirmData = {
-          name: firmDraft.name!,
-          logo: firmDraft.logo || null,
-          gstin: firmDraft.gstin!,
-          pan: firmDraft.pan || '',
-          pfNo: firmDraft.pfNo || '',
-          esicNo: firmDraft.esicNo || '',
-          bankName: firmDraft.bankName || '',
-          accountNo: firmDraft.accountNo || '',
-          ifscCode: firmDraft.ifscCode || '',
-          units: firmDraft.units || []
-        };
-        addRecord('firms', newFirmData);
-        toast({ title: "Firm Registered", description: `${newFirmData.name} added to repository.` });
+        addRecord('firms', firmData);
+        toast({ title: "Firm Registered", description: `${firmData.name} added to repository.` });
       }
       setFirmDraft({ units: [] });
       setEditingFirmId(null);
@@ -426,78 +496,105 @@ export default function FirmsAndPlantsPage() {
                   </div>
                 </div>
 
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-                  <div className="space-y-2 md:col-span-2">
-                    <Label className="font-bold">Legal Name *</Label>
-                    <Input 
-                      className="h-12 bg-white" 
-                      placeholder="Sikka Industries Ltd." 
-                      value={firmDraft.name || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, name: e.target.value}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">GSTIN *</Label>
-                    <Input 
-                      className="h-12 bg-white uppercase" 
-                      placeholder="07AAAAA0000A1Z5" 
-                      value={firmDraft.gstin || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, gstin: e.target.value.toUpperCase()}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">PAN</Label>
-                    <Input 
-                      className="h-12 bg-white uppercase" 
-                      placeholder="AAAAA0000A" 
-                      value={firmDraft.pan || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, pan: e.target.value.toUpperCase()}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">PF Number</Label>
-                    <Input 
-                      className="h-12 bg-white" 
-                      placeholder="DL/CPM/123/..." 
-                      value={firmDraft.pfNo || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, pfNo: e.target.value}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">ESIC Number</Label>
-                    <Input 
-                      className="h-12 bg-white" 
-                      placeholder="11000123..." 
-                      value={firmDraft.esicNo || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, esicNo: e.target.value}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">Bank Name</Label>
-                    <Input 
-                      className="h-12 bg-white" 
-                      placeholder="e.g. HDFC Bank" 
-                      value={firmDraft.bankName || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, bankName: e.target.value}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">Account Number</Label>
-                    <Input 
-                      className="h-12 bg-white" 
-                      placeholder="Enter bank account number" 
-                      value={firmDraft.accountNo || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, accountNo: e.target.value}))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">IFSC Code</Label>
-                    <Input 
-                      className="h-12 bg-white uppercase" 
-                      placeholder="HDFC0001234" 
-                      value={firmDraft.ifscCode || ''} 
-                      onChange={(e) => setFirmDraft(p => ({...p, ifscCode: e.target.value.toUpperCase()}))}
-                    />
+                <div className="flex-1 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label className="font-bold">Legal Name *</Label>
+                      <Input 
+                        className="h-12 bg-white" 
+                        placeholder="Sikka Industries Ltd." 
+                        value={firmDraft.name || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, name: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">GSTIN *</Label>
+                      <Input 
+                        className="h-12 bg-white uppercase" 
+                        placeholder="07AAAAA0000A1Z5" 
+                        value={firmDraft.gstin || ''} 
+                        onChange={(e) => handleGtinChange(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">PAN</Label>
+                      <Input 
+                        className="h-12 bg-slate-50 uppercase font-bold text-primary" 
+                        placeholder="Auto-derived from GSTIN" 
+                        value={firmDraft.pan || ''} 
+                        readOnly
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">State Name</Label>
+                      <Input 
+                        className="h-12 bg-slate-50 font-bold" 
+                        value={firmDraft.stateName || ''} 
+                        readOnly
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">State Code</Label>
+                      <Input 
+                        className="h-12 bg-slate-50 font-mono font-bold" 
+                        value={firmDraft.stateCode || ''} 
+                        readOnly
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label className="font-bold">Registered Address *</Label>
+                      <Textarea 
+                        className="bg-white min-h-[100px]" 
+                        placeholder="Enter official registered office address"
+                        value={firmDraft.registeredAddress || ''}
+                        onChange={(e) => setFirmDraft(p => ({...p, registeredAddress: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">PF Number</Label>
+                      <Input 
+                        className="h-12 bg-white" 
+                        placeholder="DL/CPM/123/..." 
+                        value={firmDraft.pfNo || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, pfNo: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">ESIC Number</Label>
+                      <Input 
+                        className="h-12 bg-white" 
+                        placeholder="11000123..." 
+                        value={firmDraft.esicNo || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, esicNo: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Bank Name</Label>
+                      <Input 
+                        className="h-12 bg-white" 
+                        placeholder="e.g. HDFC Bank" 
+                        value={firmDraft.bankName || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, bankName: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Account Number</Label>
+                      <Input 
+                        className="h-12 bg-white" 
+                        placeholder="Enter bank account number" 
+                        value={firmDraft.accountNo || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, accountNo: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">IFSC Code</Label>
+                      <Input 
+                        className="h-12 bg-white uppercase" 
+                        placeholder="HDFC0001234" 
+                        value={firmDraft.ifscCode || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, ifscCode: e.target.value.toUpperCase()}))}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -566,18 +663,17 @@ export default function FirmsAndPlantsPage() {
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead className="font-bold">Firm Logo / Name</TableHead>
-                    <TableHead className="font-bold">Units Name</TableHead>
-                    <TableHead className="font-bold">GSTIN</TableHead>
-                    <TableHead className="font-bold">PF Number</TableHead>
-                    <TableHead className="font-bold">ESIC Number</TableHead>
-                    <TableHead className="font-bold">Bank Name</TableHead>
+                    <TableHead className="font-bold">GSTIN / PAN</TableHead>
+                    <TableHead className="font-bold">State (Code)</TableHead>
+                    <TableHead className="font-bold">Units</TableHead>
+                    <TableHead className="font-bold text-right">PF / ESIC</TableHead>
                     <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {firms.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No firms registered yet.</TableCell>
+                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No firms registered yet.</TableCell>
                     </TableRow>
                   ) : (
                     firms.map((f) => (
@@ -593,26 +689,29 @@ export default function FirmsAndPlantsPage() {
                             </div>
                             <div className="flex flex-col">
                               <span className="font-bold leading-tight">{f.name}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono">ID: {f.id}</span>
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">{f.registeredAddress}</span>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {f.units.length > 0 ? f.units.map(u => (
-                              <Badge key={u.id} variant="secondary" className="text-[10px] bg-slate-100 text-slate-600 border-none font-medium">
-                                {u.name}
-                              </Badge>
-                            )) : <span className="text-xs text-muted-foreground">No Units</span>}
+                          <div className="flex flex-col">
+                            <span className="font-mono text-xs font-bold text-primary">{f.gstin}</span>
+                            <span className="font-mono text-[10px] text-slate-400">{f.pan}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-xs">{f.gstin}</TableCell>
-                        <TableCell className="font-mono text-xs">{f.pfNo || 'N/A'}</TableCell>
-                        <TableCell className="font-mono text-xs">{f.esicNo || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className="text-xs font-bold">{f.bankName || 'N/A'}</span>
-                            <span className="text-[10px] text-muted-foreground">{f.ifscCode}</span>
+                            <span className="text-xs font-bold">{f.stateName}</span>
+                            <span className="text-[10px] text-slate-400">Code: {f.stateCode}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="bg-slate-100">{f.units.length} Units</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-bold">PF: {f.pfNo || 'N/A'}</span>
+                            <span className="text-[10px] font-bold">ESIC: {f.esicNo || 'N/A'}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-right pr-6">
@@ -639,22 +738,15 @@ export default function FirmsAndPlantsPage() {
       <AlertDialog open={!!plantToRemove} onOpenChange={(open) => !open && setPlantToRemove(null)}>
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
-              <AlertTriangle className="w-6 h-6 text-rose-600" />
-            </div>
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4"><AlertTriangle className="w-6 h-6 text-rose-600" /></div>
             <AlertDialogTitle className="text-center text-xl">Confirm Plant Removal</AlertDialogTitle>
             <AlertDialogDescription className="text-center pt-2">
-              Are you sure you want to remove <strong>{plantToRemove?.name}</strong>? This action cannot be undone and will affect geofencing attendance for this location.
+              Are you sure you want to remove <strong>{plantToRemove?.name}</strong>? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleRemovePlant}
-              className="bg-rose-600 hover:bg-rose-700 font-bold"
-            >
-              Confirm Remove
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleRemovePlant} className="bg-rose-600 hover:bg-rose-700 font-bold">Confirm Remove</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -663,22 +755,15 @@ export default function FirmsAndPlantsPage() {
       <AlertDialog open={!!firmToRemove} onOpenChange={(open) => !open && setFirmToRemove(null)}>
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
-            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
-              <AlertTriangle className="w-6 h-6 text-rose-600" />
-            </div>
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4"><AlertTriangle className="w-6 h-6 text-rose-600" /></div>
             <AlertDialogTitle className="text-center text-xl">Confirm Firm Removal</AlertDialogTitle>
             <AlertDialogDescription className="text-center pt-2">
-              Are you sure you want to remove <strong>{firmToRemove?.name}</strong>? This will permanently delete the statutory and banking record for this legal entity.
+              Are you sure you want to remove <strong>{firmToRemove?.name}</strong>? This will permanently delete all statutory records.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleRemoveFirm}
-              className="bg-rose-600 hover:bg-rose-700 font-bold"
-            >
-              Confirm Remove
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleRemoveFirm} className="bg-rose-600 hover:bg-rose-700 font-bold">Confirm Remove</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
