@@ -975,8 +975,14 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         <SlipDetailCell label="Slip Date" value={record.slipDate ? format(parseISO(record.slipDate), 'dd-MMM-yyyy') : "---"} />
         <SlipDetailCell label="Bank Name" value={employee?.bankName} />
         <SlipDetailCell label="Account No" value={employee?.accountNo} />
-        <SlipDetailCell label="PF Number" value={employee?.pfNumber || "---"} />
-        <SlipDetailCell label="ESIC Number" value={employee?.esicNumber || "---"} />
+        
+        {employee?.isGovComplianceEnabled && (
+          <>
+            <SlipDetailCell label="PF Number" value={employee?.pfNumber || "---"} />
+            <SlipDetailCell label="ESIC Number" value={employee?.esicNumber || "---"} />
+          </>
+        )}
+        
         <SlipDetailCell label="Monthly CTC" value={employee?.salary?.monthlyCTC ? formatCurrency(employee.salary.monthlyCTC) : "---"} />
         <SlipDetailCell label="Attendance" value={`${record.totalEarningDays} Days`} />
         <SlipDetailCell label="Leaves/Absent" value={`${record.absent} Days`} />
