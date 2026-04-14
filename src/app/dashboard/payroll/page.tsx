@@ -944,7 +944,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
   return (
     <div className="text-slate-900 space-y-8 font-calibri">
       {/* Top Header Layout: Logo Left, Title Center */}
-      <div className="flex items-start mb-8 relative">
+      <div className="flex items-start mb-4 relative">
         <div className="w-24 shrink-0">
           {firm?.logo ? (
             <img src={firm.logo} className="h-16 object-contain" alt="Logo" />
@@ -966,10 +966,14 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
       <div className="text-center space-y-1">
         <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
         <p className="text-[11px] font-bold text-slate-600 uppercase max-w-2xl mx-auto leading-relaxed">{firm?.registeredAddress || "Address details not available"}</p>
-        <div className="flex justify-center gap-8 mt-3 text-[11px] font-black uppercase tracking-widest text-slate-900">
+        <div className="flex justify-center flex-wrap gap-x-8 gap-y-1 mt-3 text-[11px] font-black uppercase tracking-widest text-slate-900">
           <span>GSTIN: {firm?.gstin || "---"}</span>
-          <span>PF: ---</span>
-          <span>ESIC: ---</span>
+          {firm?.email && (
+            <span className="flex items-center gap-1.5"><Mail className="w-3 h-3" /> {firm.email}</span>
+          )}
+          {firm?.website && (
+            <span className="flex items-center gap-1.5"><Globe className="w-3 h-3" /> {firm.website}</span>
+          )}
         </div>
       </div>
 
@@ -1058,7 +1062,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
           <p className="text-[10px] font-black uppercase tracking-widest">Employee Signature</p>
         </div>
         <div className="text-center space-y-4">
-          <div className="w-64 border-b-2 border-slate-900 flex flex-col items-center pb-2">
+          <div className="w-64 border-b-2 border-slate-900 flex items-center justify-center pb-2">
             <BadgeCheck className="w-12 h-12 text-emerald-600 opacity-20" />
           </div>
           <p className="text-[10px] font-black uppercase tracking-widest">Authorized Signatory</p>

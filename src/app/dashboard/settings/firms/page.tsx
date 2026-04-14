@@ -22,7 +22,9 @@ import {
   Loader2,
   Upload,
   X,
-  Info
+  Info,
+  Globe,
+  Mail
 } from "lucide-react";
 import {
   AlertDialog,
@@ -48,7 +50,7 @@ import { useData } from "@/context/data-context";
 
 const STATE_CODES: Record<string, string> = {
   "01": "Jammu and Kashmir",
-  "02": "Himachal Pradesh",
+  "02": " हिमाचल Pradesh",
   "03": "Punjab",
   "04": "Chandigarh",
   "05": "Uttarakhand",
@@ -249,6 +251,8 @@ export default function FirmsAndPlantsPage() {
         registeredAddress: firmDraft.registeredAddress || '',
         stateName: firmDraft.stateName || '',
         stateCode: firmDraft.stateCode || '',
+        email: firmDraft.email || '',
+        website: firmDraft.website || '',
         units: firmDraft.units || []
       };
 
@@ -508,6 +512,24 @@ export default function FirmsAndPlantsPage() {
                         placeholder="07AAAAA0000A1Z5" 
                         value={firmDraft.gstin || ''} 
                         onChange={(e) => handleGtinChange(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Firm Email</Label>
+                      <Input 
+                        className="h-12 bg-white" 
+                        placeholder="contact@sikka.com" 
+                        value={firmDraft.email || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, email: e.target.value}))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Firm Website</ാമ/Label>
+                      <Input 
+                        className="h-12 bg-white" 
+                        placeholder="www.sikkaenterprises.com" 
+                        value={firmDraft.website || ''} 
+                        onChange={(e) => setFirmDraft(p => ({...p, website: e.target.value}))}
                       />
                     </div>
                     <div className="space-y-2">

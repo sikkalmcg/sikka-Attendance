@@ -41,6 +41,8 @@ export interface Firm {
   registeredAddress?: string;
   stateName?: string;
   stateCode?: string;
+  email?: string;
+  website?: string;
   units: FirmUnit[];
 }
 
