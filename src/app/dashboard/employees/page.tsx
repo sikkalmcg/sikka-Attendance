@@ -74,21 +74,6 @@ import { Employee, SalaryStructure, Firm } from "@/lib/types";
 import { DEPARTMENTS, DESIGNATIONS } from "@/lib/constants";
 import { useData } from "@/context/data-context";
 
-const MOCK_FIRMS: Firm[] = [
-  { 
-    id: "f1", 
-    name: "Sikka Industries Ltd.", 
-    gstin: "07AAAAA0000A1Z5", 
-    pan: "AAAAA0000A", 
-    pfNo: "DL/CPM/123", 
-    esicNo: "11000123", 
-    units: [
-      { id: "u1", name: "Okhla Unit 1", address: "Phase III, Okhla" },
-      { id: "u2", name: "Gurgaon Unit 2", address: "Sector 18, Gurgaon" }
-    ] 
-  }
-];
-
 const generateMonthOptions = () => {
   const options = [];
   const date = new Date();
@@ -138,7 +123,6 @@ const INITIAL_SALARY_STRUCTURE: SalaryStructure = {
 };
 
 const INITIAL_FORM_DATA: Partial<Employee> = {
-  firmId: "f1",
   isGovComplianceEnabled: true,
   salary: { ...INITIAL_SALARY_STRUCTURE },
   salaryHistory: [],
@@ -146,7 +130,7 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 };
 
 export default function EmployeesPage() {
-  const { employees, setEmployees } = useData();
+  const { employees, setEmployees, firms } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
@@ -241,9 +225,14 @@ export default function EmployeesPage() {
   const handleRegistrationPost = async () => {
     if (isProcessing) return;
 
-    // Validation Check (Before setting isProcessing to true)
+    // Validation Check
     if (!formData.name || !formData.aadhaar || (formData.aadhaar || "").replace(/\s/g, '').length !== 12) {
       toast({ variant: "destructive", title: "Validation Error", description: "Name and 12-digit Aadhaar are mandatory." });
+      return;
+    }
+
+    if (!formData.firmId || !formData.unitId) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Firm and Unit selection are mandatory." });
       return;
     }
 
@@ -369,6 +358,13 @@ export default function EmployeesPage() {
     return isNaN(pct) || !isFinite(pct) ? "0.0" : pct.toFixed(1);
   }, [salaryRevision, revisionData.monthlyCTC]);
 
+  // Derive associated units based on selected firm
+  const availableUnits = useMemo(() => {
+    if (!formData.firmId) return [];
+    const firm = (firms || []).find(f => f.id === formData.firmId);
+    return firm?.units || [];
+  }, [formData.firmId, firms]);
+
   if (!isMounted) return null;
 
   return (
@@ -412,7 +408,7 @@ export default function EmployeesPage() {
                 <TableHead className="font-bold">Join Date</TableHead>
                 <TableHead className="font-bold text-right">Monthly CTC</TableHead>
                 <TableHead className="font-bold text-center">Status</TableHead>
-                <TableHead className="text-right font-bold">Actions</TableHead>
+                <TableHead className="text-right font-bold pr-6">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -451,7 +447,7 @@ export default function EmployeesPage() {
                         {emp.active ? "Active" : "De-active"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">
                         <Button 
                           variant="ghost" 
@@ -520,15 +516,25 @@ export default function EmployeesPage() {
                         <Label>Firm Name</Label>
                         <Select value={formData.firmId} onValueChange={(v) => setFormData(prev => ({...prev, firmId: v, unitId: undefined}))}>
                           <SelectTrigger><SelectValue placeholder="Select Firm" /></SelectTrigger>
-                          <SelectContent>{MOCK_FIRMS.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+                          <SelectContent>
+                            {firms.map(f => (
+                              <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                            ))}
+                          </SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>Unit / Plant</Label>
-                        <Select value={formData.unitId} onValueChange={(v) => setFormData(prev => ({...prev, unitId: v}))}>
-                          <SelectTrigger><SelectValue placeholder="Select Unit" /></SelectTrigger>
+                        <Select 
+                          value={formData.unitId} 
+                          onValueChange={(v) => setFormData(prev => ({...prev, unitId: v}))}
+                          disabled={!formData.firmId}
+                        >
+                          <SelectTrigger><SelectValue placeholder={formData.firmId ? "Select Unit" : "Select Firm First"} /></SelectTrigger>
                           <SelectContent>
-                            {(MOCK_FIRMS.find(f => f.id === formData.firmId)?.units || []).map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                            {availableUnits.map(u => (
+                              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
