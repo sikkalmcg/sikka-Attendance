@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -26,7 +25,8 @@ import {
   Printer,
   Eye,
   Download,
-  X
+  X,
+  User as UserIcon
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -58,6 +58,7 @@ export default function VouchersPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const { toast } = useToast();
 
   // State for Preview and Print
@@ -70,6 +71,8 @@ export default function VouchersPage() {
   useEffect(() => {
     setIsMounted(true);
     setVoucherDate(new Date().toISOString().split('T')[0]);
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
 
   // Selected Employee Details
@@ -158,7 +161,8 @@ export default function VouchersPage() {
       date: voucherDate,
       amount: parseFloat(amount),
       purpose: purpose,
-      status: "PENDING"
+      status: "PENDING",
+      createdByName: currentUser?.fullName || "System"
     };
 
     setVouchers(prev => [...prev, newVoucher]);
@@ -217,12 +221,17 @@ export default function VouchersPage() {
 
         <TabsContent value="create">
           <Card className="max-w-4xl mx-auto shadow-xl border-none">
-            <CardHeader className="bg-slate-50 border-b border-slate-100 rounded-t-xl">
+            <CardHeader className="bg-slate-50 border-b border-slate-100 rounded-t-xl flex flex-row items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-lg">
                   <Wallet className="text-primary w-5 h-5" />
                 </div>
                 <CardTitle>Generate New Voucher</CardTitle>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-white border border-slate-200 rounded-full shadow-sm">
+                <UserIcon className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Voucher Create by:</span>
+                <span className="text-xs font-bold text-primary">{currentUser?.fullName || "Loading..."}</span>
               </div>
             </CardHeader>
             <form onSubmit={handleCreateVoucher}>
@@ -365,13 +374,14 @@ export default function VouchersPage() {
                       <TableHead className="font-bold">Firm / Unit</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold">Amount</TableHead>
+                      <TableHead className="font-bold">Created By</TableHead>
                       <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {pendingVouchers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                           No vouchers pending approval.
                         </TableCell>
                       </TableRow>
@@ -409,6 +419,7 @@ export default function VouchersPage() {
                             </TableCell>
                             <TableCell className="text-sm">{v.date}</TableCell>
                             <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
                             <TableCell className="text-right pr-6">
                               <div className="flex justify-end gap-2">
                                 <Button 
@@ -469,6 +480,7 @@ export default function VouchersPage() {
                       <TableHead className="font-bold">Firm / Unit</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold">Amount</TableHead>
+                      <TableHead className="font-bold">Created By</TableHead>
                       <TableHead className="font-bold">Status</TableHead>
                       <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
@@ -476,7 +488,7 @@ export default function VouchersPage() {
                   <TableBody>
                     {payableVouchers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                           No approved vouchers ready for payment.
                         </TableCell>
                       </TableRow>
@@ -514,6 +526,7 @@ export default function VouchersPage() {
                             </TableCell>
                             <TableCell className="text-sm">{v.date}</TableCell>
                             <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
                             <TableCell>
                               <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
                                 "text-[10px] font-bold px-2 py-0.5",
@@ -660,6 +673,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <div className="text-right space-y-1">
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher No:</span><span className="font-mono font-bold">{voucher.voucherNo}</span></div>
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher Date:</span><span className="font-bold">{voucher.date}</span></div>
+          <div className="flex justify-end gap-2 text-[10px] pt-2"><span className="font-black text-slate-400 uppercase tracking-widest">Created By:</span><span className="font-bold text-primary">{voucher.createdByName || "System"}</span></div>
         </div>
       </div>
 
