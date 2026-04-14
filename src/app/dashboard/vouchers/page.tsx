@@ -31,6 +31,7 @@ import {
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
+import { format, parseISO } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -555,6 +556,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
   const emp = employees.find((e: any) => e.id === voucher.employeeId);
   const firm = firms.find((f: any) => f.id === emp?.firmId);
   const plant = plants.find((p: any) => p.id === emp?.unitId);
+  const formattedDate = voucher.date ? format(parseISO(voucher.date), 'dd-MMM-yyyy') : "---";
 
   return (
     <div className="font-serif text-slate-900 space-y-12">
@@ -571,7 +573,12 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
           <div className="space-y-1">
             <h1 className="text-3xl font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
             <p className="text-lg font-bold text-slate-700 uppercase">{plant?.name || "Corporate Unit"}</p>
-            <p className="text-sm text-slate-500 font-medium italic max-w-md">{plant?.address || "Address details not available"}</p>
+            <div className="space-y-0.5">
+              <p className="text-sm text-slate-500 font-medium italic max-w-md">{plant?.address || "Address details not available"}</p>
+              <p className="text-xs font-black text-slate-900 flex gap-2">
+                <span className="text-slate-400 uppercase tracking-widest">GSTIN:</span> {firm?.gstin || "---"}
+              </p>
+            </div>
           </div>
         </div>
         
@@ -583,7 +590,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
             </div>
             <div className="flex justify-end gap-3 text-sm">
               <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px]">Date:</span>
-              <span className="font-black text-slate-900 text-lg">{voucher.date}</span>
+              <span className="font-black text-slate-900 text-lg">{formattedDate}</span>
             </div>
           </div>
           
