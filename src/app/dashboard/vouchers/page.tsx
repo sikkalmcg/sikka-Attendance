@@ -612,11 +612,13 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
       </div>
 
       {/* Employee Grid */}
-      <div className="grid grid-cols-2 border-2 border-slate-900">
+      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900">
         <DetailCell label="Employee ID" value={emp?.employeeId} />
         <DetailCell label="Employee Name" value={emp?.name} />
         <DetailCell label="Department" value={emp?.department} />
         <DetailCell label="Designation" value={emp?.designation} />
+        <DetailCell label="Aadhar Number" value={emp?.aadhaar} />
+        <DetailCell label="Mobile Number" value={emp?.mobile} />
       </div>
 
       {/* Payment Details */}
@@ -672,7 +674,7 @@ function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
 
 function DetailCell({ label, value }: { label: string, value: any }) {
   return (
-    <div className="flex items-center p-6 border-r last:border-r-0 border-slate-900">
+    <div className="flex items-center p-6 bg-white">
       <span className="text-[10px] font-black uppercase text-slate-400 w-40 shrink-0 tracking-widest">{label}:</span>
       <span className="text-base font-black text-slate-900 uppercase tracking-tight">{value || "---"}</span>
     </div>
