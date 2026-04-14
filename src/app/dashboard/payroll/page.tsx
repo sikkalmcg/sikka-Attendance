@@ -920,10 +920,12 @@ export default function PayrollPage() {
 }
 
 function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, employee?: Employee, firm?: Firm }) {
+  const basicVal = record.totalEarningDays > 0 ? Math.round((employee?.salary.basic || 0) / 30 * record.totalEarningDays) : 0;
+  const hraVal = record.totalEarningDays > 0 ? Math.round((employee?.salary.hra || 0) / 30 * record.totalEarningDays) : 0;
+  const allowanceVal = record.totalEarningDays > 0 ? Math.round((employee?.salary.allowance || 0) / 30 * record.totalEarningDays) : 0;
+
   const earnings = [
-    { label: "Basic Salary", value: record.totalEarningDays > 0 ? Math.round((employee?.salary.basic || 0) / 30 * record.totalEarningDays) : 0 },
-    { label: "HRA", value: record.totalEarningDays > 0 ? Math.round((employee?.salary.hra || 0) / 30 * record.totalEarningDays) : 0 },
-    { label: "Allowance", value: record.totalEarningDays > 0 ? Math.round((employee?.salary.allowance || 0) / 30 * record.totalEarningDays) : 0 },
+    { label: "Total Earnings", value: basicVal + hraVal + allowanceVal },
     { label: "Incentives", value: record.incentiveAmt || 0 },
     { label: "Holiday Work Pay", value: record.holidayWorkAmt || 0 },
   ];
@@ -1063,6 +1065,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
+      {/* Footer Disclaimer */}
       <div className="text-center pt-10">
         <p className="text-[8px] font-bold text-slate-300 uppercase tracking-[0.5em]">This is a computer generated document and does not require a physical signature.</p>
       </div>
