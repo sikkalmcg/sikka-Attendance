@@ -17,7 +17,9 @@ import {
   Navigation,
   ChevronLeft,
   ChevronRight,
-  Pencil
+  Pencil,
+  AlertCircle,
+  ShieldAlert
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -28,7 +30,7 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { AttendanceRecord, Plant, AppNotification } from "@/lib/types";
+import { AttendanceRecord, Plant, AppNotification, Employee } from "@/lib/types";
 import { useData } from "@/context/data-context";
 import { format, subDays, eachDayOfInterval, isSunday, isSameDay } from "date-fns";
 import {
@@ -48,9 +50,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ATTENDANCE_RULES } from "@/lib/constants";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function AttendancePage() {
-  const { attendanceRecords, addRecord, updateRecord, plants, holidays } = useData();
+  const { attendanceRecords, addRecord, updateRecord, plants, holidays, employees } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -82,11 +85,37 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Strict Access Check: Find if user exists in Employee Directory
+  const registeredEmployee = useMemo(() => {
+    if (!currentUser || !employees || employees.length === 0) return null;
+    
+    // Normalize username (Aadhaar or Mobile used during login)
+    const loginIdent = currentUser.username?.replace(/\s/g, '');
+    
+    return employees.find(e => {
+      const empAadhaar = e.aadhaar?.replace(/\s/g, '');
+      const empMobile = e.mobile?.replace(/\s/g, '');
+      return empAadhaar === loginIdent || empMobile === loginIdent;
+    });
+  }, [currentUser, employees]);
+
+  const isAccessAllowed = useMemo(() => {
+    return currentUser?.role === 'EMPLOYEE' && !!registeredEmployee;
+  }, [currentUser, registeredEmployee]);
+
+  const effectiveEmployeeId = useMemo(() => {
+    return registeredEmployee?.employeeId || currentUser?.username || "N/A";
+  }, [registeredEmployee, currentUser]);
+
+  const effectiveEmployeeName = useMemo(() => {
+    return registeredEmployee?.name || currentUser?.fullName || "Employee Name";
+  }, [registeredEmployee, currentUser]);
+
   const todayRecord = useMemo(() => {
     if (!currentUser) return null;
     const todayStr = new Date().toISOString().split('T')[0];
-    return (attendanceRecords || []).find(r => r.employeeId === currentUser.username && r.date === todayStr);
-  }, [currentUser, attendanceRecords]);
+    return (attendanceRecords || []).find(r => r.employeeId === effectiveEmployeeId && r.date === todayStr);
+  }, [currentUser, attendanceRecords, effectiveEmployeeId]);
 
   const history = useMemo(() => {
     if (!currentUser) return [];
@@ -99,7 +128,7 @@ export default function AttendancePage() {
     
     return dateRange.map(date => {
       const dateStr = format(date, 'yyyy-MM-dd');
-      const existingRecord = (attendanceRecords || []).find(r => r.employeeId === currentUser.username && r.date === dateStr);
+      const existingRecord = (attendanceRecords || []).find(r => r.employeeId === effectiveEmployeeId && r.date === dateStr);
       
       const isSun = isSunday(date);
       const holiday = (holidays || []).find(h => h.date === dateStr);
@@ -119,8 +148,8 @@ export default function AttendancePage() {
       if (isSun) {
         return {
           id: `virtual-sun-${dateStr}`,
-          employeeId: currentUser.username,
-          employeeName: currentUser.fullName,
+          employeeId: effectiveEmployeeId,
+          employeeName: effectiveEmployeeName,
           date: dateStr,
           status: 'WEEKLY_OFF',
           attendanceType: '--',
@@ -133,8 +162,8 @@ export default function AttendancePage() {
       if (holiday) {
         return {
           id: `virtual-hol-${dateStr}`,
-          employeeId: currentUser.username,
-          employeeName: currentUser.fullName,
+          employeeId: effectiveEmployeeId,
+          employeeName: effectiveEmployeeName,
           date: dateStr,
           status: 'HOLIDAY',
           attendanceType: '--',
@@ -146,8 +175,8 @@ export default function AttendancePage() {
 
       return {
         id: `virtual-abs-${dateStr}`,
-        employeeId: currentUser.username,
-        employeeName: currentUser.fullName,
+        employeeId: effectiveEmployeeId,
+        employeeName: effectiveEmployeeName,
         date: dateStr,
         status: 'ABSENT',
         attendanceType: '--',
@@ -158,7 +187,7 @@ export default function AttendancePage() {
         isNonWorkingDay: false
       } as any;
     }).filter(Boolean).reverse();
-  }, [currentUser, attendanceRecords, holidays]);
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName]);
 
   const totalPages = Math.ceil(history.length / rowsPerPage);
   const paginatedHistory = useMemo(() => {
@@ -167,6 +196,11 @@ export default function AttendancePage() {
   }, [history, currentPage]);
 
   const requestLocation = (type: "IN" | "OUT") => {
+    if (!isAccessAllowed) {
+      toast({ variant: "destructive", title: "Access Denied", description: "Attendance marking is only for registered employees." });
+      return;
+    }
+
     setIsLoadingLocation(true);
     if (!("geolocation" in navigator)) {
       toast({ variant: "destructive", title: "GPS Error", description: "Browser does not support geolocation." });
@@ -194,14 +228,14 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckIn = () => {
-    if (!currentUser || !currentGPS) return;
+    if (!currentUser || !currentGPS || !isAccessAllowed) return;
     const time = format(new Date(), "HH:mm");
     const today = new Date().toISOString().split('T')[0];
     const type = detectedPlant ? 'OFFICE' : manualType;
 
     const newRecord: Partial<AttendanceRecord> = {
-      employeeId: currentUser.username,
-      employeeName: currentUser.fullName,
+      employeeId: effectiveEmployeeId,
+      employeeName: effectiveEmployeeName,
       date: today,
       inTime: time,
       outTime: null,
@@ -217,7 +251,7 @@ export default function AttendancePage() {
 
     addRecord('attendance', newRecord);
     addRecord('notifications', {
-      message: `${currentUser.fullName} (${currentUser.username}) marked IN at ${time} (${type})`,
+      message: `${effectiveEmployeeName} (${effectiveEmployeeId}) marked IN at ${time} (${type})`,
       timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
       read: false
     });
@@ -226,7 +260,7 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckOut = () => {
-    if (!todayRecord || !currentGPS) return;
+    if (!todayRecord || !currentGPS || !isAccessAllowed) return;
     const time = format(new Date(), "HH:mm");
     const typeOut = detectedPlant ? 'OFFICE' : manualType;
     
@@ -332,6 +366,25 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
+      {currentUser?.role === 'EMPLOYEE' && !registeredEmployee && (
+        <Alert variant="destructive" className="bg-rose-50 border-rose-200 animate-in fade-in slide-in-from-top-2">
+          <ShieldAlert className="h-5 w-5 text-rose-600" />
+          <AlertTitle className="font-bold text-rose-800">Profile Not Verified</AlertTitle>
+          <AlertDescription className="text-rose-700">
+            Your login credentials are not found in the official Employee Directory. Please contact your HR Manager to register your profile before marking attendance.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {currentUser?.role !== 'EMPLOYEE' && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 items-center">
+          <AlertCircle className="w-5 h-5 text-amber-600" />
+          <p className="text-xs font-bold text-amber-800">
+            Administrator View: You are logged in as {currentUser?.role}. Attendance marking is disabled for administrative accounts.
+          </p>
+        </div>
+      )}
+
       <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-md mx-auto">
         <div className="h-1 bg-primary" />
         <CardHeader className="text-center py-4">
@@ -357,18 +410,24 @@ export default function AttendancePage() {
 
           <div className="flex gap-4">
             <Button 
-              className="flex-1 h-14 text-sm font-black rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all active:scale-95 disabled:bg-slate-50 disabled:text-slate-300" 
-              disabled={isLoadingLocation || (!!todayRecord && !!todayRecord.inTime)} 
+              className={cn(
+                "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
+                isAccessAllowed ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+              )} 
+              disabled={!isAccessAllowed || isLoadingLocation || (!!todayRecord && !!todayRecord.inTime)} 
               onClick={() => requestLocation("IN")}
             >
-              Mark Check-In
+              {isAccessAllowed ? "Mark Check-In" : "Access Locked"}
             </Button>
             <Button 
-              className="flex-1 h-14 text-sm font-black rounded-2xl bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-100 transition-all active:scale-95 disabled:bg-slate-50 disabled:text-slate-300" 
-              disabled={isLoadingLocation || !todayRecord || (!!todayRecord && !!todayRecord.outTime)} 
+              className={cn(
+                "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
+                isAccessAllowed ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+              )} 
+              disabled={!isAccessAllowed || isLoadingLocation || !todayRecord || (!!todayRecord && !!todayRecord.outTime)} 
               onClick={() => requestLocation("OUT")}
             >
-              Mark Check-Out
+              {isAccessAllowed ? "Mark Check-Out" : "Access Locked"}
             </Button>
           </div>
         </CardContent>
@@ -377,7 +436,7 @@ export default function AttendancePage() {
       <div className="space-y-4 max-w-6xl mx-auto pt-6">
         <div className="flex items-center justify-between">
           <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
-            <History className="w-6 h-6 text-primary" /> My Attendance History
+            <History className="w-6 h-6 text-primary" /> {currentUser?.role === 'EMPLOYEE' ? 'My Attendance History' : 'Staff Attendance Oversight'}
           </h3>
         </div>
         <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
