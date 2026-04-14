@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Table, 
   TableHeader, 
@@ -74,6 +74,7 @@ function determineStatus(hours: number): 'PRESENT' | 'ABSENT' | 'HALF_DAY' {
 
 export default function ApprovalsPage() {
   const { attendanceRecords, updateRecord } = useData();
+  const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("pending");
   const [currentPage, setCurrentPage] = useState(1);
@@ -90,15 +91,24 @@ export default function ApprovalsPage() {
 
   const { toast } = useToast();
 
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const filteredRecords = useMemo(() => {
     return (attendanceRecords || []).filter(rec => {
       const name = (rec.employeeName || "").toLowerCase();
       const id = (rec.employeeId || "").toLowerCase();
       const matchesSearch = name.includes(searchTerm.toLowerCase()) || id.includes(searchTerm.toLowerCase());
-      // Record is pending if not approved AND (no rejection remark OR rejection has resubmitted rejectionCount < 2)
-      // Actually simplified logic: activeTab pending = not approved.
-      const matchesTab = activeTab === "approved" ? rec.approved : !rec.approved;
-      return matchesSearch && matchesTab;
+      
+      // LOGIC:
+      // 1. Pending: Not approved AND no remark (HR hasn't rejected it yet)
+      // 2. Approved: Only approved records
+      if (activeTab === "pending") {
+        return matchesSearch && !rec.approved && (!rec.remark || rec.remark === "");
+      } else {
+        return matchesSearch && rec.approved;
+      }
     });
   }, [attendanceRecords, searchTerm, activeTab]);
 
@@ -112,6 +122,7 @@ export default function ApprovalsPage() {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
+      // CLEAR remark when approving so it moves from "Inbox" to "Approved"
       updateRecord('attendance', id, { approved: true, remark: "" });
       toast({ title: "Approved", description: "Record moved to approved list." });
     } finally {
@@ -123,7 +134,7 @@ export default function ApprovalsPage() {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
-      updateRecord('attendance', id, { approved: false });
+      updateRecord('attendance', id, { approved: false, remark: "" });
       toast({ title: "Restored", description: "Record moved back to pending list." });
     } finally {
       setIsProcessing(false);
@@ -171,12 +182,14 @@ export default function ApprovalsPage() {
     
     setIsProcessing(true);
     try {
+      // By setting a remark and keeping approved: false, it disappears from "Pending" tab
       updateRecord('attendance', selectedRecord.id, { 
         remark: rejectRemark,
-        rejectionCount: (selectedRecord.rejectionCount || 0) + 1
+        rejectionCount: (selectedRecord.rejectionCount || 0) + 1,
+        approved: false
       });
       setIsRejectDialogOpen(false);
-      toast({ title: "Rejected", description: "Remark added to pending record." });
+      toast({ title: "Rejected", description: "Record removed from pending and sent back to employee." });
     } finally {
       setIsProcessing(false);
     }
@@ -186,6 +199,8 @@ export default function ApprovalsPage() {
     setSelectedRecord(rec);
     setIsVerifyDialogOpen(true);
   };
+
+  if (!isMounted) return null;
 
   return (
     <TooltipProvider>
