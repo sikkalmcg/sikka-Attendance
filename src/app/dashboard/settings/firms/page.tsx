@@ -672,6 +672,7 @@ export default function FirmsAndPlantsPage() {
                     <TableHead className="font-bold">Firm Logo / Name</TableHead>
                     <TableHead className="font-bold">GSTIN</TableHead>
                     <TableHead className="font-bold">State (Code)</TableHead>
+                    <TableHead className="font-bold">Contact Info</TableHead>
                     <TableHead className="font-bold">Units</TableHead>
                     <TableHead className="font-bold text-right">PF / ESIC</TableHead>
                     <TableHead className="text-right font-bold pr-6">Actions</TableHead>
@@ -680,7 +681,7 @@ export default function FirmsAndPlantsPage() {
                 <TableBody>
                   {firms.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No firms registered yet.</TableCell>
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No firms registered yet.</TableCell>
                     </TableRow>
                   ) : (
                     [...firms].reverse().map((f) => (
@@ -707,6 +708,21 @@ export default function FirmsAndPlantsPage() {
                           <div className="flex flex-col">
                             <span className="text-xs font-bold">{f.stateName}</span>
                             <span className="text-[10px] text-slate-400">Code: {f.stateCode}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 text-[10px]">
+                            {f.email && (
+                              <div className="flex items-center gap-1.5 text-slate-600">
+                                <Mail className="w-3 h-3 text-primary" /> {f.email}
+                              </div>
+                            )}
+                            {f.website && (
+                              <div className="flex items-center gap-1.5 text-slate-600">
+                                <Globe className="w-3 h-3 text-primary" /> {f.website}
+                              </div>
+                            )}
+                            {!f.email && !f.website && <span className="text-slate-400">---</span>}
                           </div>
                         </TableCell>
                         <TableCell>
