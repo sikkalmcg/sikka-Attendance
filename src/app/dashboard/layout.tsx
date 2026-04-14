@@ -60,7 +60,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 function HeaderActions() {
-  const { notifications, setNotifications } = useData();
+  const { notifications, updateRecord, deleteRecord } = useData();
   const [user, setUser] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const router = useRouter();
@@ -72,10 +72,21 @@ function HeaderActions() {
   }, []);
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
-  const latestNotifications = useMemo(() => notifications.slice(0, 10), [notifications]);
+  const latestNotifications = useMemo(() => [...notifications].reverse().slice(0, 10), [notifications]);
 
   const markAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    notifications.forEach(n => {
+      if (!n.read) {
+        updateRecord('notifications', n.id, { read: true });
+      }
+    });
+  };
+
+  const handleClearLogs = () => {
+    notifications.forEach(n => {
+      deleteRecord('notifications', n.id);
+    });
+    toast({ title: "Logs Cleared", description: "All notifications have been removed." });
   };
 
   const handleLogout = () => {
@@ -147,7 +158,11 @@ function HeaderActions() {
           </ScrollArea>
           {latestNotifications.length > 0 && (
             <div className="p-3 bg-slate-50 border-t text-center">
-              <Button variant="ghost" className="text-[10px] font-black uppercase tracking-widest text-primary h-8 w-full hover:bg-primary/5" onClick={() => setNotifications([])}>
+              <Button 
+                variant="ghost" 
+                className="text-[10px] font-black uppercase tracking-widest text-primary h-8 w-full hover:bg-primary/5" 
+                onClick={handleClearLogs}
+              >
                 Clear All Logs
               </Button>
             </div>
