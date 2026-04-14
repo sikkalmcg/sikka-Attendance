@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -30,7 +31,9 @@ import {
   Clock,
   User as UserIcon,
   Camera,
-  Upload
+  Upload,
+  ShieldAlert,
+  ArrowLeft
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -367,6 +370,8 @@ function SidebarNav() {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
@@ -375,16 +380,57 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    const user = JSON.parse(savedUser);
+    const userData = JSON.parse(savedUser);
+    setUser(userData);
     
-    // Strict RBAC Redirection for Employees
-    if (user.role === 'EMPLOYEE') {
-      const isAttendancePage = pathname === '/dashboard/attendance';
-      if (!isAttendancePage) {
-        router.push("/dashboard/attendance");
-      }
+    // Authorization Check Logic
+    const menuPermissions: Record<string, string> = {
+      "/dashboard": "Dashboard",
+      "/dashboard/attendance": "Attendance",
+      "/dashboard/approvals": "Approvals",
+      "/dashboard/employees": "Employees",
+      "/dashboard/payroll": "Payroll",
+      "/dashboard/vouchers": "Vouchers",
+      "/dashboard/holidays": "Holidays",
+      "/dashboard/reports": "Reports",
+      "/dashboard/settings/firms": "Settings",
+      "/dashboard/settings/users": "Users"
+    };
+
+    const requiredPermission = menuPermissions[pathname];
+    
+    if (userData.role === 'SUPER_ADMIN') {
+      setIsAuthorized(true);
+    } else if (userData.role === 'EMPLOYEE') {
+      setIsAuthorized(pathname === '/dashboard/attendance');
+      if (pathname !== '/dashboard/attendance') router.push("/dashboard/attendance");
+    } else if (requiredPermission) {
+      const hasPerm = userData.permissions?.includes(requiredPermission) || requiredPermission === "Dashboard";
+      setIsAuthorized(hasPerm);
+    } else {
+      setIsAuthorized(true); // Allow sub-routes (like /payroll/generate) if they handle their own internal data safety
     }
   }, [router, pathname]);
+
+  if (isAuthorized === false) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 p-6">
+        <div className="w-20 h-20 bg-rose-50 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-rose-100">
+          <ShieldAlert className="w-10 h-10 text-rose-500" />
+        </div>
+        <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Access Denied</h1>
+        <p className="text-slate-500 font-medium text-center max-w-sm mb-8">
+          You do not have the required permissions to view this module. Please contact your system administrator.
+        </p>
+        <Button 
+          className="bg-primary px-8 h-12 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2"
+          onClick={() => router.push(user?.role === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard")}
+        >
+          <ArrowLeft className="w-4 h-4" /> Go Back Home
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <DataProvider>
