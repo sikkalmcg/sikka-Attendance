@@ -513,7 +513,7 @@ export default function VouchersPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Pay Dialog - Updated Dimensions and Layout */}
+      {/* Pay Dialog */}
       <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader className="border-b pb-4">
@@ -528,7 +528,6 @@ export default function VouchersPage() {
             </div>
           </DialogHeader>
           <div className="py-4 space-y-6">
-            {/* Table 1: Amount and Date */}
             <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
               <div className="space-y-2">
                 <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Paid Amount (INR)</Label>
@@ -550,7 +549,6 @@ export default function VouchersPage() {
               </div>
             </div>
 
-            {/* Table 2: Mode and Ref No */}
             <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
               <div className="space-y-2">
                 <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Mode</Label>
@@ -644,19 +642,19 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
     <div className="font-serif text-slate-900 space-y-12">
       {/* Document Header */}
       <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10">
-        <div className="flex items-center gap-8">
-          <div className="w-32 h-32 border-2 border-slate-200 flex items-center justify-center p-2 rounded-xl bg-white shadow-sm overflow-hidden">
+        <div className="flex items-start gap-6">
+          <div className="w-16 h-16 border-2 border-slate-200 flex items-center justify-center p-1 rounded-xl bg-white shadow-sm overflow-hidden shrink-0 mt-1">
             {firm?.logo ? (
               <img src={firm.logo} className="max-h-full max-w-full object-contain" alt="logo" />
             ) : (
-              <Building2 className="w-16 h-16 text-slate-300" />
+              <Building2 className="w-8 h-8 text-slate-300" />
             )}
           </div>
           <div className="space-y-1">
-            <h1 className="text-3xl font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
-            <p className="text-lg font-bold text-slate-700 uppercase">{plant?.name || "Corporate Unit"}</p>
+            <h1 className="text-2xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
+            <p className="text-sm font-black text-slate-700 uppercase tracking-widest">{plant?.name || "CORPORATE UNIT"}</p>
             <div className="space-y-0.5">
-              <p className="text-sm text-slate-500 font-medium italic max-w-md">{plant?.address || "Address details not available"}</p>
+              <p className="text-xs text-slate-500 font-bold italic max-w-md">{firm?.registeredAddress || "Address details not available"}</p>
               <p className="text-xs font-black text-slate-900 flex gap-2">
                 <span className="text-slate-400 uppercase tracking-widest">GSTIN:</span> {firm?.gstin || "---"}
               </p>
@@ -750,7 +748,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
 function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
   return (
     <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
-      <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />
+      <AdvanceVoucherContent voucher={voucher} employees={employees} firms={firms} plants={plants} />
     </div>
   );
 }
