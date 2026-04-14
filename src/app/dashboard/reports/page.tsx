@@ -17,7 +17,8 @@ import {
   Table as TableIcon,
   ChevronLeft,
   ChevronRight,
-  Filter
+  Filter,
+  ShieldCheck
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -56,7 +57,7 @@ export default function ReportsPage() {
   // Filter States
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [selectedPlantIds, setSelectedPlantIds] = useState<string[]>([]);
+  const [selectedFirmIds, setSelectedFirmIds] = useState<string[]>([]);
 
   // View States
   const [viewData, setViewData] = useState<any[] | null>(null);
@@ -69,16 +70,16 @@ export default function ReportsPage() {
     const start = subDays(end, 90);
     setFromDate(format(start, "yyyy-MM-dd"));
     setToDate(format(end, "yyyy-MM-dd"));
-    setSelectedPlantIds(plants.map(p => p.id));
-  }, [plants]);
+    setSelectedFirmIds(firms.map(f => f.id));
+  }, [firms]);
 
   const openReportDialog = (type: ReportType) => {
     setActiveReport(type);
     setIsDialogOpen(true);
   };
 
-  const togglePlant = (id: string) => {
-    setSelectedPlantIds(prev => 
+  const toggleFirm = (id: string) => {
+    setSelectedFirmIds(prev => 
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
   };
@@ -94,9 +95,9 @@ export default function ReportsPage() {
         .filter(rec => {
           const recDate = parseISO(rec.date);
           const emp = employees.find(e => e.employeeId === rec.employeeId);
-          const plantMatch = emp && selectedPlantIds.includes(emp.unitId);
+          const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
           const dateMatch = isWithinInterval(recDate, { start, end });
-          return plantMatch && dateMatch;
+          return firmMatch && dateMatch;
         })
         .map(rec => {
           const emp = employees.find(e => e.employeeId === rec.employeeId);
@@ -124,9 +125,9 @@ export default function ReportsPage() {
         .filter(pay => {
           const slipDate = pay.slipDate ? parseISO(pay.slipDate) : null;
           const emp = employees.find(e => e.employeeId === pay.employeeId);
-          const plantMatch = emp && selectedPlantIds.includes(emp.unitId);
+          const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
           const dateMatch = slipDate && isWithinInterval(slipDate, { start, end });
-          return plantMatch && dateMatch;
+          return firmMatch && dateMatch;
         })
         .map(pay => {
           const emp = employees.find(e => e.employeeId === pay.employeeId);
@@ -308,7 +309,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Report Generation Dialog */}
+      {/* Report Generation Dialog - Updated to Firm Selection */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
@@ -316,7 +317,7 @@ export default function ReportsPage() {
               <Filter className="w-6 h-6 text-primary" />
               Generate {activeReport === "ATTENDANCE" ? "Attendance" : "Payroll"} Report
             </DialogTitle>
-            <DialogDescription>Select specific filters to compile your data export.</DialogDescription>
+            <DialogDescription>Select specific filters to compile your data export based on Firms.</DialogDescription>
           </DialogHeader>
           
           <div className="space-y-8 py-6">
@@ -343,18 +344,18 @@ export default function ReportsPage() {
 
             <div className="space-y-4">
               <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
-                <Building2 className="w-4 h-4" /> Multi-Plant Selection
+                <ShieldCheck className="w-4 h-4 text-primary" /> Multi-Firm Selection
               </Label>
               <div className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 max-h-48 overflow-y-auto space-y-3 custom-scrollbar">
-                {plants.map((plant) => (
-                  <div key={plant.id} className="flex items-center space-x-3 bg-white p-2 rounded-lg border border-slate-100">
+                {firms.map((firm) => (
+                  <div key={firm.id} className="flex items-center space-x-3 bg-white p-2 rounded-lg border border-slate-100">
                     <Checkbox 
-                      id={`p-${plant.id}`} 
-                      checked={selectedPlantIds.includes(plant.id)} 
-                      onCheckedChange={() => togglePlant(plant.id)} 
+                      id={`f-${firm.id}`} 
+                      checked={selectedFirmIds.includes(firm.id)} 
+                      onCheckedChange={() => toggleFirm(firm.id)} 
                     />
-                    <label htmlFor={`p-${plant.id}`} className="text-sm font-bold text-slate-700 cursor-pointer flex-1">
-                      {plant.name}
+                    <label htmlFor={`f-${firm.id}`} className="text-sm font-bold text-slate-700 cursor-pointer flex-1">
+                      {firm.name}
                     </label>
                   </div>
                 ))}

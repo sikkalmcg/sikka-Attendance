@@ -220,6 +220,13 @@ export default function VouchersPage() {
     setVoucherToPay(null);
   };
 
+  const handleDownloadPDF = (v: Voucher) => {
+    setPreviewVoucher(v);
+    setTimeout(() => {
+      window.print();
+    }, 300);
+  };
+
   const handleExportExcel = (type: 'PENDING' | 'PAYMENT') => {
     const data = type === 'PENDING' ? filteredPendingVouchers : filteredPayableVouchers;
     if (data.length === 0) return;
@@ -464,8 +471,8 @@ export default function VouchersPage() {
                                   <CreditCard className="w-3 h-3 mr-1.5" /> Pay
                                 </Button>
                               ) : (
-                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>
-                                  <Printer className="w-3 h-3 mr-1.5" /> Print
+                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
+                                  <Download className="w-3 h-3" /> Download
                                 </Button>
                               )}
                             </div>
@@ -506,9 +513,9 @@ export default function VouchersPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Pay Dialog */}
+      {/* Pay Dialog - Updated Dimensions and Layout */}
       <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader className="border-b pb-4">
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Process Payment</span>
@@ -520,54 +527,65 @@ export default function VouchersPage() {
               </div>
             </div>
           </DialogHeader>
-          <div className="py-8 space-y-6">
-            <div className="space-y-2">
-              <Label className="font-black text-xs uppercase text-slate-500 tracking-wider">Paid Amount (INR)</Label>
-              <Input 
-                type="number" 
-                value={payAmount} 
-                onChange={(e) => setPayAmount(e.target.value)} 
-                className="h-14 bg-slate-50 border-slate-200 font-black text-xl text-emerald-600 focus-visible:ring-emerald-500" 
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="font-black text-xs uppercase text-slate-500 tracking-wider">Payment Date</Label>
-              <Input 
-                type="date" 
-                value={payDate} 
-                onChange={(e) => setPayDate(e.target.value)} 
-                className="h-14 bg-slate-50 border-slate-200 font-bold" 
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="font-black text-xs uppercase text-slate-500 tracking-wider">Payment Mode</Label>
-              <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
-                <SelectTrigger className="h-14 bg-slate-50 border-slate-200 font-bold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CASH">Cash</SelectItem>
-                  <SelectItem value="BANKING">Banking</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {payMode === 'BANKING' && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                <Label className="font-black text-xs uppercase text-slate-500 tracking-wider">Reference Number</Label>
+          <div className="py-4 space-y-6">
+            {/* Table 1: Amount and Date */}
+            <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+              <div className="space-y-2">
+                <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Paid Amount (INR)</Label>
                 <Input 
-                  placeholder="UTR / Transaction ID" 
-                  value={payRef} 
-                  onChange={(e) => setPayRef(e.target.value)} 
-                  className="h-14 bg-slate-50 border-slate-200 font-bold" 
+                  type="number" 
+                  value={payAmount} 
+                  onChange={(e) => setPayAmount(e.target.value)} 
+                  className="h-12 bg-white border-slate-200 font-black text-lg text-emerald-600 focus-visible:ring-emerald-500" 
                 />
               </div>
-            )}
+              <div className="space-y-2">
+                <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Date</Label>
+                <Input 
+                  type="date" 
+                  value={payDate} 
+                  onChange={(e) => setPayDate(e.target.value)} 
+                  className="h-12 bg-white border-slate-200 font-bold" 
+                />
+              </div>
+            </div>
+
+            {/* Table 2: Mode and Ref No */}
+            <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
+              <div className="space-y-2">
+                <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Mode</Label>
+                <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
+                  <SelectTrigger className="h-12 bg-white border-slate-200 font-bold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="BANKING">Banking</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className={cn(
+                  "font-black text-[10px] uppercase text-slate-500 tracking-wider transition-opacity",
+                  payMode !== 'BANKING' && "opacity-30"
+                )}>
+                  Reference Number
+                </Label>
+                <Input 
+                  placeholder={payMode === 'BANKING' ? "UTR / Trans ID" : "N/A"}
+                  disabled={payMode !== 'BANKING'}
+                  value={payRef} 
+                  onChange={(e) => setPayRef(e.target.value)} 
+                  className="h-12 bg-white border-slate-200 font-bold disabled:bg-slate-100 disabled:text-slate-400" 
+                />
+              </div>
+            </div>
           </div>
-          <DialogFooter className="gap-2 border-t pt-6">
-            <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="rounded-xl font-bold">Cancel</Button>
+          <DialogFooter className="gap-2 border-t pt-4">
+            <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="rounded-xl font-bold h-11">Cancel</Button>
             <Button 
               onClick={handleConfirmPayment} 
-              className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 font-black rounded-xl shadow-lg shadow-emerald-100"
+              className="h-11 px-8 bg-emerald-600 hover:bg-emerald-700 font-black rounded-xl shadow-lg shadow-emerald-100"
             >
               Confirm & Mark Paid
             </Button>
@@ -732,7 +750,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
 function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
   return (
     <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
-      <AdvanceVoucherContent voucher={voucher} employees={employees} firms={firms} plants={plants} />
+      <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />
     </div>
   );
 }
