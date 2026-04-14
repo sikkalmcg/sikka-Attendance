@@ -72,7 +72,7 @@ import {
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm } from "@/lib/types";
+import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm, Voucher } from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
@@ -117,6 +117,7 @@ export default function PayrollPage() {
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
   const [previewSlip, setPreviewSlip] = useState<PayrollRecord | null>(null);
+  const [viewAdvanceEmployee, setViewAdvanceEmployee] = useState<{emp: Employee, vouchers: any[]} | null>(null);
   
   // Adjustment Calculation State
   const [adjustmentState, setAdjustmentState] = useState({
@@ -179,16 +180,64 @@ export default function PayrollPage() {
     }).sort((a, b) => (b.slipDate || "").localeCompare(a.slipDate || ""));
   }, [payrollRecords, searchTerm, selectedFirmId, employees]);
 
-  const paidVouchers = useMemo(() => {
-    return (vouchers || []).filter(v => v.status === 'PAID').sort((a, b) => b.date.localeCompare(a.date));
-  }, [vouchers]);
+  // FIFO Logic for Advance Salary Consolidated Ledger
+  const advanceLedgerData = useMemo(() => {
+    if (!isMounted) return [];
 
-  const paginatedPaidVouchers = useMemo(() => {
+    const paidVouchers = (vouchers || []).filter(v => v.status === 'PAID');
+    const empIdsWithAdvance = Array.from(new Set(paidVouchers.map(v => v.employeeId)));
+
+    return empIdsWithAdvance.map(empId => {
+      const employee = employees.find(e => e.id === empId);
+      if (!employee) return null;
+
+      // Filter and sort vouchers by date (Oldest First for FIFO)
+      const empVouchers = paidVouchers
+        .filter(v => v.employeeId === empId)
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      // Calculate total recovery from payroll
+      const totalRecovery = payrollRecords
+        .filter(p => p.employeeId === employee.employeeId)
+        .reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+
+      // Distribute recovery via FIFO
+      let remainingRecoveryPool = totalRecovery;
+      const voucherBreakdown = empVouchers.map(v => {
+        const recoveryForThis = Math.min(v.amount, remainingRecoveryPool);
+        remainingRecoveryPool -= recoveryForThis;
+        return {
+          ...v,
+          recovered: recoveryForThis,
+          remaining: v.amount - recoveryForThis
+        };
+      });
+
+      const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
+      
+      return {
+        id: employee.id,
+        employee,
+        totalAdvAmount: totalAdv,
+        totalRecoveryAmount: totalRecovery,
+        totalRemainingAmount: Math.max(0, totalAdv - totalRecovery),
+        vouchers: voucherBreakdown
+      };
+    }).filter(Boolean).filter(item => {
+      const search = searchTerm.toLowerCase();
+      return (
+        item!.employee.name.toLowerCase().includes(search) ||
+        item!.employee.employeeId.toLowerCase().includes(search)
+      );
+    }) as any[];
+  }, [vouchers, payrollRecords, employees, searchTerm, isMounted]);
+
+  const paginatedAdvanceLedger = useMemo(() => {
     const start = (advancePage - 1) * rowsPerPageAdvance;
-    return paidVouchers.slice(start, start + rowsPerPageAdvance);
-  }, [paidVouchers, advancePage]);
+    return advanceLedgerData.slice(start, start + rowsPerPageAdvance);
+  }, [advanceLedgerData, advancePage]);
 
-  const totalAdvancePages = Math.ceil(paidVouchers.length / rowsPerPageAdvance);
+  const totalAdvancePages = Math.ceil(advanceLedgerData.length / rowsPerPageAdvance);
 
   const isSalaryGenerated = (empId: string) => {
     return payrollRecords.some(p => p.employeeId === empId && p.month === selectedMonth);
@@ -583,7 +632,7 @@ export default function PayrollPage() {
                 <div className="p-2 bg-emerald-50 rounded-lg"><Wallet className="w-5 h-5 text-emerald-600" /></div>
                 <div>
                   <CardTitle className="text-lg font-bold">Paid Advance Salary Ledger</CardTitle>
-                  <CardDescription>Track cash advances, salary deductions, and recovery status.</CardDescription>
+                  <CardDescription>Track cash advances, salary deductions, and recovery status per employee.</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -592,39 +641,59 @@ export default function PayrollPage() {
                 <Table className="min-w-[1200px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="font-bold">Voucher No</TableHead>
-                      <TableHead className="font-bold">Employee Name</TableHead>
-                      <TableHead className="text-right font-bold">Adv. Amount</TableHead>
-                      <TableHead className="text-right font-bold">Paid Amount</TableHead>
-                      <TableHead className="text-right font-bold">Remaining</TableHead>
-                      <TableHead className="text-center font-bold">Status</TableHead>
+                      <TableHead className="font-bold">Employee Name / ID</TableHead>
+                      <TableHead className="font-bold">Department</TableHead>
+                      <TableHead className="font-bold">Designation</TableHead>
+                      <TableHead className="text-right font-bold">Total Adv. Amount</TableHead>
+                      <TableHead className="text-right font-bold text-primary">Recovery Amount</TableHead>
+                      <TableHead className="text-right font-bold text-rose-600">Remaining Amount</TableHead>
+                      <TableHead className="text-right font-bold pr-6">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedPaidVouchers.map(v => {
-                      const emp = employees.find(e => e.id === v.employeeId);
-                      const recoveries = payrollRecords.filter(p => p.employeeId === (emp?.employeeId || v.employeeId));
-                      const totalRecovered = recoveries.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
-                      const remaining = v.amount - totalRecovered;
-                      return (
-                        <TableRow key={v.id}>
-                          <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold">{emp?.name || v.employeeId}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-right text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-right font-black">{formatCurrency(Math.max(0, remaining))}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={remaining <= 0 ? "default" : "outline"} className={cn(remaining <= 0 ? "bg-emerald-600" : "text-amber-600 border-amber-200 bg-amber-50")}>
-                              {remaining <= 0 ? "COMPLETE" : "PENDING"}
-                            </Badge>
+                    {paginatedAdvanceLedger.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No advance records found.</TableCell></TableRow>
+                    ) : (
+                      paginatedAdvanceLedger.map(item => (
+                        <TableRow key={item.id} className="hover:bg-slate-50/50">
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold uppercase">{item.employee.name}</span>
+                              <span className="text-[10px] font-mono text-primary">{item.employee.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">{item.employee.department}</TableCell>
+                          <TableCell className="text-sm text-slate-600">{item.employee.designation}</TableCell>
+                          <TableCell className="text-right font-bold">{formatCurrency(item.totalAdvAmount)}</TableCell>
+                          <TableCell className="text-right font-bold text-primary">{formatCurrency(item.totalRecoveryAmount)}</TableCell>
+                          <TableCell className="text-right font-black text-rose-600">{formatCurrency(item.totalRemainingAmount)}</TableCell>
+                          <TableCell className="text-right pr-6">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="font-bold gap-2 h-8"
+                              onClick={() => setViewAdvanceEmployee(item)}
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View
+                            </Button>
                           </TableCell>
                         </TableRow>
-                      );
-                    })}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </ScrollArea>
             </CardContent>
+            {totalAdvancePages > 1 && (
+              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                <div className="text-xs font-bold text-muted-foreground">Showing {((advancePage - 1) * rowsPerPageAdvance) + 1} - {Math.min(advancePage * rowsPerPageAdvance, advanceLedgerData.length)} of {advanceLedgerData.length}</div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={advancePage === 1} onClick={() => setAdvancePage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
+                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {advancePage} of {totalAdvancePages}</div>
+                  <Button variant="outline" size="sm" disabled={advancePage === totalAdvancePages} onClick={() => setAdvancePage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                </div>
+              </CardFooter>
+            )}
           </Card>
         </TabsContent>
 
@@ -662,7 +731,86 @@ export default function PayrollPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Main Adjust Leave Dialog ... remains unchanged */}
+      {/* Advance Details Popup */}
+      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => !o && setViewAdvanceEmployee(null)}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+          {viewAdvanceEmployee && (
+            <>
+              <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                    <Wallet className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <DialogTitle className="text-xl font-black text-slate-900 uppercase">
+                      {viewAdvanceEmployee.emp.name}
+                    </DialogTitle>
+                    <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
+                      <span className="text-primary font-mono">{viewAdvanceEmployee.emp.employeeId}</span>
+                      <span>•</span>
+                      <span>{viewAdvanceEmployee.emp.department} / {viewAdvanceEmployee.emp.designation}</span>
+                    </div>
+                  </div>
+                </div>
+                <Button variant="ghost" size="icon" className="rounded-full mr-2" onClick={() => setViewAdvanceEmployee(null)}>
+                  <X className="w-5 h-5" />
+                </Button>
+              </DialogHeader>
+              
+              <ScrollArea className="flex-1 bg-slate-50/30 p-6 custom-blue-scrollbar">
+                <div className="space-y-6">
+                  {/* Summary row in popup */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Advanced</p>
+                      <p className="text-lg font-black text-slate-900">{formatCurrency(viewAdvanceEmployee.totalAdvAmount)}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Recovered</p>
+                      <p className="text-lg font-black text-primary">{formatCurrency(viewAdvanceEmployee.totalRecoveryAmount)}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pending</p>
+                      <p className="text-lg font-black text-rose-600">{formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}</p>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="font-bold">Voucher No</TableHead>
+                          <TableHead className="font-bold">Voucher Date</TableHead>
+                          <TableHead className="text-right font-bold">Voucher Paid Amount</TableHead>
+                          <TableHead className="text-right font-bold text-primary">Recovery Amount</TableHead>
+                          <TableHead className="text-right font-bold text-rose-600">Remaining Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {viewAdvanceEmployee.vouchers.map(v => (
+                          <TableRow key={v.id}>
+                            <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
+                            <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-right font-bold text-primary">{formatCurrency(v.recovered)}</TableCell>
+                            <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </ScrollArea>
+              
+              <DialogFooter className="p-4 bg-slate-50 border-t">
+                <Button variant="outline" className="font-bold" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Leave Dialog */}
       <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => !o && setAdjustLeaveEmp(null)}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {adjustLeaveEmp && (
@@ -806,7 +954,7 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Sub-Adjustment Balance Picker ... remains unchanged */}
+      {/* Sub-Adjustment Balance Picker */}
       <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
         <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
@@ -839,7 +987,7 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Pay Salary Dialog ... remains unchanged */}
+      {/* Pay Salary Dialog */}
       <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
         <DialogContent className="sm:max-w-4xl">
           {paySalaryRec && (
@@ -1011,7 +1159,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         )}
       </div>
 
-      {/* Monthly Earnings & Deductions Table - Box length auto adjustable */}
+      {/* Monthly Earnings & Deductions Table */}
       <div className="border-2 border-slate-900 overflow-hidden">
         <div className="grid grid-cols-2 bg-slate-900 text-white font-black text-xs uppercase tracking-widest text-center py-2 divide-x-2 divide-white">
           <div>Monthly Earnings</div>
@@ -1047,7 +1195,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      {/* Net Salary Summary - Background color removed */}
+      {/* Net Salary Summary */}
       <div className="border-2 border-slate-900 p-6 bg-white text-slate-900 flex justify-between items-center rounded-sm shadow-sm">
         <div className="space-y-1">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Net Salary Payable</p>
