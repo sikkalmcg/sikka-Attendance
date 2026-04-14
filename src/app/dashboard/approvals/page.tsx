@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { ATTENDANCE_RULES } from "@/lib/constants";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord } from "@/lib/types";
+import { differenceInDays, parseISO } from "date-fns";
 
 // Helper to calculate hours between two 24h time strings (HH:mm)
 function calculateHours(inTime: string | null, outTime: string | null): number {
@@ -256,128 +257,142 @@ export default function ApprovalsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedRecords.map((rec) => (
-                    <TableRow key={rec.id} className="hover:bg-slate-50/50">
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-bold">{rec.employeeName}</span>
-                          <span className="text-xs font-mono text-primary">{rec.employeeId}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{rec.date}</span>
-                          <span className="text-xs font-mono font-bold text-primary">{rec.inTime || "--:--"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{rec.date}</span>
-                          <span className="text-xs font-mono font-bold text-rose-500">{rec.outTime || "--:--"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1 font-bold">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          {rec.hours}h
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button 
-                          variant="secondary" 
-                          size="sm" 
-                          className="text-xs h-8 gap-1 bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
-                          onClick={() => handleShowVerify(rec)}
-                        >
-                          <MapPin className="w-3 h-3" />
-                          Verify
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-tight py-0">
-                          {rec.attendanceType === 'WFH' ? (
-                            <div className="flex items-center gap-1">
-                              <Home className="w-3 h-3" /> WFH
-                            </div>
-                          ) : rec.attendanceType === 'OFFICE' ? (
-                            <div className="flex items-center gap-1">
-                              <Building2 className="w-3 h-3" /> Office
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-3 h-3" /> Field
-                            </div>
-                          )}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className={cn(
-                            "text-[10px] uppercase font-bold px-2 py-0 h-5",
-                            rec.status === 'PRESENT' ? "text-emerald-600 border-emerald-200 bg-emerald-50" :
-                            rec.status === 'HALF_DAY' ? "text-amber-600 border-amber-200 bg-amber-50" :
-                            "text-rose-600 border-rose-200 bg-rose-50"
-                          )}
-                        >
-                          {(rec.status || "").replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {activeTab === "pending" ? (
-                            <>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button size="sm" variant="outline" onClick={() => handleEditClick(rec)} disabled={isProcessing}>
-                                    <Pencil className="w-3 h-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Edit Times</TooltipContent>
-                              </Tooltip>
-
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button size="sm" variant="outline" className="text-rose-600 hover:bg-rose-50" onClick={() => handleRejectClick(rec)} disabled={isProcessing}>
-                                    <XCircle className="w-3 h-3" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Reject</TooltipContent>
-                              </Tooltip>
-
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="inline-block">
-                                    <Button 
-                                      size="sm" 
-                                      className={cn(
-                                        "bg-emerald-600 hover:bg-emerald-700",
-                                        !rec.outTime && "opacity-50 cursor-not-allowed"
-                                      )}
-                                      onClick={() => rec.outTime && handleApprove(rec.id)} 
-                                      disabled={isProcessing || !rec.outTime}
-                                    >
-                                      <CheckCircle2 className="w-3 h-3" />
+                  paginatedRecords.map((rec) => {
+                    const isOldRecord = differenceInDays(new Date(), parseISO(rec.date)) > 45;
+                    
+                    return (
+                      <TableRow key={rec.id} className="hover:bg-slate-50/50">
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-bold">{rec.employeeName}</span>
+                            <span className="text-xs font-mono text-primary">{rec.employeeId}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{rec.date}</span>
+                            <span className="text-xs font-mono font-bold text-primary">{rec.inTime || "--:--"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{rec.date}</span>
+                            <span className="text-xs font-mono font-bold text-rose-500">{rec.outTime || "--:--"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1 font-bold">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            {rec.hours}h
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            className="text-xs h-8 gap-1 bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
+                            onClick={() => handleShowVerify(rec)}
+                          >
+                            <MapPin className="w-3 h-3" />
+                            Verify
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-tight py-0">
+                            {rec.attendanceType === 'WFH' ? (
+                              <div className="flex items-center gap-1">
+                                <Home className="w-3 h-3" /> WFH
+                              </div>
+                            ) : rec.attendanceType === 'OFFICE' ? (
+                              <div className="flex items-center gap-1">
+                                <Building2 className="w-3 h-3" /> Office
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" /> Field
+                              </div>
+                            )}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-[10px] uppercase font-bold px-2 py-0 h-5",
+                              rec.status === 'PRESENT' ? "text-emerald-600 border-emerald-200 bg-emerald-50" :
+                              rec.status === 'HALF_DAY' ? "text-amber-600 border-amber-200 bg-amber-50" :
+                              "text-rose-600 border-rose-200 bg-rose-50"
+                            )}
+                          >
+                            {(rec.status || "").replace('_', ' ')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            {activeTab === "pending" ? (
+                              <>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="outline" onClick={() => handleEditClick(rec)} disabled={isProcessing}>
+                                      <Pencil className="w-3 h-3" />
                                     </Button>
-                                  </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Edit Times</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="outline" className="text-rose-600 hover:bg-rose-50" onClick={() => handleRejectClick(rec)} disabled={isProcessing}>
+                                      <XCircle className="w-3 h-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Reject</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="inline-block">
+                                      <Button 
+                                        size="sm" 
+                                        className={cn(
+                                          "bg-emerald-600 hover:bg-emerald-700",
+                                          !rec.outTime && "opacity-50 cursor-not-allowed"
+                                        )}
+                                        onClick={() => rec.outTime && handleApprove(rec.id)} 
+                                        disabled={isProcessing || !rec.outTime}
+                                      >
+                                        <CheckCircle2 className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{!rec.outTime ? "Out Time Required to Approve" : "Approve"}</TooltipContent>
+                                </Tooltip>
+                              </>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="gap-1" 
+                                    onClick={() => handleRestore(rec.id)} 
+                                    disabled={isProcessing || isOldRecord}
+                                  >
+                                    <RotateCcw className="w-3 h-3" /> Restore
+                                  </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>{!rec.outTime ? "Out Time Required to Approve" : "Approve"}</TooltipContent>
+                                <TooltipContent>
+                                  {isOldRecord 
+                                    ? "Restore disabled (Older than 45 days)" 
+                                    : "Move back to pending"}
+                                </TooltipContent>
                               </Tooltip>
-                            </>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button size="sm" variant="outline" className="gap-1" onClick={() => handleRestore(rec.id)} disabled={isProcessing}>
-                                  <RotateCcw className="w-3 h-3" /> Restore
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Move back to pending</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
