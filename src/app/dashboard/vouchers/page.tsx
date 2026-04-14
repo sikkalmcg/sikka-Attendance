@@ -360,7 +360,7 @@ export default function VouchersPage() {
                       return (
                         <TableRow key={v.id} className="hover:bg-slate-50/50">
                           <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold">{emp?.name || "..."}</TableCell>
+                          <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="text-xs font-bold leading-tight">{emp?.department || "--"}</span>
@@ -447,7 +447,7 @@ export default function VouchersPage() {
                       return (
                         <TableRow key={v.id} className="hover:bg-slate-50/50">
                           <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold">{emp?.name || "..."}</TableCell>
+                          <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="text-xs font-bold leading-tight">{emp?.department || "--"}</span>
@@ -667,11 +667,11 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <div className="text-right space-y-4 pt-2">
           <div className="space-y-1.5">
             <div className="flex justify-end gap-3 text-sm items-baseline">
-              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">Voucher No:</span>
+              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">VOUCHER NO:</span>
               <span className="font-mono font-black text-slate-900 text-lg leading-none">{voucher.voucherNo}</span>
             </div>
             <div className="flex justify-end gap-3 text-sm items-baseline">
-              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">Date:</span>
+              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">DATE:</span>
               <span className="font-black text-slate-900 text-lg leading-none">{formattedDate}</span>
             </div>
           </div>
@@ -724,7 +724,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
 
       {/* Declaration */}
       <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl italic text-sm text-center leading-relaxed text-slate-600 mt-10">
-        "I hereby acknowledge the receipt of the above-mentioned advance amount and agree that the same will be recovered/adjusted from my future salary/dues as per the organization's policy."
+        "I hereby acknowledge receipt of the aforementioned advance amount and expressly agree and undertake that the same shall be duly recovered and/or adjusted against my future salary, wages, or any other dues payable to me, in accordance with the applicable policies, rules, and regulations of the organization. I further confirm that this authorization is given voluntarily and shall be binding upon me."
       </div>
 
       {/* Signatures */}
