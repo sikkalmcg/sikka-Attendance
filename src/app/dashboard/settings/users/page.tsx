@@ -129,7 +129,7 @@ export default function UserManagementPage() {
   };
 
   const validateUserForm = () => {
-    const { fullName, username, password, permissions } = formData;
+    const { fullName, username, password } = formData;
 
     if (!fullName || !/^[a-zA-Z\s]+$/.test(fullName) || fullName.length < 3) {
       toast({ variant: "destructive", title: "Invalid Name", description: "Alphabets and spaces only (min 3 chars)." });
@@ -308,7 +308,6 @@ export default function UserManagementPage() {
                     <Input 
                       value={formData.fullName || ""} 
                       onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
-                      placeholder="Enter official name"
                       className="h-14 bg-white border-slate-200 font-bold text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary"
                     />
                   </div>
@@ -318,7 +317,6 @@ export default function UserManagementPage() {
                       value={formData.username || ""} 
                       onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
                       disabled={editingUser?.role === 'SUPER_ADMIN'} 
-                      placeholder="e.g. john.doe"
                       className="h-14 bg-white border-slate-200 font-mono text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary disabled:bg-slate-100 disabled:text-slate-400"
                     />
                   </div>
@@ -333,7 +331,6 @@ export default function UserManagementPage() {
                           type={showPassword ? "text" : "password"}
                           value={formData.password || ""} 
                           onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
-                          placeholder="8-16 chars, 1 Upper, 3 Digits, 1 Special"
                           className="h-14 bg-white border-slate-200 font-mono text-lg pr-14 rounded-xl shadow-sm focus-visible:ring-primary"
                         />
                         <button 
@@ -452,7 +449,6 @@ export default function UserManagementPage() {
               <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">New Secure Password</Label>
               <Input 
                 type="password"
-                placeholder="Enter new password"
                 className="h-12 bg-slate-50 border-slate-200 rounded-xl font-mono"
                 value={formData.password || ""}
                 onChange={(e) => setFormData(p => ({...p, password: e.target.value}))}
