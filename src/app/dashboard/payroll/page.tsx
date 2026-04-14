@@ -62,12 +62,15 @@ import {
   User,
   AlertTriangle,
   FileCheck,
-  X
+  X,
+  Download,
+  Eye,
+  BadgeCheck
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord } from "@/lib/types";
+import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm } from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
@@ -76,7 +79,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { parseISO, isSameMonth } from "date-fns";
+import { parseISO, isSameMonth, format } from "date-fns";
 
 const generatePayrollMonths = () => {
   const options = [];
@@ -111,6 +114,7 @@ export default function PayrollPage() {
   // Dialog States
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
+  const [previewSlip, setPreviewSlip] = useState<PayrollRecord | null>(null);
   
   // Adjustment Calculation State
   const [adjustmentState, setAdjustmentState] = useState({
@@ -185,18 +189,12 @@ export default function PayrollPage() {
     return payrollRecords.some(p => p.employeeId === empId && p.month === selectedMonth);
   };
 
-  // Logic to handle opening Adjust Leave dialog
   const openAdjustmentDialog = (emp: Employee) => {
     const relevantAttendance = attendanceRecords.filter(r => r.employeeId === emp.employeeId);
-    
-    // Simplistic Calculation for Demo
-    // In production, this would use exact date checking against the holiday calendar
     const presentOnWorking = relevantAttendance.filter(r => r.status === 'PRESENT').length;
     const holidayPres = relevantAttendance.filter(r => r.status === 'PRESENT' && r.inPlant === 'Holiday Work').length || 0; 
-    
     const workingDaysCount = 26;
     const holidayCount = 4;
-    
     const initialPresent = Math.max(0, presentOnWorking - holidayPres);
     const initialAbsent = Math.max(0, workingDaysCount - initialPresent);
 
@@ -213,7 +211,6 @@ export default function PayrollPage() {
       monthHolidays: holidayCount
     };
 
-    // Auto Logic: If Present < Working Days AND Holiday Work exists -> Move to Present
     if (state.present < state.monthWorkingDays && state.holidayWork > 0) {
       const needed = state.monthWorkingDays - state.present;
       const canMove = Math.min(needed, state.holidayWork);
@@ -267,11 +264,9 @@ export default function PayrollPage() {
     if (!adjustLeaveEmp) return;
     setIsProcessing(true);
     try {
-      // Sync back to Employee Advance Leave balance
       updateRecord('employees', adjustLeaveEmp.id, { 
         advanceLeaveBalance: adjustmentState.remainingBalance 
       });
-      
       setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
       toast({ title: "Finalized", description: `Earning Days set to ${adjustmentState.earningDays} for ${adjustLeaveEmp.name}` });
       setAdjustLeaveEmp(null);
@@ -312,8 +307,9 @@ export default function PayrollPage() {
     }
   };
 
-  const handlePrint = (rec: PayrollRecord) => {
-    toast({ title: "Opening Print...", description: "Formatting salary slip for export." });
+  const handleDownloadSlip = (rec: PayrollRecord) => {
+    toast({ title: "Downloading...", description: `Preparing salary slip ${rec.slipNo} for download.` });
+    // In a real app, this would trigger a PDF generation service call.
   };
 
   if (!isMounted) return null;
@@ -495,9 +491,9 @@ export default function PayrollPage() {
                 <Table className="min-w-[1200px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="font-bold">Firm / Unit</TableHead>
                       <TableHead className="font-bold">Slip No / Date</TableHead>
                       <TableHead className="font-bold">Employee Name / ID</TableHead>
+                      <TableHead className="font-bold">Dept / Designation</TableHead>
                       <TableHead className="font-bold">Month</TableHead>
                       <TableHead className="font-bold text-right">Net Payable</TableHead>
                       <TableHead className="font-bold text-right">Salary Paid</TableHead>
@@ -508,34 +504,64 @@ export default function PayrollPage() {
                     {finalizedSalaries.length === 0 ? (
                       <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell></TableRow>
                     ) : (
-                      finalizedSalaries.map((p) => (
-                        <TableRow key={p.id} className="hover:bg-slate-50/50">
-                          <TableCell>
-                            {firms.find(f => f.id === employees.find(e => e.employeeId === p.employeeId)?.firmId)?.name}
-                          </TableCell>
-                          <TableCell><span className="font-mono font-bold text-primary">{p.slipNo}</span></TableCell>
-                          <TableCell>{p.employeeName} ({p.employeeId})</TableCell>
-                          <TableCell className="text-center">{p.month}</TableCell>
-                          <TableCell className="text-right font-bold">{formatCurrency(p.netPayable)}</TableCell>
-                          <TableCell className="text-right font-bold">{formatCurrency(p.salaryPaidAmount)}</TableCell>
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-primary" 
-                                onClick={() => { setPaySalaryRec(p); setPaymentAmount(p.netPayable - p.salaryPaidAmount); }}
-                                disabled={p.salaryPaidAmount >= p.netPayable}
-                              >
-                                <CreditCard className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => handlePrint(p)}>
-                                <Printer className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      finalizedSalaries.map((p) => {
+                        const emp = employees.find(e => e.employeeId === p.employeeId);
+                        return (
+                          <TableRow key={p.id} className="hover:bg-slate-50/50">
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span 
+                                  className="font-mono font-bold text-primary cursor-pointer hover:underline"
+                                  onClick={() => setPreviewSlip(p)}
+                                >
+                                  {p.slipNo}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground font-medium">
+                                  {p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-bold">{p.employeeName}</span>
+                                <span className="text-xs font-mono text-slate-400">{p.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium">{emp?.department || "--"}</span>
+                                <span className="text-xs text-muted-foreground">{emp?.designation || "--"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold">{p.month}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-bold">{formatCurrency(p.netPayable)}</TableCell>
+                            <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-primary hover:bg-primary/5" 
+                                  onClick={() => { setPaySalaryRec(p); setPaymentAmount(p.netPayable - p.salaryPaidAmount); }}
+                                  disabled={p.salaryPaidAmount >= p.netPayable}
+                                >
+                                  <CreditCard className="w-4 h-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-slate-500 hover:bg-slate-100" 
+                                  onClick={() => handleDownloadSlip(p)}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -661,7 +687,6 @@ export default function PayrollPage() {
               </DialogHeader>
 
               <div className="bg-slate-50/50 p-8 space-y-8">
-                {/* Meta Summary */}
                 <div className="grid grid-cols-3 gap-6">
                   <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salary Month</p>
@@ -677,7 +702,6 @@ export default function PayrollPage() {
                   </div>
                 </div>
 
-                {/* Adjust Table */}
                 <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
                   <Table>
                     <TableHeader className="bg-slate-50">
@@ -852,6 +876,180 @@ export default function PayrollPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Salary Slip Preview Dialog */}
+      <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
+        <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+          <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-primary" />
+              </div>
+              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Salary Slip Preview</DialogTitle>
+            </div>
+            <div className="flex items-center gap-3 mr-8">
+              <Button 
+                className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
+                onClick={() => handleDownloadSlip(previewSlip!)}
+              >
+                <Download className="w-5 h-5" /> Download PDF
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
+            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-12 min-h-[297mm] border-4 border-slate-900 rounded-sm">
+              {previewSlip && (
+                <SalarySlipView 
+                  record={previewSlip} 
+                  employee={employees.find(e => e.employeeId === previewSlip.employeeId)}
+                  firm={firms.find(f => f.id === employees.find(e => e.employeeId === previewSlip.employeeId)?.firmId)}
+                />
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, employee?: Employee, firm?: Firm }) {
+  const earnings = [
+    { label: "Basic Salary", value: record.totalEarningDays > 0 ? Math.round((employee?.salary.basic || 0) / 30 * record.totalEarningDays) : 0 },
+    { label: "HRA", value: record.totalEarningDays > 0 ? Math.round((employee?.salary.hra || 0) / 30 * record.totalEarningDays) : 0 },
+    { label: "Allowance", value: record.totalEarningDays > 0 ? Math.round((employee?.salary.allowance || 0) / 30 * record.totalEarningDays) : 0 },
+    { label: "Incentives", value: record.incentiveAmt || 0 },
+    { label: "Holiday Work Pay", value: record.holidayWorkAmt || 0 },
+  ];
+
+  const deductions = [
+    { label: "PF Employee Share", value: record.pfAmountEmployee || 0 },
+    { label: "ESIC Employee Share", value: record.esicAmountEmployee || 0 },
+    { label: "Advance Recovery", value: record.advanceRecovery || 0 },
+  ];
+
+  const totalEarnings = earnings.reduce((sum, e) => sum + e.value, 0);
+  const totalDeductions = deductions.reduce((sum, d) => sum + d.value, 0);
+
+  return (
+    <div className="font-serif text-slate-900 space-y-8">
+      {/* Header */}
+      <div className="text-center border-b-2 border-slate-900 pb-6">
+        <div className="flex justify-center mb-4">
+          {firm?.logo ? (
+            <img src={firm.logo} className="h-16 object-contain" alt="Firm Logo" />
+          ) : (
+            <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center border-2 border-slate-900">
+              <Building2 className="w-8 h-8 text-slate-400" />
+            </div>
+          )}
+        </div>
+        <h1 className="text-2xl font-black uppercase tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h1>
+        <p className="text-xs font-bold text-slate-500 uppercase mt-1">{firm?.registeredAddress}</p>
+        <div className="flex justify-center gap-6 mt-2 text-[10px] font-black uppercase tracking-widest">
+          <span>GSTIN: {firm?.gstin || "---"}</span>
+          <span>PF: {firm?.pfNo || "---"}</span>
+          <span>ESIC: {firm?.esicNo || "---"}</span>
+        </div>
+      </div>
+
+      <div className="text-center">
+        <h2 className="text-xl font-black uppercase tracking-[0.2em] underline underline-offset-4 decoration-2">Salary Payslip - {record.month}</h2>
+      </div>
+
+      {/* Employee Info Grid */}
+      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900">
+        <SlipDetailCell label="Employee ID" value={record.employeeId} />
+        <SlipDetailCell label="Employee Name" value={record.employeeName} />
+        <SlipDetailCell label="Department" value={employee?.department} />
+        <SlipDetailCell label="Designation" value={employee?.designation} />
+        <SlipDetailCell label="Slip Number" value={record.slipNo} />
+        <SlipDetailCell label="Slip Date" value={record.slipDate ? format(parseISO(record.slipDate), 'dd-MMM-yyyy') : "---"} />
+        <SlipDetailCell label="Bank Name" value={employee?.bankName} />
+        <SlipDetailCell label="Account No" value={employee?.accountNo} />
+        <SlipDetailCell label="Attendance" value={`${record.totalEarningDays} Days`} />
+        <SlipDetailCell label="Leaves/Absent" value={`${record.absent} Days`} />
+      </div>
+
+      {/* Earnings & Deductions Table */}
+      <div className="border-2 border-slate-900 overflow-hidden">
+        <div className="grid grid-cols-2 bg-slate-900 text-white font-black text-xs uppercase tracking-widest text-center py-2 divide-x-2 divide-white">
+          <div>Earnings</div>
+          <div>Deductions</div>
+        </div>
+        <div className="grid grid-cols-2 divide-x-2 divide-slate-900 min-h-[200px]">
+          {/* Earnings Column */}
+          <div className="divide-y divide-slate-200">
+            {earnings.map((e, i) => (
+              <div key={i} className="flex justify-between px-4 py-2 text-xs">
+                <span className="font-bold text-slate-600">{e.label}</span>
+                <span className="font-bold">{formatCurrency(e.value)}</span>
+              </div>
+            ))}
+          </div>
+          {/* Deductions Column */}
+          <div className="divide-y divide-slate-200">
+            {deductions.map((d, i) => (
+              <div key={i} className="flex justify-between px-4 py-2 text-xs">
+                <span className="font-bold text-slate-600">{d.label}</span>
+                <span className="font-bold">{formatCurrency(d.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 border-t-2 border-slate-900 bg-slate-50 font-black text-xs uppercase tracking-widest py-3 divide-x-2 divide-slate-900">
+          <div className="flex justify-between px-4">
+            <span>Gross Earnings</span>
+            <span>{formatCurrency(totalEarnings)}</span>
+          </div>
+          <div className="flex justify-between px-4">
+            <span>Total Deductions</span>
+            <span>{formatCurrency(totalDeductions)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Net Salary Summary */}
+      <div className="border-2 border-slate-900 p-6 bg-slate-900 text-white flex justify-between items-center rounded-sm shadow-xl">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Net Salary Payable</p>
+          <p className="text-xs font-bold italic text-slate-400">({numberToIndianWords(record.netPayable)})</p>
+        </div>
+        <div className="text-4xl font-black text-white">
+          {formatCurrency(record.netPayable)}
+        </div>
+      </div>
+
+      {/* Signatures */}
+      <div className="flex justify-between items-end pt-32 px-10">
+        <div className="text-center space-y-4">
+          <div className="w-64 border-b-2 border-slate-900" />
+          <p className="text-[10px] font-black uppercase tracking-widest">Employee Signature</p>
+        </div>
+        <div className="text-center space-y-4">
+          <div className="w-64 border-b-2 border-slate-900 flex flex-col items-center pb-2">
+            <BadgeCheck className="w-12 h-12 text-emerald-600 opacity-20" />
+          </div>
+          <p className="text-[10px] font-black uppercase tracking-widest">Authorized Signatory</p>
+        </div>
+      </div>
+
+      <div className="text-center pt-10">
+        <p className="text-[8px] font-bold text-slate-300 uppercase tracking-[0.5em]">This is a computer generated document and does not require a physical signature.</p>
+      </div>
+    </div>
+  );
+}
+
+function SlipDetailCell({ label, value }: { label: string, value: any }) {
+  return (
+    <div className="flex items-center px-4 py-3 bg-white">
+      <span className="text-[10px] font-black uppercase text-slate-400 w-32 shrink-0 tracking-widest">{label}:</span>
+      <span className="text-sm font-bold text-slate-900 uppercase truncate">{value || "---"}</span>
     </div>
   );
 }
