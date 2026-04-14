@@ -117,7 +117,7 @@ export default function FirmsAndPlantsPage() {
     if (cleanGstin.length >= 2) {
       const code = cleanGstin.substring(0, 2);
       stateCode = code;
-      stateName = STATE_CODES[code] || "Invalid Code";
+      stateName = STATE_CODES[code] || stateName;
     }
 
     if (cleanGstin.length >= 12) {
@@ -453,7 +453,7 @@ export default function FirmsAndPlantsPage() {
             </CardHeader>
             <CardContent className="p-8 space-y-10">
               <div className="flex flex-col md:flex-row gap-8 items-start">
-                <div className="space-y-2 w-full md:w-1/4">
+                <div className="space-y-2 w-full md:w-40 shrink-0">
                   <Label className="font-bold">Firm Logo</Label>
                   <div 
                     className="relative group cursor-pointer"
@@ -482,7 +482,7 @@ export default function FirmsAndPlantsPage() {
                       ) : (
                         <div className="flex flex-col items-center gap-2 text-slate-400 p-4 text-center">
                           <Upload className="w-8 h-8" />
-                          <span className="text-xs font-medium">Upload (Max 500KB)</span>
+                          <span className="text-[10px] font-medium leading-tight">Upload (Max 500KB)</span>
                         </div>
                       )}
                     </div>
@@ -519,26 +519,28 @@ export default function FirmsAndPlantsPage() {
                     <div className="space-y-2">
                       <Label className="font-bold">PAN</Label>
                       <Input 
-                        className="h-12 bg-slate-50 uppercase font-bold text-primary" 
-                        placeholder="Auto-derived from GSTIN" 
+                        className="h-12 bg-white uppercase font-bold text-primary" 
+                        placeholder="Enter PAN" 
                         value={firmDraft.pan || ''} 
-                        readOnly
+                        onChange={(e) => setFirmDraft(p => ({...p, pan: e.target.value.toUpperCase()}))}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label className="font-bold">State Name</Label>
                       <Input 
-                        className="h-12 bg-slate-50 font-bold" 
+                        className="h-12 bg-white font-bold" 
+                        placeholder="State"
                         value={firmDraft.stateName || ''} 
-                        readOnly
+                        onChange={(e) => setFirmDraft(p => ({...p, stateName: e.target.value}))}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label className="font-bold">State Code</Label>
                       <Input 
-                        className="h-12 bg-slate-50 font-mono font-bold" 
+                        className="h-12 bg-white font-mono font-bold" 
+                        placeholder="Code"
                         value={firmDraft.stateCode || ''} 
-                        readOnly
+                        onChange={(e) => setFirmDraft(p => ({...p, stateCode: e.target.value}))}
                       />
                     </div>
                     <div className="space-y-2 md:col-span-2">
