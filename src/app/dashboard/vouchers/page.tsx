@@ -665,25 +665,25 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
         
         <div className="text-right space-y-4 pt-2">
-          <div className="space-y-1">
-            <div className="flex justify-end gap-3 text-sm">
-              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px]">Voucher No:</span>
-              <span className="font-mono font-black text-slate-900 text-lg">{voucher.voucherNo}</span>
+          <div className="space-y-1.5">
+            <div className="flex justify-end gap-3 text-sm items-baseline">
+              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">Voucher No:</span>
+              <span className="font-mono font-black text-slate-900 text-lg leading-none">{voucher.voucherNo}</span>
             </div>
-            <div className="flex justify-end gap-3 text-sm">
-              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px]">Date:</span>
-              <span className="font-black text-slate-900 text-lg">{formattedDate}</span>
+            <div className="flex justify-end gap-3 text-sm items-baseline">
+              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">Date:</span>
+              <span className="font-black text-slate-900 text-lg leading-none">{formattedDate}</span>
             </div>
           </div>
           
-          <div className="space-y-1 pt-4 border-t border-slate-100">
-            <div className="flex justify-end gap-3 text-[10px]">
-              <span className="font-black text-slate-400 uppercase tracking-widest">CREATED BY:</span>
-              <span className="font-bold text-primary uppercase">{voucher.createdByName || "SYSTEM"}</span>
+          <div className="space-y-1.5 pt-4 border-t border-slate-100">
+            <div className="flex justify-end gap-3 text-[10px] items-baseline">
+              <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">CREATED BY:</span>
+              <span className="font-bold text-primary uppercase leading-none">{voucher.createdByName || "SYSTEM"}</span>
             </div>
-            <div className="flex justify-end gap-3 text-[10px]">
-              <span className="font-black text-slate-400 uppercase tracking-widest">APPROVED BY:</span>
-              <span className="font-bold text-emerald-600 uppercase">{voucher.approvedByName || "--"}</span>
+            <div className="flex justify-end gap-3 text-[10px] items-baseline">
+              <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">APPROVED BY:</span>
+              <span className="font-bold text-emerald-600 uppercase leading-none">{voucher.approvedByName || "--"}</span>
             </div>
           </div>
         </div>
@@ -758,8 +758,8 @@ function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
 function DetailCell({ label, value }: { label: string, value: any }) {
   return (
     <div className="flex items-center p-6 bg-white">
-      <span className="text-[10px] font-black uppercase text-slate-400 w-40 shrink-0 tracking-widest">{label}:</span>
-      <span className="text-base font-black text-slate-900 uppercase tracking-tight">{value || "---"}</span>
+      <span className="text-[10px] font-black uppercase text-slate-400 w-40 shrink-0 tracking-widest whitespace-nowrap">{label}:</span>
+      <span className="text-base font-black text-slate-900 uppercase tracking-tight leading-none">{value || "---"}</span>
     </div>
   );
 }
