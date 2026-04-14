@@ -138,6 +138,7 @@ export interface AttendanceRecord {
   outPlant?: string;
   approved: boolean;
   remark?: string;
+  rejectionCount?: number;
   autoCheckout?: boolean;
 }
 

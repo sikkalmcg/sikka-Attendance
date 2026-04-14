@@ -20,7 +20,9 @@ import {
   Pencil,
   AlertCircle,
   ShieldAlert,
-  Lock
+  Lock,
+  MessageCircle,
+  SendHorizontal
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -40,6 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -71,6 +74,9 @@ export default function AttendancePage() {
   const [selectedRecordToEdit, setSelectedRecordToEdit] = useState<any>(null);
   const [editTimes, setEditTimes] = useState({ in: "", out: "" });
 
+  const [isRejectionDialogOpen, setIsRejectionDialogOpen] = useState(false);
+  const [selectedRecordForRejection, setSelectedRecordForRejection] = useState<AttendanceRecord | null>(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
 
@@ -86,13 +92,9 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
-  // REAL-TIME DIRECTORY CHECK: Match logged in Aadhaar/Mobile with Employee Directory
   const registeredEmployee = useMemo(() => {
     if (!currentUser || !employees || employees.length === 0) return null;
-    
-    // Normalize login identifier (remove spaces)
     const loginIdent = currentUser.username?.replace(/\s/g, '');
-    
     return employees.find(e => {
       const empAadhaar = e.aadhaar?.replace(/\s/g, '');
       const empMobile = e.mobile?.replace(/\s/g, '');
@@ -100,7 +102,6 @@ export default function AttendancePage() {
     });
   }, [currentUser, employees]);
 
-  // STRICT ACCESS: Only verified directory entries can use portal
   const isAccessAllowed = useMemo(() => {
     return currentUser?.role === 'EMPLOYEE' && !!registeredEmployee && registeredEmployee.active;
   }, [currentUser, registeredEmployee]);
@@ -248,7 +249,8 @@ export default function AttendancePage() {
       lng: currentGPS.lng,
       address: detectedAddress,
       inPlant: detectedPlant?.name || type,
-      approved: false 
+      approved: false,
+      rejectionCount: 0
     };
 
     addRecord('attendance', newRecord);
@@ -349,7 +351,8 @@ export default function AttendancePage() {
         outTime, 
         hours, 
         status: status as any,
-        remark: "Adjusted by Super Admin"
+        remark: "Adjusted by Super Admin",
+        approved: true // Auto approve manual adjustments
       });
     }
 
@@ -362,13 +365,35 @@ export default function AttendancePage() {
     toast({ title: "Manual Adjustment Applied", description: "Record has been updated and recalculated." });
   };
 
+  const handleViewRejection = (rec: AttendanceRecord) => {
+    setSelectedRecordForRejection(rec);
+    setIsRejectionDialogOpen(true);
+  };
+
+  const handleResubmit = () => {
+    if (!selectedRecordForRejection) return;
+    
+    updateRecord('attendance', selectedRecordForRejection.id, {
+      remark: "", // Clear the rejection reason
+      approved: false // Set back to pending
+    });
+
+    addRecord('notifications', {
+      message: `${selectedRecordForRejection.employeeName} resubmitted logs for ${selectedRecordForRejection.date}`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
+    });
+
+    setIsRejectionDialogOpen(false);
+    toast({ title: "Resubmitted", description: "Logs sent back for approval." });
+  };
+
   if (!isMounted) return null;
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
-      {/* Alert for unregistered employees attempting to mark attendance */}
       {currentUser?.role === 'EMPLOYEE' && !registeredEmployee && (
         <Alert variant="destructive" className="bg-rose-50 border-rose-200 animate-in fade-in slide-in-from-top-2">
           <ShieldAlert className="h-5 w-5 text-rose-600" />
@@ -379,7 +404,6 @@ export default function AttendancePage() {
         </Alert>
       )}
 
-      {/* Information for administrators */}
       {currentUser?.role !== 'EMPLOYEE' && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 items-center">
           <AlertCircle className="w-5 h-5 text-amber-600" />
@@ -452,7 +476,7 @@ export default function AttendancePage() {
                 <TableHead className="font-bold">In Date Time</TableHead>
                 <TableHead className="font-bold">Out Plant</TableHead>
                 <TableHead className="font-bold">Out Date Time</TableHead>
-                <TableHead className="font-bold">Working Hours</TableHead>
+                <TableHead className="font-bold text-center">Hours</TableHead>
                 <TableHead className="font-bold">Type</TableHead>
                 <TableHead className="font-bold">Approval Status</TableHead>
                 {isSuperAdmin && <TableHead className="font-bold text-right">Actions</TableHead>}
@@ -469,7 +493,7 @@ export default function AttendancePage() {
                     <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
                     <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.outTime || "--:--"}</TableCell>
-                    <TableCell className={cn("font-black", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
+                    <TableCell className={cn("font-black text-center", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
                       {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
                     </TableCell>
                     <TableCell>
@@ -482,15 +506,16 @@ export default function AttendancePage() {
                         <Badge variant="destructive" className="border-none font-bold uppercase text-[9px]">Absent</Badge>
                       ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
                         <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">{h.status.replace('_', ' ')}</Badge>
-                      ) : h.isNonWorkingDay ? (
-                        <Badge variant="secondary" className={cn(
-                          "border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600",
-                          h.approved && "bg-emerald-50 text-emerald-700"
-                        )}>
-                          {h.status === 'HALF_DAY' ? 'Holiday Half day' : 'Holiday Present'}
-                        </Badge>
                       ) : h.approved ? (
                         <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px]">Approved</Badge>
+                      ) : h.remark ? (
+                        <Badge 
+                          variant="destructive" 
+                          className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors"
+                          onClick={() => handleViewRejection(h)}
+                        >
+                          Rejected
+                        </Badge>
                       ) : (
                         <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600">Pending</Badge>
                       )}
@@ -647,6 +672,49 @@ export default function AttendancePage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl">Cancel</Button>
             <Button className="bg-primary px-8 rounded-xl font-bold" onClick={handleSaveAdminEdit}>Update Log</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Detail Dialog */}
+      <Dialog open={isRejectionDialogOpen} onOpenChange={setIsRejectionDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center mb-2">
+              <MessageCircle className="w-6 h-6 text-rose-600" />
+            </div>
+            <DialogTitle className="text-xl font-black">Log Rejection Reason</DialogTitle>
+            <DialogDescription>
+              Record for {selectedRecordForRejection?.date} was declined by HR.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-6">
+            <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl space-y-3">
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">HR Remark:</p>
+              <p className="text-sm font-bold text-slate-700 leading-relaxed italic">
+                "{selectedRecordForRejection?.remark || "No specific reason provided."}"
+              </p>
+            </div>
+            
+            <div className="mt-6 flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <AlertCircle className="w-3.5 h-3.5" />
+              Attempt: {selectedRecordForRejection?.rejectionCount || 1} of 2
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="ghost" onClick={() => setIsRejectionDialogOpen(false)} className="rounded-xl font-bold flex-1">
+              Close
+            </Button>
+            {(selectedRecordForRejection?.rejectionCount || 0) < 2 && (
+              <Button 
+                onClick={handleResubmit} 
+                className="bg-primary rounded-xl font-black flex-1 shadow-lg shadow-primary/20 gap-2"
+              >
+                <SendHorizontal className="w-4 h-4" /> Sent Again
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -95,6 +95,8 @@ export default function ApprovalsPage() {
       const name = (rec.employeeName || "").toLowerCase();
       const id = (rec.employeeId || "").toLowerCase();
       const matchesSearch = name.includes(searchTerm.toLowerCase()) || id.includes(searchTerm.toLowerCase());
+      // Record is pending if not approved AND (no rejection remark OR rejection has resubmitted rejectionCount < 2)
+      // Actually simplified logic: activeTab pending = not approved.
       const matchesTab = activeTab === "approved" ? rec.approved : !rec.approved;
       return matchesSearch && matchesTab;
     });
@@ -110,7 +112,7 @@ export default function ApprovalsPage() {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
-      updateRecord('attendance', id, { approved: true });
+      updateRecord('attendance', id, { approved: true, remark: "" });
       toast({ title: "Approved", description: "Record moved to approved list." });
     } finally {
       setIsProcessing(false);
@@ -169,7 +171,10 @@ export default function ApprovalsPage() {
     
     setIsProcessing(true);
     try {
-      updateRecord('attendance', selectedRecord.id, { remark: rejectRemark });
+      updateRecord('attendance', selectedRecord.id, { 
+        remark: rejectRemark,
+        rejectionCount: (selectedRecord.rejectionCount || 0) + 1
+      });
       setIsRejectDialogOpen(false);
       toast({ title: "Rejected", description: "Remark added to pending record." });
     } finally {
