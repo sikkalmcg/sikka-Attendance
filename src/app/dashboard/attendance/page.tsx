@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Pencil,
   AlertCircle,
-  ShieldAlert
+  ShieldAlert,
+  Lock
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -30,7 +31,7 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { AttendanceRecord, Plant, AppNotification, Employee } from "@/lib/types";
+import { AttendanceRecord, Plant, Employee } from "@/lib/types";
 import { useData } from "@/context/data-context";
 import { format, subDays, eachDayOfInterval, isSunday, isSameDay } from "date-fns";
 import {
@@ -85,11 +86,11 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Strict Access Check: Find if user exists in Employee Directory
+  // REAL-TIME DIRECTORY CHECK: Match logged in Aadhaar/Mobile with Employee Directory
   const registeredEmployee = useMemo(() => {
     if (!currentUser || !employees || employees.length === 0) return null;
     
-    // Normalize username (Aadhaar or Mobile used during login)
+    // Normalize login identifier (remove spaces)
     const loginIdent = currentUser.username?.replace(/\s/g, '');
     
     return employees.find(e => {
@@ -99,8 +100,9 @@ export default function AttendancePage() {
     });
   }, [currentUser, employees]);
 
+  // STRICT ACCESS: Only verified directory entries can use portal
   const isAccessAllowed = useMemo(() => {
-    return currentUser?.role === 'EMPLOYEE' && !!registeredEmployee;
+    return currentUser?.role === 'EMPLOYEE' && !!registeredEmployee && registeredEmployee.active;
   }, [currentUser, registeredEmployee]);
 
   const effectiveEmployeeId = useMemo(() => {
@@ -197,7 +199,7 @@ export default function AttendancePage() {
 
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "Attendance marking is only for registered employees." });
+      toast({ variant: "destructive", title: "Action Blocked", description: "You must be a registered employee to mark attendance." });
       return;
     }
 
@@ -366,21 +368,23 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
+      {/* Alert for unregistered employees attempting to mark attendance */}
       {currentUser?.role === 'EMPLOYEE' && !registeredEmployee && (
         <Alert variant="destructive" className="bg-rose-50 border-rose-200 animate-in fade-in slide-in-from-top-2">
           <ShieldAlert className="h-5 w-5 text-rose-600" />
-          <AlertTitle className="font-bold text-rose-800">Profile Not Verified</AlertTitle>
+          <AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle>
           <AlertDescription className="text-rose-700">
-            Your login credentials are not found in the official Employee Directory. Please contact your HR Manager to register your profile before marking attendance.
+            Your login identity (Aadhaar/Mobile) is not found in the official Employee Directory. Only registered staff can access the Gateway Portal. Please contact HR for profile registration.
           </AlertDescription>
         </Alert>
       )}
 
+      {/* Information for administrators */}
       {currentUser?.role !== 'EMPLOYEE' && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 items-center">
           <AlertCircle className="w-5 h-5 text-amber-600" />
           <p className="text-xs font-bold text-amber-800">
-            Administrator View: You are logged in as {currentUser?.role}. Attendance marking is disabled for administrative accounts.
+            Administrator Mode: You are logged in as {currentUser?.role}. Gateway Portal controls are locked for non-employee accounts.
           </p>
         </div>
       )}
@@ -417,7 +421,7 @@ export default function AttendancePage() {
               disabled={!isAccessAllowed || isLoadingLocation || (!!todayRecord && !!todayRecord.inTime)} 
               onClick={() => requestLocation("IN")}
             >
-              {isAccessAllowed ? "Mark Check-In" : "Access Locked"}
+              {isAccessAllowed ? "Mark Check-In" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
             </Button>
             <Button 
               className={cn(
@@ -427,7 +431,7 @@ export default function AttendancePage() {
               disabled={!isAccessAllowed || isLoadingLocation || !todayRecord || (!!todayRecord && !!todayRecord.outTime)} 
               onClick={() => requestLocation("OUT")}
             >
-              {isAccessAllowed ? "Mark Check-Out" : "Access Locked"}
+              {isAccessAllowed ? "Mark Check-Out" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
             </Button>
           </div>
         </CardContent>
