@@ -713,9 +713,20 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
             {numberToIndianWords(voucher.amount)}
           </span>
         </div>
-        <div className="p-6 flex items-start gap-6 bg-white">
+        <div className="p-6 flex items-start gap-6 bg-white border-b-2 border-slate-900">
           <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Purpose:</span>
           <span className="text-lg font-medium text-slate-800 leading-relaxed">{voucher.purpose}</span>
+        </div>
+        {/* Payment Mode and Ref Number Row */}
+        <div className="grid grid-cols-2 divide-x-2 divide-slate-900">
+          <div className="p-6 flex items-center gap-6 bg-slate-50">
+            <span className="font-black uppercase text-[10px] w-32 shrink-0 text-slate-500 tracking-widest">Payment Mode:</span>
+            <span className="text-base font-black text-slate-900 uppercase">{voucher.paymentMode || "---"}</span>
+          </div>
+          <div className="p-6 flex items-center gap-6 bg-slate-50">
+            <span className="font-black uppercase text-[10px] w-32 shrink-0 text-slate-500 tracking-widest">Ref Number:</span>
+            <span className="text-base font-mono font-bold text-slate-900">{voucher.paymentReference || "---"}</span>
+          </div>
         </div>
       </div>
 
