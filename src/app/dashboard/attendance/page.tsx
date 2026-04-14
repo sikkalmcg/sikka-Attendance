@@ -96,6 +96,10 @@ export default function AttendancePage() {
     return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
   }, [currentUser]);
 
+  const isSuperAdmin = useMemo(() => {
+    return currentUser?.role === 'SUPER_ADMIN';
+  }, [currentUser]);
+
   const registeredEmployee = useMemo(() => {
     if (!currentUser || !employees || employees.length === 0) return null;
     const loginIdent = currentUser.username?.replace(/\s/g, '');
@@ -125,9 +129,8 @@ export default function AttendancePage() {
   }, [currentUser, attendanceRecords, effectiveEmployeeId]);
 
   const history = useMemo(() => {
-    if (!currentUser) return [];
+    if (!currentUser || !isMounted) return [];
     
-    // BRANCH LOGIC: Oversight for Admins, Private History for Employees
     if (isAdminRole) {
       const limitDate = subDays(new Date(), 45);
       return (attendanceRecords || [])
@@ -141,7 +144,6 @@ export default function AttendancePage() {
         .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
     }
 
-    // Employee specific logic (Day-by-day calendar with virtual entries)
     const today = new Date();
     const fortyFiveDaysAgo = subDays(today, 45);
     fortyFiveDaysAgo.setHours(0, 0, 0, 0);
@@ -209,7 +211,7 @@ export default function AttendancePage() {
         isNonWorkingDay: false
       } as any;
     }).filter(Boolean).reverse();
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole]);
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted]);
 
   const totalPages = Math.ceil(history.length / rowsPerPage);
   const paginatedHistory = useMemo(() => {
@@ -371,7 +373,7 @@ export default function AttendancePage() {
         hours, 
         status: status as any,
         remark: "Adjusted by Super Admin",
-        approved: true // Auto approve manual adjustments
+        approved: true 
       });
     }
 
@@ -393,8 +395,8 @@ export default function AttendancePage() {
     if (!selectedRecordForRejection) return;
     
     updateRecord('attendance', selectedRecordForRejection.id, {
-      remark: "", // Clear the rejection reason
-      approved: false // Set back to pending
+      remark: "", 
+      approved: false 
     });
 
     addRecord('notifications', {
@@ -408,8 +410,6 @@ export default function AttendancePage() {
   };
 
   if (!isMounted) return null;
-
-  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
@@ -507,7 +507,7 @@ export default function AttendancePage() {
               ) : (
                 paginatedHistory.map((h: any) => (
                   <TableRow key={h.id} className="hover:bg-slate-50/50">
-                    <TableCell className="text-sm font-bold text-slate-700">{h.employeeName}</TableCell>
+                    <TableCell className="text-sm font-bold text-slate-900">{h.employeeName}</TableCell>
                     <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
                     <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
@@ -516,27 +516,27 @@ export default function AttendancePage() {
                       {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight">
+                      <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight rounded-full px-3 bg-slate-50 border-slate-200">
                         {h.attendanceType}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {h.status === 'ABSENT' ? (
-                        <Badge variant="destructive" className="border-none font-bold uppercase text-[9px]">Absent</Badge>
+                        <Badge variant="destructive" className="border-none font-bold uppercase text-[9px] px-3 rounded-full">Absent</Badge>
                       ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
-                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px]">{h.status.replace('_', ' ')}</Badge>
+                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px] px-3 rounded-full">{h.status.replace('_', ' ')}</Badge>
                       ) : h.approved ? (
-                        <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px]">Approved</Badge>
+                        <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px] px-3 rounded-full">Approved</Badge>
                       ) : h.remark ? (
                         <Badge 
                           variant="destructive" 
-                          className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors"
+                          className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors px-3 rounded-full"
                           onClick={() => handleViewRejection(h)}
                         >
                           Rejected
                         </Badge>
                       ) : (
-                        <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600">Pending</Badge>
+                        <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600 px-3 rounded-full">Pending</Badge>
                       )}
                     </TableCell>
                     {isSuperAdmin && (
@@ -544,7 +544,7 @@ export default function AttendancePage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-8 w-8 text-primary hover:bg-primary/5"
+                          className="h-8 w-8 text-primary hover:bg-primary/5 rounded-full"
                           onClick={() => handleAdminEditClick(h)}
                         >
                           <Pencil className="w-4 h-4" />
@@ -695,7 +695,6 @@ export default function AttendancePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Rejection Detail Dialog */}
       <Dialog open={isRejectionDialogOpen} onOpenChange={setIsRejectionDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
