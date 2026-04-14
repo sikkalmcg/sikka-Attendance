@@ -58,6 +58,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -108,16 +114,21 @@ function HeaderActions() {
     <div className="flex items-center gap-5">
       {user.role !== 'EMPLOYEE' && (
         <Popover onOpenChange={(open) => open && markAllRead()}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
-              <Bell className="w-5 h-5 text-slate-500" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
-                  {unreadCount}
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
+                  <Bell className="w-5 h-5 text-slate-500" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
+                      {unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Activity Notifications</TooltipContent>
+          </Tooltip>
           <PopoverContent className="w-80 p-0 overflow-hidden rounded-2xl shadow-2xl border-none mt-2" align="end">
             <div className="bg-primary p-4 text-white flex items-center justify-between">
               <div>
@@ -176,18 +187,23 @@ function HeaderActions() {
       )}
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <div className="flex items-center gap-3 pl-2 cursor-pointer group hover:bg-slate-50 p-1 rounded-xl transition-colors">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold text-slate-900 leading-none">{user.fullName}</p>
-              <p className="text-[10px] font-black text-primary mt-1.5 uppercase tracking-wider leading-none">{user.role?.replace(/_/g, " ")}</p>
-            </div>
-            <Avatar className="h-10 w-10 border border-slate-200 shadow-sm transition-transform group-hover:scale-105">
-              <AvatarImage src={user.avatar || `https://picsum.photos/seed/${user.username}/40/40`} />
-              <AvatarFallback className="bg-slate-100 text-slate-400 font-bold">{user.fullName?.[0]}</AvatarFallback>
-            </Avatar>
-          </div>
-        </DropdownMenuTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <div className="flex items-center gap-3 pl-2 cursor-pointer group hover:bg-slate-50 p-1 rounded-xl transition-colors">
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-bold text-slate-900 leading-none">{user.fullName}</p>
+                  <p className="text-[10px] font-black text-primary mt-1.5 uppercase tracking-wider leading-none">{user.role?.replace(/_/g, " ")}</p>
+                </div>
+                <Avatar className="h-10 w-10 border border-slate-200 shadow-sm transition-transform group-hover:scale-105">
+                  <AvatarImage src={user.avatar || `https://picsum.photos/seed/${user.username}/40/40`} />
+                  <AvatarFallback className="bg-slate-100 text-slate-400 font-bold">{user.fullName?.[0]}</AvatarFallback>
+                </Avatar>
+              </div>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>User Menu & Profile</TooltipContent>
+        </Tooltip>
         <DropdownMenuContent align="end" className="w-56 mt-2 rounded-xl shadow-xl">
           <DropdownMenuLabel className="font-bold text-xs uppercase tracking-widest text-slate-400">My Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -433,38 +449,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <DataProvider>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background overflow-hidden">
-          <Sidebar collapsible="icon" className="border-r border-slate-200">
-            <SidebarNav />
-          </Sidebar>
+    <TooltipProvider>
+      <DataProvider>
+        <SidebarProvider>
+          <div className="flex min-h-screen w-full bg-background overflow-hidden">
+            <Sidebar collapsible="icon" className="border-r border-slate-200">
+              <SidebarNav />
+            </Sidebar>
 
-          <SidebarInset className="flex flex-col flex-1 h-screen overflow-hidden">
-            <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white shrink-0 z-20">
-              <div className="flex items-center gap-4">
-                <SidebarTrigger />
-                <Separator orientation="vertical" className="h-6" />
-                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
-                  {pathname.split("/").pop()?.replace(/-/g, " ") || "Overview"}
-                </h2>
-              </div>
+            <SidebarInset className="flex flex-col flex-1 h-screen overflow-hidden">
+              <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white shrink-0 z-20">
+                <div className="flex items-center gap-4">
+                  <SidebarTrigger />
+                  <Separator orientation="vertical" className="h-6" />
+                  <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
+                    {pathname.split("/").pop()?.replace(/-/g, " ") || "Overview"}
+                  </h2>
+                </div>
+                
+                <HeaderActions />
+              </header>
+
+              <main className="flex-1 p-6 overflow-y-auto bg-slate-50/50">
+                <div className="max-w-7xl mx-auto">
+                  {children}
+                </div>
+              </main>
               
-              <HeaderActions />
-            </header>
-
-            <main className="flex-1 p-6 overflow-y-auto bg-slate-50/50">
-              <div className="max-w-7xl mx-auto">
-                {children}
-              </div>
-            </main>
-            
-            <footer className="h-12 border-t border-slate-100 flex items-center justify-center px-6 bg-white text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
-              © Sikka Industries & Logistics – Version 1.0
-            </footer>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
-    </DataProvider>
+              <footer className="h-12 border-t border-slate-100 flex items-center justify-center px-6 bg-white text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
+                © Sikka Industries & Logistics – Version 1.0
+              </footer>
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
+      </DataProvider>
+    </TooltipProvider>
   );
 }

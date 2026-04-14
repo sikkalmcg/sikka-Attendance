@@ -294,15 +294,20 @@ export default function ApprovalsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            className="text-xs h-8 gap-1 bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
-                            onClick={() => handleShowVerify(rec)}
-                          >
-                            <MapPin className="w-3 h-3" />
-                            Verify
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                className="text-xs h-8 gap-1 bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
+                                onClick={() => handleShowVerify(rec)}
+                              >
+                                <MapPin className="w-3 h-3" />
+                                Verify
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Audit GPS Coordinates</TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-tight py-0">
@@ -353,7 +358,7 @@ export default function ApprovalsPage() {
                                       <XCircle className="w-3 h-3" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Reject</TooltipContent>
+                                  <TooltipContent>Reject Log</TooltipContent>
                                 </Tooltip>
 
                                 <Tooltip>
@@ -372,7 +377,7 @@ export default function ApprovalsPage() {
                                       </Button>
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent>{!rec.outTime ? "Out Time Required to Approve" : "Approve"}</TooltipContent>
+                                  <TooltipContent>{!rec.outTime ? "Out Time Required to Approve" : "Approve Attendance"}</TooltipContent>
                                 </Tooltip>
                               </>
                             ) : (
@@ -496,8 +501,7 @@ export default function ApprovalsPage() {
                       <p className="text-xs font-mono font-medium">{selectedRecord?.latOut?.toFixed(6) || "N/A"}</p>
                     </div>
                     <div>
-                      <Label className="text-[10px] text-muted-foreground font-black uppercase">Longitude</Label>
-                      <p className="text-xs font-mono font-medium">{selectedRecord?.lngOut?.toFixed(6) || "N/A"}</p>
+                      <Label className="text-[10px] text-muted-foreground font-black uppercase">Longitude</Label color="text-xs font-mono font-medium">{selectedRecord?.lngOut?.toFixed(6) || "N/A"}</p>
                     </div>
                   </div>
                 </div>

@@ -55,6 +55,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ATTENDANCE_RULES } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function AttendancePage() {
   const { attendanceRecords, addRecord, updateRecord, plants, holidays, employees } = useData();
@@ -418,330 +424,353 @@ export default function AttendancePage() {
   if (!isMounted) return null;
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
-      {currentUser?.role === 'EMPLOYEE' && !registeredEmployee && (
-        <Alert variant="destructive" className="bg-rose-50 border-rose-200 animate-in fade-in slide-in-from-top-2">
-          <ShieldAlert className="h-5 w-5 text-rose-600" />
-          <AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle>
-          <AlertDescription className="text-rose-700">
-            Your login identity (Aadhaar/Mobile) is not found in the official Employee Directory. Only registered staff can access the Gateway Portal. Please contact HR for profile registration.
-          </AlertDescription>
-        </Alert>
-      )}
+    <TooltipProvider>
+      <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
+        {currentUser?.role === 'EMPLOYEE' && !registeredEmployee && (
+          <Alert variant="destructive" className="bg-rose-50 border-rose-200 animate-in fade-in slide-in-from-top-2">
+            <ShieldAlert className="h-5 w-5 text-rose-600" />
+            <AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle>
+            <AlertDescription className="text-rose-700">
+              Your login identity (Aadhaar/Mobile) is not found in the official Employee Directory. Only registered staff can access the Gateway Portal. Please contact HR for profile registration.
+            </AlertDescription>
+          </Alert>
+        )}
 
-      {!isAdminRole && currentUser?.role !== 'EMPLOYEE' && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 items-center">
-          <AlertCircle className="w-5 h-5 text-amber-600" />
-          <p className="text-xs font-bold text-amber-800">
-            Administrator Mode: You are logged in as {currentUser?.role}. Gateway Portal controls are locked for non-employee accounts.
-          </p>
+        {!isAdminRole && currentUser?.role !== 'EMPLOYEE' && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 items-center">
+            <AlertCircle className="w-5 h-5 text-amber-600" />
+            <p className="text-xs font-bold text-amber-800">
+              Administrator Mode: You are logged in as {currentUser?.role}. Gateway Portal controls are locked for non-employee accounts.
+            </p>
+          </div>
+        )}
+
+        <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-md mx-auto">
+          <div className="h-1 bg-primary" />
+          <CardHeader className="text-center py-4">
+            <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
+              <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 px-6 pb-8 pt-0">
+            <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
+              {currentTime ? (
+                <div className="text-center">
+                  <h2 className="text-5xl font-black tracking-tighter font-mono text-sky-900 leading-none">
+                    {format(currentTime, "HH:mm")}
+                  </h2>
+                  <p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest">
+                    <Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}
+                  </p>
+                </div>
+              ) : (
+                <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
+              )}
+            </div>
+
+            <div className="flex gap-4">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    className={cn(
+                      "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
+                      isAccessAllowed ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                    )} 
+                    disabled={!isAccessAllowed || isLoadingLocation || (!!todayRecord && !!todayRecord.inTime)} 
+                    onClick={() => requestLocation("IN")}
+                  >
+                    {isAccessAllowed ? "Mark Check-In" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Log Arrival Time</TooltipContent>
+              </Tooltip>
+              
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    className={cn(
+                      "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
+                      isAccessAllowed ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                    )} 
+                    disabled={!isAccessAllowed || isLoadingLocation || !todayRecord || (!!todayRecord && !!todayRecord.outTime)} 
+                    onClick={() => requestLocation("OUT")}
+                  >
+                    {isAccessAllowed ? "Mark Check-Out" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Log Departure Time</TooltipContent>
+              </Tooltip>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4 max-w-6xl mx-auto pt-6">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
+              <History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}
+            </h3>
+          </div>
+          <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="font-bold">Employee Name</TableHead>
+                  <TableHead className="font-bold">In Plant</TableHead>
+                  <TableHead className="font-bold">In Date Time</TableHead>
+                  <TableHead className="font-bold">Out Plant</TableHead>
+                  <TableHead className="font-bold">Out Date Time</TableHead>
+                  <TableHead className="font-bold text-center">Hours</TableHead>
+                  <TableHead className="font-bold">Type</TableHead>
+                  <TableHead className="font-bold">Approval Status</TableHead>
+                  {isSuperAdmin && <TableHead className="font-bold text-right">Actions</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedHistory.length === 0 ? (
+                  <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
+                ) : (
+                  paginatedHistory.map((h: any) => (
+                    <TableRow key={h.id} className="hover:bg-slate-50/50">
+                      <TableCell className="text-sm font-bold text-slate-900">{h.employeeName}</TableCell>
+                      <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
+                      <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.outTime || "--:--"}</TableCell>
+                      <TableCell className={cn("font-black text-center", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
+                        {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight rounded-full px-3 bg-slate-50 border-slate-200">
+                          {h.attendanceType}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {h.status === 'ABSENT' ? (
+                          <Badge variant="destructive" className="border-none font-bold uppercase text-[9px] px-3 rounded-full">Absent</Badge>
+                        ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
+                          <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px] px-3 rounded-full">{h.status.replace('_', ' ')}</Badge>
+                        ) : h.approved ? (
+                          <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px] px-3 rounded-full">Approved</Badge>
+                        ) : h.remark ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge 
+                                variant="destructive" 
+                                className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors px-3 rounded-full"
+                                onClick={() => handleViewRejection(h)}
+                              >
+                                Rejected
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>View Rejection Reason</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600 px-3 rounded-full">Pending</Badge>
+                        )}
+                      </TableCell>
+                      {isSuperAdmin && (
+                        <TableCell className="text-right">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-primary hover:bg-primary/5 rounded-full"
+                                onClick={() => handleAdminEditClick(h)}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Adjust Logs</TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            {totalPages > 1 && (
+              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                <div className="text-xs font-bold text-muted-foreground">
+                  Showing {((currentPage - 1) * rowsPerPage) + 1} - {Math.min(currentPage * rowsPerPage, history.length)} of {history.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                    className="h-8 rounded-lg font-bold"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                  </Button>
+                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border border-slate-200 shadow-sm">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    className="h-8 rounded-lg font-bold"
+                  >
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </CardFooter>
+            )}
+          </Card>
         </div>
-      )}
 
-      <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-md mx-auto">
-        <div className="h-1 bg-primary" />
-        <CardHeader className="text-center py-4">
-          <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
-            <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6 px-6 pb-8 pt-0">
-          <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
-            {currentTime ? (
-              <div className="text-center">
-                <h2 className="text-5xl font-black tracking-tighter font-mono text-sky-900 leading-none">
-                  {format(currentTime, "HH:mm")}
-                </h2>
-                <p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest">
-                  <Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}
+        <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Navigation className="w-5 h-5 text-primary" /> Confirm Check-In</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="p-4 bg-slate-50 rounded-2xl border space-y-3">
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-slate-400 mt-1" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Location</p>
+                    <p className="text-sm font-bold text-slate-700">{detectedAddress}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 pt-2 border-t">
+                  <Building2 className="w-4 h-4 text-primary mt-1" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Detected Plant</p>
+                    <p className="text-sm font-bold text-primary">{detectedPlant ? detectedPlant.name : "Field / Remote"}</p>
+                  </div>
+                </div>
+              </div>
+              {!detectedPlant && (
+                <div className="space-y-2">
+                  <Label className="font-black text-xs">Work Mode Selection</Label>
+                  <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
+                    <SelectTrigger className="h-12 bg-white rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FIELD">Field Work</SelectItem>
+                      <SelectItem value="WFH">Work From Home</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <DialogFooter><Button className="w-full h-12 rounded-xl font-black bg-primary" onClick={handleConfirmCheckIn}>Confirm Check-In</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><Navigation className="w-5 h-5 text-rose-500" /> Confirm Check-Out</DialogTitle></DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="p-4 bg-slate-50 rounded-2xl border space-y-3">
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-slate-400 mt-1" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Location</p>
+                    <p className="text-sm font-bold text-slate-700">{detectedAddress}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter><Button className="w-full h-12 rounded-xl font-black bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-primary" />
+                Adjust Attendance Logs
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Employee</p>
+                <p className="font-bold text-slate-700">{selectedRecordToEdit?.employeeName}</p>
+                <p className="text-xs text-muted-foreground">{selectedRecordToEdit?.date}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold">In Time (24h)</Label>
+                  <Input 
+                    type="time" 
+                    value={editTimes.in} 
+                    onChange={(e) => setEditTimes(prev => ({...prev, in: e.target.value}))}
+                    className="bg-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold">Out Time (24h)</Label>
+                  <Input 
+                    type="time" 
+                    value={editTimes.out} 
+                    onChange={(e) => setEditTimes(prev => ({...prev, out: e.target.value}))}
+                    className="bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
+                  Note: Updating these times will automatically recalculate working hours and status based on organization thresholds.
                 </p>
               </div>
-            ) : (
-              <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
-            )}
-          </div>
-
-          <div className="flex gap-4">
-            <Button 
-              className={cn(
-                "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
-                isAccessAllowed ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
-              )} 
-              disabled={!isAccessAllowed || isLoadingLocation || (!!todayRecord && !!todayRecord.inTime)} 
-              onClick={() => requestLocation("IN")}
-            >
-              {isAccessAllowed ? "Mark Check-In" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
-            </Button>
-            <Button 
-              className={cn(
-                "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
-                isAccessAllowed ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
-              )} 
-              disabled={!isAccessAllowed || isLoadingLocation || !todayRecord || (!!todayRecord && !!todayRecord.outTime)} 
-              onClick={() => requestLocation("OUT")}
-            >
-              {isAccessAllowed ? "Mark Check-Out" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-4 max-w-6xl mx-auto pt-6">
-        <div className="flex items-center justify-between">
-          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
-            <History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}
-          </h3>
-        </div>
-        <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
-          <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow>
-                <TableHead className="font-bold">Employee Name</TableHead>
-                <TableHead className="font-bold">In Plant</TableHead>
-                <TableHead className="font-bold">In Date Time</TableHead>
-                <TableHead className="font-bold">Out Plant</TableHead>
-                <TableHead className="font-bold">Out Date Time</TableHead>
-                <TableHead className="font-bold text-center">Hours</TableHead>
-                <TableHead className="font-bold">Type</TableHead>
-                <TableHead className="font-bold">Approval Status</TableHead>
-                {isSuperAdmin && <TableHead className="font-bold text-right">Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedHistory.length === 0 ? (
-                <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
-              ) : (
-                paginatedHistory.map((h: any) => (
-                  <TableRow key={h.id} className="hover:bg-slate-50/50">
-                    <TableCell className="text-sm font-bold text-slate-900">{h.employeeName}</TableCell>
-                    <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
-                    <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.outTime || "--:--"}</TableCell>
-                    <TableCell className={cn("font-black text-center", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
-                      {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight rounded-full px-3 bg-slate-50 border-slate-200">
-                        {h.attendanceType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {h.status === 'ABSENT' ? (
-                        <Badge variant="destructive" className="border-none font-bold uppercase text-[9px] px-3 rounded-full">Absent</Badge>
-                      ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
-                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px] px-3 rounded-full">{h.status.replace('_', ' ')}</Badge>
-                      ) : h.approved ? (
-                        <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px] px-3 rounded-full">Approved</Badge>
-                      ) : h.remark ? (
-                        <Badge 
-                          variant="destructive" 
-                          className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors px-3 rounded-full"
-                          onClick={() => handleViewRejection(h)}
-                        >
-                          Rejected
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600 px-3 rounded-full">Pending</Badge>
-                      )}
-                    </TableCell>
-                    {isSuperAdmin && (
-                      <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-primary hover:bg-primary/5 rounded-full"
-                          onClick={() => handleAdminEditClick(h)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          {totalPages > 1 && (
-            <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-              <div className="text-xs font-bold text-muted-foreground">
-                Showing {((currentPage - 1) * rowsPerPage) + 1} - {Math.min(currentPage * rowsPerPage, history.length)} of {history.length}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => p - 1)}
-                  className="h-8 rounded-lg font-bold"
-                >
-                  <ChevronLeft className="w-4 h-4 mr-1" /> Previous
-                </Button>
-                <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border border-slate-200 shadow-sm">
-                  Page {currentPage} of {totalPages}
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(p => p + 1)}
-                  className="h-8 rounded-lg font-bold"
-                >
-                  Next <ChevronRight className="w-4 h-4 ml-1" />
-                </Button>
-              </div>
-            </CardFooter>
-          )}
-        </Card>
-      </div>
-
-      <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Navigation className="w-5 h-5 text-primary" /> Confirm Check-In</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="p-4 bg-slate-50 rounded-2xl border space-y-3">
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-slate-400 mt-1" />
-                <div>
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Location</p>
-                  <p className="text-sm font-bold text-slate-700">{detectedAddress}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 pt-2 border-t">
-                <Building2 className="w-4 h-4 text-primary mt-1" />
-                <div>
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Detected Plant</p>
-                  <p className="text-sm font-bold text-primary">{detectedPlant ? detectedPlant.name : "Field / Remote"}</p>
-                </div>
-              </div>
             </div>
-            {!detectedPlant && (
-              <div className="space-y-2">
-                <Label className="font-black text-xs">Work Mode Selection</Label>
-                <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
-                  <SelectTrigger className="h-12 bg-white rounded-xl"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FIELD">Field Work</SelectItem>
-                    <SelectItem value="WFH">Work From Home</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <DialogFooter><Button className="w-full h-12 rounded-xl font-black bg-primary" onClick={handleConfirmCheckIn}>Confirm Check-In</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl">Cancel</Button>
+              <Button className="bg-primary px-8 rounded-xl font-bold" onClick={handleSaveAdminEdit}>Update Log</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Navigation className="w-5 h-5 text-rose-500" /> Confirm Check-Out</DialogTitle></DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="p-4 bg-slate-50 rounded-2xl border space-y-3">
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-slate-400 mt-1" />
-                <div>
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Location</p>
-                  <p className="text-sm font-bold text-slate-700">{detectedAddress}</p>
-                </div>
+        <Dialog open={isRejectionDialogOpen} onOpenChange={setIsRejectionDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center mb-2">
+                <MessageCircle className="w-6 h-6 text-rose-600" />
               </div>
-            </div>
-          </div>
-          <DialogFooter><Button className="w-full h-12 rounded-xl font-black bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="w-5 h-5 text-primary" />
-              Adjust Attendance Logs
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6 py-4">
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Employee</p>
-              <p className="font-bold text-slate-700">{selectedRecordToEdit?.employeeName}</p>
-              <p className="text-xs text-muted-foreground">{selectedRecordToEdit?.date}</p>
-            </div>
+              <DialogTitle className="text-xl font-black">Log Rejection Reason</DialogTitle>
+              <DialogDescription>
+                Record for {selectedRecordForRejection?.date} was declined by HR.
+              </DialogDescription>
+            </DialogHeader>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-bold">In Time (24h)</Label>
-                <Input 
-                  type="time" 
-                  value={editTimes.in} 
-                  onChange={(e) => setEditTimes(prev => ({...prev, in: e.target.value}))}
-                  className="bg-white"
-                />
+            <div className="py-6">
+              <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl space-y-3">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">HR Remark:</p>
+                <p className="text-sm font-bold text-slate-700 leading-relaxed italic">
+                  "{selectedRecordForRejection?.remark || "No specific reason provided."}"
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-bold">Out Time (24h)</Label>
-                <Input 
-                  type="time" 
-                  value={editTimes.out} 
-                  onChange={(e) => setEditTimes(prev => ({...prev, out: e.target.value}))}
-                  className="bg-white"
-                />
+              
+              <div className="mt-6 flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Attempt: {selectedRecordForRejection?.rejectionCount || 1} of 2
               </div>
             </div>
 
-            <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
-              <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
-                Note: Updating these times will automatically recalculate working hours and status based on organization thresholds.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl">Cancel</Button>
-            <Button className="bg-primary px-8 rounded-xl font-bold" onClick={handleSaveAdminEdit}>Update Log</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isRejectionDialogOpen} onOpenChange={setIsRejectionDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center mb-2">
-              <MessageCircle className="w-6 h-6 text-rose-600" />
-            </div>
-            <DialogTitle className="text-xl font-black">Log Rejection Reason</DialogTitle>
-            <DialogDescription>
-              Record for {selectedRecordForRejection?.date} was declined by HR.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-6">
-            <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl space-y-3">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">HR Remark:</p>
-              <p className="text-sm font-bold text-slate-700 leading-relaxed italic">
-                "{selectedRecordForRejection?.remark || "No specific reason provided."}"
-              </p>
-            </div>
-            
-            <div className="mt-6 flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Attempt: {selectedRecordForRejection?.rejectionCount || 1} of 2
-            </div>
-          </div>
-
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="ghost" onClick={() => setIsRejectionDialogOpen(false)} className="rounded-xl font-bold flex-1">
-              Close
-            </Button>
-            {(selectedRecordForRejection?.rejectionCount || 0) < 2 && (
-              <Button 
-                onClick={handleResubmit} 
-                className="bg-primary rounded-xl font-black flex-1 shadow-lg shadow-primary/20 gap-2"
-              >
-                <SendHorizontal className="w-4 h-4" /> Sent Again
+            <DialogFooter className="flex flex-col sm:flex-row gap-2">
+              <Button variant="ghost" onClick={() => setIsRejectionDialogOpen(false)} className="rounded-xl font-bold flex-1">
+                Close
               </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+              {(selectedRecordForRejection?.rejectionCount || 0) < 2 && (
+                <Button 
+                  onClick={handleResubmit} 
+                  className="bg-primary rounded-xl font-black flex-1 shadow-lg shadow-primary/20 gap-2"
+                >
+                  <SendHorizontal className="w-4 h-4" /> Sent Again
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   );
 }

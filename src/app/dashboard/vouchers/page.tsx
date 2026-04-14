@@ -29,6 +29,12 @@ import {
   FileSpreadsheet,
   X
 } from "lucide-react";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
@@ -252,197 +258,121 @@ export default function VouchersPage() {
   if (!isMounted) return null;
 
   return (
-    <div className="space-y-6 print:hidden">
-      <div>
-        <h1 className="text-2xl font-bold">Advance Voucher System</h1>
-        <p className="text-muted-foreground">Manage employee advance payments, approvals, and recovery ledger.</p>
-      </div>
+    <TooltipProvider>
+      <div className="space-y-6 print:hidden">
+        <div>
+          <h1 className="text-2xl font-bold">Advance Voucher System</h1>
+          <p className="text-muted-foreground">Manage employee advance payments, approvals, and recovery ledger.</p>
+        </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full max-w-xl grid-cols-3 mb-8 bg-slate-100 p-1 rounded-xl h-12">
-          <TabsTrigger value="create" className="font-semibold rounded-lg">Create Voucher</TabsTrigger>
-          <TabsTrigger value="approve" className="font-semibold rounded-lg">Approve Voucher</TabsTrigger>
-          <TabsTrigger value="payment" className="font-semibold rounded-lg">Voucher Payments</TabsTrigger>
-        </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full max-w-xl grid-cols-3 mb-8 bg-slate-100 p-1 rounded-xl h-12">
+            <TabsTrigger value="create" className="font-semibold rounded-lg">Create Voucher</TabsTrigger>
+            <TabsTrigger value="approve" className="font-semibold rounded-lg">Approve Voucher</TabsTrigger>
+            <TabsTrigger value="payment" className="font-semibold rounded-lg">Voucher Payments</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="create">
-          <Card className="max-w-4xl mx-auto shadow-xl border-none">
-            <CardHeader className="bg-slate-50 border-b border-slate-100 rounded-t-xl flex flex-row items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg"><Wallet className="text-primary w-5 h-5" /></div>
-                <CardTitle>Generate New Voucher</CardTitle>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-1.5 bg-white border border-slate-200 rounded-full shadow-sm">
-                <UserIcon className="w-3.5 h-3.5 text-primary" />
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Voucher Create by:</span>
-                <span className="text-xs font-bold text-primary">{currentUser?.fullName || "..."}</span>
-              </div>
-            </CardHeader>
-            <form onSubmit={handleCreateVoucher}>
-              <CardContent className="p-8 space-y-8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                  <div className="space-y-2">
-                    <Label className="font-bold">Voucher Number</Label>
-                    <Input value={voucherNo} disabled className="bg-slate-100 font-mono font-bold h-12 text-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">Date *</Label>
-                    <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-12 bg-white" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold">Select Employee *</Label>
-                    <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} required>
-                      <SelectTrigger className="h-12 bg-white"><SelectValue placeholder="Select Employee" /></SelectTrigger>
-                      <SelectContent>
-                        {employees.map(emp => (
-                          <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-bold text-emerald-600">Advance Amount (INR) *</Label>
-                    <Input type="number" placeholder="Enter amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-12 bg-white font-bold" required />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-bold">Purpose of Advance *</Label>
-                  <Input placeholder="Reason for advance..." value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-12 bg-white" required />
-                </div>
-              </CardContent>
-              <CardFooter className="bg-slate-50 border-t border-slate-100 rounded-b-xl flex justify-end gap-3 p-6">
-                <Button variant="outline" type="button" onClick={() => setActiveTab("approve")}>Cancel</Button>
-                <Button className="px-12 h-12 font-bold shadow-lg shadow-primary/20 bg-primary">Create Voucher</Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="approve">
-          <Card className="shadow-sm border-slate-200 overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6">
-              <div className="flex items-center justify-between gap-4">
+          <TabsContent value="create">
+            <Card className="max-w-4xl mx-auto shadow-xl border-none">
+              <CardHeader className="bg-slate-50 border-b border-slate-100 rounded-t-xl flex flex-row items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-50 rounded-lg"><FileCheck className="w-5 h-5 text-amber-600" /></div>
-                  <CardTitle className="text-lg">Pending Approvals</CardTitle>
+                  <div className="p-2 bg-primary/10 rounded-lg"><Wallet className="text-primary w-5 h-5" /></div>
+                  <CardTitle>Generate New Voucher</CardTitle>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Button variant="outline" size="sm" className="h-10 gap-2" onClick={() => handleExportExcel('PENDING')}>
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Export Excel
-                  </Button>
-                  <div className="relative w-80">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPendingPage(1); }} />
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-white border border-slate-200 rounded-full shadow-sm">
+                  <UserIcon className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Voucher Create by:</span>
+                  <span className="text-xs font-bold text-primary">{currentUser?.fullName || "..."}</span>
+                </div>
+              </CardHeader>
+              <form onSubmit={handleCreateVoucher}>
+                <CardContent className="p-8 space-y-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <Label className="font-bold">Voucher Number</Label>
+                      <Input value={voucherNo} disabled className="bg-slate-100 font-mono font-bold h-12 text-primary" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Date *</Label>
+                      <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-12 bg-white" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Select Employee *</Label>
+                      <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} required>
+                        <SelectTrigger className="h-12 bg-white"><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                        <SelectContent>
+                          {employees.map(emp => (
+                            <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.employeeId})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold text-emerald-600">Advance Amount (INR) *</Label>
+                      <Input type="number" placeholder="Enter amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-12 bg-white font-bold" required />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">Purpose of Advance *</Label>
+                    <Input placeholder="Reason for advance..." value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-12 bg-white" required />
+                  </div>
+                </CardContent>
+                <CardFooter className="bg-slate-50 border-t border-slate-100 rounded-b-xl flex justify-end gap-3 p-6">
+                  <Button variant="outline" type="button" onClick={() => setActiveTab("approve")}>Cancel</Button>
+                  <Button className="px-12 h-12 font-bold shadow-lg shadow-primary/20 bg-primary">Create Voucher</Button>
+                </CardFooter>
+              </form>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="approve">
+            <Card className="shadow-sm border-slate-200 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-amber-50 rounded-lg"><FileCheck className="w-5 h-5 text-amber-600" /></div>
+                    <CardTitle className="text-lg">Pending Approvals</CardTitle>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button variant="outline" size="sm" className="h-10 gap-2" onClick={() => handleExportExcel('PENDING')}>
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Export Excel
+                    </Button>
+                    <div className="relative w-80">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPendingPage(1); }} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="font-bold">Voucher No</TableHead>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Dept / Designation</TableHead>
-                    <TableHead className="font-bold">Date</TableHead>
-                    <TableHead className="font-bold">Amount</TableHead>
-                    <TableHead className="font-bold text-primary">Created By</TableHead>
-                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedPending.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending vouchers.</TableCell></TableRow>
-                  ) : (
-                    paginatedPending.map((v) => {
-                      const emp = employees.find(e => e.id === v.employeeId);
-                      return (
-                        <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold leading-tight">{emp?.department || "--"}</span>
-                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
-                          <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-2">
-                              <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
-                                <Download className="w-3 h-3" /> Download
-                              </Button>
-                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleApproveVoucher(v.id)}>
-                                <CheckCircle className="w-3 h-3 mr-1.5" /> Approve
-                              </Button>
-                              <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold px-3" onClick={() => setVoucherToReject(v.id)}>
-                                <XCircle className="w-3 h-3 mr-1.5" /> Reject
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-            {totalPendingPages > 1 && (
-              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                <div className="text-xs font-bold text-muted-foreground">Showing {((pendingPage - 1) * rowsPerPage) + 1} - {Math.min(pendingPage * rowsPerPage, filteredPendingVouchers.length)} of {filteredPendingVouchers.length}</div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={pendingPage === 1} onClick={() => setPendingPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
-                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {pendingPage} of {totalPendingPages}</div>
-                  <Button variant="outline" size="sm" disabled={pendingPage === totalPendingPages} onClick={() => setPendingPage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
-                </div>
-              </CardFooter>
-            )}
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="payment">
-          <Card className="shadow-sm border-slate-200 overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b p-6">
-              <div className="flex flex-col lg:flex-row items-center gap-4">
-                <div className="relative flex-1 w-full">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Search by Slip No, Name or ID..." 
-                    className="pl-10 h-10 bg-white"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="w-full">
-                <Table className="min-w-[1200px]">
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
                       <TableHead className="font-bold">Voucher No</TableHead>
                       <TableHead className="font-bold">Employee Name</TableHead>
                       <TableHead className="font-bold">Dept / Designation</TableHead>
-                      <TableHead className="font-bold text-center">Mode</TableHead>
-                      <TableHead className="font-bold text-center">Ref No</TableHead>
-                      <TableHead className="font-bold text-right">Amount</TableHead>
+                      <TableHead className="font-bold">Date</TableHead>
+                      <TableHead className="font-bold">Amount</TableHead>
                       <TableHead className="font-bold text-primary">Created By</TableHead>
-                      <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
-                      <TableHead className="font-bold text-center">Status</TableHead>
                       <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedPayable.length === 0 ? (
-                      <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
+                    {paginatedPending.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending vouchers.</TableCell></TableRow>
                     ) : (
-                      paginatedPayable.map((v) => {
+                      paginatedPending.map((v) => {
                         const emp = employees.find(e => e.id === v.employeeId);
                         return (
                           <TableRow key={v.id} className="hover:bg-slate-50/50">
-                            <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
+                            <TableCell>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</span>
+                                </TooltipTrigger>
+                                <TooltipContent>Preview Voucher</TooltipContent>
+                              </Tooltip>
+                            </TableCell>
                             <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
                             <TableCell>
                               <div className="flex flex-col">
@@ -450,31 +380,37 @@ export default function VouchersPage() {
                                 <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center">
-                              <span className="text-[10px] font-black">{v.paymentMode || "--"}</span>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <span className="text-[10px] font-mono font-medium text-slate-500">{v.paymentReference || "--"}</span>
-                            </TableCell>
-                            <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                            <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                             <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
-                            <TableCell className="text-xs font-bold text-emerald-600">{v.approvedByName || "--"}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none text-[10px] font-bold")}>
-                                {v.status}
-                              </Badge>
-                            </TableCell>
                             <TableCell className="text-right pr-6">
                               <div className="flex justify-end gap-2">
-                                {v.status === "APPROVED" ? (
-                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
-                                    <CreditCard className="w-3 h-3 mr-1.5" /> Pay
-                                  </Button>
-                                ) : (
-                                  <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
-                                    <Download className="w-3 h-3" /> Download
-                                  </Button>
-                                )}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
+                                      <Download className="w-3 h-3" /> Download
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Download PDF Copy</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleApproveVoucher(v.id)}>
+                                      <CheckCircle className="w-3 h-3 mr-1.5" /> Approve
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Approve Advance Request</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold px-3" onClick={() => setVoucherToReject(v.id)}>
+                                      <XCircle className="w-3 h-3 mr-1.5" /> Reject
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Cancel Request</TooltipContent>
+                                </Tooltip>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -483,153 +419,266 @@ export default function VouchersPage() {
                     )}
                   </TableBody>
                 </Table>
-              </ScrollArea>
-            </CardContent>
-            {totalPaymentPages > 1 && (
-              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                <div className="text-xs font-bold text-muted-foreground">Showing {((paymentPage - 1) * rowsPerPage) + 1} - {Math.min(paymentPage * rowsPerPage, filteredPayableVouchers.length)} of {filteredPayableVouchers.length}</div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={paymentPage === 1} onClick={() => setPaymentPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
-                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {paymentPage} of {totalPaymentPages}</div>
-                  <Button variant="outline" size="sm" disabled={paymentPage === totalPaymentPages} onClick={() => setPaymentPage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+              </CardContent>
+              {totalPendingPages > 1 && (
+                <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                  <div className="text-xs font-bold text-muted-foreground">Showing {((pendingPage - 1) * rowsPerPage) + 1} - {Math.min(pendingPage * rowsPerPage, filteredPendingVouchers.length)} of {filteredPendingVouchers.length}</div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={pendingPage === 1} onClick={() => setPendingPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
+                    <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {pendingPage} of {totalPendingPages}</div>
+                    <Button variant="outline" size="sm" disabled={pendingPage === totalPendingPages} onClick={() => setPendingPage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                  </div>
+                </CardFooter>
+              )}
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="payment">
+            <Card className="shadow-sm border-slate-200 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 border-b p-6">
+                <div className="flex flex-col lg:flex-row items-center gap-4">
+                  <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search by Slip No, Name or ID..." 
+                      className="pl-10 h-10 bg-white"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </CardFooter>
-            )}
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1200px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold">Voucher No</TableHead>
+                        <TableHead className="font-bold">Employee Name</TableHead>
+                        <TableHead className="font-bold">Dept / Designation</TableHead>
+                        <TableHead className="font-bold text-center">Mode</TableHead>
+                        <TableHead className="font-bold text-center">Ref No</TableHead>
+                        <TableHead className="font-bold text-right">Amount</TableHead>
+                        <TableHead className="font-bold text-primary">Created By</TableHead>
+                        <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
+                        <TableHead className="font-bold text-center">Status</TableHead>
+                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedPayable.length === 0 ? (
+                        <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
+                      ) : (
+                        paginatedPayable.map((v) => {
+                          const emp = employees.find(e => e.id === v.employeeId);
+                          return (
+                            <TableRow key={v.id} className="hover:bg-slate-50/50">
+                              <TableCell>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Preview Voucher</TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-bold leading-tight">{emp?.department || "--"}</span>
+                                  <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-[10px] font-black">{v.paymentMode || "--"}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-[10px] font-mono font-medium text-slate-500">{v.paymentReference || "--"}</span>
+                              </TableCell>
+                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
+                              <TableCell className="text-xs font-bold text-emerald-600">{v.approvedByName || "--"}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none text-[10px] font-bold")}>
+                                  {v.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right pr-6">
+                                <div className="flex justify-end gap-2">
+                                  {v.status === "APPROVED" ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
+                                          <CreditCard className="w-3 h-3 mr-1.5" /> Pay
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Record Cash/Bank Payment</TooltipContent>
+                                    </Tooltip>
+                                  ) : (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
+                                          <Download className="w-3 h-3" /> Download
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Download PDF Copy</TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+              {totalPaymentPages > 1 && (
+                <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                  <div className="text-xs font-bold text-muted-foreground">Showing {((paymentPage - 1) * rowsPerPage) + 1} - {Math.min(paymentPage * rowsPerPage, filteredPayableVouchers.length)} of {filteredPayableVouchers.length}</div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={paymentPage === 1} onClick={() => setPaymentPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
+                    <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {paymentPage} of {totalPaymentPages}</div>
+                    <Button variant="outline" size="sm" disabled={paymentPage === totalPaymentPages} onClick={() => setPaymentPage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                  </div>
+                </CardFooter>
+              )}
+            </Card>
+          </TabsContent>
+        </Tabs>
 
-      {/* Reject Alert */}
-      <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
-        <AlertDialogContent className="sm:max-w-md">
-          <AlertDialogHeader>
-            <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4"><AlertTriangle className="w-6 h-6 text-rose-600" /></div>
-            <AlertDialogTitle className="text-center">Reject Voucher?</AlertDialogTitle>
-            <AlertDialogDescription className="text-center">This action will remove the voucher request permanently.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center gap-3">
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRejectConfirm} className="bg-rose-600 hover:bg-rose-700 font-bold">Confirm Rejection</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* Reject Alert */}
+        <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4"><AlertTriangle className="w-6 h-6 text-rose-600" /></div>
+              <AlertDialogTitle className="text-center">Reject Voucher?</AlertDialogTitle>
+              <AlertDialogDescription className="text-center">This action will remove the voucher request permanently.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="sm:justify-center gap-3">
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRejectConfirm} className="bg-rose-600 hover:bg-rose-700 font-bold">Confirm Rejection</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-      {/* Pay Dialog */}
-      <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
-        <DialogContent className="sm:max-w-4xl">
-          <DialogHeader className="border-b pb-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Process Payment</span>
-              <DialogTitle className="text-xl font-black text-slate-900">
-                {employees.find(e => e.id === voucherToPay?.employeeId)?.name}
-              </DialogTitle>
-              <div className="flex items-center gap-2 text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded w-fit">
-                <CreditCard className="w-3 h-3" /> {voucherToPay?.voucherNo}
+        {/* Pay Dialog */}
+        <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
+          <DialogContent className="sm:max-w-4xl">
+            <DialogHeader className="border-b pb-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Process Payment</span>
+                <DialogTitle className="text-xl font-black text-slate-900">
+                  {employees.find(e => e.id === voucherToPay?.employeeId)?.name}
+                </DialogTitle>
+                <div className="flex items-center gap-2 text-xs font-mono font-bold text-primary bg-primary/5 px-2 py-1 rounded w-fit">
+                  <CreditCard className="w-3 h-3" /> {voucherToPay?.voucherNo}
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="py-4 space-y-0 divide-y divide-slate-100">
+              <div className="grid grid-cols-2">
+                <div className="p-6 space-y-2 border-r border-slate-100">
+                  <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Paid Amount (INR)</Label>
+                  <Input 
+                    type="number" 
+                    value={payAmount} 
+                    onChange={(e) => setPayAmount(e.target.value)} 
+                    className="h-12 bg-white border-slate-200 font-black text-lg text-emerald-600 focus-visible:ring-emerald-500" 
+                  />
+                </div>
+                <div className="p-6 space-y-2">
+                  <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Date</Label>
+                  <Input 
+                    type="date" 
+                    value={payDate} 
+                    onChange={(e) => setPayDate(e.target.value)} 
+                    className="h-12 bg-white border-slate-200 font-bold" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2">
+                <div className="p-6 space-y-2 border-r border-slate-100">
+                  <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Mode</Label>
+                  <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
+                    <SelectTrigger className="h-12 bg-white border-slate-200 font-bold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CASH">Cash</SelectItem>
+                      <SelectItem value="BANKING">Banking</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="p-6 space-y-2">
+                  <Label className={cn(
+                    "font-black text-[10px] uppercase text-slate-500 tracking-wider transition-opacity",
+                    payMode !== 'BANKING' && "opacity-30"
+                  )}>
+                    Reference Number
+                  </Label>
+                  <Input 
+                    placeholder={payMode === 'BANKING' ? "UTR / Trans ID" : "N/A"}
+                    disabled={payMode !== 'BANKING'}
+                    value={payRef} 
+                    onChange={(e) => setPayRef(e.target.value)} 
+                    className="h-12 bg-white border-slate-200 font-bold disabled:bg-slate-100 disabled:text-slate-400" 
+                  />
+                </div>
               </div>
             </div>
-          </DialogHeader>
-          <div className="py-4 space-y-0 divide-y divide-slate-100">
-            <div className="grid grid-cols-2">
-              <div className="p-6 space-y-2 border-r border-slate-100">
-                <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Paid Amount (INR)</Label>
-                <Input 
-                  type="number" 
-                  value={payAmount} 
-                  onChange={(e) => setPayAmount(e.target.value)} 
-                  className="h-12 bg-white border-slate-200 font-black text-lg text-emerald-600 focus-visible:ring-emerald-500" 
-                />
-              </div>
-              <div className="p-6 space-y-2">
-                <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Date</Label>
-                <Input 
-                  type="date" 
-                  value={payDate} 
-                  onChange={(e) => setPayDate(e.target.value)} 
-                  className="h-12 bg-white border-slate-200 font-bold" 
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2">
-              <div className="p-6 space-y-2 border-r border-slate-100">
-                <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Mode</Label>
-                <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
-                  <SelectTrigger className="h-12 bg-white border-slate-200 font-bold">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CASH">Cash</SelectItem>
-                    <SelectItem value="BANKING">Banking</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="p-6 space-y-2">
-                <Label className={cn(
-                  "font-black text-[10px] uppercase text-slate-500 tracking-wider transition-opacity",
-                  payMode !== 'BANKING' && "opacity-30"
-                )}>
-                  Reference Number
-                </Label>
-                <Input 
-                  placeholder={payMode === 'BANKING' ? "UTR / Trans ID" : "N/A"}
-                  disabled={payMode !== 'BANKING'}
-                  value={payRef} 
-                  onChange={(e) => setPayRef(e.target.value)} 
-                  className="h-12 bg-white border-slate-200 font-bold disabled:bg-slate-100 disabled:text-slate-400" 
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="gap-2 border-t pt-4">
-            <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="rounded-xl font-bold h-11">Cancel</Button>
-            <Button 
-              onClick={handleConfirmPayment} 
-              className="h-11 px-8 bg-emerald-600 hover:bg-emerald-700 font-black rounded-xl shadow-lg shadow-emerald-100"
-            >
-              Confirm & Mark Paid
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Preview Dialog */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
-          <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Eye className="w-5 h-5 text-primary" />
-              </div>
-              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Voucher Preview</DialogTitle>
-            </div>
-            <div className="flex items-center gap-3 mr-8">
+            <DialogFooter className="gap-2 border-t pt-4">
+              <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="rounded-xl font-bold h-11">Cancel</Button>
               <Button 
-                className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
-                onClick={() => handleDownloadPDF(previewVoucher!)}
+                onClick={handleConfirmPayment} 
+                className="h-11 px-8 bg-emerald-600 hover:bg-emerald-700 font-black rounded-xl shadow-lg shadow-emerald-100"
               >
-                <Download className="w-5 h-5" /> Download PDF
+                Confirm & Mark Paid
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setIsPreviewOpen(false)}>
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-          </DialogHeader>
-          
-          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
-            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-16 min-h-[297mm] border-4 border-slate-900 rounded-sm">
-              {previewVoucher && <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {/* Hidden Print Container */}
-      {previewVoucher && (
-        <div className="hidden print:block print-only">
-          <AdvanceVoucherPrint voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />
-        </div>
-      )}
-    </div>
+        {/* Preview Dialog */}
+        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+            <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-primary" />
+                </div>
+                <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Voucher Preview</DialogTitle>
+              </div>
+              <div className="flex items-center gap-3 mr-8">
+                <Button 
+                  className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
+                  onClick={() => handleDownloadPDF(previewVoucher!)}
+                >
+                  <Download className="w-5 h-5" /> Download PDF
+                </Button>
+                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setIsPreviewOpen(false)}>
+                  <X className="h-5 h-5" />
+                </Button>
+              </div>
+            </DialogHeader>
+            
+            <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
+              <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-16 min-h-[297mm] border-4 border-slate-900 rounded-sm">
+                {previewVoucher && <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />}
+              </div>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
+
+        {/* Hidden Print Container */}
+        {previewVoucher && (
+          <div className="hidden print:block print-only">
+            <AdvanceVoucherPrint voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />
+          </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
 

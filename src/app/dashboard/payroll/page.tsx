@@ -69,16 +69,16 @@ import {
   Mail,
   Globe
 } from "lucide-react";
-import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
-import { useData } from "@/context/data-context";
-import { useToast } from "@/hooks/use-toast";
-import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm, Voucher } from "@/lib/types";
-import {
+import { 
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
+import { useData } from "@/context/data-context";
+import { useToast } from "@/hooks/use-toast";
+import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm, Voucher } from "@/lib/types";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { parseISO, isSameMonth, format } from "date-fns";
@@ -378,121 +378,127 @@ export default function PayrollPage() {
   if (!isMounted) return null;
 
   return (
-    <div className="space-y-8 pb-12 print:hidden">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Payroll Management</h1>
-          <p className="text-muted-foreground">Comprehensive system for earnings, payments and leave adjustment.</p>
+    <TooltipProvider>
+      <div className="space-y-8 pb-12 print:hidden">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Payroll Management</h1>
+            <p className="text-muted-foreground">Comprehensive system for earnings, payments and leave adjustment.</p>
+          </div>
         </div>
-      </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-2xl bg-slate-100 p-1 rounded-xl h-12">
-          <TabsTrigger value="generate" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Generate Salary</TabsTrigger>
-          <TabsTrigger value="payment" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Salary Payment</TabsTrigger>
-          <TabsTrigger value="advance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Advance Salary</TabsTrigger>
-          <TabsTrigger value="leave" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Advance Leave</TabsTrigger>
-        </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl bg-slate-100 p-1 rounded-xl h-12">
+            <TabsTrigger value="generate" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Generate Salary</TabsTrigger>
+            <TabsTrigger value="payment" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Salary Payment</TabsTrigger>
+            <TabsTrigger value="advance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Advance Salary</TabsTrigger>
+            <TabsTrigger value="leave" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">Advance Leave</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="generate" className="mt-8 space-y-6">
-          <Card className="border-none shadow-sm">
-            <CardHeader className="bg-slate-50 border-b border-slate-100 px-6 py-4 rounded-t-xl">
-              <div className="flex flex-col lg:flex-row items-center gap-4">
-                <div className="relative flex-1 w-full">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Search by Employee Name / ID / Aadhaar..." 
-                    className="pl-10 h-10 bg-white"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+          <TabsContent value="generate" className="mt-8 space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50 border-b border-slate-100 px-6 py-4 rounded-t-xl">
+                <div className="flex flex-col lg:flex-row items-center gap-4">
+                  <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search by Employee Name / ID / Aadhaar..." 
+                      className="pl-10 h-10 bg-white"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                    <Select value={selectedFirmId} onValueChange={setSelectedFirmId}>
+                      <SelectTrigger className="w-full sm:w-48 bg-white h-10">
+                        <SelectValue placeholder="Filter by Firm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Firms</SelectItem>
+                        {firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                      <SelectTrigger className="w-full sm:w-40 bg-white h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-                  <Select value={selectedFirmId} onValueChange={setSelectedFirmId}>
-                    <SelectTrigger className="w-full sm:w-48 bg-white h-10">
-                      <SelectValue placeholder="Filter by Firm" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Firms</SelectItem>
-                      {firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-full sm:w-40 bg-white h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="w-full">
-                <Table className="min-w-[1200px]">
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Firm / Unit</TableHead>
-                      <TableHead className="font-bold">Employee Name / ID</TableHead>
-                      <TableHead className="font-bold">Aadhaar No</TableHead>
-                      <TableHead className="font-bold">Dept / Designation</TableHead>
-                      <TableHead className="font-bold">Month</TableHead>
-                      <TableHead className="font-bold text-right">Monthly CTC</TableHead>
-                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingGenerationEmployees.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">All salaries for {selectedMonth} have been generated.</TableCell></TableRow>
-                    ) : (
-                      pendingGenerationEmployees.map((emp) => {
-                        const isAdjusted = adjustedEmployees[emp.id];
-                        const firm = firms.find(f => f.id === emp.firmId);
-                        const plant = plants.find(p => p.id === emp.unitId);
-                        
-                        return (
-                          <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
-                                <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-bold">{emp.name}</span>
-                                <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium">{emp.department}</span>
-                                <span className="text-xs text-muted-foreground">{emp.designation}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-bold text-emerald-600">
-                              {formatCurrency(emp.salary.monthlyCTC)}
-                            </TableCell>
-                            <TableCell className="text-right pr-6">
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className={cn(
-                                    "text-xs font-bold gap-1 border-primary/20",
-                                    isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5"
-                                  )}
-                                  onClick={() => openAdjustmentDialog(emp)}
-                                >
-                                  <CalendarClock className="w-3 h-3" /> 
-                                  {isAdjusted ? "Reviewed" : "Adjust Live"}
-                                </Button>
-                                <TooltipProvider>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1200px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold">Firm / Unit</TableHead>
+                        <TableHead className="font-bold">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold">Aadhaar No</TableHead>
+                        <TableHead className="font-bold">Dept / Designation</TableHead>
+                        <TableHead className="font-bold">Month</TableHead>
+                        <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingGenerationEmployees.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">All salaries for {selectedMonth} have been generated.</TableCell></TableRow>
+                      ) : (
+                        pendingGenerationEmployees.map((emp) => {
+                          const isAdjusted = adjustedEmployees[emp.id];
+                          const firm = firms.find(f => f.id === emp.firmId);
+                          const plant = plants.find(p => p.id === emp.unitId);
+                          
+                          return (
+                            <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
+                                  <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-bold">{emp.name}</span>
+                                  <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium">{emp.department}</span>
+                                  <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-bold text-emerald-600">
+                                {formatCurrency(emp.salary.monthlyCTC)}
+                              </TableCell>
+                              <TableCell className="text-right pr-6">
+                                <div className="flex justify-end gap-2">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className={cn(
+                                          "text-xs font-bold gap-1 border-primary/20",
+                                          isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5"
+                                        )}
+                                        onClick={() => openAdjustmentDialog(emp)}
+                                      >
+                                        <CalendarClock className="w-3 h-3" /> 
+                                        {isAdjusted ? "Reviewed" : "Adjust Live"}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Review & Adjust Attendance</TooltipContent>
+                                  </Tooltip>
+
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <div className="inline-block">
@@ -513,588 +519,612 @@ export default function PayrollPage() {
                                         </Button>
                                       </div>
                                     </TooltipTrigger>
-                                    {!isAdjusted && (
-                                      <TooltipContent>
-                                        <p className="text-xs">Review attendance before generating salary</p>
-                                      </TooltipContent>
-                                    )}
+                                    <TooltipContent>
+                                      {isAdjusted ? "Proceed to Salary Generation" : "Review attendance first"}
+                                    </TooltipContent>
                                   </Tooltip>
-                                </TooltipProvider>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="payment" className="mt-8 space-y-6">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50 border-b p-6">
-              <div className="flex flex-col lg:flex-row items-center gap-4">
-                <div className="relative flex-1 w-full">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Search by Slip No, Name or ID..." 
-                    className="pl-10 h-10 bg-white"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+          <TabsContent value="payment" className="mt-8 space-y-6">
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="bg-slate-50 border-b p-6">
+                <div className="flex flex-col lg:flex-row items-center gap-4">
+                  <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search by Slip No, Name or ID..." 
+                      className="pl-10 h-10 bg-white"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                    <Select value={selectedFirmId} onValueChange={setSelectedFirmId}>
+                      <SelectTrigger className="w-full sm:w-48 bg-white h-10">
+                        <SelectValue placeholder="Filter by Firm" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Firms</SelectItem>
+                        {firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                      <SelectTrigger className="w-full sm:w-40 bg-white h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-                  <Select value={selectedFirmId} onValueChange={setSelectedFirmId}>
-                    <SelectTrigger className="w-full sm:w-48 bg-white h-10">
-                      <SelectValue placeholder="Filter by Firm" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Firms</SelectItem>
-                      {firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                    <SelectTrigger className="w-full sm:w-40 bg-white h-10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1200px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold">Slip No</TableHead>
+                        <TableHead className="font-bold">Slip Date</TableHead>
+                        <TableHead className="font-bold">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold">Dept / Designation</TableHead>
+                        <TableHead className="font-bold">Month</TableHead>
+                        <TableHead className="font-bold text-right">Net Payable</TableHead>
+                        <TableHead className="font-bold text-right">Salary Paid</TableHead>
+                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {finalizedSalaries.length === 0 ? (
+                        <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground">No finalized salaries found for {selectedMonth}.</TableCell></TableRow>
+                      ) : (
+                        finalizedSalaries.map((p) => {
+                          const emp = employees.find(e => e.employeeId === p.employeeId);
+                          return (
+                            <TableRow key={p.id} className="hover:bg-slate-50/50">
+                              <TableCell>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span 
+                                      className="font-mono font-bold text-primary cursor-pointer hover:underline"
+                                      onClick={() => setPreviewSlip(p)}
+                                    >
+                                      {p.slipNo}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>View Full Payroll Slip</TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-xs font-bold text-slate-600">
+                                  {p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-bold">{p.employeeName}</span>
+                                  <span className="text-xs font-mono text-slate-400">{p.employeeId}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium">{emp?.department || "--"}</span>
+                                  <span className="text-xs text-muted-foreground">{emp?.designation || "--"}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold">{p.month}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-bold">{formatCurrency(p.netPayable)}</TableCell>
+                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                              <TableCell className="text-right pr-6">
+                                <div className="flex justify-end gap-1">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-primary hover:bg-primary/5" 
+                                        onClick={() => { setPaySalaryRec(p); setPaymentAmount(p.netPayable - p.salaryPaidAmount); }}
+                                        disabled={p.salaryPaidAmount >= p.netPayable}
+                                      >
+                                        <CreditCard className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Process Salary Payment</TooltipContent>
+                                  </Tooltip>
+
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-slate-500 hover:bg-slate-100" 
+                                        onClick={() => setPreviewSlip(p)}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Download PDF Slip</TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="advance">
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="bg-slate-50 border-b border-slate-100 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-50 rounded-lg"><Wallet className="w-5 h-5 text-emerald-600" /></div>
+                  <div>
+                    <CardTitle className="text-lg font-bold">Paid Advance Salary Ledger</CardTitle>
+                    <CardDescription>Track cash advances, salary deductions, and recovery status per employee.</CardDescription>
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="w-full">
-                <Table className="min-w-[1200px]">
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Slip No</TableHead>
-                      <TableHead className="font-bold">Slip Date</TableHead>
-                      <TableHead className="font-bold">Employee Name / ID</TableHead>
-                      <TableHead className="font-bold">Dept / Designation</TableHead>
-                      <TableHead className="font-bold">Month</TableHead>
-                      <TableHead className="font-bold text-right">Net Payable</TableHead>
-                      <TableHead className="font-bold text-right">Salary Paid</TableHead>
-                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {finalizedSalaries.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground">No finalized salaries found for {selectedMonth}.</TableCell></TableRow>
-                    ) : (
-                      finalizedSalaries.map((p) => {
-                        const emp = employees.find(e => e.employeeId === p.employeeId);
-                        return (
-                          <TableRow key={p.id} className="hover:bg-slate-50/50">
-                            <TableCell>
-                              <span 
-                                className="font-mono font-bold text-primary cursor-pointer hover:underline"
-                                onClick={() => setPreviewSlip(p)}
-                              >
-                                {p.slipNo}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-xs font-bold text-slate-600">
-                                {p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}
-                              </span>
-                            </TableCell>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1200px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold">Department</TableHead>
+                        <TableHead className="font-bold">Designation</TableHead>
+                        <TableHead className="text-right font-bold">Total Adv. Amount</TableHead>
+                        <TableHead className="text-right font-bold text-primary">Recovery Amount</TableHead>
+                        <TableHead className="text-right font-bold text-rose-600">Remaining Amount</TableHead>
+                        <TableHead className="text-right font-bold pr-6">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedAdvanceLedger.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No advance records found.</TableCell></TableRow>
+                      ) : (
+                        paginatedAdvanceLedger.map(item => (
+                          <TableRow key={item.id} className="hover:bg-slate-50/50">
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-bold">{p.employeeName}</span>
-                                <span className="text-xs font-mono text-slate-400">{p.employeeId}</span>
+                                <span className="font-bold uppercase">{item.emp.name}</span>
+                                <span className="text-[10px] font-mono text-primary">{item.emp.employeeId}</span>
                               </div>
                             </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium">{emp?.department || "--"}</span>
-                                <span className="text-xs text-muted-foreground">{emp?.designation || "--"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold">{p.month}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(p.netPayable)}</TableCell>
-                            <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                            <TableCell className="text-sm font-medium">{item.emp.department}</TableCell>
+                            <TableCell className="text-sm text-slate-600">{item.emp.designation}</TableCell>
+                            <TableCell className="text-right font-bold">{formatCurrency(item.totalAdvAmount)}</TableCell>
+                            <TableCell className="text-right font-bold text-primary">{formatCurrency(item.totalRecoveryAmount)}</TableCell>
+                            <TableCell className="text-right font-black text-rose-600">{formatCurrency(item.totalRemainingAmount)}</TableCell>
                             <TableCell className="text-right pr-6">
-                              <div className="flex justify-end gap-1">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-primary hover:bg-primary/5" 
-                                  onClick={() => { setPaySalaryRec(p); setPaymentAmount(p.netPayable - p.salaryPaidAmount); }}
-                                  disabled={p.salaryPaidAmount >= p.netPayable}
-                                >
-                                  <CreditCard className="w-4 h-4" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-slate-500 hover:bg-slate-100" 
-                                  onClick={() => setPreviewSlip(p)}
-                                >
-                                  <Download className="w-4 h-4" />
-                                </Button>
-                              </div>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="font-bold gap-2 h-8"
+                                    onClick={() => setViewAdvanceEmployee(item)}
+                                  >
+                                    <Eye className="w-3.5 h-3.5" /> View
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Voucher-wise Recovery Breakdown</TooltipContent>
+                              </Tooltip>
                             </TableCell>
                           </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+              {totalAdvancePages > 1 && (
+                <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                  <div className="text-xs font-bold text-muted-foreground">Showing {((advancePage - 1) * rowsPerPageAdvance) + 1} - {Math.min(advancePage * rowsPerPageAdvance, advanceLedgerData.length)} of {advanceLedgerData.length}</div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={advancePage === 1} onClick={() => setAdvancePage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
+                    <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {advancePage} of {totalAdvancePages}</div>
+                    <Button variant="outline" size="sm" disabled={advancePage === totalAdvancePages} onClick={() => setAdvancePage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                  </div>
+                </CardFooter>
+              )}
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="advance">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50 border-b border-slate-100 p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-50 rounded-lg"><Wallet className="w-5 h-5 text-emerald-600" /></div>
-                <div>
-                  <CardTitle className="text-lg font-bold">Paid Advance Salary Ledger</CardTitle>
-                  <CardDescription>Track cash advances, salary deductions, and recovery status per employee.</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="w-full">
-                <Table className="min-w-[1200px]">
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Employee Name / ID</TableHead>
-                      <TableHead className="font-bold">Department</TableHead>
-                      <TableHead className="font-bold">Designation</TableHead>
-                      <TableHead className="text-right font-bold">Total Adv. Amount</TableHead>
-                      <TableHead className="text-right font-bold text-primary">Recovery Amount</TableHead>
-                      <TableHead className="text-right font-bold text-rose-600">Remaining Amount</TableHead>
-                      <TableHead className="text-right font-bold pr-6">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedAdvanceLedger.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No advance records found.</TableCell></TableRow>
-                    ) : (
-                      paginatedAdvanceLedger.map(item => (
-                        <TableRow key={item.id} className="hover:bg-slate-50/50">
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="font-bold uppercase">{item.emp.name}</span>
-                              <span className="text-[10px] font-mono text-primary">{item.emp.employeeId}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm font-medium">{item.emp.department}</TableCell>
-                          <TableCell className="text-sm text-slate-600">{item.emp.designation}</TableCell>
-                          <TableCell className="text-right font-bold">{formatCurrency(item.totalAdvAmount)}</TableCell>
-                          <TableCell className="text-right font-bold text-primary">{formatCurrency(item.totalRecoveryAmount)}</TableCell>
-                          <TableCell className="text-right font-black text-rose-600">{formatCurrency(item.totalRemainingAmount)}</TableCell>
+          <TabsContent value="leave">
+            <Card className="border-none shadow-sm overflow-hidden">
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1000px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold">Employee Name</TableHead>
+                        <TableHead className="font-bold">Employee ID</TableHead>
+                        <TableHead className="font-bold text-center">Available Balance</TableHead>
+                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {employees.map(emp => (
+                        <TableRow key={emp.id}>
+                          <TableCell className="font-bold">{emp.name}</TableCell>
+                          <TableCell className="font-mono text-xs">{emp.employeeId}</TableCell>
+                          <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
                           <TableCell className="text-right pr-6">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="font-bold gap-2 h-8"
-                              onClick={() => setViewAdvanceEmployee(item)}
-                            >
-                              <Eye className="w-3.5 h-3.5" /> View
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="sm" className="font-bold gap-2">
+                                  <History className="w-4 h-4" /> View History
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Audit Banked Leave History</TooltipContent>
+                            </Tooltip>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-            {totalAdvancePages > 1 && (
-              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                <div className="text-xs font-bold text-muted-foreground">Showing {((advancePage - 1) * rowsPerPageAdvance) + 1} - {Math.min(advancePage * rowsPerPageAdvance, advanceLedgerData.length)} of {advanceLedgerData.length}</div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={advancePage === 1} onClick={() => setAdvancePage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
-                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {advancePage} of {totalAdvancePages}</div>
-                  <Button variant="outline" size="sm" disabled={advancePage === totalAdvancePages} onClick={() => setAdvancePage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
-                </div>
-              </CardFooter>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Advance Details Popup */}
+        <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => !o && setViewAdvanceEmployee(null)}>
+          <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+            {viewAdvanceEmployee && (
+              <>
+                <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
+                      <Wallet className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <DialogTitle className="text-xl font-black text-slate-900 uppercase">
+                        {viewAdvanceEmployee.emp.name}
+                      </DialogTitle>
+                      <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
+                        <span className="text-primary font-mono">{viewAdvanceEmployee.emp.employeeId}</span>
+                        <span>•</span>
+                        <span>{viewAdvanceEmployee.emp.department} / {viewAdvanceEmployee.emp.designation}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" className="rounded-full mr-2" onClick={() => setViewAdvanceEmployee(null)}>
+                    <X className="w-5 h-5" />
+                  </Button>
+                </DialogHeader>
+                
+                <ScrollArea className="flex-1 bg-slate-50/30 p-6 custom-blue-scrollbar">
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Advanced</p>
+                        <p className="text-lg font-black text-slate-900">{formatCurrency(viewAdvanceEmployee.totalAdvAmount)}</p>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Recovered</p>
+                        <p className="text-lg font-black text-primary">{formatCurrency(viewAdvanceEmployee.totalRecoveryAmount)}</p>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pending</p>
+                        <p className="text-lg font-black text-rose-600">{formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}</p>
+                      </div>
+                    </div>
+
+                    <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="font-bold">Voucher No</TableHead>
+                            <TableHead className="font-bold">Voucher Date</TableHead>
+                            <TableHead className="text-right font-bold">Voucher Paid Amount</TableHead>
+                            <TableHead className="text-right font-bold text-primary">Recovery Amount</TableHead>
+                            <TableHead className="text-right font-bold text-rose-600">Remaining Amount</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {viewAdvanceEmployee.vouchers.map(v => (
+                            <TableRow key={v.id}>
+                              <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
+                              <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="text-right font-bold text-primary">{formatCurrency(v.recovered)}</TableCell>
+                              <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </ScrollArea>
+                
+                <DialogFooter className="p-4 bg-slate-50 border-t">
+                  <Button variant="outline" className="font-bold" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
+                </DialogFooter>
+              </>
             )}
-          </Card>
-        </TabsContent>
+          </DialogContent>
+        </Dialog>
 
-        <TabsContent value="leave">
-          <Card className="border-none shadow-sm overflow-hidden">
-            <CardContent className="p-0">
-              <ScrollArea className="w-full">
-                <Table className="min-w-[1000px]">
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Employee Name</TableHead>
-                      <TableHead className="font-bold">Employee ID</TableHead>
-                      <TableHead className="font-bold text-center">Available Balance</TableHead>
-                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employees.map(emp => (
-                      <TableRow key={emp.id}>
-                        <TableCell className="font-bold">{emp.name}</TableCell>
-                        <TableCell className="font-mono text-xs">{emp.employeeId}</TableCell>
-                        <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
-                        <TableCell className="text-right pr-6">
-                          <Button variant="ghost" size="sm" className="font-bold gap-2">
-                            <History className="w-4 h-4" /> View History
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Advance Details Popup */}
-      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => !o && setViewAdvanceEmployee(null)}>
-        <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl">
-          {viewAdvanceEmployee && (
-            <>
-              <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                    <Wallet className="w-6 h-6 text-emerald-600" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <DialogTitle className="text-xl font-black text-slate-900 uppercase">
-                      {viewAdvanceEmployee.emp.name}
-                    </DialogTitle>
-                    <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
-                      <span className="text-primary font-mono">{viewAdvanceEmployee.emp.employeeId}</span>
-                      <span>•</span>
-                      <span>{viewAdvanceEmployee.emp.department} / {viewAdvanceEmployee.emp.designation}</span>
+        {/* Adjust Leave Dialog */}
+        <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => !o && setAdjustLeaveEmp(null)}>
+          <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+            {adjustLeaveEmp && (
+              <>
+                <DialogHeader className="p-8 pb-6 bg-white border-b">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <DialogTitle className="text-2xl font-black flex items-center gap-3 text-slate-900">
+                        <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                          <CalendarClock className="w-6 h-6 text-primary" />
+                        </div>
+                        Adjust Attendance: {adjustLeaveEmp.name}
+                      </DialogTitle>
+                      <div className="flex items-center gap-3 text-sm text-slate-500 font-bold ml-12">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-mono">{adjustLeaveEmp.employeeId}</span>
+                        <span>•</span>
+                        <span>{adjustLeaveEmp.department} / {adjustLeaveEmp.designation}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Available Advance Leave</p>
+                      <Badge className="bg-emerald-500 h-8 px-4 font-black text-sm rounded-lg shadow-lg shadow-emerald-100">
+                        {adjustmentState.remainingBalance} Days
+                      </Badge>
                     </div>
                   </div>
-                </div>
-                <Button variant="ghost" size="icon" className="rounded-full mr-2" onClick={() => setViewAdvanceEmployee(null)}>
-                  <X className="w-5 h-5" />
-                </Button>
-              </DialogHeader>
-              
-              <ScrollArea className="flex-1 bg-slate-50/30 p-6 custom-blue-scrollbar">
-                <div className="space-y-6">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Advanced</p>
-                      <p className="text-lg font-black text-slate-900">{formatCurrency(viewAdvanceEmployee.totalAdvAmount)}</p>
+                </DialogHeader>
+
+                <div className="bg-slate-50/50 p-8 space-y-8">
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salary Month</p>
+                      <p className="text-lg font-black text-primary">{selectedMonth}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Recovered</p>
-                      <p className="text-lg font-black text-primary">{formatCurrency(viewAdvanceEmployee.totalRecoveryAmount)}</p>
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Working Days</p>
+                      <p className="text-lg font-black text-slate-700">{adjustmentState.monthWorkingDays}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pending</p>
-                      <p className="text-lg font-black text-rose-600">{formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}</p>
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Holidays</p>
+                      <p className="text-lg font-black text-slate-700">{adjustmentState.monthHolidays}</p>
                     </div>
                   </div>
 
-                  <div className="border rounded-xl overflow-hidden bg-white shadow-sm">
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
                     <Table>
                       <TableHeader className="bg-slate-50">
                         <TableRow>
-                          <TableHead className="font-bold">Voucher No</TableHead>
-                          <TableHead className="font-bold">Voucher Date</TableHead>
-                          <TableHead className="text-right font-bold">Voucher Paid Amount</TableHead>
-                          <TableHead className="text-right font-bold text-primary">Recovery Amount</TableHead>
-                          <TableHead className="text-right font-bold text-rose-600">Remaining Amount</TableHead>
+                          <TableHead className="font-black text-[10px] uppercase tracking-widest">Category</TableHead>
+                          <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Current Status</TableHead>
+                          <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {viewAdvanceEmployee.vouchers.map(v => (
-                          <TableRow key={v.id}>
-                            <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
-                            <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(v.amount)}</TableCell>
-                            <TableCell className="text-right font-bold text-primary">{formatCurrency(v.recovered)}</TableCell>
-                            <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
-                          </TableRow>
-                        ))}
+                        <TableRow>
+                          <TableCell className="font-bold py-6">Present on Working Days</TableCell>
+                          <TableCell className="text-center">
+                            <span className="text-xl font-black text-emerald-600">{adjustmentState.present}</span>
+                            <span className="text-xs text-slate-400 font-bold ml-1">/ {adjustmentState.monthWorkingDays}</span>
+                          </TableCell>
+                          <TableCell className="text-right pr-8">
+                            {adjustmentState.present < adjustmentState.monthWorkingDays && adjustmentState.remainingBalance > 0 && (
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="font-black text-[10px] uppercase tracking-widest h-8 px-4 border-primary/30 text-primary hover:bg-primary/5"
+                                onClick={() => setIsSubAdjustmentOpen(true)}
+                              >
+                                Adjust from Balance
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-bold py-6">Total Absent</TableCell>
+                          <TableCell className="text-center font-black text-xl text-rose-500">{adjustmentState.absent}</TableCell>
+                          <TableCell className="text-right pr-8">--</TableCell>
+                        </TableRow>
+                        <TableRow className="bg-blue-50/30">
+                          <TableCell className="font-bold py-6 flex items-center gap-2">
+                            Present on Holidays
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger><Info className="w-3.5 h-3.5 text-slate-400" /></TooltipTrigger>
+                                <TooltipContent>Attendance recorded on Sundays or Official Holidays</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+                          <TableCell className="text-center font-black text-xl text-blue-600">{adjustmentState.holidayWork}</TableCell>
+                          <TableCell className="text-right pr-8">
+                            {adjustmentState.holidayWork > 0 && (
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  size="sm" 
+                                  className="bg-emerald-600 hover:bg-emerald-700 font-bold text-[10px] uppercase tracking-tighter"
+                                  onClick={handlePayHoliday}
+                                >
+                                  Pay Holiday Work
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="secondary" 
+                                  className="font-bold text-[10px] uppercase tracking-tighter"
+                                  onClick={handleBankHoliday}
+                                >
+                                  Add in Advance Leave
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
                       </TableBody>
                     </Table>
                   </div>
                 </div>
-              </ScrollArea>
-              
-              <DialogFooter className="p-4 bg-slate-50 border-t">
-                <Button variant="outline" className="font-bold" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
 
-      {/* Adjust Leave Dialog */}
-      <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => !o && setAdjustLeaveEmp(null)}>
-        <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
-          {adjustLeaveEmp && (
-            <>
-              <DialogHeader className="p-8 pb-6 bg-white border-b">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <DialogTitle className="text-2xl font-black flex items-center gap-3 text-slate-900">
-                      <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                        <CalendarClock className="w-6 h-6 text-primary" />
-                      </div>
-                      Adjust Attendance: {adjustLeaveEmp.name}
-                    </DialogTitle>
-                    <div className="flex items-center gap-3 text-sm text-slate-500 font-bold ml-12">
-                      <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-mono">{adjustLeaveEmp.employeeId}</span>
-                      <span>•</span>
-                      <span>{adjustLeaveEmp.department} / {adjustLeaveEmp.designation}</span>
-                    </div>
+                <DialogFooter className="p-8 bg-slate-900 border-t shrink-0 flex items-center justify-between">
+                  <div className="text-white text-left">
+                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Calculated Earning Days</p>
+                    <p className="text-3xl font-black text-white">{adjustmentState.earningDays} <span className="text-xs font-bold text-slate-400">Total</span></p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Available Advance Leave</p>
-                    <Badge className="bg-emerald-500 h-8 px-4 font-black text-sm rounded-lg shadow-lg shadow-emerald-100">
-                      {adjustmentState.remainingBalance} Days
-                    </Badge>
+                  <div className="flex gap-4">
+                    <Button 
+                      variant="ghost" 
+                      className="text-slate-400 hover:text-white hover:bg-slate-800 font-bold h-12 rounded-xl px-8"
+                      onClick={() => setAdjustLeaveEmp(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      className="bg-primary hover:bg-primary/90 font-black h-12 rounded-xl px-12 shadow-xl shadow-primary/20"
+                      onClick={handlePostAdjustment}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? "Saving..." : "Post & Finalize"}
+                    </Button>
                   </div>
-                </div>
-              </DialogHeader>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
 
-              <div className="bg-slate-50/50 p-8 space-y-8">
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salary Month</p>
-                    <p className="text-lg font-black text-primary">{selectedMonth}</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Working Days</p>
-                    <p className="text-lg font-black text-slate-700">{adjustmentState.monthWorkingDays}</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Holidays</p>
-                    <p className="text-lg font-black text-slate-700">{adjustmentState.monthHolidays}</p>
-                  </div>
-                </div>
-
-                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="font-black text-[10px] uppercase tracking-widest">Category</TableHead>
-                        <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Current Status</TableHead>
-                        <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell className="font-bold py-6">Present on Working Days</TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-xl font-black text-emerald-600">{adjustmentState.present}</span>
-                          <span className="text-xs text-slate-400 font-bold ml-1">/ {adjustmentState.monthWorkingDays}</span>
-                        </TableCell>
-                        <TableCell className="text-right pr-8">
-                          {adjustmentState.present < adjustmentState.monthWorkingDays && adjustmentState.remainingBalance > 0 && (
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="font-black text-[10px] uppercase tracking-widest h-8 px-4 border-primary/30 text-primary hover:bg-primary/5"
-                              onClick={() => setIsSubAdjustmentOpen(true)}
-                            >
-                              Adjust from Balance
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="font-bold py-6">Total Absent</TableCell>
-                        <TableCell className="text-center font-black text-xl text-rose-500">{adjustmentState.absent}</TableCell>
-                        <TableCell className="text-right pr-8">--</TableCell>
-                      </TableRow>
-                      <TableRow className="bg-blue-50/30">
-                        <TableCell className="font-bold py-6 flex items-center gap-2">
-                          Present on Holidays
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger><Info className="w-3.5 h-3.5 text-slate-400" /></TooltipTrigger>
-                              <TooltipContent>Attendance recorded on Sundays or Official Holidays</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </TableCell>
-                        <TableCell className="text-center font-black text-xl text-blue-600">{adjustmentState.holidayWork}</TableCell>
-                        <TableCell className="text-right pr-8">
-                          {adjustmentState.holidayWork > 0 && (
-                            <div className="flex justify-end gap-2">
-                              <Button 
-                                size="sm" 
-                                className="bg-emerald-600 hover:bg-emerald-700 font-bold text-[10px] uppercase tracking-tighter"
-                                onClick={handlePayHoliday}
-                              >
-                                Pay Holiday Work
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="secondary" 
-                                className="font-bold text-[10px] uppercase tracking-tighter"
-                                onClick={handleBankHoliday}
-                              >
-                                Add in Advance Leave
-                              </Button>
-                            </div>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
+        {/* Sub-Adjustment Balance Picker */}
+        <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
+          <DialogContent className="sm:max-w-md rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black">Use Banked Leave</DialogTitle>
+              <DialogDescription>
+                Adjust missing days from {adjustLeaveEmp?.name}'s balance.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-8 space-y-6">
+              <div className="bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-200 text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Available Balance</p>
+                <p className="text-4xl font-black text-emerald-600">{adjustmentState.remainingBalance} Days</p>
               </div>
-
-              <DialogFooter className="p-8 bg-slate-900 border-t shrink-0 flex items-center justify-between">
-                <div className="text-white text-left">
-                  <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Calculated Earning Days</p>
-                  <p className="text-3xl font-black text-white">{adjustmentState.earningDays} <span className="text-xs font-bold text-slate-400">Total</span></p>
-                </div>
-                <div className="flex gap-4">
-                  <Button 
-                    variant="ghost" 
-                    className="text-slate-400 hover:text-white hover:bg-slate-800 font-bold h-12 rounded-xl px-8"
-                    onClick={() => setAdjustLeaveEmp(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    className="bg-primary hover:bg-primary/90 font-black h-12 rounded-xl px-12 shadow-xl shadow-primary/20"
-                    onClick={handlePostAdjustment}
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? "Saving..." : "Post & Finalize"}
-                  </Button>
-                </div>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Sub-Adjustment Balance Picker */}
-      <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-black">Use Banked Leave</DialogTitle>
-            <DialogDescription>
-              Adjust missing days from {adjustLeaveEmp?.name}'s balance.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-8 space-y-6">
-            <div className="bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-200 text-center">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Available Balance</p>
-              <p className="text-4xl font-black text-emerald-600">{adjustmentState.remainingBalance} Days</p>
-            </div>
-            <div className="space-y-2">
-              <Label className="font-bold text-xs">Days to Adjust</Label>
-              <Input 
-                type="number" 
-                className="h-12 bg-slate-50 border-slate-200 font-bold text-lg" 
-                value={subAdjValue} 
-                max={Math.min(adjustmentState.absent, adjustmentState.remainingBalance)}
-                onChange={(e) => setSubAdjValue(Math.min(parseInt(e.target.value) || 0, adjustmentState.remainingBalance))}
-              />
-              <p className="text-[10px] text-muted-foreground italic">Cannot exceed absent days ({adjustmentState.absent}) or balance.</p>
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setIsSubAdjustmentOpen(false)}>Cancel</Button>
-            <Button className="bg-primary rounded-xl font-black px-8" onClick={handleSaveSubAdjustment}>Confirm Adjustment</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Pay Salary Dialog */}
-      <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
-        <DialogContent className="sm:max-w-4xl">
-          {paySalaryRec && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Pay Salary</DialogTitle>
-                <DialogDescription>{paySalaryRec.employeeName} • {paySalaryRec.month}</DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-6 py-4">
-                <div className="space-y-2">
-                  <Label>Salary Paid Amount</Label>
-                  <Input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Paid Date</Label>
-                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Payment Type</Label>
-                  <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BANKING">Banking</SelectItem>
-                      <SelectItem value="CASH">Cash</SelectItem>
-                      <SelectItem value="CHEQUE">Cheque</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Reference Number</Label>
-                  <Input value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setPaySalaryRec(null)}>Cancel</Button>
-                <Button className="bg-primary font-bold" onClick={handlePostPayment}>Record Payment</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Payroll Slip Preview Dialog */}
-      <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
-        <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
-          <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <FileText className="w-5 h-5 text-primary" />
-              </div>
-              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Payroll Slip Preview</DialogTitle>
-            </div>
-            <div className="flex items-center gap-3 mr-8">
-              <Button 
-                className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
-                onClick={() => handleDownloadSlip(previewSlip!)}
-              >
-                <Download className="w-5 h-5" /> Download PDF
-              </Button>
-              <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)}>
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-          </DialogHeader>
-          
-          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
-            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-12 min-h-[297mm] border-4 border-slate-900 rounded-sm font-calibri">
-              {previewSlip && (
-                <SalarySlipView 
-                  record={previewSlip} 
-                  employee={employees.find(e => e.employeeId === previewSlip.employeeId)}
-                  firm={firms.find(f => f.id === employees.find(e => e.employeeId === previewSlip.employeeId)?.firmId)}
+              <div className="space-y-2">
+                <Label className="font-bold text-xs">Days to Adjust</Label>
+                <Input 
+                  type="number" 
+                  className="h-12 bg-slate-50 border-slate-200 font-bold text-lg" 
+                  value={subAdjValue} 
+                  max={Math.min(adjustmentState.absent, adjustmentState.remainingBalance)}
+                  onChange={(e) => setSubAdjValue(Math.min(parseInt(e.target.value) || 0, adjustmentState.remainingBalance))}
                 />
-              )}
+                <p className="text-[10px] text-muted-foreground italic">Cannot exceed absent days ({adjustmentState.absent}) or balance.</p>
+              </div>
             </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setIsSubAdjustmentOpen(false)}>Cancel</Button>
+              <Button className="bg-primary rounded-xl font-black px-8" onClick={handleSaveSubAdjustment}>Confirm Adjustment</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Pay Salary Dialog */}
+        <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
+          <DialogContent className="sm:max-w-4xl">
+            {paySalaryRec && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Pay Salary</DialogTitle>
+                  <DialogDescription>{paySalaryRec.employeeName} • {paySalaryRec.month}</DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-6 py-4">
+                  <div className="space-y-2">
+                    <Label>Salary Paid Amount</Label>
+                    <Input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Paid Date</Label>
+                    <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Payment Type</Label>
+                    <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BANKING">Banking</SelectItem>
+                        <SelectItem value="CASH">Cash</SelectItem>
+                        <SelectItem value="CHEQUE">Cheque</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Reference Number</Label>
+                    <Input value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setPaySalaryRec(null)}>Cancel</Button>
+                  <Button className="bg-primary font-bold" onClick={handlePostPayment}>Record Payment</Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Payroll Slip Preview Dialog */}
+        <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
+          <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+            <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-primary" />
+                </div>
+                <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Payroll Slip Preview</DialogTitle>
+              </div>
+              <div className="flex items-center gap-3 mr-8">
+                <Button 
+                  className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
+                  onClick={() => handleDownloadSlip(previewSlip!)}
+                >
+                  <Download className="w-5 h-5" /> Download PDF
+                </Button>
+                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)}>
+                  <X className="h-5 h-5" />
+                </Button>
+              </div>
+            </DialogHeader>
+            
+            <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
+              <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-12 min-h-[297mm] border-4 border-slate-900 rounded-sm font-calibri">
+                {previewSlip && (
+                  <SalarySlipView 
+                    record={previewSlip} 
+                    employee={employees.find(e => e.employeeId === previewSlip.employeeId)}
+                    firm={firms.find(f => f.id === employees.find(e => e.employeeId === previewSlip.employeeId)?.firmId)}
+                  />
+                )}
+              </div>
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   );
 }
 
