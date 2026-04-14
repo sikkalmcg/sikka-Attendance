@@ -807,16 +807,13 @@ export default function VouchersPage() {
               <Eye className="w-5 h-5 text-primary" />
               <DialogTitle className="text-xl font-bold">Voucher Preview</DialogTitle>
             </div>
-            <div className="flex items-center gap-2">
-              <Button className="bg-primary font-bold gap-2" onClick={() => window.print()}>
+            <div className="flex items-center gap-4 pr-10">
+              <Button className="bg-primary hover:bg-primary/90 font-bold gap-2 px-6 h-10 shadow-lg shadow-primary/20" onClick={() => window.print()}>
                 <Download className="w-4 h-4" /> Download PDF
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setIsPreviewOpen(false)}>
-                <X className="w-4 h-4" />
               </Button>
             </div>
           </DialogHeader>
-          <ScrollArea className="flex-1 bg-slate-100 p-8">
+          <ScrollArea className="flex-1 bg-slate-100 p-8 custom-scrollbar">
             <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-10 min-h-[297mm]">
               {previewVoucher && (
                 <AdvanceVoucherContent 
@@ -872,9 +869,9 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <div className="text-right space-y-1">
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher No:</span><span className="font-mono font-bold">{voucher.voucherNo}</span></div>
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher Date:</span><span className="font-bold">{voucher.date}</span></div>
-          <div className="flex flex-col items-end gap-1 pt-2">
-            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">Created By:</span><span className="font-bold text-primary">{voucher.createdByName || "Admin"}</span></div>
-            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">Approved By:</span><span className="font-bold text-emerald-600">{voucher.approvedByName || "--"}</span></div>
+          <div className="flex flex-col items-end gap-1 pt-4">
+            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">CREATED BY:</span><span className="font-bold text-primary">{voucher.createdByName || "Admin"}</span></div>
+            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">APPROVED BY:</span><span className="font-bold text-emerald-600">{voucher.approvedByName || "--"}</span></div>
           </div>
         </div>
       </div>
