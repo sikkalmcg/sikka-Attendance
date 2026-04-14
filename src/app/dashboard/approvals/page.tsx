@@ -501,7 +501,8 @@ export default function ApprovalsPage() {
                       <p className="text-xs font-mono font-medium">{selectedRecord?.latOut?.toFixed(6) || "N/A"}</p>
                     </div>
                     <div>
-                      <Label className="text-[10px] text-muted-foreground font-black uppercase">Longitude</Label color="text-xs font-mono font-medium">{selectedRecord?.lngOut?.toFixed(6) || "N/A"}</p>
+                      <Label className="text-[10px] text-muted-foreground font-black uppercase">Longitude</Label>
+                      <p className="text-xs font-mono font-medium">{selectedRecord?.lngOut?.toFixed(6) || "N/A"}</p>
                     </div>
                   </div>
                 </div>
