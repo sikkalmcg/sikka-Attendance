@@ -70,7 +70,9 @@ export default function ReportsPage() {
     const start = subDays(end, 90);
     setFromDate(format(start, "yyyy-MM-dd"));
     setToDate(format(end, "yyyy-MM-dd"));
-    setSelectedFirmIds(firms.map(f => f.id));
+    if (firms && firms.length > 0) {
+      setSelectedFirmIds(firms.map(f => f.id));
+    }
   }, [firms]);
 
   const openReportDialog = (type: ReportType) => {
@@ -84,15 +86,17 @@ export default function ReportsPage() {
     );
   };
 
-  const processReportData = () => {
-    if (!activeReport) return [];
+  const processReportData = (typeOverride?: ReportType) => {
+    const reportToProcess = typeOverride || activeReport;
+    if (!reportToProcess) return [];
 
     const start = parseISO(fromDate);
     const end = parseISO(toDate);
 
-    if (activeReport === "ATTENDANCE") {
+    if (reportToProcess === "ATTENDANCE") {
       return attendanceRecords
         .filter(rec => {
+          if (!rec.date) return false;
           const recDate = parseISO(rec.date);
           const emp = employees.find(e => e.employeeId === rec.employeeId);
           const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
@@ -149,7 +153,7 @@ export default function ReportsPage() {
             paidDate: pay.salaryPaidDate || "N/A",
             pfEmployee: pay.pfAmountEmployee,
             pfEmployer: pay.pfAmountEmployer,
-            pfPaid: pay.pfPaidAmountEmployee + pay.pfPaidAmountEmployer,
+            pfPaid: pay.pfPaidAmountEmployee + pay.pfAmountEmployer,
             pfPaidDate: pay.pfPaidDate || "N/A",
             esicEmployee: pay.esicAmountEmployee,
             esicEmployer: pay.esicAmountEmployer,
@@ -160,8 +164,8 @@ export default function ReportsPage() {
     }
   };
 
-  const handleExport = () => {
-    const data = processReportData();
+  const handleExport = (typeOverride?: ReportType) => {
+    const data = processReportData(typeOverride);
     if (data.length === 0) {
       toast({ variant: "destructive", title: "No Data", description: "No records found for the selected filters." });
       return;
@@ -176,8 +180,9 @@ export default function ReportsPage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
+    const reportType = typeOverride || activeReport;
     link.setAttribute("href", url);
-    link.setAttribute("download", `${activeReport}_Report_${fromDate}_to_${toDate}.csv`);
+    link.setAttribute("download", `${reportType}_Report_${fromDate}_to_${toDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -248,7 +253,7 @@ export default function ReportsPage() {
                   Period: {fromDate} to {toDate} | {viewData.length} Records Found
                 </CardDescription>
               </div>
-              <Button className="bg-primary hover:bg-primary/90 font-bold" onClick={() => { setActiveReport(viewType); handleExport(); }}>
+              <Button className="bg-primary hover:bg-primary/90 font-bold" onClick={() => handleExport(viewType!)}>
                 <Download className="w-4 h-4 mr-2" /> Download Excel
               </Button>
             </CardHeader>
@@ -309,7 +314,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Report Generation Dialog - Updated to Firm Selection */}
+      {/* Report Generation Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
@@ -368,10 +373,10 @@ export default function ReportsPage() {
               Cancel
             </Button>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button variant="outline" onClick={handleView} className="h-12 px-6 font-bold rounded-xl flex-1 sm:flex-none">
+              <Button type="button" variant="outline" onClick={handleView} className="h-12 px-6 font-bold rounded-xl flex-1 sm:flex-none">
                 <Eye className="w-4 h-4 mr-2" /> View
               </Button>
-              <Button onClick={handleExport} className="h-12 px-8 bg-primary font-black rounded-xl shadow-lg shadow-primary/20 flex-1 sm:flex-none">
+              <Button type="button" onClick={() => handleExport()} className="h-12 px-8 bg-primary font-black rounded-xl shadow-lg shadow-primary/20 flex-1 sm:flex-none">
                 <Download className="w-4 h-4 mr-2" /> Export
               </Button>
             </div>
