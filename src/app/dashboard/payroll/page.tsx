@@ -171,11 +171,11 @@ export default function PayrollPage() {
       const matchesSearch = p.employeeName.toLowerCase().includes(search) || p.employeeId.toLowerCase().includes(search) || (p.slipNo || "").toLowerCase().includes(search);
       const matchesFirm = selectedFirmId === "all" || emp?.firmId === selectedFirmId;
       return matchesSearch && matchesFirm;
-    }).reverse();
+    }).sort((a, b) => (b.slipDate || "").localeCompare(a.slipDate || ""));
   }, [payrollRecords, searchTerm, selectedFirmId, employees]);
 
   const paidVouchers = useMemo(() => {
-    return vouchers.filter(v => v.status === 'PAID').reverse();
+    return (vouchers || []).filter(v => v.status === 'PAID').sort((a, b) => b.date.localeCompare(a.date));
   }, [vouchers]);
 
   const paginatedPaidVouchers = useMemo(() => {
@@ -309,7 +309,6 @@ export default function PayrollPage() {
 
   const handleDownloadSlip = (rec: PayrollRecord) => {
     toast({ title: "Downloading...", description: `Preparing salary slip ${rec.slipNo} for download.` });
-    // In a real app, this would trigger a PDF generation service call.
   };
 
   if (!isMounted) return null;
@@ -427,7 +426,7 @@ export default function PayrollPage() {
                                 onClick={() => !generated && openAdjustmentDialog(emp)}
                               >
                                 <CalendarClock className="w-3 h-3" /> 
-                                {generated ? "Locked" : isAdjusted ? "Reviewed" : "Adjust Leave"}
+                                {generated ? "Locked" : isAdjusted ? "Reviewed" : "Adjust Live"}
                               </Button>
                               <TooltipProvider>
                                 <Tooltip>
@@ -453,7 +452,7 @@ export default function PayrollPage() {
                                   </TooltipTrigger>
                                   {!isAdjusted && !generated && (
                                     <TooltipContent>
-                                      <p className="text-xs">Review leave before generating salary</p>
+                                      <p className="text-xs">Review attendance before generating salary</p>
                                     </TooltipContent>
                                   )}
                                 </Tooltip>
@@ -491,7 +490,8 @@ export default function PayrollPage() {
                 <Table className="min-w-[1200px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="font-bold">Slip No / Date</TableHead>
+                      <TableHead className="font-bold">Slip No</TableHead>
+                      <TableHead className="font-bold">Slip Date</TableHead>
                       <TableHead className="font-bold">Employee Name / ID</TableHead>
                       <TableHead className="font-bold">Dept / Designation</TableHead>
                       <TableHead className="font-bold">Month</TableHead>
@@ -502,24 +502,24 @@ export default function PayrollPage() {
                   </TableHeader>
                   <TableBody>
                     {finalizedSalaries.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell></TableRow>
                     ) : (
                       finalizedSalaries.map((p) => {
                         const emp = employees.find(e => e.employeeId === p.employeeId);
                         return (
                           <TableRow key={p.id} className="hover:bg-slate-50/50">
                             <TableCell>
-                              <div className="flex flex-col">
-                                <span 
-                                  className="font-mono font-bold text-primary cursor-pointer hover:underline"
-                                  onClick={() => setPreviewSlip(p)}
-                                >
-                                  {p.slipNo}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground font-medium">
-                                  {p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}
-                                </span>
-                              </div>
+                              <span 
+                                className="font-mono font-bold text-primary cursor-pointer hover:underline"
+                                onClick={() => setPreviewSlip(p)}
+                              >
+                                {p.slipNo}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-xs font-bold text-slate-600">
+                                {p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}
+                              </span>
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col">
@@ -719,7 +719,7 @@ export default function PayrollPage() {
                           <span className="text-xs text-slate-400 font-bold ml-1">/ {adjustmentState.monthWorkingDays}</span>
                         </TableCell>
                         <TableCell className="text-right pr-8">
-                          {adjustmentState.present < adjustmentState.monthWorkingDays && (
+                          {adjustmentState.present < adjustmentState.monthWorkingDays && adjustmentState.remainingBalance > 0 && (
                             <Button 
                               size="sm" 
                               variant="outline" 
