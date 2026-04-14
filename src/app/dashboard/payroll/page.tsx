@@ -152,7 +152,10 @@ export default function PayrollPage() {
   }, [selectedMonth]);
 
   const filteredEmployees = useMemo(() => {
-    return (employees || []).filter(emp => {
+    // SORT FIRST: Latest joined or registered employees at top
+    const sorted = [...(employees || [])].sort((a, b) => (b.id || "").localeCompare(a.id || ""));
+
+    return sorted.filter(emp => {
       const search = searchTerm.toLowerCase();
       const matchesSearch = (
         emp.name.toLowerCase().includes(search) ||
@@ -553,7 +556,7 @@ export default function PayrollPage() {
                                   variant="ghost" 
                                   size="icon" 
                                   className="h-8 w-8 text-slate-500 hover:bg-slate-100" 
-                                  onClick={() => handleDownloadSlip(p)}
+                                  onClick={() => setPreviewSlip(p)}
                                 >
                                   <Download className="w-4 h-4" />
                                 </Button>
@@ -926,9 +929,12 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
     { label: "Holiday Work Pay", value: record.holidayWorkAmt || 0 },
   ];
 
+  // Conditional Deductions based on Government Compliance applicability
   const deductions = [
-    { label: "PF Employee Share", value: record.pfAmountEmployee || 0 },
-    { label: "ESIC Employee Share", value: record.esicAmountEmployee || 0 },
+    ...(employee?.isGovComplianceEnabled ? [
+      { label: "PF Employee Share", value: record.pfAmountEmployee || 0 },
+      { label: "ESIC Employee Share", value: record.esicAmountEmployee || 0 },
+    ] : []),
     { label: "Advance Recovery", value: record.advanceRecovery || 0 },
   ];
 
