@@ -152,7 +152,6 @@ export default function PayrollPage() {
   }, [selectedMonth]);
 
   const filteredEmployees = useMemo(() => {
-    // SORT FIRST: Latest joined or registered employees at top
     const sorted = [...(employees || [])].sort((a, b) => (b.id || "").localeCompare(a.id || ""));
 
     return sorted.filter(emp => {
@@ -929,7 +928,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
     { label: "Holiday Work Pay", value: record.holidayWorkAmt || 0 },
   ];
 
-  // Conditional Deductions based on Government Compliance applicability
   const deductions = [
     ...(employee?.isGovComplianceEnabled ? [
       { label: "PF Employee Share", value: record.pfAmountEmployee || 0 },
@@ -968,7 +966,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
       </div>
 
       {/* Employee Info Grid */}
-      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900">
+      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 overflow-hidden">
         <SlipDetailCell label="Employee ID" value={record.employeeId} />
         <SlipDetailCell label="Employee Name" value={record.employeeName} />
         <SlipDetailCell label="Department" value={employee?.department} />
@@ -977,6 +975,9 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         <SlipDetailCell label="Slip Date" value={record.slipDate ? format(parseISO(record.slipDate), 'dd-MMM-yyyy') : "---"} />
         <SlipDetailCell label="Bank Name" value={employee?.bankName} />
         <SlipDetailCell label="Account No" value={employee?.accountNo} />
+        <SlipDetailCell label="PF Number" value={employee?.pfNumber || "---"} />
+        <SlipDetailCell label="ESIC Number" value={employee?.esicNumber || "---"} />
+        <SlipDetailCell label="Monthly CTC" value={employee?.salary?.monthlyCTC ? formatCurrency(employee.salary.monthlyCTC) : "---"} />
         <SlipDetailCell label="Attendance" value={`${record.totalEarningDays} Days`} />
         <SlipDetailCell label="Leaves/Absent" value={`${record.absent} Days`} />
       </div>
@@ -984,7 +985,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
       {/* Earnings & Deductions Table */}
       <div className="border-2 border-slate-900 overflow-hidden">
         <div className="grid grid-cols-2 bg-slate-900 text-white font-black text-xs uppercase tracking-widest text-center py-2 divide-x-2 divide-white">
-          <div>Earnings</div>
+          <div>Monthly Earnings</div>
           <div>Deductions</div>
         </div>
         <div className="grid grid-cols-2 divide-x-2 border-slate-900 min-h-[200px]">
@@ -1053,9 +1054,9 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
 
 function SlipDetailCell({ label, value }: { label: string, value: any }) {
   return (
-    <div className="flex items-center px-4 py-3 bg-white">
-      <span className="text-[10px] font-black uppercase text-slate-400 w-32 shrink-0 tracking-widest">{label}:</span>
-      <span className="text-sm font-bold text-slate-900 uppercase truncate">{value || "---"}</span>
+    <div className="flex items-start px-4 py-3 bg-white gap-2">
+      <span className="text-[10px] font-black uppercase text-slate-400 w-28 shrink-0 tracking-widest leading-normal">{label}:</span>
+      <span className="text-sm font-bold text-slate-900 uppercase leading-normal break-words flex-1">{value || "---"}</span>
     </div>
   );
 }
