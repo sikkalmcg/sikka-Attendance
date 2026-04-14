@@ -92,6 +92,10 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
+  const isAdminRole = useMemo(() => {
+    return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
+  }, [currentUser]);
+
   const registeredEmployee = useMemo(() => {
     if (!currentUser || !employees || employees.length === 0) return null;
     const loginIdent = currentUser.username?.replace(/\s/g, '');
@@ -123,6 +127,21 @@ export default function AttendancePage() {
   const history = useMemo(() => {
     if (!currentUser) return [];
     
+    // BRANCH LOGIC: Oversight for Admins, Private History for Employees
+    if (isAdminRole) {
+      const limitDate = subDays(new Date(), 45);
+      return (attendanceRecords || [])
+        .filter(r => {
+          try {
+            return new Date(r.date) >= limitDate;
+          } catch (e) {
+            return false;
+          }
+        })
+        .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
+    }
+
+    // Employee specific logic (Day-by-day calendar with virtual entries)
     const today = new Date();
     const fortyFiveDaysAgo = subDays(today, 45);
     fortyFiveDaysAgo.setHours(0, 0, 0, 0);
@@ -190,7 +209,7 @@ export default function AttendancePage() {
         isNonWorkingDay: false
       } as any;
     }).filter(Boolean).reverse();
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName]);
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole]);
 
   const totalPages = Math.ceil(history.length / rowsPerPage);
   const paginatedHistory = useMemo(() => {
@@ -404,7 +423,7 @@ export default function AttendancePage() {
         </Alert>
       )}
 
-      {currentUser?.role !== 'EMPLOYEE' && (
+      {!isAdminRole && currentUser?.role !== 'EMPLOYEE' && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 items-center">
           <AlertCircle className="w-5 h-5 text-amber-600" />
           <p className="text-xs font-bold text-amber-800">
@@ -464,7 +483,7 @@ export default function AttendancePage() {
       <div className="space-y-4 max-w-6xl mx-auto pt-6">
         <div className="flex items-center justify-between">
           <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
-            <History className="w-6 h-6 text-primary" /> {currentUser?.role === 'EMPLOYEE' ? 'My Attendance History' : 'Staff Attendance Oversight'}
+            <History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}
           </h3>
         </div>
         <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
