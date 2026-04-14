@@ -222,7 +222,6 @@ export default function VouchersPage() {
 
   const handleDownloadPDF = (v: Voucher) => {
     setPreviewVoucher(v);
-    // Use a small delay to ensure the DOM is ready for the print engine
     setTimeout(() => {
       window.print();
     }, 300);
@@ -344,7 +343,7 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Dept / Desig</TableHead>
+                    <TableHead className="font-bold">Dept / Designation</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
                     <TableHead className="font-bold text-primary">Created By</TableHead>
@@ -363,7 +362,7 @@ export default function VouchersPage() {
                           <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-xs font-bold leading-tight">{emp?.department || "--"}</span>
+                              <span className="text-sm font-bold leading-tight">{emp?.department || "--"}</span>
                               <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
                             </div>
                           </TableCell>
@@ -405,88 +404,86 @@ export default function VouchersPage() {
 
         <TabsContent value="payment">
           <Card className="shadow-sm border-slate-200 overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-50 rounded-lg"><CreditCard className="w-5 h-5 text-emerald-600" /></div>
-                  <CardTitle className="text-lg">Voucher Payments</CardTitle>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button variant="outline" size="sm" className="h-10 gap-2" onClick={() => handleExportExcel('PAYMENT')}>
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Export Excel
-                  </Button>
-                  <div className="relative w-80">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPaymentPage(1); }} />
-                  </div>
+            <CardHeader className="bg-slate-50/50 border-b p-6">
+              <div className="flex flex-col lg:flex-row items-center gap-4">
+                <div className="relative flex-1 w-full">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search by Slip No, Name or ID..." 
+                    className="pl-10 h-10 bg-white"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="font-bold">Voucher No</TableHead>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Dept / Desig</TableHead>
-                    <TableHead className="font-bold text-center">Mode</TableHead>
-                    <TableHead className="font-bold text-center">Ref No</TableHead>
-                    <TableHead className="font-bold text-right">Amount</TableHead>
-                    <TableHead className="font-bold text-primary">Created By</TableHead>
-                    <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
-                    <TableHead className="font-bold text-center">Status</TableHead>
-                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedPayable.length === 0 ? (
-                    <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
-                  ) : (
-                    paginatedPayable.map((v) => {
-                      const emp = employees.find(e => e.id === v.employeeId);
-                      return (
-                        <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-bold leading-tight">{emp?.department || "--"}</span>
-                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className="text-[10px] font-black">{v.paymentMode || "--"}</span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <span className="text-[10px] font-mono font-medium text-slate-500">{v.paymentReference || "--"}</span>
-                          </TableCell>
-                          <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
-                          <TableCell className="text-xs font-bold text-emerald-600">{v.approvedByName || "--"}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none text-[10px] font-bold")}>
-                              {v.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-2">
-                              {v.status === "APPROVED" ? (
-                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
-                                  <CreditCard className="w-3 h-3 mr-1.5" /> Pay
-                                </Button>
-                              ) : (
-                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
-                                  <Download className="w-3 h-3" /> Download
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+              <ScrollArea className="w-full">
+                <Table className="min-w-[1200px]">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-bold">Voucher No</TableHead>
+                      <TableHead className="font-bold">Employee Name</TableHead>
+                      <TableHead className="font-bold">Dept / Designation</TableHead>
+                      <TableHead className="font-bold text-center">Mode</TableHead>
+                      <TableHead className="font-bold text-center">Ref No</TableHead>
+                      <TableHead className="font-bold text-right">Amount</TableHead>
+                      <TableHead className="font-bold text-primary">Created By</TableHead>
+                      <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
+                      <TableHead className="font-bold text-center">Status</TableHead>
+                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedPayable.length === 0 ? (
+                      <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
+                    ) : (
+                      paginatedPayable.map((v) => {
+                        const emp = employees.find(e => e.id === v.employeeId);
+                        return (
+                          <TableRow key={v.id} className="hover:bg-slate-50/50">
+                            <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
+                            <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-bold leading-tight">{emp?.department || "--"}</span>
+                                <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-[10px] font-black">{v.paymentMode || "--"}</span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <span className="text-[10px] font-mono font-medium text-slate-500">{v.paymentReference || "--"}</span>
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
+                            <TableCell className="text-xs font-bold text-emerald-600">{v.approvedByName || "--"}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none text-[10px] font-bold")}>
+                                {v.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-2">
+                                {v.status === "APPROVED" ? (
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
+                                    <CreditCard className="w-3 h-3 mr-1.5" /> Pay
+                                  </Button>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
+                                    <Download className="w-3 h-3" /> Download
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
             </CardContent>
             {totalPaymentPages > 1 && (
               <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
@@ -519,7 +516,7 @@ export default function VouchersPage() {
 
       {/* Pay Dialog */}
       <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader className="border-b pb-4">
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Process Payment</span>
@@ -531,9 +528,9 @@ export default function VouchersPage() {
               </div>
             </div>
           </DialogHeader>
-          <div className="py-4 space-y-6">
-            <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
-              <div className="space-y-2">
+          <div className="py-4 space-y-0 divide-y divide-slate-100">
+            <div className="grid grid-cols-2">
+              <div className="p-6 space-y-2 border-r border-slate-100">
                 <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Paid Amount (INR)</Label>
                 <Input 
                   type="number" 
@@ -542,7 +539,7 @@ export default function VouchersPage() {
                   className="h-12 bg-white border-slate-200 font-black text-lg text-emerald-600 focus-visible:ring-emerald-500" 
                 />
               </div>
-              <div className="space-y-2">
+              <div className="p-6 space-y-2">
                 <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Date</Label>
                 <Input 
                   type="date" 
@@ -553,8 +550,8 @@ export default function VouchersPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
-              <div className="space-y-2">
+            <div className="grid grid-cols-2">
+              <div className="p-6 space-y-2 border-r border-slate-100">
                 <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Mode</Label>
                 <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
                   <SelectTrigger className="h-12 bg-white border-slate-200 font-bold">
@@ -566,7 +563,7 @@ export default function VouchersPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="p-6 space-y-2">
                 <Label className={cn(
                   "font-black text-[10px] uppercase text-slate-500 tracking-wider transition-opacity",
                   payMode !== 'BANKING' && "opacity-30"
@@ -642,9 +639,14 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
   const formattedDate = voucher.date ? format(parseISO(voucher.date), 'dd-MMM-yyyy') : "---";
 
   return (
-    <div className="font-serif text-slate-900 space-y-12">
+    <div className="font-serif text-slate-900 space-y-10">
+      {/* Centered Top Title */}
+      <div className="text-center">
+        <h2 className="text-2xl font-black uppercase tracking-[0.3em] underline decoration-2 underline-offset-8">Advance Payment Voucher</h2>
+      </div>
+
       {/* Document Header */}
-      <div className="flex justify-between items-start border-b-4 border-slate-900 pb-10">
+      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mt-6">
         <div className="flex items-start gap-6">
           <div className="w-16 h-16 border-2 border-slate-200 flex items-center justify-center p-1 rounded-xl bg-white shadow-sm overflow-hidden shrink-0 mt-1">
             {firm?.logo ? (
@@ -668,34 +670,29 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
           <div className="space-y-1.5">
             <div className="flex justify-end gap-3 text-sm items-baseline">
               <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">VOUCHER NO:</span>
-              <span className="font-mono font-black text-slate-900 text-lg leading-none">{voucher.voucherNo}</span>
+              <span className="font-mono font-black text-slate-900 text-lg leading-none whitespace-nowrap">{voucher.voucherNo}</span>
             </div>
             <div className="flex justify-end gap-3 text-sm items-baseline">
               <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">DATE:</span>
-              <span className="font-black text-slate-900 text-lg leading-none">{formattedDate}</span>
+              <span className="font-black text-slate-900 text-lg leading-none whitespace-nowrap">{formattedDate}</span>
             </div>
           </div>
           
           <div className="space-y-1.5 pt-4 border-t border-slate-100">
             <div className="flex justify-end gap-3 text-[10px] items-baseline">
               <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">CREATED BY:</span>
-              <span className="font-bold text-primary uppercase leading-none">{voucher.createdByName || "SYSTEM"}</span>
+              <span className="font-bold text-primary uppercase leading-none whitespace-nowrap">{voucher.createdByName || "SYSTEM"}</span>
             </div>
             <div className="flex justify-end gap-3 text-[10px] items-baseline">
               <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">APPROVED BY:</span>
-              <span className="font-bold text-emerald-600 uppercase leading-none">{voucher.approvedByName || "--"}</span>
+              <span className="font-bold text-emerald-600 uppercase leading-none whitespace-nowrap">{voucher.approvedByName || "--"}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Document Title */}
-      <div className="text-center py-6 bg-slate-50 border-y-2 border-slate-900">
-        <h2 className="text-2xl font-black uppercase tracking-[0.4em] text-slate-900">Advance Payment Voucher</h2>
-      </div>
-
       {/* Employee Grid */}
-      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900">
+      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 mt-6">
         <DetailCell label="Employee ID" value={emp?.employeeId} />
         <DetailCell label="Employee Name" value={emp?.name} />
         <DetailCell label="Department" value={emp?.department} />
