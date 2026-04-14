@@ -101,7 +101,7 @@ export default function VouchersPage() {
     const fyPrefix = `${startYear}${(endYear % 100).toString().padStart(2, '0')}`;
     const fyFullPrefix = `SIL-${fyPrefix}-`;
 
-    const sameFYVouchers = vouchers.filter(v => v.voucherNo.startsWith(fyFullPrefix));
+    const sameFYVouchers = (vouchers || []).filter(v => v.voucherNo.startsWith(fyFullPrefix));
     
     let nextSerial = 1;
     if (sameFYVouchers.length > 0) {
@@ -117,7 +117,7 @@ export default function VouchersPage() {
 
   // Filtering Logic
   const filteredPendingVouchers = useMemo(() => {
-    return vouchers.filter(v => v.status === 'PENDING').filter(v => {
+    return (vouchers || []).filter(v => v.status === 'PENDING').filter(v => {
       const emp = employees.find(e => e.id === v.employeeId);
       const search = searchTerm.toLowerCase();
       return (
@@ -129,7 +129,7 @@ export default function VouchersPage() {
   }, [vouchers, searchTerm, employees]);
 
   const filteredPayableVouchers = useMemo(() => {
-    return vouchers.filter(v => v.status === 'APPROVED' || v.status === 'PAID').filter(v => {
+    return (vouchers || []).filter(v => v.status === 'APPROVED' || v.status === 'PAID').filter(v => {
       const emp = employees.find(e => e.id === v.employeeId);
       const search = searchTerm.toLowerCase();
       return (
@@ -533,7 +533,7 @@ export default function VouchersPage() {
             </Button>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar" style={{ overflowY: 'auto' }}>
+          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
             <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-16 min-h-[297mm] border-4 border-slate-900 rounded-sm">
               {previewVoucher && <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />}
             </div>
@@ -620,25 +620,25 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
       </div>
 
       {/* Payment Details */}
-      <div className="grid grid-cols-1 border-2 border-slate-900 border-t-0">
+      <div className="grid grid-cols-1 border-2 border-slate-900 mt-10">
         <div className="p-6 border-b-2 border-slate-900 flex items-center justify-between bg-white">
           <span className="font-black uppercase text-sm tracking-widest">Amount (In Figures)</span>
           <span className="text-4xl font-black text-slate-900">{formatCurrency(voucher.amount)}</span>
         </div>
-        <div className="p-6 bg-slate-50 flex items-start gap-6">
+        <div className="p-6 bg-slate-50 flex items-start gap-6 border-b-2 border-slate-900">
           <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Amount in Words:</span>
           <span className="text-lg font-bold italic underline decoration-slate-300 underline-offset-8 leading-relaxed">
             {numberToIndianWords(voucher.amount)}
           </span>
         </div>
-        <div className="p-6 border-t-2 border-slate-900 flex items-start gap-6 bg-white">
+        <div className="p-6 flex items-start gap-6 bg-white">
           <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Purpose:</span>
           <span className="text-lg font-medium text-slate-800 leading-relaxed">{voucher.purpose}</span>
         </div>
       </div>
 
       {/* Declaration */}
-      <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl italic text-sm text-center leading-relaxed text-slate-600">
+      <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl italic text-sm text-center leading-relaxed text-slate-600 mt-10">
         "I hereby acknowledge the receipt of the above-mentioned advance amount and agree that the same will be recovered/adjusted from my future salary/dues as per the organization's policy."
       </div>
 
