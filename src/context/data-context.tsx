@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { Employee, AttendanceRecord, Voucher, Plant, PayrollRecord, Firm, User, Holiday, AppNotification } from '@/lib/types';
-import { INITIAL_PLANTS, INITIAL_FIRMS, INITIAL_USERS, DEFAULT_EMPLOYEE } from '@/lib/mock-data';
+import { INITIAL_PLANTS, INITIAL_FIRMS, INITIAL_USERS, INITIAL_EMPLOYEES } from '@/lib/mock-data';
 
 interface DataContextType {
   employees: Employee[];
@@ -41,6 +41,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const isLoaded = useRef(false);
 
   useEffect(() => {
+    // Initial Load from LocalStorage
     const savedEmps = localStorage.getItem('app_employees');
     const savedAtt = localStorage.getItem('app_attendance');
     const savedVouchers = localStorage.getItem('app_vouchers');
@@ -51,7 +52,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const savedHolidays = localStorage.getItem('app_holidays');
     const savedNotifications = localStorage.getItem('app_notifications');
 
-    setEmployees(savedEmps ? JSON.parse(savedEmps) : [DEFAULT_EMPLOYEE]);
+    setEmployees(savedEmps ? JSON.parse(savedEmps) : INITIAL_EMPLOYEES);
     setAttendanceRecords(savedAtt ? JSON.parse(savedAtt) : []);
     setVouchers(savedVouchers ? JSON.parse(savedVouchers) : []);
     setPayrollRecords(savedPayroll ? JSON.parse(savedPayroll) : []);
@@ -65,6 +66,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Persist to LocalStorage whenever state changes
     if (!isLoaded.current) return;
 
     localStorage.setItem('app_employees', JSON.stringify(employees));
