@@ -73,7 +73,7 @@ function determineStatus(hours: number): 'PRESENT' | 'ABSENT' | 'HALF_DAY' {
 }
 
 export default function ApprovalsPage() {
-  const { attendanceRecords, setAttendanceRecords } = useData();
+  const { attendanceRecords, updateRecord } = useData();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("pending");
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,7 +110,7 @@ export default function ApprovalsPage() {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
-      setAttendanceRecords(prev => prev.map(r => r.id === id ? { ...r, approved: true } : r));
+      updateRecord('attendance', id, { approved: true });
       toast({ title: "Approved", description: "Record moved to approved list." });
     } finally {
       setIsProcessing(false);
@@ -121,7 +121,7 @@ export default function ApprovalsPage() {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
-      setAttendanceRecords(prev => prev.map(r => r.id === id ? { ...r, approved: false } : r));
+      updateRecord('attendance', id, { approved: false });
       toast({ title: "Restored", description: "Record moved back to pending list." });
     } finally {
       setIsProcessing(false);
@@ -141,17 +141,12 @@ export default function ApprovalsPage() {
       const newHours = calculateHours(editTimes.in, editTimes.out);
       const newStatus = determineStatus(newHours);
       
-      setAttendanceRecords(prev => prev.map(r => 
-        r.id === selectedRecord.id 
-          ? { 
-              ...r, 
-              inTime: editTimes.in, 
-              outTime: editTimes.out, 
-              hours: newHours,
-              status: newStatus as any
-            } 
-          : r
-      ));
+      updateRecord('attendance', selectedRecord.id, { 
+        inTime: editTimes.in, 
+        outTime: editTimes.out, 
+        hours: newHours,
+        status: newStatus as any
+      });
       setIsEditDialogOpen(false);
       toast({ title: "Updated", description: `Attendance updated. New Status: ${newStatus}` });
     } finally {
@@ -174,9 +169,7 @@ export default function ApprovalsPage() {
     
     setIsProcessing(true);
     try {
-      setAttendanceRecords(prev => prev.map(r => 
-        r.id === selectedRecord.id ? { ...r, remark: rejectRemark } : r
-      ));
+      updateRecord('attendance', selectedRecord.id, { remark: rejectRemark });
       setIsRejectDialogOpen(false);
       toast({ title: "Rejected", description: "Remark added to pending record." });
     } finally {

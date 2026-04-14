@@ -56,7 +56,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function HolidaysPage() {
   const { toast } = useToast();
-  const { plants, holidays, setHolidays } = useData();
+  const { plants, holidays, addRecord, updateRecord, deleteRecord, setRecord } = useData();
   
   // Stable initial state for hydration, update after mount
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date(2024, 0, 1));
@@ -77,7 +77,7 @@ export default function HolidaysPage() {
     setCurrentMonth(new Date());
   }, []);
 
-  // Auto-generate Sundays for current year if not present
+  // Auto-generate Sundays for current year
   useEffect(() => {
     if (!isMounted) return;
     const year = currentMonth.getFullYear();
@@ -96,14 +96,13 @@ export default function HolidaysPage() {
         plantIds: plants.map(p => p.id) 
       }));
     
-    // Add Sundays to holidays if they don't exist
-    setHolidays(prev => {
-      const existingIds = new Set(prev.map(h => h.id));
-      const newSundays = sundays.filter(s => !existingIds.has(s.id));
-      if (newSundays.length === 0) return prev;
-      return [...prev, ...newSundays].sort((a, b) => a.date.localeCompare(b.date));
+    // Use setRecord for idempotency
+    sundays.forEach(s => {
+      if (!holidays.some(h => h.date === s.date)) {
+        setRecord('holidays', s.id, s);
+      }
     });
-  }, [plants, currentMonth.getFullYear(), setHolidays, isMounted]);
+  }, [plants, currentMonth.getFullYear(), holidays, setRecord, isMounted]);
 
   const handleDayClick = (date: Date) => {
     if (isSunday(date)) {
@@ -144,20 +143,20 @@ export default function HolidaysPage() {
     const dateStr = format(targetDate, "yyyy-MM-dd");
     
     if (editingHolidayId) {
-      setHolidays(prev => prev.map(h => 
-        h.id === editingHolidayId ? { ...h, name: holidayName, plantIds: selectedPlantIds } : h
-      ));
+      updateRecord('holidays', editingHolidayId, { 
+        name: holidayName, 
+        plantIds: selectedPlantIds 
+      });
       toast({ title: "Holiday Updated" });
     } else {
-      const newHoliday: Holiday = {
-        id: Math.random().toString(36).substr(2, 9),
+      const newHoliday = {
         date: dateStr,
         name: holidayName,
         type: 'FESTIVAL',
         plantIds: selectedPlantIds,
         auto: false
       };
-      setHolidays(prev => [...prev, newHoliday].sort((a, b) => a.date.localeCompare(b.date)));
+      addRecord('holidays', newHoliday);
       toast({ title: "Holiday Posted", description: `${holidayName} scheduled.` });
     }
 
@@ -166,7 +165,7 @@ export default function HolidaysPage() {
 
   const handleDeleteHoliday = () => {
     if (!holidayToDelete) return;
-    setHolidays(prev => prev.filter(h => h.id !== holidayToDelete.id));
+    deleteRecord('holidays', holidayToDelete.id);
     setHolidayToDelete(null);
     toast({ variant: "destructive", title: "Holiday Deleted", description: "The festival record has been removed." });
   };

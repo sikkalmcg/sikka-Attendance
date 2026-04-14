@@ -130,7 +130,7 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 };
 
 export default function EmployeesPage() {
-  const { employees, setEmployees, firms } = useData();
+  const { employees, firms, addRecord, updateRecord } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
@@ -254,9 +254,8 @@ export default function EmployeesPage() {
 
       const nextEmpId = getNextId();
 
-      const newEmp: Employee = {
-        ...(formData as Employee),
-        id: editEmployee ? editEmployee.id : Math.random().toString(36).substring(2, 11),
+      const empData = {
+        ...formData,
         employeeId: nextEmpId,
         salaryHistory: editEmployee ? (formData.salaryHistory || []) : [
           { fromMonth: joinMonthStr, toMonth: "Present", monthlyCTC: formData.salary?.monthlyCTC || 0 }
@@ -264,13 +263,14 @@ export default function EmployeesPage() {
         active: editEmployee ? (formData.active ?? true) : true
       };
 
-      setEmployees(prev => {
-        if (editEmployee) return prev.map(e => e.id === editEmployee.id ? newEmp : e);
-        return [...prev, newEmp];
-      });
+      if (editEmployee) {
+        updateRecord('employees', editEmployee.id, empData);
+      } else {
+        addRecord('employees', empData);
+      }
 
       handleCloseRegistration();
-      toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${newEmp.name} has been saved.` });
+      toast({ title: editEmployee ? "Profile Updated" : "Employee Registered", description: `${empData.name} has been saved.` });
     } catch (e) {
       console.error("Registration error:", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to save employee data." });
@@ -290,32 +290,27 @@ export default function EmployeesPage() {
     setIsProcessing(true);
 
     try {
-      setEmployees(prev => prev.map(emp => {
-        if (emp.id !== salaryRevision.id) return emp;
+      const history = salaryRevision.salaryHistory ? [...salaryRevision.salaryHistory] : [];
+      const newEffectiveDate = getMonthFromMMM_YYYY(effectiveMonth);
+      
+      if (history.length > 0) {
+        const lastEntry = { ...history[history.length - 1] };
+        const prevMonthDate = new Date(newEffectiveDate);
+        prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+        lastEntry.toMonth = formatToMMM_YYYY(prevMonthDate);
+        history[history.length - 1] = lastEntry;
+      }
 
-        const history = emp.salaryHistory ? [...emp.salaryHistory] : [];
-        const newEffectiveDate = getMonthFromMMM_YYYY(effectiveMonth);
-        
-        if (history.length > 0) {
-          const lastEntry = { ...history[history.length - 1] };
-          const prevMonthDate = new Date(newEffectiveDate);
-          prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
-          lastEntry.toMonth = formatToMMM_YYYY(prevMonthDate);
-          history[history.length - 1] = lastEntry;
-        }
+      history.push({
+        fromMonth: effectiveMonth,
+        toMonth: "Present",
+        monthlyCTC: revisionData.monthlyCTC
+      });
 
-        history.push({
-          fromMonth: effectiveMonth,
-          toMonth: "Present",
-          monthlyCTC: revisionData.monthlyCTC
-        });
-
-        return {
-          ...emp,
-          salary: { ...revisionData },
-          salaryHistory: history
-        };
-      }));
+      updateRecord('employees', salaryRevision.id, {
+        salary: { ...revisionData },
+        salaryHistory: history
+      });
 
       setSalaryRevision(null);
       toast({ title: "Salary Revision Posted", description: `Updated for ${salaryRevision.name}` });
@@ -332,9 +327,7 @@ export default function EmployeesPage() {
     setIsProcessing(true);
     
     try {
-      setEmployees(prev => prev.map(emp => 
-        emp.id === employeeToToggle.id ? { ...emp, active: !emp.active } : emp
-      ));
+      updateRecord('employees', employeeToToggle.id, { active: !employeeToToggle.active });
       
       toast({ 
         title: employeeToToggle.active ? "Employee Deactivated" : "Employee Activated",

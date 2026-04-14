@@ -45,7 +45,7 @@ import { Badge } from "@/components/ui/badge";
 import { useData } from "@/context/data-context";
 
 export default function FirmsAndPlantsPage() {
-  const { firms, setFirms, plants, setPlants } = useData();
+  const { firms, plants, addRecord, updateRecord, deleteRecord } = useData();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("plants");
   const [isMounted, setIsMounted] = useState(false);
@@ -113,13 +113,12 @@ export default function FirmsAndPlantsPage() {
     setIsProcessing(true);
     try {
       if (editingPlantId) {
-        setPlants(prev => prev.map(p => p.id === editingPlantId ? { ...p, ...plantDraft } as Plant : p));
+        updateRecord('plants', editingPlantId, plantDraft);
         toast({ title: "Plant Updated", description: `${plantDraft.name} configuration saved.` });
         setEditingPlantId(null);
         setPlantDraft({ radius: 700 });
       } else {
-        const newPlant: Plant = {
-          id: Math.random().toString(36).substr(2, 9),
+        const newPlant = {
           name: plantDraft.name!,
           lat: Number(plantDraft.lat),
           lng: Number(plantDraft.lng),
@@ -127,7 +126,7 @@ export default function FirmsAndPlantsPage() {
           firmId: plantDraft.firmId!,
           active: true
         };
-        setPlants(prev => [...prev, newPlant]);
+        addRecord('plants', newPlant);
         toast({ title: "Plant Registered", description: `${newPlant.name} is now live for geofencing.` });
         setPlantDraft({ 
           radius: 700, 
@@ -143,7 +142,7 @@ export default function FirmsAndPlantsPage() {
 
   const handleRemovePlant = () => {
     if (!plantToRemove) return;
-    setPlants(prev => prev.filter(p => p.id !== plantToRemove.id));
+    deleteRecord('plants', plantToRemove.id);
     setPlantToRemove(null);
     toast({ title: "Plant Removed", description: "The infrastructure node has been deleted." });
   };
@@ -178,13 +177,12 @@ export default function FirmsAndPlantsPage() {
     setIsProcessing(true);
     try {
       if (editingFirmId) {
-        setFirms(prev => prev.map(f => f.id === editingFirmId ? { ...f, ...firmDraft } as Firm : f));
+        updateRecord('firms', editingFirmId, firmDraft);
         toast({ title: "Firm Updated", description: `${firmDraft.name} record updated.` });
       } else {
-        const newFirm: Firm = {
-          id: Math.random().toString(36).substr(2, 9),
+        const newFirmData = {
           name: firmDraft.name!,
-          logo: firmDraft.logo,
+          logo: firmDraft.logo || null,
           gstin: firmDraft.gstin!,
           pan: firmDraft.pan || '',
           pfNo: firmDraft.pfNo || '',
@@ -194,8 +192,8 @@ export default function FirmsAndPlantsPage() {
           ifscCode: firmDraft.ifscCode || '',
           units: firmDraft.units || []
         };
-        setFirms(prev => [...prev, newFirm]);
-        toast({ title: "Firm Registered", description: `${newFirm.name} added to repository.` });
+        addRecord('firms', newFirmData);
+        toast({ title: "Firm Registered", description: `${newFirmData.name} added to repository.` });
       }
       setFirmDraft({ units: [] });
       setEditingFirmId(null);
@@ -207,7 +205,7 @@ export default function FirmsAndPlantsPage() {
 
   const handleRemoveFirm = () => {
     if (!firmToRemove) return;
-    setFirms(prev => prev.filter(f => f.id !== firmToRemove.id));
+    deleteRecord('firms', firmToRemove.id);
     setFirmToRemove(null);
     toast({ title: "Firm Removed", description: "The legal entity record has been deleted." });
   };

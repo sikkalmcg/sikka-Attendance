@@ -38,6 +38,7 @@ interface DataContextType {
   addRecord: (col: string, data: any) => void;
   updateRecord: (col: string, id: string, data: any) => void;
   deleteRecord: (col: string, id: string) => void;
+  setRecord: (col: string, id: string, data: any) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -89,6 +90,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     deleteDocumentNonBlocking(docRef);
   };
 
+  const setRecord = (col: string, id: string, data: any) => {
+    const docRef = doc(db, col, id);
+    setDocumentNonBlocking(docRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+  };
+
   const value = useMemo(() => ({
     employees: employees || [],
     attendanceRecords: attendance || [],
@@ -101,7 +107,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     notifications: notifications || [],
     addRecord,
     updateRecord,
-    deleteRecord
+    deleteRecord,
+    setRecord
   }), [employees, attendance, vouchers, payroll, plants, firms, users, holidays, notifications]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
