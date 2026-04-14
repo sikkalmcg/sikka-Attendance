@@ -26,7 +26,10 @@ import {
   Eye,
   Download,
   X,
-  User as UserIcon
+  User as UserIcon,
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -60,6 +63,11 @@ export default function VouchersPage() {
   const [purpose, setPurpose] = useState("");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const { toast } = useToast();
+
+  // Pagination State
+  const [pendingPage, setPendingPage] = useState(1);
+  const [paymentPage, setPaymentPage] = useState(1);
+  const rowsPerPage = 15;
 
   // State for Preview and Print
   const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
@@ -118,7 +126,7 @@ export default function VouchersPage() {
   }, [voucherDate, vouchers]);
 
   // Filtering Logic based on tabs
-  const pendingVouchers = useMemo(() => {
+  const filteredPendingVouchers = useMemo(() => {
     return vouchers.filter(v => v.status === 'PENDING').filter(v => {
       const emp = employees.find(e => e.id === v.employeeId);
       const search = searchTerm.toLowerCase();
@@ -130,7 +138,7 @@ export default function VouchersPage() {
     }).reverse();
   }, [vouchers, searchTerm, employees]);
 
-  const payableVouchers = useMemo(() => {
+  const filteredPayableVouchers = useMemo(() => {
     return vouchers.filter(v => v.status === 'APPROVED' || v.status === 'PAID').filter(v => {
       const emp = employees.find(e => e.id === v.employeeId);
       const search = searchTerm.toLowerCase();
@@ -141,6 +149,20 @@ export default function VouchersPage() {
       );
     }).reverse();
   }, [vouchers, searchTerm, employees]);
+
+  // Paginated Data
+  const paginatedPending = useMemo(() => {
+    const start = (pendingPage - 1) * rowsPerPage;
+    return filteredPendingVouchers.slice(start, start + rowsPerPage);
+  }, [filteredPendingVouchers, pendingPage]);
+
+  const paginatedPayable = useMemo(() => {
+    const start = (paymentPage - 1) * rowsPerPage;
+    return filteredPayableVouchers.slice(start, start + rowsPerPage);
+  }, [filteredPayableVouchers, paymentPage]);
+
+  const totalPendingPages = Math.ceil(filteredPendingVouchers.length / rowsPerPage);
+  const totalPaymentPages = Math.ceil(filteredPayableVouchers.length / rowsPerPage);
 
   const handleCreateVoucher = (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,7 +197,11 @@ export default function VouchersPage() {
   };
 
   const handleApproveVoucher = (id: string) => {
-    setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'APPROVED' } : v));
+    setVouchers(prev => prev.map(v => v.id === id ? { 
+      ...v, 
+      status: 'APPROVED', 
+      approvedByName: currentUser?.fullName || "Admin" 
+    } : v));
     toast({ title: "Voucher Approved", description: "Voucher moved to payments list." });
   };
 
@@ -196,9 +222,43 @@ export default function VouchersPage() {
     setIsPreviewOpen(true);
   };
 
-  const handleDownloadPDF = () => {
-    if (!previewVoucher) return;
-    window.print();
+  const handleExportExcel = (type: 'PENDING' | 'PAYMENT') => {
+    const data = type === 'PENDING' ? filteredPendingVouchers : filteredPayableVouchers;
+    if (data.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No records found to export." });
+      return;
+    }
+
+    const headers = ["Voucher No", "Date", "Employee ID", "Employee Name", "Dept", "Desig", "Amount", "Purpose", "Created By", "Approved By", "Status"];
+    const csvContent = [
+      headers.join(","),
+      ...data.map(v => {
+        const emp = employees.find(e => e.id === v.employeeId);
+        return [
+          v.voucherNo,
+          v.date,
+          emp?.employeeId || "",
+          `"${emp?.name || ""}"`,
+          `"${emp?.department || ""}"`,
+          `"${emp?.designation || ""}"`,
+          v.amount,
+          `"${v.purpose}"`,
+          `"${v.createdByName || ""}"`,
+          `"${v.approvedByName || ""}"`,
+          v.status
+        ].join(",");
+      })
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Vouchers_${type}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Export Success", description: "Excel file has been downloaded." });
   };
 
   if (!isMounted) return null;
@@ -352,101 +412,134 @@ export default function VouchersPage() {
                   <div className="p-2 bg-amber-50 rounded-lg"><FileCheck className="w-5 h-5 text-amber-600" /></div>
                   <CardTitle className="text-lg">Pending Approvals</CardTitle>
                 </div>
-                <div className="relative w-80">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Search pending vouchers..." 
-                    className="pl-10 h-10 bg-white"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" size="sm" className="h-10 gap-2" onClick={() => handleExportExcel('PENDING')}>
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Export Excel
+                  </Button>
+                  <div className="relative w-80">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search pending vouchers..." 
+                      className="pl-10 h-10 bg-white"
+                      value={searchTerm}
+                      onChange={(e) => { setSearchTerm(e.target.value); setPendingPage(1); }}
+                    />
+                  </div>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="w-full">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="font-bold">Voucher No</TableHead>
-                      <TableHead className="font-bold">Employee Name</TableHead>
-                      <TableHead className="font-bold">Dept / Desig</TableHead>
-                      <TableHead className="font-bold">Firm / Unit</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                      <TableHead className="font-bold">Amount</TableHead>
-                      <TableHead className="font-bold">Created By</TableHead>
-                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50 hover:bg-slate-50">
+                    <TableHead className="font-bold">Voucher No</TableHead>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Dept / Desig</TableHead>
+                    <TableHead className="font-bold">Firm / Unit</TableHead>
+                    <TableHead className="font-bold">Date</TableHead>
+                    <TableHead className="font-bold">Amount</TableHead>
+                    <TableHead className="font-bold">Created By</TableHead>
+                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedPending.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                        No vouchers pending approval.
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingVouchers.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                          No vouchers pending approval.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      pendingVouchers.map((v) => {
-                        const emp = employees.find(e => e.id === v.employeeId);
-                        const firm = firms.find(f => f.id === emp?.firmId);
-                        const unit = plants.find(p => p.id === emp?.unitId);
-                        
-                        return (
-                          <TableRow key={v.id} className="hover:bg-slate-50/50">
-                            <TableCell 
-                              className="font-mono font-bold text-primary cursor-pointer hover:underline"
-                              onClick={() => handleOpenPreview(v)}
-                            >
-                              {v.voucherNo}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-bold">{emp?.name || "Unknown"}</span>
-                                <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
-                                <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
-                                <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">{v.date}</TableCell>
-                            <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                            <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
-                            <TableCell className="text-right pr-6">
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  size="sm" 
-                                  className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
-                                  onClick={() => handleApproveVoucher(v.id)}
-                                >
-                                  <CheckCircle className="w-3 h-3 mr-1" /> Approve
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
-                                  onClick={() => setVoucherToReject(v.id)}
-                                >
-                                  <XCircle className="w-3 h-3 mr-1" /> Reject
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+                  ) : (
+                    paginatedPending.map((v) => {
+                      const emp = employees.find(e => e.id === v.employeeId);
+                      const firm = firms.find(f => f.id === emp?.firmId);
+                      const unit = plants.find(p => p.id === emp?.unitId);
+                      
+                      return (
+                        <TableRow key={v.id} className="hover:bg-slate-50/50">
+                          <TableCell 
+                            className="font-mono font-bold text-primary cursor-pointer hover:underline"
+                            onClick={() => handleOpenPreview(v)}
+                          >
+                            {v.voucherNo}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold">{emp?.name || "Unknown"}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
+                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
+                              <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">{v.date}</TableCell>
+                          <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                size="sm" 
+                                className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
+                                onClick={() => handleApproveVoucher(v.id)}
+                              >
+                                <CheckCircle className="w-3 h-3 mr-1" /> Approve
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
+                                onClick={() => setVoucherToReject(v.id)}
+                              >
+                                <XCircle className="w-3 h-3 mr-1" /> Reject
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
+            {totalPendingPages > 1 && (
+              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                <div className="text-xs font-bold text-muted-foreground">
+                  Showing {((pendingPage - 1) * rowsPerPage) + 1} - {Math.min(pendingPage * rowsPerPage, filteredPendingVouchers.length)} of {filteredPendingVouchers.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={pendingPage === 1}
+                    onClick={() => setPendingPage(p => p - 1)}
+                    className="h-8 rounded-lg font-bold"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                  </Button>
+                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border border-slate-200 shadow-sm">
+                    Page {pendingPage} of {totalPendingPages}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={pendingPage === totalPendingPages}
+                    onClick={() => setPendingPage(p => p + 1)}
+                    className="h-8 rounded-lg font-bold"
+                  >
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </CardFooter>
+            )}
           </Card>
         </TabsContent>
 
@@ -458,120 +551,155 @@ export default function VouchersPage() {
                   <div className="p-2 bg-emerald-50 rounded-lg"><CreditCard className="w-5 h-5 text-emerald-600" /></div>
                   <CardTitle className="text-lg">Approved Vouchers for Payment</CardTitle>
                 </div>
-                <div className="relative w-80">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    placeholder="Search voucher, employee or unit..." 
-                    className="pl-10 h-10 bg-white"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" size="sm" className="h-10 gap-2" onClick={() => handleExportExcel('PAYMENT')}>
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Export Excel
+                  </Button>
+                  <div className="relative w-80">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Search voucher, employee or unit..." 
+                      className="pl-10 h-10 bg-white"
+                      value={searchTerm}
+                      onChange={(e) => { setSearchTerm(e.target.value); setPaymentPage(1); }}
+                    />
+                  </div>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="w-full">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="font-bold">Voucher No</TableHead>
-                      <TableHead className="font-bold">Employee Name</TableHead>
-                      <TableHead className="font-bold">Dept / Desig</TableHead>
-                      <TableHead className="font-bold">Firm / Unit</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                      <TableHead className="font-bold">Amount</TableHead>
-                      <TableHead className="font-bold">Created By</TableHead>
-                      <TableHead className="font-bold">Status</TableHead>
-                      <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50 hover:bg-slate-50">
+                    <TableHead className="font-bold">Voucher No</TableHead>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">Dept / Desig</TableHead>
+                    <TableHead className="font-bold">Firm / Unit</TableHead>
+                    <TableHead className="font-bold">Date</TableHead>
+                    <TableHead className="font-bold">Amount</TableHead>
+                    <TableHead className="font-bold">Created By</TableHead>
+                    <TableHead className="font-bold">Approved By</TableHead>
+                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedPayable.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                        No approved vouchers ready for payment.
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payableVouchers.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
-                          No approved vouchers ready for payment.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      payableVouchers.map((v) => {
-                        const emp = employees.find(e => e.id === v.employeeId);
-                        const firm = firms.find(f => f.id === emp?.firmId);
-                        const unit = plants.find(p => p.id === emp?.unitId);
-                        
-                        return (
-                          <TableRow key={v.id} className="hover:bg-slate-50/50">
-                            <TableCell 
-                              className="font-mono font-bold text-primary cursor-pointer hover:underline"
-                              onClick={() => handleOpenPreview(v)}
-                            >
-                              {v.voucherNo}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-bold">{emp?.name || "Unknown"}</span>
-                                <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
-                                <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
-                                <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">{v.date}</TableCell>
-                            <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                            <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
-                            <TableCell>
-                              <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
-                                "text-[10px] font-bold px-2 py-0.5",
-                                v.status === "PAID" && "bg-emerald-600",
-                                v.status === "APPROVED" && "bg-blue-500 text-white border-none"
-                              )}>
-                                {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
-                                {v.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right pr-6">
-                              <div className="flex justify-end gap-2">
-                                {v.status === "APPROVED" ? (
-                                  <>
-                                    <Button 
-                                      size="sm" 
-                                      className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
-                                      onClick={() => handlePayVoucher(v.id)}
-                                    >
-                                      <CreditCard className="w-3 h-3 mr-1" /> Pay
-                                    </Button>
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
-                                      onClick={() => setVoucherToReject(v.id)}
-                                    >
-                                      <XCircle className="w-3 h-3 mr-1" /> Reject
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1" onClick={() => handleOpenPreview(v)}>
-                                    <Printer className="w-3 h-3" /> Print
+                  ) : (
+                    paginatedPayable.map((v) => {
+                      const emp = employees.find(e => e.id === v.employeeId);
+                      const firm = firms.find(f => f.id === emp?.firmId);
+                      const unit = plants.find(p => p.id === emp?.unitId);
+                      
+                      return (
+                        <TableRow key={v.id} className="hover:bg-slate-50/50">
+                          <TableCell 
+                            className="font-mono font-bold text-primary cursor-pointer hover:underline"
+                            onClick={() => handleOpenPreview(v)}
+                          >
+                            {v.voucherNo}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-bold">{emp?.name || "Unknown"}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">{emp?.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{emp?.department || "N/A"}</span>
+                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "N/A"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium">{firm?.name || "N/A"}</span>
+                              <span className="text-[10px] text-muted-foreground">{unit?.name || "N/A"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">{v.date}</TableCell>
+                          <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
+                          <TableCell className="text-xs font-bold text-primary">{v.approvedByName || "--"}</TableCell>
+                          <TableCell>
+                            <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
+                              "text-[10px] font-bold px-2 py-0.5",
+                              v.status === "PAID" && "bg-emerald-600",
+                              v.status === "APPROVED" && "bg-blue-500 text-white border-none"
+                            )}>
+                              {v.status === "PAID" ? <CheckCircle className="w-3 h-3 mr-1" /> : <ShieldCheck className="w-3 h-3 mr-1" />}
+                              {v.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-2">
+                              {v.status === "APPROVED" ? (
+                                <>
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
+                                    onClick={() => handlePayVoucher(v.id)}
+                                  >
+                                    <CreditCard className="w-3 h-3 mr-1" /> Pay
                                   </Button>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold"
+                                    onClick={() => setVoucherToReject(v.id)}
+                                  >
+                                    <XCircle className="w-3 h-3 mr-1" /> Reject
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1" onClick={() => handleOpenPreview(v)}>
+                                  <Printer className="w-3 h-3" /> Print
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
+            {totalPaymentPages > 1 && (
+              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                <div className="text-xs font-bold text-muted-foreground">
+                  Showing {((paymentPage - 1) * rowsPerPage) + 1} - {Math.min(paymentPage * rowsPerPage, filteredPayableVouchers.length)} of {filteredPayableVouchers.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={paymentPage === 1}
+                    onClick={() => setPaymentPage(p => p - 1)}
+                    className="h-8 rounded-lg font-bold"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                  </Button>
+                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border border-slate-200 shadow-sm">
+                    Page {paymentPage} of {totalPaymentPages}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={paymentPage === totalPaymentPages}
+                    onClick={() => setPaymentPage(p => p + 1)}
+                    className="h-8 rounded-lg font-bold"
+                  >
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </CardFooter>
+            )}
           </Card>
         </TabsContent>
       </Tabs>
@@ -609,7 +737,7 @@ export default function VouchersPage() {
               <DialogTitle className="text-xl font-bold">Voucher Preview</DialogTitle>
             </div>
             <div className="flex items-center gap-2">
-              <Button className="bg-primary font-bold gap-2" onClick={handleDownloadPDF}>
+              <Button className="bg-primary font-bold gap-2" onClick={() => window.print()}>
                 <Download className="w-4 h-4" /> Download PDF
               </Button>
               <Button variant="ghost" size="icon" onClick={() => setIsPreviewOpen(false)}>
@@ -673,7 +801,10 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <div className="text-right space-y-1">
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher No:</span><span className="font-mono font-bold">{voucher.voucherNo}</span></div>
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher Date:</span><span className="font-bold">{voucher.date}</span></div>
-          <div className="flex justify-end gap-2 text-[10px] pt-2"><span className="font-black text-slate-400 uppercase tracking-widest">Created By:</span><span className="font-bold text-primary">{voucher.createdByName || "System"}</span></div>
+          <div className="flex flex-col items-end gap-1 pt-2">
+            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">Created By:</span><span className="font-bold text-primary">{voucher.createdByName || "System"}</span></div>
+            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">Approved By:</span><span className="font-bold text-emerald-600">{voucher.approvedByName || "--"}</span></div>
+          </div>
         </div>
       </div>
 
@@ -741,7 +872,7 @@ function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
     <div className="fixed inset-0 bg-white z-[999] p-[1cm]">
       <div className="w-full max-w-[210mm] mx-auto border-4 border-slate-900 p-10 min-h-[297mm]">
         <AdvanceVoucherContent 
-          voucher={voucher} 
+          voucher={previewVoucher} 
           employees={employees} 
           firms={firms} 
           plants={plants} 
