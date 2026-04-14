@@ -222,6 +222,7 @@ export default function VouchersPage() {
 
   const handleDownloadPDF = (v: Voucher) => {
     setPreviewVoucher(v);
+    // Use a small delay to ensure the DOM is ready for the print engine
     setTimeout(() => {
       window.print();
     }, 300);
@@ -343,7 +344,7 @@ export default function VouchersPage() {
                   <TableRow className="bg-slate-50">
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">Dept / Designation</TableHead>
+                    <TableHead className="font-bold">Dept / Desig</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold">Amount</TableHead>
                     <TableHead className="font-bold text-primary">Created By</TableHead>
@@ -362,11 +363,11 @@ export default function VouchersPage() {
                           <TableCell className="font-bold">{emp?.name || "..."}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-xs font-bold">{emp?.department || "--"}</span>
+                              <span className="text-xs font-bold leading-tight">{emp?.department || "--"}</span>
                               <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-sm">{v.date}</TableCell>
+                          <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                           <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
                           <TableCell className="text-right pr-6">
@@ -428,12 +429,12 @@ export default function VouchersPage() {
                     <TableHead className="font-bold">Voucher No</TableHead>
                     <TableHead className="font-bold">Employee Name</TableHead>
                     <TableHead className="font-bold">Dept / Desig</TableHead>
-                    <TableHead className="font-bold">Mode</TableHead>
-                    <TableHead className="font-bold">Ref No</TableHead>
-                    <TableHead className="font-bold">Amount</TableHead>
+                    <TableHead className="font-bold text-center">Mode</TableHead>
+                    <TableHead className="font-bold text-center">Ref No</TableHead>
+                    <TableHead className="font-bold text-right">Amount</TableHead>
                     <TableHead className="font-bold text-primary">Created By</TableHead>
                     <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
-                    <TableHead className="font-bold">Status</TableHead>
+                    <TableHead className="font-bold text-center">Status</TableHead>
                     <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -449,21 +450,21 @@ export default function VouchersPage() {
                           <TableCell className="font-bold">{emp?.name || "..."}</TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-bold">{emp?.department || "--"}</span>
-                              <span className="text-[9px] text-muted-foreground">{emp?.designation || "--"}</span>
+                              <span className="text-xs font-bold leading-tight">{emp?.department || "--"}</span>
+                              <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             <span className="text-[10px] font-black">{v.paymentMode || "--"}</span>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             <span className="text-[10px] font-mono font-medium text-slate-500">{v.paymentReference || "--"}</span>
                           </TableCell>
-                          <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                           <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
                           <TableCell className="text-xs font-bold text-emerald-600">{v.approvedByName || "--"}</TableCell>
-                          <TableCell>
-                            <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none")}>
+                          <TableCell className="text-center">
+                            <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none text-[10px] font-bold")}>
                               {v.status}
                             </Badge>
                           </TableCell>
@@ -607,7 +608,7 @@ export default function VouchersPage() {
             <div className="flex items-center gap-3 mr-8">
               <Button 
                 className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
-                onClick={() => window.print()}
+                onClick={() => handleDownloadPDF(previewVoucher!)}
               >
                 <Download className="w-5 h-5" /> Download PDF
               </Button>
