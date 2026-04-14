@@ -301,70 +301,68 @@ export default function UserManagementPage() {
           <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30">
             <div className="space-y-10 pb-8 pr-4">
               {/* Identity Section */}
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Full Name *</Label>
+                  <Input 
+                    value={formData.fullName || ""} 
+                    onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
+                    className="h-14 bg-white border-slate-200 font-bold text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Username *</Label>
+                  <Input 
+                    value={formData.username || ""} 
+                    onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
+                    disabled={editingUser?.role === 'SUPER_ADMIN'} 
+                    className="h-14 bg-white border-slate-200 font-mono text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary disabled:bg-slate-100 disabled:text-slate-400"
+                  />
+                </div>
+              </div>
+              
+              {!editingUser && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Full Name *</Label>
-                    <Input 
-                      value={formData.fullName || ""} 
-                      onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
-                      className="h-14 bg-white border-slate-200 font-bold text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary"
-                    />
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Secure Password *</Label>
+                    <div className="relative">
+                      <Input 
+                        type={showPassword ? "text" : "password"}
+                        value={formData.password || ""} 
+                        onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
+                        className="h-14 bg-white border-slate-200 font-mono text-lg pr-14 rounded-xl shadow-sm focus-visible:ring-primary"
+                      />
+                      <button 
+                        type="button"
+                        className="absolute right-4 top-4 text-slate-400 hover:text-primary transition-colors"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Username *</Label>
-                    <Input 
-                      value={formData.username || ""} 
-                      onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
-                      disabled={editingUser?.role === 'SUPER_ADMIN'} 
-                      className="h-14 bg-white border-slate-200 font-mono text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary disabled:bg-slate-100 disabled:text-slate-400"
-                    />
+                  
+                  {/* Password Strength Indicator */}
+                  <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-0 md:mt-0">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
+                      <Badge className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", 
+                        passwordStrength.label === 'STRONG' ? "bg-emerald-500" : 
+                        passwordStrength.label === 'MEDIUM' ? "bg-amber-500" : 
+                        passwordStrength.label === 'WEAK' ? "bg-rose-500" : "bg-slate-200 text-slate-500"
+                      )}>
+                        {passwordStrength.label}
+                      </Badge>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex gap-1.5">
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 1 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 2 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 3 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 4 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                    </div>
                   </div>
                 </div>
-                
-                {!editingUser && (
-                  <div className="space-y-6 pt-2">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Secure Password *</Label>
-                      <div className="relative">
-                        <Input 
-                          type={showPassword ? "text" : "password"}
-                          value={formData.password || ""} 
-                          onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
-                          className="h-14 bg-white border-slate-200 font-mono text-lg pr-14 rounded-xl shadow-sm focus-visible:ring-primary"
-                        />
-                        <button 
-                          type="button"
-                          className="absolute right-4 top-4 text-slate-400 hover:text-primary transition-colors"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Password Strength Indicator */}
-                    <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
-                        <Badge className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", 
-                          passwordStrength.label === 'STRONG' ? "bg-emerald-500" : 
-                          passwordStrength.label === 'MEDIUM' ? "bg-amber-500" : 
-                          passwordStrength.label === 'WEAK' ? "bg-rose-500" : "bg-slate-200 text-slate-500"
-                        )}>
-                          {passwordStrength.label}
-                        </Badge>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex gap-1.5">
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 1 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 2 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 3 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 4 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
 
               {/* Permissions Section */}
               <div className="space-y-6 pt-8 border-t border-slate-200">
