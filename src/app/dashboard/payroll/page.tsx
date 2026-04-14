@@ -310,7 +310,7 @@ export default function PayrollPage() {
   };
 
   const handleDownloadSlip = (rec: PayrollRecord) => {
-    toast({ title: "Downloading...", description: `Preparing salary slip ${rec.slipNo} for download.` });
+    toast({ title: "Downloading...", description: `Preparing payroll slip ${rec.slipNo} for download.` });
   };
 
   if (!isMounted) return null;
@@ -879,7 +879,7 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Salary Slip Preview Dialog */}
+      {/* Payroll Slip Preview Dialog */}
       <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
         <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
           <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
@@ -887,7 +887,7 @@ export default function PayrollPage() {
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                 <FileText className="w-5 h-5 text-primary" />
               </div>
-              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Salary Slip Preview</DialogTitle>
+              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Payroll Slip Preview</DialogTitle>
             </div>
             <div className="flex items-center gap-3 mr-8">
               <Button 
@@ -903,7 +903,7 @@ export default function PayrollPage() {
           </DialogHeader>
           
           <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
-            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-12 min-h-[297mm] border-4 border-slate-900 rounded-sm">
+            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-12 min-h-[297mm] border-4 border-slate-900 rounded-sm font-calibri">
               {previewSlip && (
                 <SalarySlipView 
                   record={previewSlip} 
@@ -940,9 +940,9 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
   const totalDeductions = deductions.reduce((sum, d) => sum + d.value, 0);
 
   return (
-    <div className="font-serif text-slate-900 space-y-8">
-      {/* Header */}
-      <div className="text-center border-b-2 border-slate-900 pb-6">
+    <div className="text-slate-900 space-y-8 font-calibri">
+      {/* Centered Top Title */}
+      <div className="text-center pb-6">
         <div className="flex justify-center mb-4">
           {firm?.logo ? (
             <img src={firm.logo} className="h-16 object-contain" alt="Firm Logo" />
@@ -952,17 +952,17 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
             </div>
           )}
         </div>
-        <h1 className="text-2xl font-black uppercase tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
-        <p className="text-xs font-bold text-slate-500 uppercase mt-1">{firm?.registeredAddress}</p>
-        <div className="flex justify-center gap-10 mt-2 text-[10px] font-black uppercase tracking-widest">
+        <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
+        <p className="text-[11px] font-bold text-slate-600 uppercase mt-1 max-w-2xl mx-auto leading-relaxed">{firm?.registeredAddress || "Address details not available"}</p>
+        <div className="flex justify-center gap-8 mt-3 text-[11px] font-black uppercase tracking-widest text-slate-900">
           <span>GSTIN: {firm?.gstin || "---"}</span>
-          <span>PF: {firm?.pfNo || "---"}</span>
-          <span>ESIC: {firm?.esicNo || "---"}</span>
+          <span>PF: ---</span>
+          <span>ESIC: ---</span>
         </div>
       </div>
 
       <div className="text-center">
-        <h2 className="text-xl font-black uppercase tracking-[0.2em] underline underline-offset-4 decoration-2">Salary Payslip - {record.month}</h2>
+        <h2 className="text-xl font-black uppercase tracking-[0.2em] underline underline-offset-4 decoration-2">PAYROLL SLIP - {record.month}</h2>
       </div>
 
       {/* Employee Info Grid */}
@@ -1060,7 +1060,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
 
 function SlipDetailCell({ label, value }: { label: string, value: any }) {
   return (
-    <div className="flex items-start px-4 py-3 bg-white gap-2">
+    <div className="flex items-start px-4 py-3 bg-white gap-2 font-calibri">
       <span className="text-[10px] font-black uppercase text-slate-400 w-28 shrink-0 tracking-widest leading-normal">{label}:</span>
       <span className="text-sm font-bold text-slate-900 uppercase leading-normal break-words flex-1">{value || "---"}</span>
     </div>

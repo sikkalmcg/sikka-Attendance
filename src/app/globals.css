@@ -75,6 +75,11 @@
     @apply font-headline;
   }
 
+  /* Calibri Typography Override for Payroll Slips */
+  .font-calibri {
+    font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', 'Arial', sans-serif;
+  }
+
   /* Global Scrollbar Styles - Blue Theme */
   ::-webkit-scrollbar {
     width: 10px;
