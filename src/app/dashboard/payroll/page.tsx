@@ -187,7 +187,7 @@ export default function PayrollPage() {
     const paidVouchers = (vouchers || []).filter(v => v.status === 'PAID');
     const empIdsWithAdvance = Array.from(new Set(paidVouchers.map(v => v.employeeId)));
 
-    return empIdsWithAdvance.map(empId => {
+    const ledger = empIdsWithAdvance.map(empId => {
       const employee = employees.find(e => e.id === empId);
       if (!employee) return null;
 
@@ -217,19 +217,21 @@ export default function PayrollPage() {
       
       return {
         id: employee.id,
-        employee,
+        emp: employee,
         totalAdvAmount: totalAdv,
         totalRecoveryAmount: totalRecovery,
         totalRemainingAmount: Math.max(0, totalAdv - totalRecovery),
         vouchers: voucherBreakdown
       };
-    }).filter(Boolean).filter(item => {
+    }).filter(Boolean).sort((a, b) => (b!.id || "").localeCompare(a!.id || ""));
+
+    return (ledger as any[]).filter(item => {
       const search = searchTerm.toLowerCase();
       return (
-        item!.employee.name.toLowerCase().includes(search) ||
-        item!.employee.employeeId.toLowerCase().includes(search)
+        item.emp.name.toLowerCase().includes(search) ||
+        item.emp.employeeId.toLowerCase().includes(search)
       );
-    }) as any[];
+    });
   }, [vouchers, payrollRecords, employees, searchTerm, isMounted]);
 
   const paginatedAdvanceLedger = useMemo(() => {
@@ -658,12 +660,12 @@ export default function PayrollPage() {
                         <TableRow key={item.id} className="hover:bg-slate-50/50">
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="font-bold uppercase">{item.employee.name}</span>
-                              <span className="text-[10px] font-mono text-primary">{item.employee.employeeId}</span>
+                              <span className="font-bold uppercase">{item.emp.name}</span>
+                              <span className="text-[10px] font-mono text-primary">{item.emp.employeeId}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-sm font-medium">{item.employee.department}</TableCell>
-                          <TableCell className="text-sm text-slate-600">{item.employee.designation}</TableCell>
+                          <TableCell className="text-sm font-medium">{item.emp.department}</TableCell>
+                          <TableCell className="text-sm text-slate-600">{item.emp.designation}</TableCell>
                           <TableCell className="text-right font-bold">{formatCurrency(item.totalAdvAmount)}</TableCell>
                           <TableCell className="text-right font-bold text-primary">{formatCurrency(item.totalRecoveryAmount)}</TableCell>
                           <TableCell className="text-right font-black text-rose-600">{formatCurrency(item.totalRemainingAmount)}</TableCell>
@@ -759,7 +761,6 @@ export default function PayrollPage() {
               
               <ScrollArea className="flex-1 bg-slate-50/30 p-6 custom-blue-scrollbar">
                 <div className="space-y-6">
-                  {/* Summary row in popup */}
                   <div className="grid grid-cols-3 gap-4">
                     <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Advanced</p>
@@ -1094,7 +1095,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
 
   return (
     <div className="text-slate-900 space-y-8 font-calibri">
-      {/* Top Header Layout: Logo Left, Title Center */}
       <div className="flex items-start mb-4 relative">
         <div className="w-24 shrink-0">
           {firm?.logo ? (
@@ -1110,10 +1110,9 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
             PAYROLL SLIP - {record.month}
           </h2>
         </div>
-        <div className="w-24 shrink-0" /> {/* Spacer for balance */}
+        <div className="w-24 shrink-0" />
       </div>
 
-      {/* Branding Section Centered */}
       <div className="text-center space-y-1">
         <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
         <p className="text-[11px] font-bold text-slate-600 uppercase max-w-2xl mx-auto leading-relaxed">{firm?.registeredAddress || "Address details not available"}</p>
@@ -1128,7 +1127,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      {/* Slip Details Above Grid (Right Aligned) */}
       <div className="flex justify-end gap-8 text-[10px] font-black uppercase tracking-widest pr-2">
         <div className="flex gap-2">
           <span className="text-slate-400">Slip Number:</span>
@@ -1140,7 +1138,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      {/* Employee Identity Grid */}
       <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 overflow-hidden">
         <SlipDetailCell label="Employee ID" value={record.employeeId} />
         <SlipDetailCell label="Employee Name" value={record.employeeName} />
@@ -1159,7 +1156,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         )}
       </div>
 
-      {/* Monthly Earnings & Deductions Table */}
       <div className="border-2 border-slate-900 overflow-hidden">
         <div className="grid grid-cols-2 bg-slate-900 text-white font-black text-xs uppercase tracking-widest text-center py-2 divide-x-2 divide-white">
           <div>Monthly Earnings</div>
@@ -1195,7 +1191,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      {/* Net Salary Summary */}
       <div className="border-2 border-slate-900 p-6 bg-white text-slate-900 flex justify-between items-center rounded-sm shadow-sm">
         <div className="space-y-1">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Net Salary Payable</p>
@@ -1206,7 +1201,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      {/* Signatures */}
       <div className="flex justify-between items-end pt-32 px-10">
         <div className="text-center space-y-4">
           <div className="w-64 border-b-2 border-slate-900" />
@@ -1220,7 +1214,6 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
         </div>
       </div>
 
-      {/* Footer Disclaimer */}
       <div className="text-center pt-10">
         <p className="text-[8px] font-bold text-slate-300 uppercase tracking-[0.5em]">This is a computer generated document and does not require a physical signature.</p>
       </div>
