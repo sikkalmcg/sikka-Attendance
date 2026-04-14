@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -76,13 +77,33 @@
 
   /* Global Scrollbar Styles - Blue Theme */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-track {
     @apply bg-slate-100;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-primary rounded-full hover:bg-primary/80 transition-colors;
+    @apply bg-primary rounded-full hover:bg-primary/80 transition-colors border-2 border-slate-100;
+  }
+
+  /* Specialized scrollbar for popups/previews */
+  .custom-blue-scrollbar ::-webkit-scrollbar-thumb {
+    @apply bg-primary rounded-full;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-only, .print-only * {
+    visibility: visible;
+  }
+  .print-only {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
   }
 }
