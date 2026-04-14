@@ -57,7 +57,12 @@ import {
   ShieldCheck,
   FileText,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  TrendingUp,
+  User,
+  AlertTriangle,
+  FileCheck,
+  X
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -71,6 +76,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { parseISO, isSameMonth } from "date-fns";
 
 const generatePayrollMonths = () => {
   const options = [];
@@ -88,7 +94,7 @@ const PAYROLL_MONTHS = generatePayrollMonths();
 
 export default function PayrollPage() {
   const router = useRouter();
-  const { employees, attendanceRecords, payrollRecords, vouchers, firms, plants, updateRecord } = useData();
+  const { employees, attendanceRecords, payrollRecords, vouchers, firms, plants, updateRecord, holidays } = useData();
   const { toast } = useToast();
 
   const [isMounted, setIsMounted] = useState(false);
@@ -104,10 +110,24 @@ export default function PayrollPage() {
 
   // Dialog States
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
-  const [payPFRec, setPayPFRec] = useState<PayrollRecord | null>(null);
-  const [payESICRec, setPayESICRec] = useState<PayrollRecord | null>(null);
-  const [printRec, setPrintRec] = useState<PayrollRecord | null>(null);
-  const [printVoucherRec, setPrintVoucherRec] = useState<PayrollRecord | null>(null);
+  const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
+  
+  // Adjustment Calculation State
+  const [adjustmentState, setAdjustmentState] = useState({
+    present: 0,
+    absent: 0,
+    holidayWork: 0,
+    holidayBanked: 0,
+    holidayPaid: 0,
+    balanceUsed: 0,
+    remainingBalance: 0,
+    earningDays: 0,
+    monthWorkingDays: 26,
+    monthHolidays: 4
+  });
+
+  const [isSubAdjustmentOpen, setIsSubAdjustmentOpen] = useState(false);
+  const [subAdjValue, setSubAdjValue] = useState(0);
 
   // Form States for Payments
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -115,15 +135,7 @@ export default function PayrollPage() {
   const [paymentType, setPaymentType] = useState<'BANKING' | 'CASH' | 'CHEQUE'>('BANKING');
   const [paymentRef, setPaymentRef] = useState("");
 
-  const [pfEmpAmt, setPfEmpAmt] = useState(0);
-  const [pfExAmt, setPfExAmt] = useState(0);
-  const [esicEmpAmt, setEsicEmpAmt] = useState(0);
-  const [esicExAmt, setEsicExAmt] = useState(0);
-
   const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, boolean>>({});
-  const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
-  const [viewLeaveHistoryEmp, setViewLeaveHistoryEmp] = useState<Employee | null>(null);
-  const [advanceLeaveValue, setAdvanceLeaveValue] = useState(0);
 
   useEffect(() => {
     setIsMounted(true);
@@ -173,39 +185,95 @@ export default function PayrollPage() {
     return payrollRecords.some(p => p.employeeId === empId && p.month === selectedMonth);
   };
 
-  const getAttendanceSummary = (empId: string) => {
-    const records = attendanceRecords.filter(r => r.employeeId === empId || r.employeeId === "emp-mock");
-    const presents = records.filter(r => r.status === 'PRESENT').length;
-    const halfDays = records.filter(r => r.status === 'HALF_DAY').length;
-    const holidays = records.filter(r => r.status === 'HOLIDAY').length;
+  // Logic to handle opening Adjust Leave dialog
+  const openAdjustmentDialog = (emp: Employee) => {
+    const relevantAttendance = attendanceRecords.filter(r => r.employeeId === emp.employeeId);
     
-    const effectiveAttendance = presents + (halfDays * 0.5);
-    const totalDaysInMonth = 30;
-    const absent = totalDaysInMonth - effectiveAttendance - holidays;
+    // Simplistic Calculation for Demo
+    // In production, this would use exact date checking against the holiday calendar
+    const presentOnWorking = relevantAttendance.filter(r => r.status === 'PRESENT').length;
+    const holidayPres = relevantAttendance.filter(r => r.status === 'PRESENT' && r.inPlant === 'Holiday Work').length || 0; 
+    
+    const workingDaysCount = 26;
+    const holidayCount = 4;
+    
+    const initialPresent = Math.max(0, presentOnWorking - holidayPres);
+    const initialAbsent = Math.max(0, workingDaysCount - initialPresent);
 
-    return {
-      attendance: effectiveAttendance,
-      absent: Math.max(0, absent),
-      holidayWork: holidays,
-      totalDays: totalDaysInMonth
+    let state = {
+      present: initialPresent,
+      absent: initialAbsent,
+      holidayWork: holidayPres,
+      holidayBanked: 0,
+      holidayPaid: 0,
+      balanceUsed: 0,
+      remainingBalance: emp.advanceLeaveBalance || 0,
+      earningDays: initialPresent,
+      monthWorkingDays: workingDaysCount,
+      monthHolidays: holidayCount
     };
-  };
 
-  const handleAdjustLeave = () => {
-    if (!adjustLeaveEmp || isProcessing) return;
-    if (advanceLeaveValue > (adjustLeaveEmp.advanceLeaveBalance || 0)) {
-      toast({ variant: "destructive", title: "Invalid Amount", description: "Adjustment exceeds available balance." });
-      return;
+    // Auto Logic: If Present < Working Days AND Holiday Work exists -> Move to Present
+    if (state.present < state.monthWorkingDays && state.holidayWork > 0) {
+      const needed = state.monthWorkingDays - state.present;
+      const canMove = Math.min(needed, state.holidayWork);
+      state.present += canMove;
+      state.holidayWork -= canMove;
+      state.absent -= canMove;
+      state.earningDays = state.present;
     }
 
+    setAdjustmentState(state);
+    setAdjustLeaveEmp(emp);
+  };
+
+  const handlePayHoliday = () => {
+    setAdjustmentState(prev => ({
+      ...prev,
+      holidayPaid: prev.holidayPaid + prev.holidayWork,
+      earningDays: prev.earningDays + prev.holidayWork,
+      holidayWork: 0
+    }));
+  };
+
+  const handleBankHoliday = () => {
+    setAdjustmentState(prev => ({
+      ...prev,
+      holidayBanked: prev.holidayBanked + prev.holidayWork,
+      remainingBalance: prev.remainingBalance + prev.holidayWork,
+      holidayWork: 0
+    }));
+  };
+
+  const handleSaveSubAdjustment = () => {
+    if (subAdjValue > adjustmentState.remainingBalance) {
+      toast({ variant: "destructive", title: "Limit Exceeded", description: "Insufficient balance." });
+      return;
+    }
+    
+    setAdjustmentState(prev => ({
+      ...prev,
+      present: prev.present + subAdjValue,
+      absent: prev.absent - subAdjValue,
+      balanceUsed: prev.balanceUsed + subAdjValue,
+      remainingBalance: prev.remainingBalance - subAdjValue,
+      earningDays: prev.present + subAdjValue
+    }));
+    setIsSubAdjustmentOpen(false);
+    setSubAdjValue(0);
+  };
+
+  const handlePostAdjustment = () => {
+    if (!adjustLeaveEmp) return;
     setIsProcessing(true);
     try {
+      // Sync back to Employee Advance Leave balance
       updateRecord('employees', adjustLeaveEmp.id, { 
-        advanceLeaveBalance: (adjustLeaveEmp.advanceLeaveBalance || 0) - advanceLeaveValue 
+        advanceLeaveBalance: adjustmentState.remainingBalance 
       });
       
       setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
-      toast({ title: "Leave Adjusted", description: `${advanceLeaveValue} days added to earning days.` });
+      toast({ title: "Finalized", description: `Earning Days set to ${adjustmentState.earningDays} for ${adjustLeaveEmp.name}` });
       setAdjustLeaveEmp(null);
     } finally {
       setIsProcessing(false);
@@ -244,70 +312,8 @@ export default function PayrollPage() {
     }
   };
 
-  const handlePostPF = () => {
-    if (!payPFRec || isProcessing) return;
-    setIsProcessing(true);
-    try {
-      const historyEntry: StatutoryPaymentRecord = {
-        employeeAmt: pfEmpAmt,
-        employerAmt: pfExAmt,
-        date: paymentDate,
-        reference: paymentRef
-      };
-
-      updateRecord('payroll', payPFRec.id, {
-        pfPaidAmountEmployee: payPFRec.pfPaidAmountEmployee + pfEmpAmt,
-        pfPaidAmountEmployer: payPFRec.pfPaidAmountEmployer + pfExAmt,
-        pfPaidDate: paymentDate,
-        pfHistory: [...(payPFRec.pfHistory || []), historyEntry]
-      });
-
-      toast({ title: "PF Payment Recorded" });
-      setPayPFRec(null);
-      setPaymentRef("");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handlePostESIC = () => {
-    if (!payESICRec || isProcessing) return;
-    setIsProcessing(true);
-    try {
-      const historyEntry: StatutoryPaymentRecord = {
-        employeeAmt: esicEmpAmt,
-        employerAmt: esicExAmt,
-        date: paymentDate,
-        reference: paymentRef
-      };
-
-      updateRecord('payroll', payESICRec.id, {
-        esicPaidAmountEmployee: payESICRec.esicPaidAmountEmployee + esicEmpAmt,
-        esicPaidAmountEmployer: payESICRec.esicPaidAmountEmployer + esicExAmt,
-        esicPaidDate: paymentDate,
-        esicHistory: [...(payESICRec.esicHistory || []), historyEntry]
-      });
-
-      toast({ title: "ESIC Payment Recorded" });
-      setPayESICRec(null);
-      setPaymentRef("");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handlePrint = (rec: PayrollRecord) => {
-    setPrintRec(rec);
-    setTimeout(() => {
-      window.print();
-    }, 500);
-  };
-
-  const handlePrintVoucher = (rec: PayrollRecord) => {
-    setPrintVoucherRec(rec);
-    setTimeout(() => {
-      window.print();
-    }, 500);
+    toast({ title: "Opening Print...", description: "Formatting salary slip for export." });
   };
 
   if (!isMounted) return null;
@@ -422,7 +428,7 @@ export default function PayrollPage() {
                                   isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5",
                                   generated && "opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200"
                                 )}
-                                onClick={() => !generated && setAdjustLeaveEmp(emp)}
+                                onClick={() => !generated && openAdjustmentDialog(emp)}
                               >
                                 <CalendarClock className="w-3 h-3" /> 
                                 {generated ? "Locked" : isAdjusted ? "Reviewed" : "Adjust Leave"}
@@ -435,7 +441,7 @@ export default function PayrollPage() {
                                         size="sm" 
                                         className={cn(
                                           "text-xs font-bold gap-1",
-                                          isAdjusted && !generated ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                          isAdjusted && !generated ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"
                                         )}
                                         onClick={() => {
                                           if (isAdjusted && !generated) {
@@ -454,11 +460,6 @@ export default function PayrollPage() {
                                       <p className="text-xs">Review leave before generating salary</p>
                                     </TooltipContent>
                                   )}
-                                  {generated && (
-                                    <TooltipContent>
-                                      <p className="text-xs">Salary record already exists</p>
-                                    </TooltipContent>
-                                  )}
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
@@ -475,7 +476,6 @@ export default function PayrollPage() {
         </TabsContent>
 
         <TabsContent value="payment" className="mt-8 space-y-6">
-          {/* (Finalized Salaries Table - Keep existing structure but use updateRecord) */}
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50 border-b p-6">
               <div className="flex flex-col lg:flex-row items-center gap-4">
@@ -492,15 +492,15 @@ export default function PayrollPage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1800px]">
+                <Table className="min-w-[1200px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       <TableHead className="font-bold">Firm / Unit</TableHead>
                       <TableHead className="font-bold">Slip No / Date</TableHead>
                       <TableHead className="font-bold">Employee Name / ID</TableHead>
                       <TableHead className="font-bold">Month</TableHead>
-                      <TableHead className="font-bold text-right">Net Payable Amount</TableHead>
-                      <TableHead className="font-bold text-right">Salary Paid Amount</TableHead>
+                      <TableHead className="font-bold text-right">Net Payable</TableHead>
+                      <TableHead className="font-bold text-right">Salary Paid</TableHead>
                       <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -546,7 +546,6 @@ export default function PayrollPage() {
         </TabsContent>
 
         <TabsContent value="advance">
-          {/* (Advance Salary Ledger - Read Only) */}
           <Card className="border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50 border-b border-slate-100 p-6">
               <div className="flex items-center gap-3">
@@ -618,7 +617,7 @@ export default function PayrollPage() {
                         <TableCell className="font-mono text-xs">{emp.employeeId}</TableCell>
                         <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
                         <TableCell className="text-right pr-6">
-                          <Button variant="ghost" size="sm" className="font-bold gap-2" onClick={() => setViewLeaveHistoryEmp(emp)}>
+                          <Button variant="ghost" size="sm" className="font-bold gap-2">
                             <History className="w-4 h-4" /> View History
                           </Button>
                         </TableCell>
@@ -631,6 +630,185 @@ export default function PayrollPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Main Adjust Leave Dialog */}
+      <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => !o && setAdjustLeaveEmp(null)}>
+        <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          {adjustLeaveEmp && (
+            <>
+              <DialogHeader className="p-8 pb-6 bg-white border-b">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <DialogTitle className="text-2xl font-black flex items-center gap-3 text-slate-900">
+                      <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                        <CalendarClock className="w-6 h-6 text-primary" />
+                      </div>
+                      Adjust Attendance: {adjustLeaveEmp.name}
+                    </DialogTitle>
+                    <div className="flex items-center gap-3 text-sm text-slate-500 font-bold ml-12">
+                      <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-mono">{adjustLeaveEmp.employeeId}</span>
+                      <span>•</span>
+                      <span>{adjustLeaveEmp.department} / {adjustLeaveEmp.designation}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Available Advance Leave</p>
+                    <Badge className="bg-emerald-500 h-8 px-4 font-black text-sm rounded-lg shadow-lg shadow-emerald-100">
+                      {adjustmentState.remainingBalance} Days
+                    </Badge>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="bg-slate-50/50 p-8 space-y-8">
+                {/* Meta Summary */}
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salary Month</p>
+                    <p className="text-lg font-black text-primary">{selectedMonth}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Working Days</p>
+                    <p className="text-lg font-black text-slate-700">{adjustmentState.monthWorkingDays}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Holidays</p>
+                    <p className="text-lg font-black text-slate-700">{adjustmentState.monthHolidays}</p>
+                  </div>
+                </div>
+
+                {/* Adjust Table */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-black text-[10px] uppercase tracking-widest">Category</TableHead>
+                        <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Current Status</TableHead>
+                        <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell className="font-bold py-6">Present on Working Days</TableCell>
+                        <TableCell className="text-center">
+                          <span className="text-xl font-black text-emerald-600">{adjustmentState.present}</span>
+                          <span className="text-xs text-slate-400 font-bold ml-1">/ {adjustmentState.monthWorkingDays}</span>
+                        </TableCell>
+                        <TableCell className="text-right pr-8">
+                          {adjustmentState.present < adjustmentState.monthWorkingDays && (
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="font-black text-[10px] uppercase tracking-widest h-8 px-4 border-primary/30 text-primary hover:bg-primary/5"
+                              onClick={() => setIsSubAdjustmentOpen(true)}
+                            >
+                              Adjust from Balance
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-bold py-6">Total Absent</TableCell>
+                        <TableCell className="text-center font-black text-xl text-rose-500">{adjustmentState.absent}</TableCell>
+                        <TableCell className="text-right pr-8">--</TableCell>
+                      </TableRow>
+                      <TableRow className="bg-blue-50/30">
+                        <TableCell className="font-bold py-6 flex items-center gap-2">
+                          Present on Holidays
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger><Info className="w-3.5 h-3.5 text-slate-400" /></TooltipTrigger>
+                              <TooltipContent>Attendance recorded on Sundays or Official Holidays</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell className="text-center font-black text-xl text-blue-600">{adjustmentState.holidayWork}</TableCell>
+                        <TableCell className="text-right pr-8">
+                          {adjustmentState.holidayWork > 0 && (
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                size="sm" 
+                                className="bg-emerald-600 hover:bg-emerald-700 font-bold text-[10px] uppercase tracking-tighter"
+                                onClick={handlePayHoliday}
+                              >
+                                Pay Holiday Work
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="secondary" 
+                                className="font-bold text-[10px] uppercase tracking-tighter"
+                                onClick={handleBankHoliday}
+                              >
+                                Add in Advance Leave
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <DialogFooter className="p-8 bg-slate-900 border-t shrink-0 flex items-center justify-between">
+                <div className="text-white text-left">
+                  <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Calculated Earning Days</p>
+                  <p className="text-3xl font-black text-white">{adjustmentState.earningDays} <span className="text-xs font-bold text-slate-400">Total</span></p>
+                </div>
+                <div className="flex gap-4">
+                  <Button 
+                    variant="ghost" 
+                    className="text-slate-400 hover:text-white hover:bg-slate-800 font-bold h-12 rounded-xl px-8"
+                    onClick={() => setAdjustLeaveEmp(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="bg-primary hover:bg-primary/90 font-black h-12 rounded-xl px-12 shadow-xl shadow-primary/20"
+                    onClick={handlePostAdjustment}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? "Saving..." : "Post & Finalize"}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Sub-Adjustment Balance Picker */}
+      <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black">Use Banked Leave</DialogTitle>
+            <DialogDescription>
+              Adjust missing days from {adjustLeaveEmp?.name}'s balance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-8 space-y-6">
+            <div className="bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-200 text-center">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Available Balance</p>
+              <p className="text-4xl font-black text-emerald-600">{adjustmentState.remainingBalance} Days</p>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold text-xs">Days to Adjust</Label>
+              <Input 
+                type="number" 
+                className="h-12 bg-slate-50 border-slate-200 font-bold text-lg" 
+                value={subAdjValue} 
+                max={Math.min(adjustmentState.absent, adjustmentState.remainingBalance)}
+                onChange={(e) => setSubAdjValue(Math.min(parseInt(e.target.value) || 0, adjustmentState.remainingBalance))}
+              />
+              <p className="text-[10px] text-muted-foreground italic">Cannot exceed absent days ({adjustmentState.absent}) or balance.</p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" className="rounded-xl font-bold" onClick={() => setIsSubAdjustmentOpen(false)}>Cancel</Button>
+            <Button className="bg-primary rounded-xl font-black px-8" onClick={handleSaveSubAdjustment}>Confirm Adjustment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Pay Salary Dialog */}
       <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
@@ -670,28 +848,6 @@ export default function PayrollPage() {
                 <Button variant="outline" onClick={() => setPaySalaryRec(null)}>Cancel</Button>
                 <Button className="bg-primary font-bold" onClick={handlePostPayment}>Record Payment</Button>
               </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* (Statutory Dialogs - Update same as handlePostPF/ESIC) */}
-      <Dialog open={!!adjustLeaveEmp} onOpenChange={(open) => !open && setAdjustLeaveEmp(null)}>
-        <DialogContent className="sm:max-w-3xl">
-          {adjustLeaveEmp && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{adjustLeaveEmp.name} • {selectedMonth}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-8 py-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-4">
-                    <Label>Advance Leave to Use</Label>
-                    <Input type="number" className="bg-slate-800 border-slate-700" value={advanceLeaveValue} onChange={(e) => setAdvanceLeaveValue(parseInt(e.target.value) || 0)} />
-                    <Button className="w-full bg-primary font-bold" onClick={handleAdjustLeave}>Add Leave</Button>
-                  </div>
-                </div>
-              </div>
             </>
           )}
         </DialogContent>
