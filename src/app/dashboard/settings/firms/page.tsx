@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -242,7 +241,6 @@ export default function FirmsAndPlantsPage() {
         name: firmDraft.name!,
         logo: firmDraft.logo || null,
         gstin: firmDraft.gstin!,
-        pan: firmDraft.pan || '',
         pfNo: firmDraft.pfNo || '',
         esicNo: firmDraft.esicNo || '',
         bankName: firmDraft.bankName || '',
@@ -524,7 +522,7 @@ export default function FirmsAndPlantsPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="font-bold">Firm Website</ാമ/Label>
+                      <Label className="font-bold">Firm Website</Label>
                       <Input 
                         className="h-12 bg-white" 
                         placeholder="www.sikkaenterprises.com" 
