@@ -49,6 +49,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -75,6 +77,12 @@ export default function VouchersPage() {
 
   // State for Rejection Confirmation
   const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
+
+  // State for Payment Dialog
+  const [isPayDialogOpen, setIsPayDialogOpen] = useState(false);
+  const [voucherToPay, setVoucherToPay] = useState<Voucher | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
@@ -212,9 +220,24 @@ export default function VouchersPage() {
     setVoucherToReject(null);
   };
 
-  const handlePayVoucher = (id: string) => {
-    setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'PAID' } : v));
-    toast({ title: "Voucher Paid", description: "Voucher marked as paid." });
+  const handleOpenPayDialog = (v: Voucher) => {
+    setVoucherToPay(v);
+    setPayAmount(v.amount.toString());
+    setPayDate(new Date().toISOString().split('T')[0]);
+    setIsPayDialogOpen(true);
+  };
+
+  const handleConfirmPayment = () => {
+    if (!voucherToPay) return;
+    setVouchers(prev => prev.map(v => v.id === voucherToPay.id ? { 
+      ...v, 
+      status: 'PAID',
+      date: payDate, // Update to payment date
+      amount: parseFloat(payAmount) // Update to actual paid amount if changed
+    } : v));
+    toast({ title: "Voucher Paid", description: "Payment recorded successfully." });
+    setIsPayDialogOpen(false);
+    setVoucherToPay(null);
   };
 
   const handleOpenPreview = (v: Voucher) => {
@@ -643,7 +666,7 @@ export default function VouchersPage() {
                                   <Button 
                                     size="sm" 
                                     className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold"
-                                    onClick={() => handlePayVoucher(v.id)}
+                                    onClick={() => handleOpenPayDialog(v)}
                                   >
                                     <CreditCard className="w-3 h-3 mr-1" /> Pay
                                   </Button>
@@ -727,6 +750,54 @@ export default function VouchersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Payment Confirmation Dialog */}
+      <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="border-b pb-4">
+            <DialogTitle className="flex flex-col gap-1">
+              <span className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Process Payment</span>
+              <span className="text-xl font-bold text-slate-900">
+                {employees.find(e => e.id === voucherToPay?.employeeId)?.name}
+              </span>
+              <span className="text-xs font-mono font-bold text-primary">{voucherToPay?.voucherNo}</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-6 space-y-6">
+            <div className="space-y-2">
+              <Label className="font-bold text-slate-700">Paid Amount (INR)</Label>
+              <Input 
+                type="number" 
+                value={payAmount} 
+                onChange={(e) => setPayAmount(e.target.value)}
+                className="h-12 bg-white font-bold text-lg border-emerald-200 focus-visible:ring-emerald-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold text-slate-700">Payment Date</Label>
+              <Input 
+                type="date" 
+                value={payDate} 
+                onChange={(e) => setPayDate(e.target.value)}
+                className="h-12 bg-white font-bold"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
+            <Button variant="outline" onClick={() => setIsPayDialogOpen(false)} className="h-11 px-6 font-bold">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleConfirmPayment}
+              className="bg-emerald-600 hover:bg-emerald-700 h-11 px-10 font-bold shadow-lg shadow-emerald-100"
+            >
+              Confirm Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Voucher Preview Dialog */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
