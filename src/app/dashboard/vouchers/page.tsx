@@ -184,11 +184,11 @@ export default function VouchersPage() {
       amount: parseFloat(amount),
       purpose: purpose,
       status: "PENDING",
-      createdByName: currentUser?.fullName || "System"
+      createdByName: currentUser?.fullName || "Admin"
     };
 
     setVouchers(prev => [...prev, newVoucher]);
-    toast({ title: "Voucher Created", description: `Voucher #${voucherNo} generated and sent for approval.` });
+    toast({ title: "Voucher Created", description: `Voucher #${voucherNo} generated.` });
     
     setSelectedEmployeeId("");
     setAmount("");
@@ -208,13 +208,13 @@ export default function VouchersPage() {
   const handleRejectConfirm = () => {
     if (!voucherToReject) return;
     setVouchers(prev => prev.filter(v => v.id !== voucherToReject));
-    toast({ variant: "destructive", title: "Voucher Rejected", description: "Voucher removed from database. Number is now reusable." });
+    toast({ variant: "destructive", title: "Voucher Rejected", description: "Voucher removed." });
     setVoucherToReject(null);
   };
 
   const handlePayVoucher = (id: string) => {
     setVouchers(prev => prev.map(v => v.id === id ? { ...v, status: 'PAID' } : v));
-    toast({ title: "Voucher Paid", description: "Voucher marked as paid and added to payroll ledger." });
+    toast({ title: "Voucher Paid", description: "Voucher marked as paid." });
   };
 
   const handleOpenPreview = (v: Voucher) => {
@@ -243,8 +243,8 @@ export default function VouchersPage() {
           `"${emp?.designation || ""}"`,
           v.amount,
           `"${v.purpose}"`,
-          `"${v.createdByName || ""}"`,
-          `"${v.approvedByName || ""}"`,
+          `"${v.createdByName || "Admin"}"`,
+          `"${v.approvedByName || "--"}"`,
           v.status
         ].join(",");
       })
@@ -258,7 +258,7 @@ export default function VouchersPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast({ title: "Export Success", description: "Excel file has been downloaded." });
+    toast({ title: "Export Success", description: "CSV file downloaded." });
   };
 
   if (!isMounted) return null;
@@ -483,7 +483,7 @@ export default function VouchersPage() {
                           </TableCell>
                           <TableCell className="text-sm">{v.date}</TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "Admin"}</TableCell>
                           <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-2">
                               <Button 
@@ -624,7 +624,7 @@ export default function VouchersPage() {
                           </TableCell>
                           <TableCell className="text-sm">{v.date}</TableCell>
                           <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "System"}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-500">{v.createdByName || "Admin"}</TableCell>
                           <TableCell className="text-xs font-bold text-primary">{v.approvedByName || "--"}</TableCell>
                           <TableCell>
                             <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(
@@ -713,7 +713,7 @@ export default function VouchersPage() {
             </div>
             <AlertDialogTitle className="text-center">Reject & Remove Voucher?</AlertDialogTitle>
             <AlertDialogDescription className="text-center">
-              Are you sure you want to reject this request? The voucher will be permanently removed from the system and its number will become reusable.
+              Are you sure you want to reject this request? The voucher will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="sm:justify-center gap-3">
@@ -802,7 +802,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher No:</span><span className="font-mono font-bold">{voucher.voucherNo}</span></div>
           <div className="flex justify-end gap-2 text-sm"><span className="font-bold text-slate-500">Voucher Date:</span><span className="font-bold">{voucher.date}</span></div>
           <div className="flex flex-col items-end gap-1 pt-2">
-            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">Created By:</span><span className="font-bold text-primary">{voucher.createdByName || "System"}</span></div>
+            <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">Created By:</span><span className="font-bold text-primary">{voucher.createdByName || "Admin"}</span></div>
             <div className="flex justify-end gap-2 text-[10px]"><span className="font-black text-slate-400 uppercase tracking-widest">Approved By:</span><span className="font-bold text-emerald-600">{voucher.approvedByName || "--"}</span></div>
           </div>
         </div>
@@ -872,7 +872,7 @@ function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
     <div className="fixed inset-0 bg-white z-[999] p-[1cm]">
       <div className="w-full max-w-[210mm] mx-auto border-4 border-slate-900 p-10 min-h-[297mm]">
         <AdvanceVoucherContent 
-          voucher={previewVoucher} 
+          voucher={voucher} 
           employees={employees} 
           firms={firms} 
           plants={plants} 
