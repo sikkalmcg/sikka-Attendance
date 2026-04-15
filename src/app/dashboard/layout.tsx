@@ -346,8 +346,9 @@ function SidebarNav() {
   ];
 
   const filteredMenu = menuItems.filter(item => {
+    const isSuperAdmin = user.role === 'SUPER_ADMIN';
     const hasRole = item.roles.includes(user.role);
-    const hasPermission = user.role === 'SUPER_ADMIN' || item.permission === 'Dashboard' || user.permissions?.includes(item.permission);
+    const hasPermission = isSuperAdmin || item.permission === 'Dashboard' || user.permissions?.includes(item.permission);
     return hasRole && hasPermission;
   });
 
@@ -422,17 +423,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
 
     const requiredPermission = menuPermissions[pathname];
+    const isSuperAdmin = userData.role === 'SUPER_ADMIN';
     
-    if (userData.role === 'SUPER_ADMIN') {
+    if (isSuperAdmin) {
       setIsAuthorized(true);
     } else if (userData.role === 'EMPLOYEE') {
-      setIsAuthorized(pathname === '/dashboard/attendance');
-      if (pathname !== '/dashboard/attendance') router.push("/dashboard/attendance");
+      const canAccessAttendance = pathname === '/dashboard/attendance';
+      setIsAuthorized(canAccessAttendance);
+      if (!canAccessAttendance) router.push("/dashboard/attendance");
     } else if (requiredPermission) {
       const hasPerm = userData.permissions?.includes(requiredPermission) || requiredPermission === "Dashboard";
       setIsAuthorized(hasPerm);
     } else {
-      setIsAuthorized(true); // Allow sub-routes (like /payroll/generate) if they handle their own internal data safety
+      setIsAuthorized(true); 
     }
   }, [router, pathname]);
 

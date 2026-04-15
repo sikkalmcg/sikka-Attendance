@@ -5,44 +5,80 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { SUPER_ADMIN_USER } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
+import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const db = getFirestore();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    // Simulated Authentication Logic
-    setTimeout(() => {
+    try {
+      // 1. Check Super Admin Hardcoded Fallback
       if (username === SUPER_ADMIN_USER.username && password === SUPER_ADMIN_USER.password) {
         localStorage.setItem("user", JSON.stringify({ ...SUPER_ADMIN_USER, id: "super-1" }));
         router.push("/dashboard");
         toast({ title: "Welcome back, Admin", description: "Login successful." });
-      } else if (username.length === 12 && password.length === 10) {
-        // Employee Login (Aadhaar/Mobile mock)
+        setLoading(false);
+        return;
+      }
+
+      // 2. Check Firestore Users Collection (Created Users)
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where("username", "==", username.toLowerCase()), where("password", "==", password));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const userData = { id: userDoc.id, ...userDoc.data() };
+        
+        localStorage.setItem("user", JSON.stringify(userData));
+        
+        // Redirect based on permissions/role
+        if (userData.role === 'EMPLOYEE') {
+          router.push("/dashboard/attendance");
+        } else {
+          router.push("/dashboard");
+        }
+        
+        toast({ title: "Login Successful", description: `Welcome, ${userData.fullName}` });
+        setLoading(false);
+        return;
+      }
+
+      // 3. Employee Mock Login (Aadhaar/Mobile) - Support for legacy or direct access
+      if (username.length === 12 && password.length === 10) {
         localStorage.setItem("user", JSON.stringify({
           id: "emp-mock",
           username,
           fullName: "Employee Name",
-          role: "EMPLOYEE"
+          role: "EMPLOYEE",
+          permissions: ["Attendance"]
         }));
-        // Redirect Employee strictly to Attendance module
         router.push("/dashboard/attendance");
         toast({ title: "Welcome", description: "Successfully logged in." });
-      } else {
-        setError("Invalid credentials. Please check your username and password.");
+        setLoading(false);
+        return;
       }
+
+      setError("Invalid credentials. Please check your username and password.");
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("An error occurred during login. Please try again.");
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
@@ -100,13 +136,22 @@ export default function LoginPage() {
               <label className="w-24 text-right text-sm font-semibold text-slate-600">
                 Password <span className="text-red-500">*</span>
               </label>
-              <input 
-                type="password"
-                className="flex-1 h-8 bg-white border border-slate-300 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="flex-1 relative">
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  className="w-full h-8 bg-white border border-slate-300 px-2 pr-8 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button 
+                  type="button"
+                  className="absolute right-2 top-1.5 text-slate-400 hover:text-[#C59D2E] transition-colors"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div className="flex justify-center pt-8">
