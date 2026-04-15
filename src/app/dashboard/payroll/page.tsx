@@ -128,6 +128,7 @@ export default function PayrollPage() {
   const [payESICRec, setPayESICRec] = useState<PayrollRecord | null>(null);
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
   const [previewSlip, setPreviewSlip] = useState<PayrollRecord | null>(null);
+  const [printSlip, setPrintSlip] = useState<PayrollRecord | null>(null);
   const [viewAdvanceEmployee, setViewAdvanceEmployee] = useState<{emp: Employee, vouchers: any[]} | null>(null);
   
   // Adjustment Calculation State
@@ -333,12 +334,16 @@ export default function PayrollPage() {
   };
 
   const handleDownloadAndPrint = (p: PayrollRecord) => {
-    setPreviewSlip(p);
-    toast({ title: "Generating Slip", description: "Standard A4 layout prepared. Opening print dialog..." });
-    // Small timeout to allow state to settle and modal to mount before printing
+    // We render a hidden print-only version and trigger window.print()
+    setPrintSlip(p);
+    toast({ title: "Generating Slip", description: "Standard A4 layout prepared. Opening download/print dialog..." });
+    
+    // Small timeout to allow state to settle and React to render the hidden div
     setTimeout(() => {
       window.print();
-    }, 600);
+      // Clear printing state after dialog opens
+      setPrintSlip(null);
+    }, 500);
   };
 
   if (!isMounted) return null;
@@ -877,7 +882,7 @@ export default function PayrollPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Slip Preview Dialog */}
+        {/* Preview Dialog (Opened via Slip No click) */}
         <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
           <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
@@ -903,6 +908,19 @@ export default function PayrollPage() {
             </ScrollArea>
           </DialogContent>
         </Dialog>
+
+        {/* Print-Only Hidden Container (For Direct Download) */}
+        {printSlip && (
+          <div className="hidden print:block print-only">
+            <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
+              <SalarySlipView 
+                record={printSlip} 
+                employee={employees.find(e => e.employeeId === printSlip.employeeId)}
+                firm={firms.find(f => f.id === employees.find(e => e.employeeId === printSlip.employeeId)?.firmId)}
+              />
+            </div>
+          </div>
+        )}
 
         {/* View Advance Details */}
         <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => !o && setViewAdvanceEmployee(null)}>
