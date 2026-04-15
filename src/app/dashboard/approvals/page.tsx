@@ -215,10 +215,10 @@ export default function ApprovalsPage() {
       return;
     }
 
+    // Removed Latitude and Longitude columns as requested
     const headers = [
       "Employee Name", "Employee ID", "Date", "In Time", "Out Time", 
       "Hours", "Status", "Attendance Type", "In Location", "Out Location",
-      "In Latitude", "In Longitude", "Out Latitude", "Out Longitude", 
       "In Plant", "Out Plant"
     ];
 
@@ -235,10 +235,6 @@ export default function ApprovalsPage() {
         `"${rec.attendanceType}"`,
         `"${(rec.address || '').replace(/"/g, '""')}"`,
         `"${(rec.addressOut || '').replace(/"/g, '""')}"`,
-        `"${rec.lat || ''}"`,
-        `"${rec.lng || ''}"`,
-        `"${rec.latOut || ''}"`,
-        `"${rec.lngOut || ''}"`,
         `"${rec.inPlant || ''}"`,
         `"${rec.outPlant || ''}"`
       ].join(","))
