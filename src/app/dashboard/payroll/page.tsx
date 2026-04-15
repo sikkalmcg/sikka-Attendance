@@ -453,7 +453,7 @@ export default function PayrollPage() {
                                 <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
                                     <Tooltip><TooltipTrigger asChild>
-                                      <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={() => openAdjustmentDialog(emp)}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Live"}</Button>
+                                      <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={() => openAdjustmentDialog(emp)}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Leave"}</Button>
                                     </TooltipTrigger><TooltipContent>Review & Adjust Attendance</TooltipContent></Tooltip>
                                     <Tooltip><TooltipTrigger asChild>
                                       <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => isAdjusted && router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}`)} disabled={!isAdjusted}><Calculator className="w-3 h-3" /> Generate Salary</Button>
