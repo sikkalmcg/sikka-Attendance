@@ -410,20 +410,25 @@ export default function UserManagementPage() {
                           key={perm}
                           onClick={() => togglePermission(perm)}
                           className={cn(
-                            "flex items-center justify-between p-5 rounded-2xl border-2 transition-all cursor-pointer group select-none",
+                            "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
                             isSelected 
-                              ? "bg-primary/5 border-primary text-primary shadow-md translate-y-[-2px]" 
-                              : "bg-white border-slate-100 text-slate-500 hover:border-slate-300 hover:bg-slate-50 shadow-sm"
+                              ? "bg-primary/5 border-primary shadow-sm" 
+                              : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
                           )}
                         >
-                          <span className="text-sm font-black tracking-tight">{perm}</span>
-                          {isSelected ? (
-                            <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/30">
-                              <Check className="w-4 h-4 stroke-[3px]" />
-                            </div>
-                          ) : (
-                            <div className="w-6 h-6 bg-slate-50 border-2 border-slate-200 rounded-full group-hover:border-slate-400 transition-colors" />
-                          )}
+                          <Checkbox 
+                            id={`perm-${perm}`}
+                            checked={isSelected}
+                            onCheckedChange={() => togglePermission(perm)}
+                            className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                          />
+                          <Label 
+                            htmlFor={`perm-${perm}`} 
+                            className="text-sm font-bold text-slate-700 cursor-pointer flex-1"
+                            onClick={(e) => e.preventDefault()}
+                          >
+                            {perm}
+                          </Label>
                         </div>
                       );
                     })}
