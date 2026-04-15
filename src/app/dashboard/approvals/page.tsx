@@ -36,7 +36,9 @@ import {
   Building2,
   Home,
   Navigation,
-  Info
+  Info,
+  FileSpreadsheet,
+  Download
 } from "lucide-react";
 import { 
   Tooltip,
@@ -207,6 +209,53 @@ export default function ApprovalsPage() {
     setIsVerifyDialogOpen(true);
   };
 
+  const handleExportExcel = () => {
+    if (filteredRecords.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No records to export in the current selection." });
+      return;
+    }
+
+    const headers = [
+      "Employee Name", "Employee ID", "Date", "In Time", "Out Time", 
+      "Hours", "Status", "Attendance Type", "In Location", "Out Location",
+      "In Latitude", "In Longitude", "Out Latitude", "Out Longitude", 
+      "In Plant", "Out Plant"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...filteredRecords.map(rec => [
+        `"${rec.employeeName}"`,
+        `"${rec.employeeId}"`,
+        `"${rec.date}"`,
+        `"${rec.inTime || '--:--'}"`,
+        `"${rec.outTime || '--:--'}"`,
+        `"${rec.hours}"`,
+        `"${rec.status}"`,
+        `"${rec.attendanceType}"`,
+        `"${(rec.address || '').replace(/"/g, '""')}"`,
+        `"${(rec.addressOut || '').replace(/"/g, '""')}"`,
+        `"${rec.lat || ''}"`,
+        `"${rec.lng || ''}"`,
+        `"${rec.latOut || ''}"`,
+        `"${rec.lngOut || ''}"`,
+        `"${rec.inPlant || ''}"`,
+        `"${rec.outPlant || ''}"`
+      ].join(","))
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Approved_Attendance_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast({ title: "Export Success", description: "The attendance data has been exported." });
+  };
+
   if (!isMounted) return null;
 
   return (
@@ -232,12 +281,24 @@ export default function ApprovalsPage() {
               }}
             />
           </div>
-          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentPage(1); }} className="w-full md:w-auto">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="pending">Pending</TabsTrigger>
-              <TabsTrigger value="approved">Approved</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            {activeTab === "approved" && (
+              <Button 
+                variant="outline" 
+                className="gap-2 font-bold h-10 bg-white border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all"
+                onClick={handleExportExcel}
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                Export Excel
+              </Button>
+            )}
+            <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentPage(1); }} className="w-full md:w-auto">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="pending">Pending</TabsTrigger>
+                <TabsTrigger value="approved">Approved</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
 
         <Card className="border-slate-200 shadow-sm">
