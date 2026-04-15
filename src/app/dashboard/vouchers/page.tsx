@@ -251,6 +251,52 @@ export default function VouchersPage() {
     }, 1200);
   };
 
+  const handleExportVouchersExcel = () => {
+    if (filteredPayableVouchers.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No records to export in the current selection." });
+      return;
+    }
+
+    const headers = [
+      "Voucher No", "Employee Name", "Employee ID", "Department", "Designation",
+      "Date", "Amount", "Purpose", "Status", "Payment Mode", "Ref No", 
+      "Created By", "Approved By"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...filteredPayableVouchers.map(v => {
+        const emp = employees.find(e => e.id === v.employeeId);
+        return [
+          `"${v.voucherNo}"`,
+          `"${emp?.name || ''}"`,
+          `"${emp?.employeeId || ''}"`,
+          `"${emp?.department || ''}"`,
+          `"${emp?.designation || ''}"`,
+          `"${v.date || ''}"`,
+          `"${v.amount}"`,
+          `"${(v.purpose || '').replace(/"/g, '""')}"`,
+          `"${v.status}"`,
+          `"${v.paymentMode || ''}"`,
+          `"${v.paymentReference || ''}"`,
+          `"${v.createdByName || ''}"`,
+          `"${v.approvedByName || ''}"`
+        ].join(",");
+      })
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Voucher_Payments_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast({ title: "Export Success", description: "The voucher payment data has been exported." });
+  };
+
   if (!isMounted) return null;
 
   return (
@@ -439,6 +485,14 @@ export default function VouchersPage() {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
+                  <Button 
+                    variant="outline" 
+                    className="gap-2 font-bold h-10 bg-white border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all w-full lg:w-auto"
+                    onClick={handleExportVouchersExcel}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    Export Excel
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -710,7 +764,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
               <span className="font-mono font-black text-slate-900 text-lg leading-none whitespace-nowrap">{voucher.voucherNo}</span>
             </div>
             <div className="flex justify-end gap-3 text-sm items-baseline">
-              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">DATE:</span>
               <span className="font-black text-slate-900 text-lg leading-none whitespace-nowrap">{formattedDate}</span>
             </div>
           </div>
