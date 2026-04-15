@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
@@ -40,6 +41,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   const resolvedParams = use(params);
   const employeeId = resolvedParams.employeeId;
   const selectedMonth = searchParams.get("month") || "";
+  const queryEarningDays = searchParams.get("earningDays");
 
   const { employees, attendanceRecords, payrollRecords, vouchers, addRecord } = useData();
   const { toast } = useToast();
@@ -116,14 +118,26 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
 
   const currentSummary = useMemo(() => {
     if (!employee) return null;
-    const records = attendanceRecords.filter(r => r.employeeId === employee.employeeId || r.employeeId === "emp-mock");
+    
+    // If earningDays is provided via query (from Adjust Leave portal), use it
+    if (queryEarningDays !== null) {
+      const eDays = parseFloat(queryEarningDays);
+      return {
+        attendance: eDays,
+        absent: Math.max(0, 26 - eDays),
+        holidayWork: 0,
+        totalDays: 30
+      };
+    }
+
+    const records = attendanceRecords.filter(r => r.employeeId === employee.employeeId);
     const presents = records.filter(r => r.status === 'PRESENT').length;
     const halfDays = records.filter(r => r.status === 'HALF_DAY').length;
     const holidays = records.filter(r => r.status === 'HOLIDAY').length;
     
     const effectiveAttendance = presents + (halfDays * 0.5);
     const totalDaysInMonth = 30;
-    const absent = totalDaysInMonth - effectiveAttendance - holidays;
+    const absent = 26 - effectiveAttendance;
 
     return {
       attendance: effectiveAttendance,
@@ -131,7 +145,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       holidayWork: holidays,
       totalDays: totalDaysInMonth
     };
-  }, [employee, attendanceRecords]);
+  }, [employee, attendanceRecords, queryEarningDays]);
 
   const netPayBeforeDeduction = useMemo(() => {
     if (!employee || !currentSummary) return 0;
@@ -238,7 +252,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       <ScrollArea className="flex-1 bg-slate-50/30">
         <div className="max-w-7xl mx-auto p-6 lg:p-10 space-y-10">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <StatBox label="ATTENDANCE" value={currentSummary?.attendance || 0} color="text-slate-900" />
+            <StatBox label="EARNING DAYS" value={currentSummary?.attendance || 0} color="text-slate-900" />
             <StatBox label="ABSENT" value={currentSummary?.absent || 0} color="text-rose-600" />
             <StatBox label="ADV. BALANCE" value={formatCurrency(advanceBalance - advanceRecovery)} color="text-rose-500" />
           </div>

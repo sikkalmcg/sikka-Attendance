@@ -70,7 +70,10 @@ import {
   Globe,
   MoreVertical,
   AlertTriangle,
-  Lock
+  Lock,
+  ArrowRightCircle,
+  PlusCircle,
+  MinusCircle
 } from "lucide-react";
 import { 
   Tooltip,
@@ -118,6 +121,9 @@ export default function PayrollPage() {
   const [payPFRec, setPayPFRec] = useState<PayrollRecord | null>(null);
   const [payESICRec, setPayESICRec] = useState<PayrollRecord | null>(null);
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
+  const [isSubAdjustmentOpen, setIsSubAdjustmentOpen] = useState(false);
+  const [subAdjustmentValue, setSubAdjustmentValue] = useState(0);
+  
   const [previewSlip, setPreviewSlip] = useState<PayrollRecord | null>(null);
   const [printSlip, setPrintSlip] = useState<PayrollRecord | null>(null);
   const [viewAdvanceEmployee, setViewAdvanceEmployee] = useState<{emp: Employee, vouchers: any[]} | null>(null);
@@ -145,7 +151,7 @@ export default function PayrollPage() {
   const [esicPaidEmp, setEsicPaidEmp] = useState(0);
   const [esicPaidEx, setEsicPaidEx] = useState(0);
 
-  const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, boolean>>({});
+  const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, { adjusted: boolean, earningDays: number }>>({});
 
   useEffect(() => {
     setIsMounted(true);
@@ -232,33 +238,113 @@ export default function PayrollPage() {
 
   const openAdjustmentDialog = (emp: Employee) => {
     const relevantAttendance = attendanceRecords.filter(r => r.employeeId === emp.employeeId);
-    const presentOnWorking = relevantAttendance.filter(r => r.status === 'PRESENT').length;
-    const holidayPres = relevantAttendance.filter(r => r.status === 'PRESENT' && r.inPlant === 'Holiday Work').length || 0; 
+    
+    // Logic: Standard month is 26 Working Days + 4 Holidays = 30 Total
+    // Holiday work is attendance marked on a holiday or with "Holiday Work" designation
+    const presentOnWorking = relevantAttendance.filter(r => r.status === 'PRESENT' && r.inPlant !== 'Holiday Work').length;
+    const holidayPres = relevantAttendance.filter(r => r.inPlant === 'Holiday Work' || r.status === 'HOLIDAY').length; 
+    
     const workingDaysCount = 26;
-    const initialPresent = Math.max(0, presentOnWorking - holidayPres);
-    const initialAbsent = Math.max(0, workingDaysCount - initialPresent);
-    let state = { present: initialPresent, absent: initialAbsent, holidayWork: holidayPres, holidayBanked: 0, holidayPaid: 0, balanceUsed: 0, remainingBalance: emp.advanceLeaveBalance || 0, earningDays: initialPresent, monthWorkingDays: workingDaysCount, monthHolidays: 4 };
-    if (state.present < state.monthWorkingDays && state.holidayWork > 0) {
-      const needed = state.monthWorkingDays - state.present;
-      const canMove = Math.min(needed, state.holidayWork);
-      state.present += canMove;
-      state.holidayWork -= canMove;
-      state.absent -= canMove;
-      state.earningDays = state.present;
+    let initialPresent = presentOnWorking;
+    let initialHolidayWork = holidayPres;
+    let initialAbsent = Math.max(0, workingDaysCount - initialPresent);
+
+    // AUTO LOGIC: If present < 26 and holiday work exists, shift holiday work to present
+    if (initialPresent < workingDaysCount && initialHolidayWork > 0) {
+      const needed = workingDaysCount - initialPresent;
+      const shift = Math.min(needed, initialHolidayWork);
+      initialPresent += shift;
+      initialHolidayWork -= shift;
+      initialAbsent = Math.max(0, workingDaysCount - initialPresent);
     }
-    setAdjustmentState(state);
+
+    setAdjustmentState({
+      present: initialPresent,
+      absent: initialAbsent,
+      holidayWork: initialHolidayWork,
+      holidayBanked: 0,
+      holidayPaid: 0,
+      balanceUsed: 0,
+      remainingBalance: emp.advanceLeaveBalance || 0,
+      earningDays: initialPresent,
+      monthWorkingDays: workingDaysCount,
+      monthHolidays: 4
+    });
     setAdjustLeaveEmp(emp);
+  };
+
+  const handlePayHolidayWork = () => {
+    setAdjustmentState(prev => ({
+      ...prev,
+      present: prev.present + prev.holidayWork,
+      earningDays: prev.present + prev.holidayWork,
+      absent: Math.max(0, prev.monthWorkingDays - (prev.present + prev.holidayWork)),
+      holidayWork: 0
+    }));
+    toast({ title: "Updated", description: "Holiday work converted to paid working days." });
+  };
+
+  const handleBankHolidayWork = () => {
+    const hw = adjustmentState.holidayWork;
+    setAdjustmentState(prev => ({
+      ...prev,
+      holidayWork: 0,
+      holidayBanked: hw,
+      remainingBalance: prev.remainingBalance + hw
+    }));
+    toast({ title: "Banked", description: `${hw} day(s) added to Advance Leave balance.` });
+  };
+
+  const handleOpenSubAdjustment = () => {
+    setSubAdjustmentValue(0);
+    setIsSubAdjustmentOpen(true);
+  };
+
+  const handleSaveSubAdjustment = () => {
+    if (subAdjustmentValue > adjustmentState.remainingBalance) {
+      toast({ variant: "destructive", title: "Over Limit", description: "Cannot adjust more than available balance." });
+      return;
+    }
+    
+    const maxNeeded = adjustmentState.monthWorkingDays - adjustmentState.present;
+    const finalVal = Math.min(subAdjustmentValue, maxNeeded);
+
+    setAdjustmentState(prev => ({
+      ...prev,
+      present: prev.present + finalVal,
+      earningDays: prev.present + finalVal,
+      absent: Math.max(0, prev.monthWorkingDays - (prev.present + finalVal)),
+      balanceUsed: prev.balanceUsed + finalVal,
+      remainingBalance: prev.remainingBalance - finalVal
+    }));
+
+    setIsSubAdjustmentOpen(false);
+    toast({ title: "Leave Adjusted", description: `${finalVal} day(s) taken from balance.` });
   };
 
   const handlePostAdjustment = () => {
     if (!adjustLeaveEmp) return;
     setIsProcessing(true);
     try {
-      updateRecord('employees', adjustLeaveEmp.id, { advanceLeaveBalance: adjustmentState.remainingBalance });
-      setAdjustedEmployees(prev => ({ ...prev, [adjustLeaveEmp.id]: true }));
-      toast({ title: "Finalized", description: `Earning Days set to ${adjustmentState.earningDays}` });
+      // Update employee's permanent leave balance
+      updateRecord('employees', adjustLeaveEmp.id, { 
+        advanceLeaveBalance: adjustmentState.remainingBalance 
+      });
+      
+      // Mark as adjusted for this session
+      setAdjustedEmployees(prev => ({ 
+        ...prev, 
+        [adjustLeaveEmp.id]: { 
+          adjusted: true, 
+          earningDays: adjustmentState.earningDays 
+        } 
+      }));
+      
+      toast({ title: "Finalized", description: `Review complete. Earning Days set to ${adjustmentState.earningDays}` });
       setAdjustLeaveEmp(null);
-    } finally { setIsProcessing(false); }
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
 
   const handlePostPayment = () => {
@@ -424,7 +510,8 @@ export default function PayrollPage() {
                           <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">All salaries for {selectedMonth} have been generated.</TableCell></TableRow>
                         ) : (
                           pendingGenerationEmployees.map((emp) => {
-                            const isAdjusted = adjustedEmployees[emp.id];
+                            const adjData = adjustedEmployees[emp.id];
+                            const isAdjusted = adjData?.adjusted;
                             const firm = firms.find(f => f.id === emp.firmId);
                             const plant = plants.find(p => p.id === emp.unitId);
                             return (
@@ -456,7 +543,7 @@ export default function PayrollPage() {
                                       <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={() => openAdjustmentDialog(emp)}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Leave"}</Button>
                                     </TooltipTrigger><TooltipContent>Review & Adjust Attendance</TooltipContent></Tooltip>
                                     <Tooltip><TooltipTrigger asChild>
-                                      <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => isAdjusted && router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}`)} disabled={!isAdjusted}><Calculator className="w-3 h-3" /> Generate Salary</Button>
+                                      <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => isAdjusted && router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}`)} disabled={!isAdjusted}><Calculator className="w-3 h-3" /> Generate Salary</Button>
                                     </TooltipTrigger><TooltipContent>{isAdjusted ? "Proceed" : "Review first"}</TooltipContent></Tooltip>
                                   </div>
                                 </TableCell>
@@ -674,6 +761,156 @@ export default function PayrollPage() {
           </TabsContent>
         </Tabs>
 
+        {/* Adjust Leave Main Dialog */}
+        <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => !o && setAdjustLeaveEmp(null)}>
+          <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+            {adjustLeaveEmp && (
+              <>
+                <DialogHeader className="p-8 border-b bg-slate-50 flex flex-row justify-between items-start shrink-0">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20">
+                      <CalendarClock className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <DialogTitle className="text-2xl font-black text-slate-900 uppercase">
+                        {adjustLeaveEmp.name}
+                      </DialogTitle>
+                      <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
+                        <span className="font-mono text-primary bg-primary/5 px-2 py-0.5 rounded">ID: {adjustLeaveEmp.employeeId}</span>
+                        <span>•</span>
+                        <span>{adjustLeaveEmp.department} / {adjustLeaveEmp.designation}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">Remaining Adv. Leave</p>
+                    <p className={cn(
+                      "text-3xl font-black leading-none mt-2",
+                      adjustmentState.remainingBalance > 0 ? "text-emerald-600" : "text-slate-300"
+                    )}>{adjustmentState.remainingBalance} Days</p>
+                  </div>
+                </DialogHeader>
+
+                <div className="p-8 bg-white border-b flex justify-around items-center">
+                  <div className="text-center">
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Salary Month</p>
+                    <p className="font-bold text-slate-700">{selectedMonth}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Working Days</p>
+                    <p className="font-bold text-slate-700">{adjustmentState.monthWorkingDays} Days</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Month Holidays</p>
+                    <p className="font-bold text-slate-700">{adjustmentState.monthHolidays} Days</p>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-auto p-8 space-y-8">
+                  <div className="border rounded-2xl overflow-hidden shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="font-black text-[10px] uppercase">Attendance Segment</TableHead>
+                          <TableHead className="font-black text-[10px] uppercase text-center">Count</TableHead>
+                          <TableHead className="font-black text-[10px] uppercase text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell className="font-bold">Total Present on Working Days</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-emerald-100 text-emerald-700 font-black text-sm px-4">{adjustmentState.present} Days</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {adjustmentState.present < adjustmentState.monthWorkingDays && adjustmentState.remainingBalance > 0 && (
+                              <Button variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase gap-2 hover:bg-primary hover:text-white" onClick={handleOpenSubAdjustment}>
+                                <PlusCircle className="w-3 h-3" /> Adjust Leave
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-bold">Total Absent</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="border-rose-200 text-rose-600 bg-rose-50 font-black text-sm px-4">{adjustmentState.absent} Days</Badge>
+                          </TableCell>
+                          <TableCell className="text-right"></TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-bold">Present on Holidays (Holiday Work)</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="outline" className="border-amber-200 text-amber-600 bg-amber-50 font-black text-sm px-4">{adjustmentState.holidayWork} Days</Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {adjustmentState.holidayWork > 0 && (
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase gap-2" onClick={handlePayHolidayWork}>Pay Work</Button>
+                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase gap-2 border-emerald-200 text-emerald-600 hover:bg-emerald-50" onClick={handleBankHolidayWork}>Add to Balance</Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-2xl border-2 border-dashed border-slate-200 flex justify-between items-center">
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Reconciled Monthly Earning Days</p>
+                      <p className="text-xs font-bold text-slate-500 mt-1 italic">Calculated based on attendance + adjustments</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-4xl font-black text-primary">{adjustmentState.earningDays}</p>
+                      <p className="text-[9px] font-black uppercase text-primary/60">Days</p>
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter className="p-8 bg-slate-900 border-t flex flex-row items-center justify-between shrink-0">
+                  <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-slate-800 h-14 px-8 font-bold" onClick={() => setAdjustLeaveEmp(null)}>
+                    Cancel
+                  </Button>
+                  <Button className="bg-primary hover:bg-primary/90 h-14 px-16 font-black rounded-xl text-lg shadow-2xl shadow-primary/30" onClick={handlePostAdjustment}>
+                    Post Adjustment
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Sub-Dialog for Leave Balance Adjustment */}
+        <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
+          <DialogContent className="sm:max-w-md rounded-2xl shadow-2xl border-none">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 font-black text-xl">
+                <MinusCircle className="w-5 h-5 text-primary" /> Adjust from Balance
+              </DialogTitle>
+              <DialogDescription className="font-bold">
+                {adjustLeaveEmp?.name} • Balance: {adjustmentState.remainingBalance} Days
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-8 space-y-4 text-center">
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Days to Adjust</Label>
+              <div className="flex items-center justify-center gap-6">
+                <Button variant="outline" size="icon" className="h-12 w-12 rounded-full border-2" onClick={() => setSubAdjustmentValue(v => Math.max(0, v - 1))}>
+                  <MinusCircle className="w-6 h-6" />
+                </Button>
+                <span className="text-5xl font-black text-slate-900 w-20">{subAdjustmentValue}</span>
+                <Button variant="outline" size="icon" className="h-12 w-12 rounded-full border-2" onClick={() => setSubAdjustmentValue(v => Math.min(adjustmentState.remainingBalance, v + 1))}>
+                  <PlusCircle className="w-6 h-6" />
+                </Button>
+              </div>
+              <p className="text-[10px] font-bold text-rose-500 uppercase tracking-tight mt-4">Note: This will be deducted from employee's future leave pool.</p>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="ghost" onClick={() => setIsSubAdjustmentOpen(false)} className="rounded-xl font-bold">Cancel</Button>
+              <Button className="bg-primary rounded-xl font-black px-10 shadow-lg shadow-primary/20" onClick={handleSaveSubAdjustment}>Confirm & Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
           <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             {paySalaryRec && (
@@ -687,7 +924,9 @@ export default function PayrollPage() {
                     <DialogTitle className="text-2xl font-black text-slate-900 uppercase">{paySalaryRec.employeeName}</DialogTitle>
                     <div className="flex flex-wrap gap-4 mt-2 text-xs font-bold text-slate-500">
                       <span className="bg-white px-2 py-1 rounded shadow-sm border">ID: {paySalaryRec.employeeId}</span>
+                      <span>•</span>
                       <span className="bg-white px-2 py-1 rounded shadow-sm border">SLIP: {paySalaryRec.slipNo}</span>
+                      <span>•</span>
                       <span className="bg-white px-2 py-1 rounded shadow-sm border">MONTH: {paySalaryRec.month}</span>
                     </div>
                   </div>
