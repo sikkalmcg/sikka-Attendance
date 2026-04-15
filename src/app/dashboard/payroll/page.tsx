@@ -766,7 +766,7 @@ export default function PayrollPage() {
           <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             {adjustLeaveEmp && (
               <>
-                <DialogHeader className="p-8 border-b bg-slate-50 flex flex-row justify-between items-start shrink-0">
+                <DialogHeader className="p-6 border-b bg-slate-50 flex flex-row justify-between items-start shrink-0">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20">
                       <CalendarClock className="w-8 h-8 text-white" />
@@ -791,7 +791,7 @@ export default function PayrollPage() {
                   </div>
                 </DialogHeader>
 
-                <div className="p-8 bg-white border-b flex justify-around items-center">
+                <div className="py-5 bg-white border-b flex justify-around items-center shrink-0">
                   <div className="text-center">
                     <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Salary Month</p>
                     <p className="font-bold text-slate-700">{selectedMonth}</p>
@@ -867,11 +867,11 @@ export default function PayrollPage() {
                   </div>
                 </div>
 
-                <DialogFooter className="p-8 bg-slate-900 border-t flex flex-row items-center justify-between shrink-0">
-                  <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-slate-800 h-14 px-8 font-bold" onClick={() => setAdjustLeaveEmp(null)}>
+                <DialogFooter className="p-6 bg-slate-900 border-t flex flex-row items-center justify-between shrink-0">
+                  <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-slate-800 h-12 px-8 font-bold" onClick={() => setAdjustLeaveEmp(null)}>
                     Cancel
                   </Button>
-                  <Button className="bg-primary hover:bg-primary/90 h-14 px-16 font-black rounded-xl text-lg shadow-2xl shadow-primary/30" onClick={handlePostAdjustment}>
+                  <Button className="bg-primary hover:bg-primary/90 h-12 px-16 font-black rounded-xl text-lg shadow-2xl shadow-primary/30" onClick={handlePostAdjustment}>
                     Post Adjustment
                   </Button>
                 </DialogFooter>
@@ -1168,7 +1168,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
   const deductions = [
     ...(employee?.isGovComplianceEnabled ? [
       { label: "PF Employee Share", value: record.pfAmountEmployee || 0 },
-      { label: "ESIC Employee Share", value: record.esicAmountEmployee || 0 },
+      { label: "ESIC Employee Share", value: record.absent || 0 },
     ] : []),
     { label: "Advance Recovery", value: record.advanceRecovery || 0 },
   ];
