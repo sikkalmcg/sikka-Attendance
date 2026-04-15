@@ -81,10 +81,18 @@ function HeaderActions() {
   }, []);
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
-  const latestNotifications = useMemo(() => [...notifications].reverse().slice(0, 10), [notifications]);
+  
+  // LOGIC: Display only "Current" (Today's) actual detail
+  const latestNotifications = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return [...notifications]
+      .filter(n => n.timestamp?.startsWith(todayStr))
+      .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))
+      .slice(0, 20);
+  }, [notifications]);
 
   const markAllRead = () => {
-    notifications.forEach(n => {
+    latestNotifications.forEach(n => {
       if (!n.read) {
         updateRecord('notifications', n.id, { read: true });
       }
@@ -92,10 +100,10 @@ function HeaderActions() {
   };
 
   const handleClearLogs = () => {
-    notifications.forEach(n => {
+    latestNotifications.forEach(n => {
       deleteRecord('notifications', n.id);
     });
-    toast({ title: "Logs Cleared", description: "All notifications have been removed." });
+    toast({ title: "Logs Cleared", description: "Today's notification view has been reset." });
   };
 
   const handleLogout = () => {
@@ -133,7 +141,7 @@ function HeaderActions() {
             <div className="bg-primary p-4 text-white flex items-center justify-between">
               <div>
                 <h3 className="font-black text-sm uppercase tracking-widest">Notifications</h3>
-                <p className="text-[10px] text-white/70 font-bold">Latest activity logs</p>
+                <p className="text-[10px] text-white/70 font-bold">Today's actual logs</p>
               </div>
               {unreadCount > 0 && (
                 <Badge variant="secondary" className="bg-white/20 text-white border-none font-bold text-[10px]">
@@ -141,13 +149,13 @@ function HeaderActions() {
                 </Badge>
               )}
             </div>
-            <ScrollArea className="max-h-[400px]">
+            <ScrollArea className="max-h-[400px]" tabIndex={0}>
               {latestNotifications.length === 0 ? (
                 <div className="p-10 text-center space-y-3">
                   <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                     <Bell className="w-6 h-6 text-slate-300" />
                   </div>
-                  <p className="text-xs text-muted-foreground font-bold">No notifications yet.</p>
+                  <p className="text-xs text-muted-foreground font-bold leading-relaxed">No actual logs for today yet.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
@@ -158,13 +166,13 @@ function HeaderActions() {
                     )}>
                       <div className={cn(
                         "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-                        n.message.includes("marked IN") ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                        n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
                       )}>
-                        {n.message.includes("marked IN") ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                        {n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                       </div>
                       <div className="space-y-1">
-                        <p className="text-xs font-bold text-slate-700 leading-relaxed">{n.message}</p>
-                        <p className="text-[10px] text-muted-foreground font-medium">{n.timestamp}</p>
+                        <p className="text-xs font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.message}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono font-medium">{n.timestamp}</p>
                       </div>
                     </div>
                   ))}

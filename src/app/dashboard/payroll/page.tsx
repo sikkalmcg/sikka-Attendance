@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -87,7 +88,6 @@ import { parseISO, format } from "date-fns";
 const generatePayrollMonths = () => {
   const options = [];
   const date = new Date();
-  // Generate 12 months for comprehensive history viewing
   for (let i = 0; i < 12; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
     const mmm = d.toLocaleString('en-US', { month: 'short' });
@@ -101,7 +101,7 @@ const PAYROLL_MONTHS = generatePayrollMonths();
 
 export default function PayrollPage() {
   const router = useRouter();
-  const { employees, attendanceRecords, payrollRecords, vouchers, firms, plants, updateRecord } = useData();
+  const { employees, attendanceRecords, payrollRecords, vouchers, firms, plants, updateRecord, addRecord } = useData();
   const { toast } = useToast();
 
   const [isMounted, setIsMounted] = useState(false);
@@ -111,11 +111,9 @@ export default function PayrollPage() {
   const [selectedFirmId, setSelectedFirmId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Pagination for Advance Salary tab
   const [advancePage, setAdvancePage] = useState(1);
   const rowsPerPageAdvance = 15;
 
-  // Dialog States
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
   const [payPFRec, setPayPFRec] = useState<PayrollRecord | null>(null);
   const [payESICRec, setPayESICRec] = useState<PayrollRecord | null>(null);
@@ -124,7 +122,6 @@ export default function PayrollPage() {
   const [printSlip, setPrintSlip] = useState<PayrollRecord | null>(null);
   const [viewAdvanceEmployee, setViewAdvanceEmployee] = useState<{emp: Employee, vouchers: any[]} | null>(null);
   
-  // Adjustment Calculation State
   const [adjustmentState, setAdjustmentState] = useState({
     present: 0,
     absent: 0,
@@ -138,13 +135,11 @@ export default function PayrollPage() {
     monthHolidays: 4
   });
 
-  // Form States for Payments
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDate, setPaymentDate] = useState("");
   const [paymentType, setPaymentType] = useState<'BANKING' | 'CASH' | 'CHEQUE'>('BANKING');
   const [paymentRef, setPaymentRef] = useState("");
 
-  // Statutory Payment States
   const [pfPaidEmp, setPfPaidEmp] = useState(0);
   const [pfPaidEx, setPfPaidEx] = useState(0);
   const [esicPaidEmp, setEsicPaidEmp] = useState(0);
@@ -154,7 +149,7 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    setSelectedMonth(PAYROLL_MONTHS[0]); // Default to CURRENT month
+    setSelectedMonth(PAYROLL_MONTHS[0]);
     setPaymentDate(new Date().toISOString().split('T')[0]);
   }, []);
 
@@ -162,19 +157,15 @@ export default function PayrollPage() {
     setAdjustedEmployees({});
   }, [selectedMonth]);
 
-  // Restriction logic: Only allow generation for Current + Previous 3 months (Index 0, 1, 2, 3)
   const isGenerationAllowed = useMemo(() => {
     if (!selectedMonth) return false;
     const allowedWindow = PAYROLL_MONTHS.slice(0, 4);
     return allowedWindow.includes(selectedMonth);
   }, [selectedMonth]);
 
-  // Tab 1: Pending Generation List
   const pendingGenerationEmployees = useMemo(() => {
     if (!isGenerationAllowed) return [];
-
     const sorted = [...(employees || [])].sort((a, b) => (b.id || "").localeCompare(a.id || ""));
-
     return sorted.filter(emp => {
       const search = searchTerm.toLowerCase();
       const matchesSearch = (
@@ -188,14 +179,12 @@ export default function PayrollPage() {
     });
   }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth, isGenerationAllowed]);
 
-  // Tab 2: Finalized Salaries
   const finalizedSalaries = useMemo(() => {
     const sorted = [...payrollRecords].sort((a, b) => {
       const dateCompare = (b.slipDate || "").localeCompare(a.slipDate || "");
       if (dateCompare !== 0) return dateCompare;
       return (b.slipNo || "").localeCompare(a.slipNo || "");
     });
-
     return sorted.filter(p => {
       const emp = employees.find(e => e.employeeId === p.employeeId);
       const search = searchTerm.toLowerCase();
@@ -206,12 +195,10 @@ export default function PayrollPage() {
     });
   }, [payrollRecords, searchTerm, selectedFirmId, employees, selectedMonth]);
 
-  // Advance Salary Ledger Logic
   const advanceLedgerData = useMemo(() => {
     if (!isMounted) return [];
     const paidVouchers = (vouchers || []).filter(v => v.status === 'PAID');
     const empIdsWithAdvance = Array.from(new Set(paidVouchers.map(v => v.employeeId)));
-
     const ledger = empIdsWithAdvance.map(empId => {
       const employee = employees.find(e => e.id === empId);
       if (!employee) return null;
@@ -230,7 +217,6 @@ export default function PayrollPage() {
       const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
       return { id: employee.id, emp: employee, totalAdvAmount: totalAdv, totalRecoveryAmount: totalRecovery, totalRemainingAmount: Math.max(0, totalAdv - totalRecovery), vouchers: voucherBreakdown };
     }).filter(Boolean).sort((a, b) => (b!.id || "").localeCompare(a!.id || ""));
-
     return (ledger as any[]).filter(item => {
       const search = searchTerm.toLowerCase();
       return (item.emp.name.toLowerCase().includes(search) || item.emp.employeeId.toLowerCase().includes(search));
@@ -251,7 +237,6 @@ export default function PayrollPage() {
     const workingDaysCount = 26;
     const initialPresent = Math.max(0, presentOnWorking - holidayPres);
     const initialAbsent = Math.max(0, workingDaysCount - initialPresent);
-
     let state = { present: initialPresent, absent: initialAbsent, holidayWork: holidayPres, holidayBanked: 0, holidayPaid: 0, balanceUsed: 0, remainingBalance: emp.advanceLeaveBalance || 0, earningDays: initialPresent, monthWorkingDays: workingDaysCount, monthHolidays: 4 };
     if (state.present < state.monthWorkingDays && state.holidayWork > 0) {
       const needed = state.monthWorkingDays - state.present;
@@ -283,12 +268,18 @@ export default function PayrollPage() {
       toast({ variant: "destructive", title: "Invalid Amount", description: `Amount must be between 1 and ${formatCurrency(remaining)}` });
       return;
     }
-
     setIsProcessing(true);
     try {
       const historyEntry: SalaryPaymentRecord = { amount: paymentAmount, date: paymentDate, type: paymentType, reference: paymentRef };
       const newPaid = paySalaryRec.salaryPaidAmount + paymentAmount;
       updateRecord('payroll', paySalaryRec.id, { salaryPaidAmount: newPaid, salaryPaidDate: paymentDate, salaryHistory: [...(paySalaryRec.salaryHistory || []), historyEntry], status: newPaid >= paySalaryRec.netPayable ? 'PAID' : 'FINALIZED' });
+      
+      addRecord('notifications', {
+        message: `Salary Paid: ${formatCurrency(paymentAmount)} to ${paySalaryRec.employeeName} (${paySalaryRec.month})`,
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+        read: false
+      });
+
       toast({ title: "Payment Recorded", description: `Successfully paid ${formatCurrency(paymentAmount)}` });
       setPaySalaryRec(null);
       setPaymentRef("");
@@ -305,6 +296,11 @@ export default function PayrollPage() {
         pfPaidAmountEmployer: payPFRec.pfPaidAmountEmployer + pfPaidEx,
         pfPaidDate: paymentDate,
         pfHistory: [...(payPFRec.pfHistory || []), historyEntry]
+      });
+      addRecord('notifications', {
+        message: `Statutory: PF Payment recorded for ${payPFRec.employeeName} (${payPFRec.month})`,
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+        read: false
       });
       toast({ title: "PF Payment Recorded" });
       setPayPFRec(null);
@@ -323,6 +319,11 @@ export default function PayrollPage() {
         esicPaidDate: paymentDate,
         esicHistory: [...(payESICRec.esicHistory || []), historyEntry]
       });
+      addRecord('notifications', {
+        message: `Statutory: ESIC Payment recorded for ${payESICRec.employeeName} (${payESICRec.month})`,
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+        read: false
+      });
       toast({ title: "ESIC Payment Recorded" });
       setPayESICRec(null);
       setPaymentRef("");
@@ -334,7 +335,6 @@ export default function PayrollPage() {
     document.title = p.slipNo || "Salary_Slip";
     setPrintSlip(p);
     toast({ title: "Generating PDF", description: "Applying high-fidelity render for A4 export..." });
-    
     setTimeout(() => {
       window.print();
       document.title = originalTitle;
@@ -587,7 +587,6 @@ export default function PayrollPage() {
             </Card>
           </TabsContent>
 
-          {/* Advance Salary Ledger Content */}
           <TabsContent value="advance">
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="bg-slate-50 border-b p-6">
@@ -643,7 +642,6 @@ export default function PayrollPage() {
             </Card>
           </TabsContent>
 
-          {/* Advance Leave Content */}
           <TabsContent value="leave">
             <Card className="border-none shadow-sm overflow-hidden">
               <CardContent className="p-0">
@@ -676,7 +674,6 @@ export default function PayrollPage() {
           </TabsContent>
         </Tabs>
 
-        {/* PAY SALARY POPUP */}
         <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
           <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             {paySalaryRec && (
@@ -801,7 +798,6 @@ export default function PayrollPage() {
           </DialogContent>
         </Dialog>
 
-        {/* PREVIEW DIALOG */}
         <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
           <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
@@ -829,7 +825,6 @@ export default function PayrollPage() {
         </Dialog>
       </div>
 
-      {/* Robust Print Portal */}
       {isMounted && printSlip && createPortal(
         <div className="print-only">
           <SalarySlipView 
@@ -841,7 +836,6 @@ export default function PayrollPage() {
         document.body
       )}
 
-      {/* Advance Account Popup */}
       <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => !o && setViewAdvanceEmployee(null)}>
         <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewAdvanceEmployee && (

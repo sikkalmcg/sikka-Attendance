@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -70,20 +71,16 @@ export default function VouchersPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const { toast } = useToast();
 
-  // Pagination State
   const [pendingPage, setPendingPage] = useState(1);
   const [paymentPage, setPaymentPage] = useState(1);
   const rowsPerPage = 15;
 
-  // State for Preview and Print
   const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
   const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  // State for Rejection Confirmation
   const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
 
-  // State for Payment Dialog
   const [isPayDialogOpen, setIsPayDialogOpen] = useState(false);
   const [voucherToPay, setVoucherToPay] = useState<Voucher | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -98,21 +95,17 @@ export default function VouchersPage() {
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
 
-  // Dynamic FY Sequential Voucher Number Calculation
   const voucherNo = useMemo(() => {
     if (!voucherDate) return "SIL-XXXXXX-XXXXX";
     const d = new Date(voucherDate);
     if (isNaN(d.getTime())) return "SIL-XXXXXX-XXXXX";
-    
     const month = d.getMonth();
     const year = d.getFullYear();
     const startYear = month < 3 ? year - 1 : year;
     const endYear = startYear + 1;
     const fyPrefix = `${startYear}${(endYear % 100).toString().padStart(2, '0')}`;
     const fyFullPrefix = `SIL-${fyPrefix}-`;
-
     const sameFYVouchers = (vouchers || []).filter(v => v.voucherNo.startsWith(fyFullPrefix));
-    
     let nextSerial = 1;
     if (sameFYVouchers.length > 0) {
       const serials = sameFYVouchers.map(v => {
@@ -121,11 +114,9 @@ export default function VouchersPage() {
       });
       nextSerial = Math.max(...serials) + 1;
     }
-
     return `${fyFullPrefix}${nextSerial.toString().padStart(5, '0')}`;
   }, [voucherDate, vouchers]);
 
-  // Filtering Logic
   const filteredPendingVouchers = useMemo(() => {
     return (vouchers || []).filter(v => v.status === 'PENDING').filter(v => {
       const emp = employees.find(e => e.id === v.employeeId);
@@ -150,7 +141,6 @@ export default function VouchersPage() {
     }).reverse();
   }, [vouchers, searchTerm, employees]);
 
-  // Paginated Data
   const paginatedPending = useMemo(() => {
     const start = (pendingPage - 1) * rowsPerPage;
     return filteredPendingVouchers.slice(start, start + rowsPerPage);
@@ -170,7 +160,7 @@ export default function VouchersPage() {
       toast({ variant: "destructive", title: "Missing Fields", description: "Mandatory fields required." });
       return;
     }
-
+    const emp = employees.find(e => e.id === selectedEmployeeId);
     const newVoucher = {
       voucherNo: voucherNo, 
       employeeId: selectedEmployeeId,
@@ -180,8 +170,12 @@ export default function VouchersPage() {
       status: "PENDING",
       createdByName: currentUser?.fullName || "Admin"
     };
-
     addRecord('vouchers', newVoucher);
+    addRecord('notifications', {
+      message: `Voucher Created: ${voucherNo} for ${emp?.name} (${formatCurrency(parseFloat(amount))})`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
+    });
     toast({ title: "Voucher Created", description: `Voucher #${voucherNo} generated.` });
     setSelectedEmployeeId("");
     setAmount("");
@@ -189,17 +183,30 @@ export default function VouchersPage() {
     setActiveTab("approve");
   };
 
-  const handleApproveVoucher = (id: string) => {
-    updateRecord('vouchers', id, { 
+  const handleApproveVoucher = (v: Voucher) => {
+    updateRecord('vouchers', v.id, { 
       status: 'APPROVED', 
       approvedByName: currentUser?.fullName || "Admin" 
+    });
+    addRecord('notifications', {
+      message: `Voucher Approved: ${v.voucherNo} by ${currentUser?.fullName || "Admin"}`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
     });
     toast({ title: "Voucher Approved" });
   };
 
   const handleRejectConfirm = () => {
     if (!voucherToReject) return;
+    const v = vouchers.find(x => x.id === voucherToReject);
     deleteRecord('vouchers', voucherToReject);
+    if (v) {
+      addRecord('notifications', {
+        message: `Voucher Rejected: ${v.voucherNo} by ${currentUser?.fullName || "Admin"}`,
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+        read: false
+      });
+    }
     toast({ variant: "destructive", title: "Voucher Rejected" });
     setVoucherToReject(null);
   };
@@ -221,6 +228,11 @@ export default function VouchersPage() {
       amount: parseFloat(payAmount),
       paymentMode: payMode,
       paymentReference: payMode === 'BANKING' ? payRef : ""
+    });
+    addRecord('notifications', {
+      message: `Voucher Paid: ${voucherToPay.voucherNo} (${formatCurrency(parseFloat(payAmount))}) via ${payMode}`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false
     });
     toast({ title: "Payment Recorded" });
     setIsPayDialogOpen(false);
@@ -377,7 +389,7 @@ export default function VouchersPage() {
 
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleApproveVoucher(v.id)}>
+                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleApproveVoucher(v)}>
                                       <CheckCircle className="w-3 h-3 mr-1.5" /> Approve
                                     </Button>
                                   </TooltipTrigger>
@@ -528,7 +540,6 @@ export default function VouchersPage() {
           </TabsContent>
         </Tabs>
 
-        {/* Reject Alert */}
         <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
           <AlertDialogContent className="sm:max-w-md">
             <AlertDialogHeader>
@@ -543,7 +554,6 @@ export default function VouchersPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Pay Dialog */}
         <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
           <DialogContent className="sm:max-w-4xl">
             <DialogHeader className="border-b pb-4">
@@ -621,7 +631,6 @@ export default function VouchersPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Preview Dialog */}
         <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
           <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
@@ -653,7 +662,6 @@ export default function VouchersPage() {
         </Dialog>
       </div>
 
-      {/* Portal for isolation-aware printing */}
       {isMounted && printVoucher && createPortal(
         <div className="print-only">
           <AdvanceVoucherContent voucher={printVoucher} employees={employees} firms={firms} plants={plants} />
@@ -671,12 +679,10 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
 
   return (
     <div className="font-serif text-slate-900 space-y-10 bg-white">
-      {/* Centered Top Title */}
       <div className="text-center">
         <h2 className="text-2xl font-black uppercase tracking-[0.3em] underline decoration-2 underline-offset-8">Advance Payment Voucher</h2>
       </div>
 
-      {/* Document Header */}
       <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mt-6">
         <div className="flex items-start gap-6">
           <div className="w-16 h-16 border-2 border-slate-200 flex items-center justify-center p-1 rounded-xl bg-white shadow-sm overflow-hidden shrink-0 mt-1">
@@ -722,7 +728,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
       </div>
 
-      {/* Employee Grid */}
       <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 mt-6">
         <DetailCell label="Employee ID" value={emp?.employeeId} />
         <DetailCell label="Employee Name" value={emp?.name} />
@@ -732,7 +737,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <DetailCell label="Mobile Number" value={emp?.mobile} />
       </div>
 
-      {/* Payment Details */}
       <div className="grid grid-cols-1 border-2 border-slate-900 mt-10">
         <div className="p-4 border-b-2 border-slate-900 flex items-center justify-between bg-white">
           <span className="font-black uppercase text-sm tracking-widest">Amount (In Figures)</span>
@@ -748,7 +752,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
           <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Purpose:</span>
           <span className="text-lg font-medium text-slate-800 leading-relaxed">{voucher.purpose}</span>
         </div>
-        {/* Payment Mode and Ref Number Row */}
         <div className="grid grid-cols-2 divide-x-2 divide-slate-900">
           <div className="p-3 flex items-center gap-6 bg-slate-50">
             <span className="font-black uppercase text-[10px] w-32 shrink-0 text-slate-500 tracking-widest">Payment Mode:</span>
@@ -761,12 +764,10 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
       </div>
 
-      {/* Declaration */}
       <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl italic text-sm text-center leading-relaxed text-slate-600 mt-10">
         "I hereby acknowledge receipt of the aforementioned advance amount and expressly agree and undertake that the same shall be duly recovered and/or adjusted against my future salary, wages, or any other dues payable to me, in accordance with the applicable policies, rules, and regulations of the organization. I further confirm that this authorization is given voluntarily and shall be binding upon me."
       </div>
 
-      {/* Signatures */}
       <div className="flex justify-between items-end pt-32 px-10">
         <div className="text-center space-y-4">
           <div className="w-72 border-b-2 border-slate-900" />
@@ -778,7 +779,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
       </div>
       
-      {/* Footer Branding */}
       <div className="pt-20 text-center">
         <p className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-300 italic">© Sikka Industries & Logistics – Internal Secure Document</p>
       </div>
