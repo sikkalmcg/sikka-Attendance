@@ -62,6 +62,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
+
 export default function AttendancePage() {
   const { attendanceRecords, addRecord, updateRecord, plants, holidays, employees } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -137,7 +139,6 @@ export default function AttendancePage() {
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
     
-    // ADMIN OVERVIEW: Sort by date and time (descending)
     if (isAdminRole) {
       const limitDate = subDays(new Date(), 45);
       return (attendanceRecords || [])
@@ -155,7 +156,6 @@ export default function AttendancePage() {
         });
     }
 
-    // EMPLOYEE HISTORY: Calendar logic sorted descending
     const today = new Date();
     const fortyFiveDaysAgo = subDays(today, 45);
     fortyFiveDaysAgo.setHours(0, 0, 0, 0);
@@ -231,6 +231,22 @@ export default function AttendancePage() {
     return history.slice(start, start + rowsPerPage);
   }, [history, currentPage]);
 
+  const fetchAddress = async (lat: number, lng: number) => {
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.status === "OK" && data.results.length > 0) {
+        return data.results[0].formatted_address;
+      }
+      return "Unable to fetch location details";
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      return "Unable to fetch location";
+    }
+  };
+
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
       toast({ variant: "destructive", title: "Action Blocked", description: "You must be a registered employee to mark attendance." });
@@ -245,21 +261,26 @@ export default function AttendancePage() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setCurrentGPS({ lat, lng });
-        const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= 700);
+        
+        const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
         setDetectedPlant(plant || null);
-        const mockAddress = plant ? `${plant.name}, Industrial Estate` : `Street ${Math.floor(lat)}, City Hub`;
-        setDetectedAddress(mockAddress);
+        
+        const address = await fetchAddress(lat, lng);
+        setDetectedAddress(address);
+        
         setIsLoadingLocation(false);
         setActiveDialog(type);
       },
       (err) => {
-        toast({ variant: "destructive", title: "GPS Access Denied", description: "Enable location permissions to proceed." });
+        let message = "Enable location permissions to proceed.";
+        if (err.code === err.PERMISSION_DENIED) message = "Location access denied.";
+        toast({ variant: "destructive", title: "GPS Error", description: message });
         setIsLoadingLocation(false);
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
@@ -474,12 +495,12 @@ export default function AttendancePage() {
                   <Button 
                     className={cn(
                       "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
-                      isAccessAllowed ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                      isAccessAllowed ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
                     )} 
                     disabled={!isAccessAllowed || isLoadingLocation || (!!todayRecord && !!todayRecord.inTime)} 
                     onClick={() => requestLocation("IN")}
                   >
-                    {isAccessAllowed ? "Mark Check-In" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
+                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? "Mark Check-In" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>)}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Log Arrival Time</TooltipContent>
@@ -495,7 +516,7 @@ export default function AttendancePage() {
                     disabled={!isAccessAllowed || isLoadingLocation || !todayRecord || (!!todayRecord && !!todayRecord.outTime)} 
                     onClick={() => requestLocation("OUT")}
                   >
-                    {isAccessAllowed ? "Mark Check-Out" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>}
+                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? "Mark Check-Out" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>)}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Log Departure Time</TooltipContent>
@@ -511,85 +532,87 @@ export default function AttendancePage() {
             </h3>
           </div>
           <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-bold">Employee Name</TableHead>
-                  <TableHead className="font-bold">In Plant</TableHead>
-                  <TableHead className="font-bold">In Date Time</TableHead>
-                  <TableHead className="font-bold">Out Plant</TableHead>
-                  <TableHead className="font-bold">Out Date Time</TableHead>
-                  <TableHead className="font-bold text-center">Hours</TableHead>
-                  <TableHead className="font-bold">Type</TableHead>
-                  <TableHead className="font-bold">Approval Status</TableHead>
-                  {isSuperAdmin && <TableHead className="font-bold text-right">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedHistory.length === 0 ? (
-                  <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
-                ) : (
-                  paginatedHistory.map((h: any) => (
-                    <TableRow key={h.id} className="hover:bg-slate-50/50">
-                      <TableCell className="text-sm font-bold text-slate-900">{h.employeeName}</TableCell>
-                      <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
-                      <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.outTime || "--:--"}</TableCell>
-                      <TableCell className={cn("font-black text-center", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
-                        {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight rounded-full px-3 bg-slate-50 border-slate-200">
-                          {h.attendanceType}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {h.status === 'ABSENT' ? (
-                          <Badge variant="destructive" className="border-none font-bold uppercase text-[9px] px-3 rounded-full">Absent</Badge>
-                        ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
-                          <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px] px-3 rounded-full">{h.status.replace('_', ' ')}</Badge>
-                        ) : h.approved ? (
-                          <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px] px-3 rounded-full">Approved</Badge>
-                        ) : h.remark ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Badge 
-                                variant="destructive" 
-                                className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors px-3 rounded-full"
-                                onClick={() => handleViewRejection(h)}
-                              >
-                                Rejected
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>View Rejection Reason</TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600 px-3 rounded-full">Pending</Badge>
-                        )}
-                      </TableCell>
-                      {isSuperAdmin && (
-                        <TableCell className="text-right">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-primary hover:bg-primary/5 rounded-full"
-                                onClick={() => handleAdminEditClick(h)}
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Adjust Logs</TooltipContent>
-                          </Tooltip>
+            <ScrollArea className="w-full" tabIndex={0}>
+              <Table className="min-w-[1000px]">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">In Plant</TableHead>
+                    <TableHead className="font-bold">In Date Time</TableHead>
+                    <TableHead className="font-bold">Out Plant</TableHead>
+                    <TableHead className="font-bold">Out Date Time</TableHead>
+                    <TableHead className="font-bold text-center">Hours</TableHead>
+                    <TableHead className="font-bold">Type</TableHead>
+                    <TableHead className="font-bold">Approval Status</TableHead>
+                    {isSuperAdmin && <TableHead className="font-bold text-right">Actions</TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
+                  ) : (
+                    paginatedHistory.map((h: any) => (
+                      <TableRow key={h.id} className="hover:bg-slate-50/50">
+                        <TableCell className="text-sm font-bold text-slate-900">{h.employeeName}</TableCell>
+                        <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
+                        <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.outTime || "--:--"}</TableCell>
+                        <TableCell className={cn("font-black text-center", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
+                          {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight rounded-full px-3 bg-slate-50 border-slate-200">
+                            {h.attendanceType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {h.status === 'ABSENT' ? (
+                            <Badge variant="destructive" className="border-none font-bold uppercase text-[9px] px-3 rounded-full">Absent</Badge>
+                          ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
+                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px] px-3 rounded-full">{h.status.replace('_', ' ')}</Badge>
+                          ) : h.approved ? (
+                            <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px] px-3 rounded-full">Approved</Badge>
+                          ) : h.remark ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge 
+                                  variant="destructive" 
+                                  className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors px-3 rounded-full"
+                                  onClick={() => handleViewRejection(h)}
+                                >
+                                  Rejected
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>View Rejection Reason</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600 px-3 rounded-full">Pending</Badge>
+                          )}
+                        </TableCell>
+                        {isSuperAdmin && (
+                          <TableCell className="text-right">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-primary hover:bg-primary/5 rounded-full"
+                                  onClick={() => handleAdminEditClick(h)}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Adjust Logs</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
             {totalPages > 1 && (
               <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
                 <div className="text-xs font-bold text-muted-foreground">
@@ -624,59 +647,87 @@ export default function AttendancePage() {
         </div>
 
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2"><Navigation className="w-5 h-5 text-primary" /> Confirm Check-In</DialogTitle>
+              <DialogTitle className="flex items-center gap-2 font-black text-xl">
+                <Navigation className="w-5 h-5 text-primary" /> Confirm Check-In
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-6 py-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border space-y-3">
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-slate-400 mt-1" />
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Location</p>
-                    <p className="text-sm font-bold text-slate-700">{detectedAddress}</p>
+              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-100 shrink-0">
+                    <MapPin className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Current Location</p>
+                    <p className="text-sm font-bold text-slate-700 leading-snug">{detectedAddress || "Locating..."}</p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3 pt-2 border-t">
-                  <Building2 className="w-4 h-4 text-primary mt-1" />
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Detected Plant</p>
+                <div className="flex items-start gap-4 pt-4 border-t border-slate-200">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-sm border border-primary/10 shrink-0">
+                    <Building2 className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Detected Plant</p>
                     <p className="text-sm font-bold text-primary">{detectedPlant ? detectedPlant.name : "Field / Remote"}</p>
                   </div>
                 </div>
               </div>
               {!detectedPlant && (
-                <div className="space-y-2">
-                  <Label className="font-black text-xs">Work Mode Selection</Label>
+                <div className="space-y-3 px-1">
+                  <Label className="font-black text-[10px] uppercase tracking-widest text-slate-500">Work Mode Selection</Label>
                   <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
-                    <SelectTrigger className="h-12 bg-white rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-14 bg-white border-slate-200 rounded-2xl font-bold shadow-sm focus:ring-primary">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="FIELD">Field Work</SelectItem>
-                      <SelectItem value="WFH">Work From Home</SelectItem>
+                      <SelectItem value="FIELD" className="font-bold">Field Work</SelectItem>
+                      <SelectItem value="WFH" className="font-bold">Work From Home</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
             </div>
-            <DialogFooter><Button className="w-full h-12 rounded-xl font-black bg-primary" onClick={handleConfirmCheckIn}>Confirm Check-In</Button></DialogFooter>
+            <DialogFooter>
+              <Button 
+                className="w-full h-14 rounded-2xl font-black bg-primary text-lg shadow-xl shadow-primary/30 active:scale-[0.98] transition-all" 
+                onClick={handleConfirmCheckIn}
+              >
+                Confirm Check-In
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
         <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader><DialogTitle className="flex items-center gap-2"><Navigation className="w-5 h-5 text-rose-500" /> Confirm Check-Out</DialogTitle></DialogHeader>
+          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 font-black text-xl">
+                <Navigation className="w-5 h-5 text-rose-500" /> Confirm Check-Out
+              </DialogTitle>
+            </DialogHeader>
             <div className="space-y-6 py-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border space-y-3">
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-slate-400 mt-1" />
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Location</p>
-                    <p className="text-sm font-bold text-slate-700">{detectedAddress}</p>
+              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-100 shrink-0">
+                    <MapPin className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Current Location</p>
+                    <p className="text-sm font-bold text-slate-700 leading-snug">{detectedAddress || "Locating..."}</p>
                   </div>
                 </div>
               </div>
             </div>
-            <DialogFooter><Button className="w-full h-12 rounded-xl font-black bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button></DialogFooter>
+            <DialogFooter>
+              <Button 
+                className="w-full h-14 rounded-2xl font-black bg-rose-500 hover:bg-rose-600 text-lg shadow-xl shadow-rose-500/30 active:scale-[0.98] transition-all" 
+                onClick={handleConfirmCheckOut}
+              >
+                Confirm Check-Out
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
