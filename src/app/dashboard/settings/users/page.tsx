@@ -96,9 +96,7 @@ export default function UserManagementPage() {
   }, []);
 
   const filteredUsers = useMemo(() => {
-    // SORT FIRST: Latest entry first
     const sorted = [...(users || [])].reverse();
-
     return sorted.filter(u => {
       const nameMatch = u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
       const userMatch = u.username.toLowerCase().includes(searchTerm.toLowerCase());
@@ -313,7 +311,7 @@ export default function UserManagementPage() {
               </div>
             </DialogHeader>
             
-            <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30">
+            <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30" tabIndex={0}>
               <div className="space-y-10 pb-8 pr-4">
                 {/* Identity Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -387,7 +385,7 @@ export default function UserManagementPage() {
                       <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Select the modules this user can view and interact with.</p>
                     </div>
                     <div className="flex gap-3">
-                      <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg" onClick={selectAllPermissions}>Select All</Button>
+                      <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg border-slate-200" onClick={selectAllPermissions}>Select All</Button>
                       <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions}>Clear</Button>
                     </div>
                   </div>
@@ -402,7 +400,7 @@ export default function UserManagementPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[300px]">
                     {filteredPermissions.map(perm => {
                       const isSelected = formData.permissions?.includes(perm);
                       return (
@@ -420,7 +418,7 @@ export default function UserManagementPage() {
                             id={`perm-${perm}`}
                             checked={isSelected}
                             onCheckedChange={() => togglePermission(perm)}
-                            className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                            className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
                           />
                           <Label 
                             htmlFor={`perm-${perm}`} 
