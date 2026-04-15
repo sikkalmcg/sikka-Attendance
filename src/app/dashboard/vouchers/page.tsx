@@ -228,10 +228,15 @@ export default function VouchersPage() {
   };
 
   const handleDownloadPDF = (v: Voucher) => {
+    const originalTitle = document.title;
+    // Set document title to voucher number for the filename
+    document.title = v.voucherNo || "Voucher_Slip";
     setPrintVoucher(v);
     toast({ title: "Quick Download", description: "Preparing Voucher for export..." });
     setTimeout(() => {
       window.print();
+      // Restore original title
+      document.title = originalTitle;
       setTimeout(() => setPrintVoucher(null), 3000);
     }, 800);
   };
@@ -315,9 +320,6 @@ export default function VouchersPage() {
                     <CardTitle className="text-lg">Pending Approvals</CardTitle>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Button variant="outline" size="sm" className="h-10 gap-2" onClick={() => handleExportExcel('PENDING')}>
-                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Export Excel
-                    </Button>
                     <div className="relative w-80">
                       <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPendingPage(1); }} />
@@ -654,7 +656,7 @@ export default function VouchersPage() {
 
         {/* Quick Download (Print-Only Hidden Container) */}
         {printVoucher && (
-          <div className="fixed inset-0 z-[-1] opacity-0 print:opacity-100 print:z-[9999] print:relative print:bg-white overflow-visible">
+          <div className="print-only">
             <AdvanceVoucherPrint voucher={printVoucher} employees={employees} firms={firms} plants={plants} />
           </div>
         )}

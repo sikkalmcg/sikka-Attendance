@@ -103,21 +103,26 @@
 }
 
 @media print {
+  body {
+    background: white !important;
+  }
+  /* Hide all elements by default */
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
+  /* Show only the print container and its contents */
   .print-only, .print-only * {
-    visibility: visible;
+    visibility: visible !important;
   }
+  /* Ensure the print container starts at the top left */
   .print-only {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    z-index: 9999;
-    background: white;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 9999 !important;
+    background: white !important;
   }
 }

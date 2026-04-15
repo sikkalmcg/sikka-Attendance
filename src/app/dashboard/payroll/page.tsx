@@ -334,15 +334,22 @@ export default function PayrollPage() {
   };
 
   const handleDownloadAndPrint = (p: PayrollRecord) => {
-    // Quick Download: Trigger print/PDF dialog directly
+    const originalTitle = document.title;
+    // Set document title to slip number for the filename
+    document.title = p.slipNo || "Salary_Slip";
     setPrintSlip(p);
     toast({ title: "Quick Download", description: "Preparing Salary Slip for export..." });
     
     setTimeout(() => {
       window.print();
-      // Keep state for a few seconds to ensure browser captures it
+      // Restore original title after print dialog closes
+      document.title = originalTitle;
       setTimeout(() => setPrintSlip(null), 3000);
     }, 800);
+  };
+
+  const handleViewSlip = (p: PayrollRecord) => {
+    setPreviewSlip(p);
   };
 
   if (!isMounted) return null;
@@ -508,7 +515,7 @@ export default function PayrollPage() {
                             <TableRow key={p.id} className="hover:bg-slate-50/50">
                               <TableCell>
                                 <div className="flex flex-col">
-                                  <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => setPreviewSlip(p)}>{p.slipNo}</span>
+                                  <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => handleViewSlip(p)}>{p.slipNo}</span>
                                   <span className="text-[10px] text-slate-400">{p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}</span>
                                 </div>
                               </TableCell>
@@ -910,7 +917,7 @@ export default function PayrollPage() {
 
         {/* Print-Only Hidden Container (For Direct Download) */}
         {printSlip && (
-          <div className="fixed inset-0 z-[-1] opacity-0 print:opacity-100 print:z-[9999] print:relative print:bg-white overflow-visible">
+          <div className="print-only">
             <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
               <SalarySlipView 
                 record={printSlip} 
