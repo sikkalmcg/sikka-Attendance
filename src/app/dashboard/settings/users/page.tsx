@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -317,7 +316,7 @@ export default function UserManagementPage() {
         </Card>
 
         <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-          <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
             <DialogHeader className="p-8 pb-4 shrink-0 border-b bg-white z-10">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -333,7 +332,7 @@ export default function UserManagementPage() {
             </DialogHeader>
             
             <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30" tabIndex={0}>
-              <div className="space-y-10 pb-12 pr-4">
+              <div className="space-y-10 pb-20 pr-4">
                 {/* Identity Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">

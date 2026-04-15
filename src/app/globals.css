@@ -93,11 +93,13 @@
 
   /* Specialized scrollbar for popups/previews */
   .custom-blue-scrollbar [data-radix-scroll-area-thumb] {
-    @apply bg-primary/80 opacity-100 min-h-[40px] w-[8px] !important;
+    @apply bg-primary opacity-100 min-h-[60px] w-[8px] !important;
+    visibility: visible !important;
   }
   
-  .custom-blue-scrollbar ::-webkit-scrollbar-thumb {
-    @apply bg-primary rounded-full;
+  .custom-blue-scrollbar [data-radix-scroll-area-scrollbar] {
+    @apply bg-slate-100/80 opacity-100 w-[12px] border-l border-slate-200 !important;
+    visibility: visible !important;
   }
 }
 
