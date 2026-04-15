@@ -332,6 +332,15 @@ export default function PayrollPage() {
     } finally { setIsProcessing(false); }
   };
 
+  const handleDownloadAndPrint = (p: PayrollRecord) => {
+    setPreviewSlip(p);
+    toast({ title: "Generating Slip", description: "Standard A4 layout prepared. Opening print dialog..." });
+    // Small timeout to allow state to settle and modal to mount before printing
+    setTimeout(() => {
+      window.print();
+    }, 600);
+  };
+
   if (!isMounted) return null;
 
   return (
@@ -467,7 +476,7 @@ export default function PayrollPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="w-full" tabIndex={0}>
-                  <Table className="min-w-[1200px]">
+                  <Table className="min-w-[1300px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-bold">Slip Details</TableHead>
@@ -476,12 +485,13 @@ export default function PayrollPage() {
                         <TableHead className="font-bold">Month</TableHead>
                         <TableHead className="font-bold text-right">Net Payable</TableHead>
                         <TableHead className="font-bold text-right">Salary Paid</TableHead>
+                        <TableHead className="font-bold text-center">Paid Date</TableHead>
                         <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {finalizedSalaries.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell></TableRow>
                       ) : (
                         finalizedSalaries.map((p) => {
                           const emp = employees.find(e => e.employeeId === p.employeeId);
@@ -513,17 +523,24 @@ export default function PayrollPage() {
                               <TableCell className="text-center"><Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold">{p.month}</Badge></TableCell>
                               <TableCell className="text-right font-bold">{formatCurrency(p.netPayable)}</TableCell>
                               <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                                  {p.salaryPaidDate ? format(parseISO(p.salaryPaidDate), 'dd-MMM-yyyy') : "--"}
+                                </span>
+                              </TableCell>
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end gap-1">
                                   {emp?.isGovComplianceEnabled ? (
                                     <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" disabled={!hasUnpaid}><CreditCard className="w-4 h-4 text-primary" /></Button>
-                                      </DropdownMenuTrigger>
+                                      <Tooltip><TooltipTrigger asChild>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button variant="ghost" size="icon" disabled={!hasUnpaid}><CreditCard className="w-4 h-4 text-primary" /></Button>
+                                        </DropdownMenuTrigger>
+                                      </TooltipTrigger><TooltipContent>Process Payments</TooltipContent></Tooltip>
                                       <DropdownMenuContent align="end" className="w-48">
                                         <DropdownMenuItem disabled={remainingSalary <= 0} onClick={() => { setPaySalaryRec(p); setPaymentAmount(remainingSalary); }}>Pay Salary</DropdownMenuItem>
                                         <DropdownMenuItem disabled={remainingPF <= 0} onClick={() => { setPayPFRec(p); setPfPaidEmp(p.pfAmountEmployee - (p.pfPaidAmountEmployee || 0)); setPfPaidEx(p.pfAmountEmployer - (p.pfPaidAmountEmployer || 0)); }}>Pay PF</DropdownMenuItem>
-                                        <DropdownMenuItem disabled={remainingESIC <= 0} onClick={() => { setPayESICRec(p); setEsicPaidEmp(p.esicAmountEmployee - (p.esicPaidAmountEmployee || 0)); setEsicPaidEx(p.esicAmountEmployer - (p.esicPaidAmountEmployer || 0)); }}>Pay ESIC</DropdownMenuItem>
+                                        <DropdownMenuItem disabled={remainingESIC <= 0} onClick={() => { setPayESICRec(p); setEsicPaidEmp(p.esicAmountEmployee - (p.esicPaidAmountEmployee || 0)); setEsicPaidEx(p.esicAmountEmployer - (p.esicAmountEmployer || 0)); }}>Pay ESIC</DropdownMenuItem>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   ) : (
@@ -532,8 +549,8 @@ export default function PayrollPage() {
                                     </TooltipTrigger><TooltipContent>Pay Salary</TooltipContent></Tooltip>
                                   )}
                                   <Tooltip><TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={() => setPreviewSlip(p)}><Download className="w-4 h-4 text-slate-500" /></Button>
-                                  </TooltipTrigger><TooltipContent>Download Slip</TooltipContent></Tooltip>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDownloadAndPrint(p)}><Download className="w-4 h-4 text-slate-500" /></Button>
+                                  </TooltipTrigger><TooltipContent>Direct Download / Print</TooltipContent></Tooltip>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -615,7 +632,11 @@ export default function PayrollPage() {
                         <TableRow key={emp.id}>
                           <TableCell><div className="flex flex-col"><span className="font-bold uppercase">{emp.name}</span><span className="text-[10px] font-mono text-slate-400">{emp.employeeId}</span></div></TableCell>
                           <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
-                          <TableCell className="text-right pr-6"><Button variant="ghost" size="sm" className="font-bold gap-2"><History className="w-4 h-4" /> View History</Button></TableCell>
+                          <TableCell className="text-right pr-6">
+                            <Tooltip><TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" className="font-bold gap-2"><History className="w-4 h-4" /> View History</Button>
+                            </TooltipTrigger><TooltipContent>View Leave Accrual History</TooltipContent></Tooltip>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -856,7 +877,7 @@ export default function PayrollPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Adjustment Popups & Slip Previews... */}
+        {/* Slip Preview Dialog */}
         <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
           <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
@@ -865,7 +886,7 @@ export default function PayrollPage() {
                 <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Payroll Slip Preview</DialogTitle>
               </div>
               <div className="flex items-center gap-3 mr-8">
-                <Button className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" onClick={() => toast({ title: "Exporting..." })}><Download className="w-5 h-5" /> Download PDF</Button>
+                <Button className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" onClick={() => window.print()}><Printer className="w-5 h-5" /> Print / Save as PDF</Button>
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)}><X className="h-5 h-5" /></Button>
               </div>
             </DialogHeader>
