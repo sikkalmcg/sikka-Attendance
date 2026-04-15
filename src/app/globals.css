@@ -101,6 +101,12 @@
   }
 }
 
+@layer utilities {
+  .print-only {
+    display: none;
+  }
+}
+
 @media print {
   /* Reset for printing */
   html, body {
@@ -109,37 +115,24 @@
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 210mm !important;
   }
 
-  /* Hide all UI elements */
-  [data-sidebar="sidebar"],
-  .sidebar-trigger,
-  header,
-  footer,
-  aside,
-  nav,
-  .print-hidden,
-  .sidebar-inset > header,
-  [role="dialog"] {
+  /* Hide EVERYTHING except the direct-child print portal */
+  body > *:not(.print-only) {
     display: none !important;
   }
 
-  /* Hide main content to allow print-only to occupy the page */
-  body > div:not(.print-only) {
-    display: none !important;
-  }
-
-  /* Force print-only to be visible and standard size */
-  .print-only {
+  /* Force print-only to be visible and occupy the full page */
+  body > .print-only {
     display: block !important;
     visibility: visible !important;
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
-    height: auto !important;
-    z-index: 9999999 !important;
+    position: static !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
     background: white !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
   }
 
   .print-only * {
@@ -150,5 +143,10 @@
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
   }
 }

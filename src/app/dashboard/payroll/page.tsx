@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { 
   Card, 
   CardHeader, 
@@ -134,9 +135,6 @@ export default function PayrollPage() {
     monthHolidays: 4
   });
 
-  const [isSubAdjustmentOpen, setIsSubAdjustmentOpen] = useState(false);
-  const [subAdjValue, setSubAdjValue] = useState(0);
-
   // Form States for Payments
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDate, setPaymentDate] = useState("");
@@ -255,9 +253,6 @@ export default function PayrollPage() {
     setAdjustLeaveEmp(emp);
   };
 
-  const handlePayHoliday = () => setAdjustmentState(prev => ({ ...prev, holidayPaid: prev.holidayPaid + prev.holidayWork, earningDays: prev.earningDays + prev.holidayWork, holidayWork: 0 }));
-  const handleBankHoliday = () => setAdjustmentState(prev => ({ ...prev, holidayBanked: prev.holidayBanked + prev.holidayWork, remainingBalance: prev.remainingBalance + prev.holidayWork, holidayWork: 0 }));
-
   const handlePostAdjustment = () => {
     if (!adjustLeaveEmp) return;
     setIsProcessing(true);
@@ -324,17 +319,18 @@ export default function PayrollPage() {
 
   const handleDownloadAndPrint = (p: PayrollRecord) => {
     const originalTitle = document.title;
-    // Set document title to slip number for the filename
+    // Set document title to slip number for the filename suggestion
     document.title = p.slipNo || "Salary_Slip";
     setPrintSlip(p);
-    toast({ title: "Quick Download", description: "Preparing Salary Slip for export..." });
+    toast({ title: "Generating PDF", description: "Applying high-fidelity render for A4 export..." });
     
+    // Using a longer timeout to ensure Portal content is fully committed to DOM
     setTimeout(() => {
       window.print();
       // Restore original title after print dialog closes
       document.title = originalTitle;
-      setTimeout(() => setPrintSlip(null), 3000);
-    }, 1000);
+      setPrintSlip(null);
+    }, 1200);
   };
 
   const handleViewSlip = (p: PayrollRecord) => {
@@ -781,7 +777,7 @@ export default function PayrollPage() {
                 <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Payroll Slip Preview</DialogTitle>
               </div>
               <div className="flex items-center gap-3 mr-8">
-                <Button className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" onClick={() => window.print()}><Printer className="w-5 h-5" /> Print / Save as PDF</Button>
+                <Button className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" onClick={() => handleDownloadAndPrint(previewSlip!)}><Printer className="w-5 h-5" /> Print / Save as PDF</Button>
                 <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)}><X className="h-5 h-5" /></Button>
               </div>
             </DialogHeader>
@@ -800,18 +796,94 @@ export default function PayrollPage() {
         </Dialog>
       </div>
 
-      {/* Print-Only Hidden Container (Rendered outside the print:hidden div) */}
-      {printSlip && (
+      {/* Robust Print Portal - Renders directly under <body> to avoid layout nesting issues */}
+      {isMounted && printSlip && createPortal(
         <div className="print-only">
-          <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
-            <SalarySlipView 
-              record={printSlip} 
-              employee={employees.find(e => e.employeeId === printSlip.employeeId)}
-              firm={firms.find(f => f.id === employees.find(e => e.employeeId === printSlip.employeeId)?.firmId)}
-            />
-          </div>
-        </div>
+          <SalarySlipView 
+            record={printSlip} 
+            employee={employees.find(e => e.employeeId === printSlip.employeeId)}
+            firm={firms.find(f => f.id === employees.find(e => e.employeeId === printSlip.employeeId)?.firmId)}
+          />
+        </div>,
+        document.body
       )}
+
+      {/* Advance Account Popup */}
+      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => !o && setViewAdvanceEmployee(null)}>
+        <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          {viewAdvanceEmployee && (
+            <>
+              <DialogHeader className="p-8 border-b bg-slate-50 flex flex-row justify-between items-start shrink-0">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-900/20">
+                    <Wallet className="w-8 h-8 text-white" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <DialogTitle className="text-xl font-black text-slate-900 uppercase">
+                      {viewAdvanceEmployee.emp.name}
+                    </DialogTitle>
+                    <div className="flex items-center gap-3 text-xs font-bold text-slate-500">
+                      <span className="font-mono text-primary bg-primary/5 px-2 py-0.5 rounded">ID: {viewAdvanceEmployee.emp.employeeId}</span>
+                      <span>•</span>
+                      <span>{viewAdvanceEmployee.emp.department}</span>
+                      <span>/</span>
+                      <span>{viewAdvanceEmployee.emp.designation}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Active Advance Bal.</p>
+                  <p className="text-3xl font-black text-rose-600 leading-none mt-1">{formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}</p>
+                </div>
+              </DialogHeader>
+
+              <ScrollArea className="flex-1 p-8 bg-white" tabIndex={0}>
+                <div className="space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <StatBox label="Total Advanced" value={formatCurrency(viewAdvanceEmployee.totalAdvAmount)} color="text-slate-900" />
+                    <StatBox label="Total Recovered" value={formatCurrency(viewAdvanceEmployee.totalRecoveryAmount)} color="text-emerald-600" />
+                    <StatBox label="Outstanding" value={formatCurrency(viewAdvanceEmployee.totalRemainingAmount)} color="text-rose-600" />
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-black uppercase text-slate-400 flex items-center gap-2 tracking-widest">
+                      <History className="w-4 h-4" /> Sequential Recovery Audit (FIFO)
+                    </h4>
+                    <div className="border rounded-2xl overflow-hidden shadow-sm">
+                      <Table>
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="font-bold">Voucher No</TableHead>
+                            <TableHead className="font-bold">Paid Date</TableHead>
+                            <TableHead className="font-bold text-right">Voucher Amt</TableHead>
+                            <TableHead className="font-bold text-right text-emerald-600">Recovered</TableHead>
+                            <TableHead className="font-bold text-right text-rose-600">Remaining</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {viewAdvanceEmployee.vouchers.map((v: any) => (
+                            <TableRow key={v.id} className="hover:bg-slate-50/50">
+                              <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
+                              <TableCell className="text-sm font-medium">{format(parseISO(v.date), 'dd-MMM-yyyy')}</TableCell>
+                              <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.recovered)}</TableCell>
+                              <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+
+              <DialogFooter className="p-6 bg-slate-50 border-t">
+                <Button variant="outline" className="px-10 h-12 rounded-xl font-bold" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -901,4 +973,13 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
 
 function SlipDetailCell({ label, value }: { label: string, value: any }) {
   return (<div className="flex items-start px-4 py-3 bg-white gap-2 font-calibri"><span className="text-[10px] font-black uppercase text-slate-400 w-32 shrink-0 tracking-widest leading-normal">{label}:</span><span className="text-sm font-bold text-slate-900 uppercase leading-normal break-words flex-1">{value || "---"}</span></div>);
+}
+
+function StatBox({ label, value, color }: { label: string, value: string | number, color: string }) {
+  return (
+    <div className="bg-slate-50 p-6 rounded-2xl text-center border border-slate-100 shadow-sm">
+      <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">{label}</p>
+      <div className={cn("text-xl font-black", color)}>{value}</div>
+    </div>
+  );
 }

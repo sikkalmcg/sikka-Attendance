@@ -1,7 +1,7 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -237,8 +237,8 @@ export default function VouchersPage() {
       window.print();
       // Restore original title
       document.title = originalTitle;
-      setTimeout(() => setPrintVoucher(null), 3000);
-    }, 800);
+      setPrintVoucher(null);
+    }, 1200);
   };
 
   if (!isMounted) return null;
@@ -653,14 +653,15 @@ export default function VouchersPage() {
             </ScrollArea>
           </DialogContent>
         </Dialog>
-
-        {/* Quick Download (Print-Only Hidden Container) */}
-        {printVoucher && (
-          <div className="print-only">
-            <AdvanceVoucherPrint voucher={printVoucher} employees={employees} firms={firms} plants={plants} />
-          </div>
-        )}
       </div>
+
+      {/* Portal for isolation-aware printing */}
+      {isMounted && printVoucher && createPortal(
+        <div className="print-only">
+          <AdvanceVoucherContent voucher={printVoucher} employees={employees} firms={firms} plants={plants} />
+        </div>,
+        document.body
+      )}
     </TooltipProvider>
   );
 }
@@ -783,14 +784,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
       <div className="pt-20 text-center">
         <p className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-300 italic">© Sikka Industries & Logistics – Internal Secure Document</p>
       </div>
-    </div>
-  );
-}
-
-function AdvanceVoucherPrint({ voucher, employees, firms, plants }: any) {
-  return (
-    <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
-      <AdvanceVoucherContent voucher={voucher} employees={employees} firms={firms} plants={plants} />
     </div>
   );
 }
