@@ -77,6 +77,7 @@ export default function VouchersPage() {
 
   // State for Preview and Print
   const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
+  const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // State for Rejection Confirmation
@@ -227,32 +228,12 @@ export default function VouchersPage() {
   };
 
   const handleDownloadPDF = (v: Voucher) => {
-    setPreviewVoucher(v);
+    setPrintVoucher(v);
+    toast({ title: "Quick Download", description: "Preparing Voucher for export..." });
     setTimeout(() => {
       window.print();
-    }, 300);
-  };
-
-  const handleExportExcel = (type: 'PENDING' | 'PAYMENT') => {
-    const data = type === 'PENDING' ? filteredPendingVouchers : filteredPayableVouchers;
-    if (data.length === 0) return;
-    const headers = ["Voucher No", "Date", "Employee Name", "Dept", "Desig", "Amount", "Purpose", "Created By", "Approved By", "Status", "Pay Mode", "Ref No"];
-    const csvContent = [
-      headers.join(","),
-      ...data.map(v => {
-        const emp = employees.find(e => e.id === v.employeeId);
-        return [
-          v.voucherNo, v.date, `"${emp?.name || ""}"`, `"${emp?.department || ""}"`, `"${emp?.designation || ""}"`, v.amount, `"${v.purpose}"`,
-          `"${v.createdByName || ""}"`, `"${v.approvedByName || "--"}"`, v.status, `"${v.paymentMode || ""}"`, `"${v.paymentReference || ""}"`
-        ].join(",");
-      })
-    ].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Vouchers_${type}_${new Date().toISOString().split('T')[0]}.csv`);
-    link.click();
+      setTimeout(() => setPrintVoucher(null), 3000);
+    }, 800);
   };
 
   if (!isMounted) return null;
@@ -391,7 +372,7 @@ export default function VouchersPage() {
                                       <Download className="w-3 h-3" /> Download
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Download PDF Copy</TooltipContent>
+                                  <TooltipContent>Quick Download (PDF)</TooltipContent>
                                 </Tooltip>
 
                                 <Tooltip>
@@ -520,7 +501,7 @@ export default function VouchersPage() {
                                           <Download className="w-3 h-3" /> Download
                                         </Button>
                                       </TooltipTrigger>
-                                      <TooltipContent>Download PDF Copy</TooltipContent>
+                                      <TooltipContent>Quick Download (PDF)</TooltipContent>
                                     </Tooltip>
                                   )}
                                 </div>
@@ -671,10 +652,10 @@ export default function VouchersPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Hidden Print Container */}
-        {previewVoucher && (
-          <div className="hidden print:block print-only">
-            <AdvanceVoucherPrint voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />
+        {/* Quick Download (Print-Only Hidden Container) */}
+        {printVoucher && (
+          <div className="fixed inset-0 z-[-1] opacity-0 print:opacity-100 print:z-[9999] print:relative print:bg-white overflow-visible">
+            <AdvanceVoucherPrint voucher={printVoucher} employees={employees} firms={firms} plants={plants} />
           </div>
         )}
       </div>
@@ -688,7 +669,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
   const formattedDate = voucher.date ? format(parseISO(voucher.date), 'dd-MMM-yyyy') : "---";
 
   return (
-    <div className="font-serif text-slate-900 space-y-10">
+    <div className="font-serif text-slate-900 space-y-10 bg-white">
       {/* Centered Top Title */}
       <div className="text-center">
         <h2 className="text-2xl font-black uppercase tracking-[0.3em] underline decoration-2 underline-offset-8">Advance Payment Voucher</h2>
@@ -740,7 +721,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
       </div>
 
-      {/* Employee Grid - Reduced padding p-6 -> p-3 for 40% height reduction */}
+      {/* Employee Grid */}
       <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 mt-6">
         <DetailCell label="Employee ID" value={emp?.employeeId} />
         <DetailCell label="Employee Name" value={emp?.name} />
@@ -750,7 +731,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <DetailCell label="Mobile Number" value={emp?.mobile} />
       </div>
 
-      {/* Payment Details - Reduced paddings */}
+      {/* Payment Details */}
       <div className="grid grid-cols-1 border-2 border-slate-900 mt-10">
         <div className="p-4 border-b-2 border-slate-900 flex items-center justify-between bg-white">
           <span className="font-black uppercase text-sm tracking-widest">Amount (In Figures)</span>

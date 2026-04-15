@@ -334,16 +334,15 @@ export default function PayrollPage() {
   };
 
   const handleDownloadAndPrint = (p: PayrollRecord) => {
-    // We render a hidden print-only version and trigger window.print()
+    // Quick Download: Trigger print/PDF dialog directly
     setPrintSlip(p);
-    toast({ title: "Generating Slip", description: "Standard A4 layout prepared. Opening download/print dialog..." });
+    toast({ title: "Quick Download", description: "Preparing Salary Slip for export..." });
     
-    // Small timeout to allow state to settle and React to render the hidden div
     setTimeout(() => {
       window.print();
-      // Clear printing state after dialog opens
-      setPrintSlip(null);
-    }, 500);
+      // Keep state for a few seconds to ensure browser captures it
+      setTimeout(() => setPrintSlip(null), 3000);
+    }, 800);
   };
 
   if (!isMounted) return null;
@@ -555,7 +554,7 @@ export default function PayrollPage() {
                                   )}
                                   <Tooltip><TooltipTrigger asChild>
                                     <Button variant="ghost" size="icon" onClick={() => handleDownloadAndPrint(p)}><Download className="w-4 h-4 text-slate-500" /></Button>
-                                  </TooltipTrigger><TooltipContent>Direct Download / Print</TooltipContent></Tooltip>
+                                  </TooltipTrigger><TooltipContent>Quick Download (PDF)</TooltipContent></Tooltip>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -911,7 +910,7 @@ export default function PayrollPage() {
 
         {/* Print-Only Hidden Container (For Direct Download) */}
         {printSlip && (
-          <div className="hidden print:block print-only">
+          <div className="fixed inset-0 z-[-1] opacity-0 print:opacity-100 print:z-[9999] print:relative print:bg-white overflow-visible">
             <div className="w-full max-w-[210mm] mx-auto p-16 min-h-[297mm] bg-white">
               <SalarySlipView 
                 record={printSlip} 
@@ -1131,7 +1130,7 @@ function SalarySlipView({ record, employee, firm }: { record: PayrollRecord, emp
   const totalDeductions = deductions.reduce((sum, d) => sum + d.value, 0);
 
   return (
-    <div className="text-slate-900 space-y-8 font-calibri">
+    <div className="text-slate-900 space-y-8 font-calibri bg-white">
       <div className="flex items-start mb-4 relative">
         <div className="w-24 shrink-0">
           {firm?.logo ? <img src={firm.logo} className="h-16 object-contain" alt="Logo" /> : <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center border-2 border-slate-900"><Building2 className="w-8 h-8 text-slate-400" /></div>}
