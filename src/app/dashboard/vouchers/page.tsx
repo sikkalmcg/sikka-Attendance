@@ -229,13 +229,11 @@ export default function VouchersPage() {
 
   const handleDownloadPDF = (v: Voucher) => {
     const originalTitle = document.title;
-    // Set document title to voucher number for the filename
     document.title = v.voucherNo || "Voucher_Slip";
     setPrintVoucher(v);
     toast({ title: "Quick Download", description: "Preparing Voucher for export..." });
     setTimeout(() => {
       window.print();
-      // Restore original title
       document.title = originalTitle;
       setPrintVoucher(null);
     }, 1200);
@@ -499,7 +497,7 @@ export default function VouchersPage() {
                                   ) : (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
+                                        <Button size="sm" className="bg-primary hover:bg-primary/90 h-8 text-xs font-bold px-4 gap-2 shadow-lg shadow-primary/20" onClick={() => handleDownloadPDF(v)}>
                                           <Download className="w-3 h-3" /> Download
                                         </Button>
                                       </TooltipTrigger>
