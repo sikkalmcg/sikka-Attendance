@@ -470,7 +470,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <HeaderActions />
               </header>
 
-              <main className="flex-1 p-6 overflow-y-auto bg-slate-50/50">
+              <main 
+                className="flex-1 p-6 overflow-y-auto bg-slate-50/50 outline-none focus-visible:ring-1 focus-visible:ring-primary/10"
+                tabIndex={0}
+                role="main"
+              >
                 <div className="max-w-7xl mx-auto">
                   {children}
                 </div>
