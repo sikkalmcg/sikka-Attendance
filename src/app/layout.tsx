@@ -6,6 +6,11 @@ import { Toaster } from '@/components/ui/toaster';
 export const metadata: Metadata = {
   title: 'SikkaTrack HR - Sikka Industries & Logistics',
   description: 'Enterprise HRMS for Sikka Industries & Logistics',
+  icons: {
+    icon: 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG',
+    shortcut: 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG',
+    apple: 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG',
+  },
 };
 
 export default function RootLayout({
