@@ -67,7 +67,9 @@ import {
   BadgeCheck,
   Mail,
   Globe,
-  MoreVertical
+  MoreVertical,
+  AlertTriangle,
+  Lock
 } from "lucide-react";
 import { 
   Tooltip,
@@ -85,7 +87,8 @@ import { parseISO, format } from "date-fns";
 const generatePayrollMonths = () => {
   const options = [];
   const date = new Date();
-  for (let i = 0; i < 6; i++) {
+  // Generate 12 months for comprehensive history viewing
+  for (let i = 0; i < 12; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
     const mmm = d.toLocaleString('en-US', { month: 'short' });
     const yy = d.getFullYear().toString().slice(-2);
@@ -151,7 +154,7 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    setSelectedMonth(PAYROLL_MONTHS[1]);
+    setSelectedMonth(PAYROLL_MONTHS[0]); // Default to CURRENT month
     setPaymentDate(new Date().toISOString().split('T')[0]);
   }, []);
 
@@ -159,8 +162,17 @@ export default function PayrollPage() {
     setAdjustedEmployees({});
   }, [selectedMonth]);
 
+  // Restriction logic: Only allow generation for Current + Previous 3 months (Index 0, 1, 2, 3)
+  const isGenerationAllowed = useMemo(() => {
+    if (!selectedMonth) return false;
+    const allowedWindow = PAYROLL_MONTHS.slice(0, 4);
+    return allowedWindow.includes(selectedMonth);
+  }, [selectedMonth]);
+
   // Tab 1: Pending Generation List
   const pendingGenerationEmployees = useMemo(() => {
+    if (!isGenerationAllowed) return [];
+
     const sorted = [...(employees || [])].sort((a, b) => (b.id || "").localeCompare(a.id || ""));
 
     return sorted.filter(emp => {
@@ -174,7 +186,7 @@ export default function PayrollPage() {
       const alreadyGenerated = payrollRecords.some(p => p.employeeId === emp.employeeId && p.month === selectedMonth);
       return matchesSearch && matchesFirm && !alreadyGenerated;
     });
-  }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth]);
+  }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth, isGenerationAllowed]);
 
   // Tab 2: Finalized Salaries
   const finalizedSalaries = useMemo(() => {
@@ -319,15 +331,12 @@ export default function PayrollPage() {
 
   const handleDownloadAndPrint = (p: PayrollRecord) => {
     const originalTitle = document.title;
-    // Set document title to slip number for the filename suggestion
     document.title = p.slipNo || "Salary_Slip";
     setPrintSlip(p);
     toast({ title: "Generating PDF", description: "Applying high-fidelity render for A4 export..." });
     
-    // Using a longer timeout to ensure Portal content is fully committed to DOM
     setTimeout(() => {
       window.print();
-      // Restore original title after print dialog closes
       document.title = originalTitle;
       setPrintSlip(null);
     }, 1200);
@@ -381,68 +390,85 @@ export default function PayrollPage() {
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <ScrollArea className="w-full" tabIndex={0}>
-                  <Table className="min-w-[1200px]">
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="font-bold">Firm / Unit</TableHead>
-                        <TableHead className="font-bold">Employee Name / ID</TableHead>
-                        <TableHead className="font-bold">Aadhaar No</TableHead>
-                        <TableHead className="font-bold">Dept / Designation</TableHead>
-                        <TableHead className="font-bold">Month</TableHead>
-                        <TableHead className="font-bold text-right">Monthly CTC</TableHead>
-                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pendingGenerationEmployees.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">All salaries for {selectedMonth} have been generated.</TableCell></TableRow>
-                      ) : (
-                        pendingGenerationEmployees.map((emp) => {
-                          const isAdjusted = adjustedEmployees[emp.id];
-                          const firm = firms.find(f => f.id === emp.firmId);
-                          const plant = plants.find(p => p.id === emp.unitId);
-                          return (
-                            <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                              <TableCell>
-                                <div className="flex flex-col">
-                                  <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
-                                  <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-col">
-                                  <span className="font-bold uppercase">{emp.name}</span>
-                                  <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                              <TableCell>
-                                <div className="flex flex-col">
-                                  <span className="text-sm font-medium">{emp.department}</span>
-                                  <span className="text-xs text-muted-foreground">{emp.designation}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell><Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge></TableCell>
-                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(emp.salary.monthlyCTC)}</TableCell>
-                              <TableCell className="text-right pr-6">
-                                <div className="flex justify-end gap-2">
-                                  <Tooltip><TooltipTrigger asChild>
-                                    <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={() => openAdjustmentDialog(emp)}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Live"}</Button>
-                                  </TooltipTrigger><TooltipContent>Review & Adjust Attendance</TooltipContent></Tooltip>
-                                  <Tooltip><TooltipTrigger asChild>
-                                    <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => isAdjusted && router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}`)} disabled={!isAdjusted}><Calculator className="w-3 h-3" /> Generate Salary</Button>
-                                  </TooltipTrigger><TooltipContent>{isAdjusted ? "Proceed" : "Review first"}</TooltipContent></Tooltip>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                  <ScrollBar orientation="horizontal" />
-                </ScrollArea>
+                {!isGenerationAllowed ? (
+                  <div className="flex flex-col items-center justify-center py-24 space-y-4 px-6 text-center">
+                    <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center border border-amber-100 shadow-inner">
+                      <AlertTriangle className="w-8 h-8 text-amber-600" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-lg font-black text-slate-900 tracking-tight">Generation Restricted</h3>
+                      <p className="text-sm text-slate-500 font-medium max-w-sm">
+                        For security and compliance, you can only generate salaries for the current month and the previous three months.
+                      </p>
+                    </div>
+                    <Button variant="outline" className="mt-4 font-bold border-slate-200" onClick={() => setSelectedMonth(PAYROLL_MONTHS[0])}>
+                      Switch to Current Month
+                    </Button>
+                  </div>
+                ) : (
+                  <ScrollArea className="w-full" tabIndex={0}>
+                    <Table className="min-w-[1200px]">
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="font-bold">Firm / Unit</TableHead>
+                          <TableHead className="font-bold">Employee Name / ID</TableHead>
+                          <TableHead className="font-bold">Aadhaar No</TableHead>
+                          <TableHead className="font-bold">Dept / Designation</TableHead>
+                          <TableHead className="font-bold">Month</TableHead>
+                          <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                          <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingGenerationEmployees.length === 0 ? (
+                          <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">All salaries for {selectedMonth} have been generated.</TableCell></TableRow>
+                        ) : (
+                          pendingGenerationEmployees.map((emp) => {
+                            const isAdjusted = adjustedEmployees[emp.id];
+                            const firm = firms.find(f => f.id === emp.firmId);
+                            const plant = plants.find(p => p.id === emp.unitId);
+                            return (
+                              <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
+                                    <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="font-bold uppercase">{emp.name}</span>
+                                    <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium">{emp.department}</span>
+                                    <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell><Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge></TableCell>
+                                <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(emp.salary.monthlyCTC)}</TableCell>
+                                <TableCell className="text-right pr-6">
+                                  <div className="flex justify-end gap-2">
+                                    <Tooltip><TooltipTrigger asChild>
+                                      <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={() => openAdjustmentDialog(emp)}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Live"}</Button>
+                                    </TooltipTrigger><TooltipContent>Review & Adjust Attendance</TooltipContent></Tooltip>
+                                    <Tooltip><TooltipTrigger asChild>
+                                      <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => isAdjusted && router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}`)} disabled={!isAdjusted}><Calculator className="w-3 h-3" /> Generate Salary</Button>
+                                    </TooltipTrigger><TooltipContent>{isAdjusted ? "Proceed" : "Review first"}</TooltipContent></Tooltip>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -561,7 +587,7 @@ export default function PayrollPage() {
             </Card>
           </TabsContent>
 
-          {/* Advance Salary Content */}
+          {/* Advance Salary Ledger Content */}
           <TabsContent value="advance">
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="bg-slate-50 border-b p-6">
@@ -599,7 +625,14 @@ export default function PayrollPage() {
                             <TableCell className="text-right font-bold">{formatCurrency(item.totalAdvAmount)}</TableCell>
                             <TableCell className="text-right font-bold text-primary">{formatCurrency(item.totalRecoveryAmount)}</TableCell>
                             <TableCell className="text-right font-black text-rose-600">{formatCurrency(item.totalRemainingAmount)}</TableCell>
-                            <TableCell className="text-right pr-6"><Button variant="outline" size="sm" onClick={() => setViewAdvanceEmployee(item)}>View</Button></TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="sm" className="font-bold h-8" onClick={() => setViewAdvanceEmployee(item)}>View</Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Detailed Voucher Audit</TooltipContent>
+                              </Tooltip>
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -625,7 +658,7 @@ export default function PayrollPage() {
                     </TableHeader>
                     <TableBody>
                       {employees.map(emp => (
-                        <TableRow key={emp.id}>
+                        <TableRow key={emp.id} className="hover:bg-slate-50/50">
                           <TableCell><div className="flex flex-col"><span className="font-bold uppercase">{emp.name}</span><span className="text-[10px] font-mono text-slate-400">{emp.employeeId}</span></div></TableCell>
                           <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
                           <TableCell className="text-right pr-6">
@@ -796,7 +829,7 @@ export default function PayrollPage() {
         </Dialog>
       </div>
 
-      {/* Robust Print Portal - Renders directly under <body> to avoid layout nesting issues */}
+      {/* Robust Print Portal */}
       {isMounted && printSlip && createPortal(
         <div className="print-only">
           <SalarySlipView 

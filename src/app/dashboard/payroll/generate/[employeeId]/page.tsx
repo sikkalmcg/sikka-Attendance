@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
@@ -20,7 +19,8 @@ import {
   Info,
   ArrowDownCircle,
   ChevronLeft,
-  AlertCircle
+  AlertCircle,
+  Lock
 } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -49,10 +49,34 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   const [advanceRecovery, setAdvanceRecovery] = useState(0);
   const [slipNo, setSlipNo] = useState("");
   const [slipDate, setSlipDate] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     setSlipDate(new Date().toISOString().split('T')[0]);
   }, []);
+
+  // Restriction logic: Only allow generation for Current + Previous 3 months
+  const isGenerationAllowed = useMemo(() => {
+    if (!selectedMonth) return false;
+    const allowedOptions = [];
+    const date = new Date();
+    for (let i = 0; i < 4; i++) {
+      const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+      const mmm = d.toLocaleString('en-US', { month: 'short' });
+      const yy = d.getFullYear().toString().slice(-2);
+      allowedOptions.push(`${mmm}-${yy}`);
+    }
+    return allowedOptions.includes(selectedMonth);
+  }, [selectedMonth]);
+
+  // Security Redirect
+  useEffect(() => {
+    if (isMounted && !isGenerationAllowed) {
+      toast({ variant: "destructive", title: "Access Denied", description: "Salary generation is restricted to the current and previous 3 months." });
+      router.push("/dashboard/payroll");
+    }
+  }, [isMounted, isGenerationAllowed, router, toast]);
 
   const employee = useMemo(() => employees.find(e => e.id === employeeId), [employees, employeeId]);
 
@@ -85,7 +109,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     return Math.max(0, totalAdv - totalRecovered);
   }, [employee, vouchers, payrollRecords]);
 
-  // Set default deduction to full advance balance (capped by logic later)
+  // Set default deduction to full advance balance
   useEffect(() => {
     setAdvanceRecovery(advanceBalance);
   }, [advanceBalance]);
@@ -109,7 +133,6 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     };
   }, [employee, attendanceRecords]);
 
-  // Validation Logic: Calculate Net before deductions
   const netPayBeforeDeduction = useMemo(() => {
     if (!employee || !currentSummary) return 0;
     
@@ -133,7 +156,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   const isDeductionError = advanceRecovery > netPayBeforeDeduction;
 
   const handlePostSalary = () => {
-    if (!employee || isProcessing || !currentSummary || isDeductionError) return;
+    if (!employee || isProcessing || !currentSummary || isDeductionError || !isGenerationAllowed) return;
     
     if (payrollRecords.some(p => p.slipNo === slipNo)) {
       toast({ variant: "destructive", title: "Duplicate Slip No", description: `Salary slip number ${slipNo} already exists.` });
@@ -149,7 +172,6 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       const earningDays = currentSummary.attendance;
       const totalDays = currentSummary.totalDays;
 
-      // Scale statutory liabilities based on earning days
       const pfEmp = Math.round((employee.salary.employeePF / totalDays) * earningDays);
       const pfEx = Math.round((employee.salary.employerPF / totalDays) * earningDays);
       const esicEmp = Math.round((employee.salary.employeeESIC / totalDays) * earningDays);
@@ -196,7 +218,8 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     }
   };
 
-  if (!employee) return <div>Employee not found.</div>;
+  if (!isMounted) return null;
+  if (!employee || !isGenerationAllowed) return null;
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] -m-6">
