@@ -28,7 +28,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  X
+  X,
+  History
 } from "lucide-react";
 import { 
   Tooltip,
@@ -57,10 +58,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 export default function VouchersPage() {
-  const { employees, firms, plants, vouchers, addRecord, updateRecord, deleteRecord } = useData();
+  const { employees, firms, plants, vouchers, payrollRecords, addRecord, updateRecord, deleteRecord } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("create");
   const [searchTerm, setSearchTerm] = useState("");
@@ -129,17 +130,76 @@ export default function VouchersPage() {
     }).reverse();
   }, [vouchers, searchTerm, employees]);
 
-  const filteredPayableVouchers = useMemo(() => {
-    return (vouchers || []).filter(v => v.status === 'APPROVED' || v.status === 'PAID').filter(v => {
-      const emp = employees.find(e => e.id === v.employeeId);
-      const search = searchTerm.toLowerCase();
-      return (
-        v.voucherNo.toLowerCase().includes(search) ||
-        (emp?.name || "").toLowerCase().includes(search) ||
-        (emp?.employeeId || "").toLowerCase().includes(search)
-      );
-    }).reverse();
-  }, [vouchers, searchTerm, employees]);
+  // Vouchers with Recovery Logic Auto-Sync
+  const vouchersWithRecovery = useMemo(() => {
+    if (!isMounted) return [];
+    
+    // Group vouchers by employee for FIFO recovery calculation
+    const vouchersByEmp: Record<string, any[]> = {};
+    [...vouchers].sort((a,b) => a.date.localeCompare(b.date)).forEach(v => {
+      if (v.status === 'PAID') {
+        if (!vouchersByEmp[v.employeeId]) vouchersByEmp[v.employeeId] = [];
+        vouchersByEmp[v.employeeId].push(v);
+      }
+    });
+
+    const recoveryMap: Record<string, any> = {};
+
+    Object.keys(vouchersByEmp).forEach(empId => {
+      const empVouchers = vouchersByEmp[empId];
+      const empObj = employees.find(e => e.id === empId);
+      const empPayroll = payrollRecords
+        .filter(p => p.employeeId === empObj?.employeeId)
+        .sort((a, b) => (a.slipDate || "").localeCompare(b.slipDate || ""));
+
+      let slipPool = empPayroll.map(p => ({...p, remainingPool: p.advanceRecovery || 0}));
+
+      empVouchers.forEach(v => {
+        let recoveredAmt = 0;
+        let lastSlipNo = "--";
+        let lastSlipDate = "--";
+        let lastSlipMonth = "--";
+        let remToRecover = v.amount;
+
+        for (let slip of slipPool) {
+          if (remToRecover <= 0) break;
+          if (slip.remainingPool > 0) {
+            const take = Math.min(remToRecover, slip.remainingPool);
+            slip.remainingPool -= take;
+            remToRecover -= take;
+            recoveredAmt += take;
+            lastSlipNo = slip.slipNo || "--";
+            lastSlipDate = slip.slipDate || "--";
+            lastSlipMonth = slip.month || "--";
+          }
+        }
+
+        recoveryMap[v.id] = {
+          recovered: recoveredAmt,
+          remaining: v.amount - recoveredAmt,
+          slipNo: lastSlipNo,
+          slipDate: lastSlipDate,
+          slipMonth: lastSlipMonth
+        };
+      });
+    });
+
+    return (vouchers || [])
+      .filter(v => v.status === 'APPROVED' || v.status === 'PAID')
+      .map(v => ({
+        ...v,
+        recovery: recoveryMap[v.id] || { recovered: 0, remaining: v.amount, slipNo: "--", slipDate: "--", slipMonth: "--" }
+      }))
+      .filter(v => {
+        const emp = employees.find(e => e.id === v.employeeId);
+        const search = searchTerm.toLowerCase();
+        return (
+          v.voucherNo.toLowerCase().includes(search) ||
+          (emp?.name || "").toLowerCase().includes(search) ||
+          (emp?.employeeId || "").toLowerCase().includes(search)
+        );
+      }).reverse();
+  }, [vouchers, payrollRecords, employees, searchTerm, isMounted]);
 
   const paginatedPending = useMemo(() => {
     const start = (pendingPage - 1) * rowsPerPage;
@@ -148,11 +208,11 @@ export default function VouchersPage() {
 
   const paginatedPayable = useMemo(() => {
     const start = (paymentPage - 1) * rowsPerPage;
-    return filteredPayableVouchers.slice(start, start + rowsPerPage);
-  }, [filteredPayableVouchers, paymentPage]);
+    return vouchersWithRecovery.slice(start, start + rowsPerPage);
+  }, [vouchersWithRecovery, paymentPage]);
 
   const totalPendingPages = Math.ceil(filteredPendingVouchers.length / rowsPerPage);
-  const totalPaymentPages = Math.ceil(filteredPayableVouchers.length / rowsPerPage);
+  const totalPaymentPages = Math.ceil(vouchersWithRecovery.length / rowsPerPage);
 
   const handleCreateVoucher = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,35 +312,35 @@ export default function VouchersPage() {
   };
 
   const handleExportVouchersExcel = () => {
-    if (filteredPayableVouchers.length === 0) {
+    if (vouchersWithRecovery.length === 0) {
       toast({ variant: "destructive", title: "No Data", description: "No records to export in the current selection." });
       return;
     }
 
     const headers = [
-      "Voucher No", "Employee Name", "Employee ID", "Department", "Designation",
-      "Date", "Amount", "Purpose", "Status", "Payment Mode", "Ref No", 
-      "Created By", "Approved By"
+      "Voucher No", "Employee Name", "Employee ID", "Voucher Date", "Amount",
+      "Recovery Amount", "Remaining Balance", "Recovery Slip No", "Recovery Slip Date", "Recovery Month",
+      "Status", "Payment Mode", "Ref No"
     ];
 
     const csvRows = [
       headers.join(","),
-      ...filteredPayableVouchers.map(v => {
+      ...vouchersWithRecovery.map(v => {
         const emp = employees.find(e => e.id === v.employeeId);
         return [
           `"${v.voucherNo}"`,
           `"${emp?.name || ''}"`,
           `"${emp?.employeeId || ''}"`,
-          `"${emp?.department || ''}"`,
-          `"${emp?.designation || ''}"`,
           `"${v.date || ''}"`,
           `"${v.amount}"`,
-          `"${(v.purpose || '').replace(/"/g, '""')}"`,
+          `"${v.recovery.recovered}"`,
+          `"${v.recovery.remaining}"`,
+          `"${v.recovery.slipNo}"`,
+          `"${v.recovery.slipDate}"`,
+          `"${v.recovery.slipMonth}"`,
           `"${v.status}"`,
           `"${v.paymentMode || ''}"`,
-          `"${v.paymentReference || ''}"`,
-          `"${v.createdByName || ''}"`,
-          `"${v.approvedByName || ''}"`
+          `"${v.paymentReference || ''}"`
         ].join(",");
       })
     ];
@@ -289,12 +349,12 @@ export default function VouchersPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Voucher_Payments_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `Voucher_Audit_Report_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    toast({ title: "Export Success", description: "The voucher payment data has been exported." });
+    toast({ title: "Export Success", description: "The voucher audit report has been exported." });
   };
 
   if (!isMounted) return null;
@@ -497,53 +557,52 @@ export default function VouchersPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="w-full">
-                  <Table className="min-w-[1200px]">
+                  <Table className="min-w-[1800px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-bold">Voucher No</TableHead>
                         <TableHead className="font-bold">Employee Name</TableHead>
-                        <TableHead className="font-bold">Dept / Designation</TableHead>
-                        <TableHead className="font-bold text-center">Mode</TableHead>
-                        <TableHead className="font-bold text-center">Ref No</TableHead>
-                        <TableHead className="font-bold text-right">Amount</TableHead>
-                        <TableHead className="font-bold text-primary">Created By</TableHead>
-                        <TableHead className="font-bold text-emerald-600">Approved By</TableHead>
+                        <TableHead className="font-bold">Voucher Date</TableHead>
+                        <TableHead className="font-bold text-right">Voucher Amt</TableHead>
+                        <TableHead className="font-bold text-right text-primary">Recovery Amt</TableHead>
+                        <TableHead className="font-bold text-right text-rose-600">Remaining Bal</TableHead>
+                        <TableHead className="font-bold">Recovery Slip No</TableHead>
+                        <TableHead className="font-bold">Recovery Date</TableHead>
+                        <TableHead className="font-bold">Recovery Month</TableHead>
                         <TableHead className="font-bold text-center">Status</TableHead>
                         <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedPayable.length === 0 ? (
-                        <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No vouchers for payment.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">No vouchers found in ledger.</TableCell></TableRow>
                       ) : (
                         paginatedPayable.map((v) => {
                           const emp = employees.find(e => e.id === v.employeeId);
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50">
                               <TableCell>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Preview Voucher</TooltipContent>
-                                </Tooltip>
+                                <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</span>
                               </TableCell>
-                              <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col">
-                                  <span className="text-sm font-bold leading-tight">{emp?.department || "--"}</span>
-                                  <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
+                                  <span className="font-bold uppercase">{emp?.name || "..."}</span>
+                                  <span className="text-[10px] font-mono text-slate-400">{emp?.employeeId}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-center">
-                                <span className="text-[10px] font-black">{v.paymentMode || "--"}</span>
+                              <TableCell className="text-xs font-medium">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="text-right font-black text-primary">{formatCurrency(v.recovery.recovered)}</TableCell>
+                              <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.recovery.remaining)}</TableCell>
+                              <TableCell>
+                                <span className="text-[10px] font-mono font-black text-slate-600">{v.recovery.slipNo}</span>
                               </TableCell>
-                              <TableCell className="text-center">
-                                <span className="text-[10px] font-mono font-medium text-slate-500">{v.paymentReference || "--"}</span>
+                              <TableCell className="text-[10px] font-medium text-slate-500">
+                                {v.recovery.slipDate !== "--" ? format(parseISO(v.recovery.slipDate), 'dd-MMM-yyyy') : "--"}
                               </TableCell>
-                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                              <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
-                              <TableCell className="text-xs font-bold text-emerald-600">{v.approvedByName || "--"}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-50">{v.recovery.slipMonth}</Badge>
+                              </TableCell>
                               <TableCell className="text-center">
                                 <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none text-[10px] font-bold")}>
                                   {v.status}
@@ -552,22 +611,17 @@ export default function VouchersPage() {
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end gap-2">
                                   {v.status === "APPROVED" ? (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
-                                          <CreditCard className="w-3 h-3 mr-1.5" /> Pay
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Record Cash/Bank Payment</TooltipContent>
-                                    </Tooltip>
+                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
+                                      Pay
+                                    </Button>
                                   ) : (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Button size="sm" className="bg-primary hover:bg-primary/90 h-8 text-xs font-bold px-4 gap-2 shadow-lg shadow-primary/20" onClick={() => handleDownloadPDF(v)}>
-                                          <Download className="w-3 h-3" /> Download
+                                        <Button size="sm" variant="ghost" className="h-8 w-8 rounded-full" onClick={() => handleDownloadPDF(v)}>
+                                          <Download className="w-4 h-4 text-slate-400" />
                                         </Button>
                                       </TooltipTrigger>
-                                      <TooltipContent>Quick Download (PDF)</TooltipContent>
+                                      <TooltipContent>Download Voucher</TooltipContent>
                                     </Tooltip>
                                   )}
                                 </div>
@@ -578,11 +632,12 @@ export default function VouchersPage() {
                       )}
                     </TableBody>
                   </Table>
+                  <ScrollBar orientation="horizontal" />
                 </ScrollArea>
               </CardContent>
               {totalPaymentPages > 1 && (
                 <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                  <div className="text-xs font-bold text-muted-foreground">Showing {((paymentPage - 1) * rowsPerPage) + 1} - {Math.min(paymentPage * rowsPerPage, filteredPayableVouchers.length)} of {filteredPayableVouchers.length}</div>
+                  <div className="text-xs font-bold text-muted-foreground">Showing {((paymentPage - 1) * rowsPerPage) + 1} - {Math.min(paymentPage * rowsPerPage, vouchersWithRecovery.length)} of {vouchersWithRecovery.length}</div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" disabled={paymentPage === 1} onClick={() => setPaymentPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
                     <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {paymentPage} of {totalPaymentPages}</div>
