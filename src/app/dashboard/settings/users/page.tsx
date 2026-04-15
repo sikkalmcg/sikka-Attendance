@@ -24,7 +24,9 @@ import {
   EyeOff,
   Check,
   X,
-  SearchIcon
+  SearchIcon,
+  Globe,
+  Users
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -202,6 +204,25 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleGlobalPermissionsUpdate = () => {
+    if (!formData.permissions || formData.permissions.length === 0) {
+      toast({ variant: "destructive", title: "Action Blocked", description: "Select at least one permission to apply globally." });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      users.forEach(u => {
+        if (u.role !== 'SUPER_ADMIN') {
+          updateRecord('users', u.id, { permissions: formData.permissions });
+        }
+      });
+      toast({ title: "Global Update Success", description: "Permissions applied to all managed users." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const togglePermission = (perm: string) => {
     const current = formData.permissions || [];
     const updated = current.includes(perm) 
@@ -296,7 +317,7 @@ export default function UserManagementPage() {
         </Card>
 
         <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
-          <DialogContent className="sm:max-w-4xl max-h-[95vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
             <DialogHeader className="p-8 pb-4 shrink-0 border-b bg-white z-10">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -312,7 +333,7 @@ export default function UserManagementPage() {
             </DialogHeader>
             
             <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30" tabIndex={0}>
-              <div className="space-y-10 pb-8 pr-4">
+              <div className="space-y-10 pb-12 pr-4">
                 {/* Identity Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
@@ -379,14 +400,27 @@ export default function UserManagementPage() {
 
                 {/* Permissions Section */}
                 <div className="space-y-6 pt-8 border-t border-slate-200">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Assign Page Access</h3>
                       <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Select the modules this user can view and interact with.</p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg border-slate-200" onClick={selectAllPermissions}>Select All</Button>
                       <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions}>Clear</Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            className="h-9 px-4 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg gap-2"
+                            onClick={handleGlobalPermissionsUpdate}
+                          >
+                            <Globe className="w-3.5 h-3.5" /> Apply Globally
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Apply current permissions to all users</TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
 
@@ -400,7 +434,7 @@ export default function UserManagementPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[300px]">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredPermissions.map(perm => {
                       const isSelected = formData.permissions?.includes(perm);
                       return (
@@ -430,6 +464,38 @@ export default function UserManagementPage() {
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* All Users Preview Section */}
+                <div className="space-y-6 pt-12 border-t border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 text-slate-400" />
+                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Managed Users Registry</h3>
+                  </div>
+                  <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="text-[9px] font-black uppercase">Name</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase">Username</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase">Role</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase text-right">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map(u => (
+                          <TableRow key={u.id} className="hover:bg-slate-50/50">
+                            <TableCell className="text-xs font-bold">{u.fullName}</TableCell>
+                            <TableCell className="text-xs font-mono text-primary">{u.username}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-[8px] font-black uppercase py-0">{u.role}</Badge></TableCell>
+                            <TableCell className="text-right">
+                              <Badge className={cn("text-[8px] font-black uppercase py-0", u.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>{u.status}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 </div>
               </div>
