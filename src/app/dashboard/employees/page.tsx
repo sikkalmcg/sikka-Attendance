@@ -52,7 +52,8 @@ import {
   User,
   AlertTriangle,
   Clock,
-  TrendingUp as GrowthIcon
+  TrendingUp as GrowthIcon,
+  TrendingDown as LossIcon
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -162,7 +163,6 @@ export default function EmployeesPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    // SORT FIRST: Latest entry first based on createdAt or joinDate
     const sorted = [...(employees || [])].sort((a, b) => {
       const aVal = a.createdAt || a.joinDate || "";
       const bVal = b.createdAt || b.joinDate || "";
@@ -239,7 +239,6 @@ export default function EmployeesPage() {
   const handleRegistrationPost = async () => {
     if (isProcessing) return;
 
-    // Validation Check
     if (!formData.name || !formData.aadhaar || (formData.aadhaar || "").replace(/\s/g, '').length !== 12) {
       toast({ variant: "destructive", title: "Validation Error", description: "Name and 12-digit Aadhaar are mandatory." });
       return;
@@ -365,7 +364,6 @@ export default function EmployeesPage() {
     return isNaN(pct) || !isFinite(pct) ? "0.0" : pct.toFixed(1);
   }, [salaryRevision, revisionData.monthlyCTC]);
 
-  // Derive associated units based on selected firm
   const availableUnits = useMemo(() => {
     if (!formData.firmId) return [];
     const firm = (firms || []).find(f => f.id === formData.firmId);
@@ -903,7 +901,6 @@ export default function EmployeesPage() {
 
                 <ScrollArea className="flex-1 p-6">
                   <div className="space-y-6">
-                    {/* Top Summary Card */}
                     <Card className="border-none bg-slate-900 text-white shadow-lg">
                       <CardContent className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="space-y-1">
@@ -925,7 +922,6 @@ export default function EmployeesPage() {
                       </CardContent>
                     </Card>
 
-                    {/* History Table */}
                     <div className="space-y-4">
                       <h4 className="font-bold text-sm flex items-center gap-2 text-slate-700">
                         <History className="w-4 h-4" /> Salary History Timeline
@@ -949,17 +945,17 @@ export default function EmployeesPage() {
                               </TableRow>
                             ) : (
                               [...viewHistoryEmployee.salaryHistory].reverse().map((entry, idx, arr) => {
-                                // Growth logic: compared to the chronologically previous entry
-                                // Since we are reversed (newest first), the previous entry is at idx + 1
                                 const prevEntry = arr[idx + 1];
                                 let growthLabel: string | null = null;
+                                let pctValue = 0;
                                 
                                 if (prevEntry) {
                                   const diff = entry.monthlyCTC - prevEntry.monthlyCTC;
-                                  const pct = (diff / prevEntry.monthlyCTC) * 100;
-                                  growthLabel = `+${pct.toFixed(1)}%`;
+                                  pctValue = (diff / prevEntry.monthlyCTC) * 100;
+                                  const isPos = pctValue > 0;
+                                  growthLabel = `${isPos ? '+' : ''}${pctValue.toFixed(1)}%`;
                                 } else {
-                                  growthLabel = "Starting";
+                                  growthLabel = "STARTING";
                                 }
 
                                 return (
@@ -980,10 +976,11 @@ export default function EmployeesPage() {
                                         variant="outline" 
                                         className={cn(
                                           "font-black text-[10px] px-2 py-0 h-6 uppercase",
-                                          growthLabel === "Starting" ? "text-slate-400 bg-slate-50 border-slate-200" : "text-emerald-600 bg-emerald-50 border-emerald-200"
+                                          growthLabel === "STARTING" ? "text-slate-400 bg-slate-50 border-slate-200" : 
+                                          pctValue >= 0 ? "text-emerald-600 bg-emerald-50 border-emerald-200" : "text-rose-600 bg-rose-50 border-rose-200"
                                         )}
                                       >
-                                        {growthLabel === "Starting" ? null : <GrowthIcon className="w-2.5 h-3 mr-1" />}
+                                        {growthLabel === "STARTING" ? null : (pctValue >= 0 ? <GrowthIcon className="w-2.5 h-3 mr-1" /> : <LossIcon className="w-2.5 h-3 mr-1" />)}
                                         {growthLabel}
                                       </Badge>
                                     </TableCell>
@@ -1053,3 +1050,4 @@ export default function EmployeesPage() {
     </TooltipProvider>
   );
 }
+
