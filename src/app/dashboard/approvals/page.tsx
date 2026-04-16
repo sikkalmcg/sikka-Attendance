@@ -52,7 +52,9 @@ import {
   ChevronRight,
   History,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -290,6 +292,87 @@ export default function ApprovalsPage() {
     } finally { setIsProcessing(false); }
   };
 
+  // Export Functions
+  const handleExportAttendance = () => {
+    if (historyAttendance.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No approved records to export." });
+      return;
+    }
+
+    const headers = [
+      "Employee Name", "Employee ID", "Department", "Designation", 
+      "Date", "IN Time", "OUT Time", "Working Hours", "Type", 
+      "Status", "IN Address", "OUT Address", "Approved By"
+    ];
+
+    const csvContent = [
+      headers.join(","),
+      ...historyAttendance.map(rec => [
+        `"${rec.employeeName}"`,
+        `"${rec.employeeId}"`,
+        `"${rec.dept}"`,
+        `"${rec.desig}"`,
+        `"${rec.date}"`,
+        `"${rec.inTime || '--'}"`,
+        `"${rec.outTime || '--'}"`,
+        `"${rec.hours}"`,
+        `"${rec.attendanceType}"`,
+        `"${rec.status}"`,
+        `"${rec.address || '--'}"`,
+        `"${rec.addressOut || '--'}"`,
+        `"${rec.approvedBy || 'HR_ADMIN'}"`
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Attendance_History_${format(new Date(), "yyyy-MM-dd")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Export Success", description: "Attendance audit ledger downloaded." });
+  };
+
+  const handleExportLeave = () => {
+    if (historyLeaves.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No processed leave records to export." });
+      return;
+    }
+
+    const headers = [
+      "Employee Name", "Employee ID", "Department", "Designation", 
+      "From Date", "To Date", "Days", "Purpose", "Status", "Reject Reason"
+    ];
+
+    const csvContent = [
+      headers.join(","),
+      ...historyLeaves.map(l => [
+        `"${l.employeeName}"`,
+        `"${l.employeeId}"`,
+        `"${l.department}"`,
+        `"${l.designation}"`,
+        `"${l.fromDate}"`,
+        `"${l.toDate}"`,
+        `"${l.days}"`,
+        `"${l.purpose}"`,
+        `"${l.status}"`,
+        `"${l.rejectReason || 'N/A'}"`
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Leave_History_${format(new Date(), "yyyy-MM-dd")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Export Success", description: "Leave processing history downloaded." });
+  };
+
   if (!isMounted) return null;
 
   return (
@@ -509,6 +592,14 @@ export default function ApprovalsPage() {
                 <TabsTrigger value="leave" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">Leave History</TabsTrigger>
               </TabsList>
               <div className="h-px flex-1 bg-slate-100" />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-9 px-4 font-black text-[10px] uppercase tracking-widest gap-2 bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shadow-sm"
+                onClick={historyType === 'attendance' ? handleExportAttendance : handleExportLeave}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Export Excel
+              </Button>
             </div>
 
             <TabsContent value="attendance">
