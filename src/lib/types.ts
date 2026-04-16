@@ -1,3 +1,4 @@
+
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'HR' | 'EMPLOYEE';
 
 export interface User {
@@ -94,6 +95,7 @@ export interface Employee {
   salaryHistory: SalaryHistoryEntry[];
   active: boolean;
   advanceLeaveBalance?: number;
+  avatar?: string;
 }
 
 export interface Holiday {
@@ -143,6 +145,21 @@ export interface AttendanceRecord {
   rejectionCount?: number;
   autoOut?: boolean;
   autoCheckout?: boolean; // Maintain compatibility
+}
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  designation: string;
+  fromDate: string;
+  toDate: string;
+  days: number;
+  purpose: string;
+  status: 'UNDER_PROCESS' | 'APPROVED' | 'REJECTED';
+  rejectReason?: string;
+  createdAt: string;
 }
 
 export interface AppNotification {

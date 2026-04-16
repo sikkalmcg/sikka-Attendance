@@ -55,6 +55,24 @@
         "date": { "type": "string" },
         "status": { "type": "string" }
       }
+    },
+    "LeaveRequest": {
+      "title": "LeaveRequest",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "department": { "type": "string" },
+        "designation": { "type": "string" },
+        "fromDate": { "type": "string" },
+        "toDate": { "type": "string" },
+        "days": { "type": "number" },
+        "purpose": { "type": "string" },
+        "status": { "type": "string", "enum": ["UNDER_PROCESS", "APPROVED", "REJECTED"] },
+        "rejectReason": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
     }
   },
   "auth": {
@@ -70,7 +88,8 @@
       { "path": "/payroll/{payrollId}", "definition": { "entityName": "Payroll", "description": "Monthly earnings" } },
       { "path": "/vouchers/{voucherId}", "definition": { "entityName": "Voucher", "description": "Cash advances" } },
       { "path": "/holidays/{holidayId}", "definition": { "entityName": "Holiday", "description": "Organization calendar" } },
-      { "path": "/notifications/{notifId}", "definition": { "entityName": "Notification", "description": "Activity alerts" } }
+      { "path": "/notifications/{notifId}", "definition": { "entityName": "Notification", "description": "Activity alerts" } },
+      { "path": "/leaveRequests/{leaveId}", "definition": { "entityName": "LeaveRequest", "description": "Employee leave applications" } }
     ]
   }
 }

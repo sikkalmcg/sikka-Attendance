@@ -11,7 +11,8 @@ import {
   Firm, 
   User, 
   Holiday, 
-  AppNotification 
+  AppNotification,
+  LeaveRequest
 } from '@/lib/types';
 import { 
   useCollection, 
@@ -35,6 +36,7 @@ interface DataContextType {
   users: User[];
   holidays: Holiday[];
   notifications: AppNotification[];
+  leaveRequests: LeaveRequest[];
   // Mutation helpers
   addRecord: (col: string, data: any) => void;
   updateRecord: (col: string, id: string, data: any) => void;
@@ -83,18 +85,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const notificationsQuery = useMemoFirebase(() => collection(db, 'notifications'), [db]);
   const { data: notifications } = useCollection<AppNotification>(notificationsQuery);
 
+  const leaveQuery = useMemoFirebase(() => collection(db, 'leaveRequests'), [db]);
+  const { data: leaveRequests } = useCollection<LeaveRequest>(leaveQuery);
+
   // Helper to check if current user is Super Admin
   const isSuperAdmin = () => currentUser?.role === 'SUPER_ADMIN';
 
   // Firestore Mutation Helpers with RBAC
   const addRecord = (col: string, data: any) => {
-    // Standard role check can be added here if certain collections are restricted
     const colRef = collection(db, col);
     addDocumentNonBlocking(colRef, { ...data, createdAt: new Date().toISOString() });
   };
 
   const updateRecord = (col: string, id: string, data: any) => {
-    // Block deactivation of Super Admin or critical system users if needed
     const docRef = doc(db, col, id);
     updateDocumentNonBlocking(docRef, { ...data, updatedAt: new Date().toISOString() });
   };
@@ -127,12 +130,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     users: users || [],
     holidays: holidays || [],
     notifications: notifications || [],
+    leaveRequests: leaveRequests || [],
     addRecord,
     updateRecord,
     deleteRecord,
     setRecord,
     currentUser
-  }), [employees, attendance, vouchers, payroll, plants, firms, users, holidays, notifications, currentUser]);
+  }), [employees, attendance, vouchers, payroll, plants, firms, users, holidays, notifications, leaveRequests, currentUser]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

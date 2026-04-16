@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -21,7 +22,9 @@ import {
   ShieldAlert,
   Lock,
   MessageCircle,
-  SendHorizontal
+  SendHorizontal,
+  FileText,
+  Plus
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -32,9 +35,9 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { AttendanceRecord, Plant } from "@/lib/types";
+import { AttendanceRecord, Plant, LeaveRequest } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -70,18 +73,24 @@ const getISTTime = () => {
 };
 
 export default function AttendancePage() {
-  const { attendanceRecords, addRecord, updateRecord, plants, holidays, employees } = useData();
+  const { attendanceRecords, leaveRequests, addRecord, updateRecord, plants, holidays, employees } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-  const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT">("NONE");
+  const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT" | "LEAVE">("NONE");
   
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
   const [manualType, setManualType] = useState<'FIELD' | 'WFH'>('FIELD');
+
+  // Leave Form State
+  const [leaveFrom, setLeaveFrom] = useState("");
+  const [leaveTo, setLeaveTo] = useState("");
+  const [leavePurpose, setLeavePurpose] = useState("");
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedRecordToEdit, setSelectedRecordToEdit] = useState<any>(null);
@@ -135,11 +144,17 @@ export default function AttendancePage() {
     return registeredEmployee?.name || currentUser?.fullName || "Employee Name";
   }, [registeredEmployee, currentUser]);
 
-  // Logic for Active Record and Restriction
   const employeeRecords = useMemo(() => {
     if (!effectiveEmployeeId) return [];
     return (attendanceRecords || []).filter(r => r.employeeId === effectiveEmployeeId);
   }, [attendanceRecords, effectiveEmployeeId]);
+
+  const myLeaveRequests = useMemo(() => {
+    if (!effectiveEmployeeId) return [];
+    return (leaveRequests || [])
+      .filter(l => l.employeeId === effectiveEmployeeId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [leaveRequests, effectiveEmployeeId]);
 
   const activeRecord = useMemo(() => {
     return employeeRecords.find(r => !r.outTime);
@@ -167,50 +182,63 @@ export default function AttendancePage() {
       isLocked, 
       unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null 
     };
-  }, [lastOutRecord, currentTime]); // Re-check as time passes
+  }, [lastOutRecord, currentTime]);
 
-  // Auto-OUT Rule (16 Hours)
-  useEffect(() => {
-    if (!activeRecord || !activeRecord.inTime || !isMounted) return;
+  const handleCreateLeaveRequest = () => {
+    if (!isAccessAllowed) {
+      toast({ variant: "destructive", title: "Action Blocked", description: "Only registered staff can request leave." });
+      return;
+    }
+    setLeaveFrom(format(getISTTime(), "yyyy-MM-dd"));
+    setLeaveTo(format(getISTTime(), "yyyy-MM-dd"));
+    setLeavePurpose("");
+    setActiveDialog("LEAVE");
+  };
 
-    const checkAutoOut = () => {
-      const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
-      const now = getISTTime();
-      const diff = differenceInHours(now, inDateTime);
+  const handleSendLeaveRequest = () => {
+    if (!leaveFrom || !leaveTo || !leavePurpose.trim()) {
+      toast({ variant: "destructive", title: "Missing Fields", description: "Please provide dates and purpose." });
+      return;
+    }
 
-      if (diff >= 16) {
-        // FINAL_OUT_TIME = IN_TIME + 16hr - 8hr = IN_TIME + 8hr
-        const finalOutDateTime = addHours(inDateTime, 8);
-        const outDate = format(finalOutDateTime, "yyyy-MM-dd");
-        const outTimeStr = format(finalOutDateTime, "HH:mm");
+    const today = format(getISTTime(), "yyyy-MM-dd");
+    if (leaveFrom < today) {
+      toast({ variant: "destructive", title: "Invalid Date", description: "Leave from date cannot be in the past." });
+      return;
+    }
+    if (leaveTo < leaveFrom) {
+      toast({ variant: "destructive", title: "Invalid Date", description: "To date must be after From date." });
+      return;
+    }
 
-        updateRecord('attendance', activeRecord.id, {
-          outTime: outTimeStr,
-          hours: 8.0,
-          status: 'PRESENT',
-          autoOut: true,
-          addressOut: "Auto marked by system",
-          outPlant: activeRecord.inPlant || "Auto-OUT"
-        });
+    setIsSubmittingLeave(true);
+    try {
+      const days = differenceInDays(parseISO(leaveTo), parseISO(leaveFrom)) + 1;
+      const newLeave: Partial<LeaveRequest> = {
+        employeeId: effectiveEmployeeId,
+        employeeName: effectiveEmployeeName,
+        department: registeredEmployee?.department || "N/A",
+        designation: registeredEmployee?.designation || "N/A",
+        fromDate: leaveFrom,
+        toDate: leaveTo,
+        days: days,
+        purpose: leavePurpose,
+        status: 'UNDER_PROCESS'
+      };
 
-        addRecord('notifications', {
-          message: `AUTO-OUT: ${activeRecord.employeeName} shift closed automatically after 16 hours.`,
-          timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-          read: false
-        });
+      addRecord('leaveRequests', newLeave);
+      addRecord('notifications', {
+        message: `New Leave Request: ${effectiveEmployeeName} (${days} days)`,
+        timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
+        read: false
+      });
 
-        toast({ 
-          title: "Session Expired", 
-          description: "System auto-marked OUT (16h Rule). 8h shift stored.",
-          variant: "destructive"
-        });
-      }
-    };
-
-    const interval = setInterval(checkAutoOut, 60000); // Check every minute
-    checkAutoOut(); // Initial check
-    return () => clearInterval(interval);
-  }, [activeRecord, isMounted]);
+      toast({ title: "Request Sent", description: "Your leave application is under process." });
+      setActiveDialog("NONE");
+    } finally {
+      setIsSubmittingLeave(false);
+    }
+  };
 
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
@@ -220,7 +248,6 @@ export default function AttendancePage() {
       return (attendanceRecords || [])
         .filter(r => {
           try {
-            // Apply global rule: filter even for admins if it's before the specific employee's join date
             const emp = employees.find(e => e.employeeId === r.employeeId);
             if (emp?.joinDate && r.date < emp.joinDate) return false;
             return new Date(r.date) >= limitDate;
@@ -238,7 +265,6 @@ export default function AttendancePage() {
     const today = startOfDay(new Date());
     const fortyFiveDaysAgo = subDays(today, 45);
     
-    // Strict Boundary: History starts at max(45 days ago, joining date)
     let historyStartDate = fortyFiveDaysAgo;
     if (registeredEmployee?.joinDate) {
       const joinDate = parseISO(registeredEmployee.joinDate);
@@ -341,7 +367,6 @@ export default function AttendancePage() {
       return;
     }
 
-    // Joining Date Boundary Validation
     if (type === "IN") {
       const istNow = getISTTime();
       const todayStr = format(istNow, "yyyy-MM-dd");
@@ -393,7 +418,6 @@ export default function AttendancePage() {
     const time = format(now, "HH:mm");
     const today = format(now, "yyyy-MM-dd");
 
-    // Redundant but safe validation
     if (registeredEmployee?.joinDate && today < registeredEmployee.joinDate) {
       toast({ variant: "destructive", title: "Action Blocked", description: "Attendance cannot be marked before employee joining date." });
       return;
@@ -442,7 +466,6 @@ export default function AttendancePage() {
     let finalHours = parseFloat(diffHours.toFixed(2));
     let isAuto = false;
 
-    // Standard Shift Auto-Correction (Max 16 hours check)
     if (diffHours > 16) {
       const autoOutDate = new Date(inDateTime.getTime() + (8 * 60 * 60 * 1000));
       finalOutTime = format(autoOutDate, "HH:mm");
@@ -478,10 +501,8 @@ export default function AttendancePage() {
 
   const handleSaveAdminEdit = () => {
     if (!selectedRecordToEdit || !currentUser) return;
-
     const inTime = editTimes.in;
     const outTime = editTimes.out;
-    
     let hours = 0;
     if (inTime && outTime) {
       const dummyDate = "2024-01-01 ";
@@ -492,10 +513,8 @@ export default function AttendancePage() {
         hours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
       }
     }
-
     const status = hours > ATTENDANCE_RULES.PRESENT_THRESHOLD ? 'PRESENT' : (hours > 0 ? 'HALF_DAY' : 'ABSENT');
     const isVirtual = selectedRecordToEdit.id.startsWith('virtual-');
-
     if (isVirtual) {
       addRecord('attendance', {
         employeeId: selectedRecordToEdit.employeeId,
@@ -522,37 +541,8 @@ export default function AttendancePage() {
         approved: true 
       });
     }
-
-    addRecord('notifications', {
-      message: `ADMIN: ${currentUser.fullName} manually adjusted logs for ${selectedRecordToEdit.date}`,
-      timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
-      read: false
-    });
     setIsEditDialogOpen(false);
-    toast({ title: "Manual Adjustment Applied", description: "Record has been updated and recalculated." });
-  };
-
-  const handleViewRejection = (rec: AttendanceRecord) => {
-    setSelectedRecordForRejection(rec);
-    setIsRejectionDialogOpen(true);
-  };
-
-  const handleResubmit = () => {
-    if (!selectedRecordForRejection) return;
-    
-    updateRecord('attendance', selectedRecordForRejection.id, {
-      remark: "", 
-      approved: false 
-    });
-
-    addRecord('notifications', {
-      message: `${selectedRecordForRejection.employeeName} resubmitted logs for ${selectedRecordForRejection.date}`,
-      timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
-      read: false
-    });
-
-    setIsRejectionDialogOpen(false);
-    toast({ title: "Resubmitted", description: "Logs sent back for approval." });
+    toast({ title: "Manual Adjustment Applied" });
   };
 
   if (!isMounted) return null;
@@ -565,7 +555,7 @@ export default function AttendancePage() {
             <ShieldAlert className="h-5 w-5 text-rose-600" />
             <AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle>
             <AlertDescription className="text-rose-700">
-              Your login identity (Aadhaar/Mobile) is not found in the official Employee Directory. Only registered staff can access the Gateway Portal. Please contact HR for profile registration.
+              Only registered staff can access Gateway Portal. Please contact HR.
             </AlertDescription>
           </Alert>
         )}
@@ -575,46 +565,38 @@ export default function AttendancePage() {
             <Lock className="h-5 w-5 text-amber-600" />
             <AlertTitle className="font-bold text-amber-800">Check-In Restricted</AlertTitle>
             <AlertDescription className="text-amber-700 font-medium">
-              Organization policy requires a mandatory 8-hour cooling period between shifts. You can mark attendance after <span className="font-black underline">{lockState.unlockTime}</span>.
+              Mandatory 8-hour cooling period. You can mark attendance after <span className="font-black underline">{lockState.unlockTime}</span>.
             </AlertDescription>
           </Alert>
         )}
 
-        {!isAdminRole && currentUser?.role !== 'EMPLOYEE' && (
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex gap-3 items-center">
-            <AlertCircle className="w-5 h-5 text-amber-600" />
-            <p className="text-xs font-bold text-amber-800">
-              Administrator Mode: You are logged in as {currentUser?.role}. Gateway Portal controls are locked for non-employee accounts.
-            </p>
-          </div>
-        )}
-
-        <Card className="shadow-2xl border-none overflow-hidden bg-white max-w-md mx-auto">
-          <div className="h-1 bg-primary" />
-          <CardHeader className="text-center py-4">
-            <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
-              <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6 px-6 pb-8 pt-0">
-            <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
-              {currentTime ? (
-                <div className="text-center">
-                  <h2 className="text-5xl font-black tracking-tighter font-mono text-sky-900 leading-none">
-                    {format(currentTime, "HH:mm")}
-                  </h2>
-                  <p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest">
-                    <Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}
-                  </p>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Main Attendance Card */}
+          <div className="lg:col-span-4 space-y-6">
+            <Card className="shadow-2xl border-none overflow-hidden bg-white">
+              <div className="h-1 bg-primary" />
+              <CardHeader className="text-center py-4">
+                <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
+                  <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6 px-6 pb-8 pt-0">
+                <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
+                  {currentTime ? (
+                    <div className="text-center">
+                      <h2 className="text-5xl font-black tracking-tighter font-mono text-sky-900 leading-none">
+                        {format(currentTime, "HH:mm")}
+                      </h2>
+                      <p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest">
+                        <Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}
+                      </p>
+                    </div>
+                  ) : (
+                    <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
+                  )}
                 </div>
-              ) : (
-                <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
-              )}
-            </div>
 
-            <div className="flex gap-4">
-              <Tooltip>
-                <TooltipTrigger asChild>
+                <div className="flex gap-4">
                   <Button 
                     className={cn(
                       "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
@@ -623,14 +605,9 @@ export default function AttendancePage() {
                     disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} 
                     onClick={() => requestLocation("IN")}
                   >
-                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? (lockState.isLocked ? <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Locked</span> : "Mark Check-In") : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>)}
+                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? (lockState.isLocked ? "Locked" : "Mark IN") : "Locked")}
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>{lockState.isLocked ? `Wait until ${lockState.unlockTime}` : "Log Arrival Time"}</TooltipContent>
-              </Tooltip>
-              
-              <Tooltip>
-                <TooltipTrigger asChild>
+                  
                   <Button 
                     className={cn(
                       "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
@@ -639,311 +616,223 @@ export default function AttendancePage() {
                     disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} 
                     onClick={() => requestLocation("OUT")}
                   >
-                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? "Mark Check-Out" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>)}
+                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Mark OUT"}
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>Log Departure Time</TooltipContent>
-              </Tooltip>
-            </div>
-          </CardContent>
-        </Card>
+                </div>
+              </CardContent>
+            </Card>
 
-        <div className="space-y-4 max-w-6xl mx-auto pt-6">
-          <div className="flex items-center justify-between">
+            {/* Leave Request Widget */}
+            <Card className="shadow-xl border-none overflow-hidden bg-white">
+              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" /> Leave Requests
+                </CardTitle>
+                <Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={handleCreateLeaveRequest} disabled={!isAccessAllowed}>
+                  <Plus className="w-3 h-3" /> Create Request
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[300px]">
+                  {myLeaveRequests.length === 0 ? (
+                    <div className="p-10 text-center space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">No leave records found.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {myLeaveRequests.map((l) => (
+                        <div key={l.id} className="p-4 space-y-2 hover:bg-slate-50 transition-colors">
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p>
+                              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">{l.days} Day(s) • {l.purpose}</p>
+                            </div>
+                            <Badge 
+                              className={cn(
+                                "text-[9px] font-black uppercase border-none px-2 py-0.5 rounded-full",
+                                l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" :
+                                l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" :
+                                "bg-blue-100 text-blue-600"
+                              )}
+                            >
+                              {l.status.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                          {l.status === 'REJECTED' && l.rejectReason && (
+                            <p className="text-[9px] text-rose-500 font-bold bg-rose-50 p-2 rounded-lg border border-rose-100 italic">
+                              Reason: {l.rejectReason}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* History Section */}
+          <div className="lg:col-span-8 space-y-4">
             <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
               <History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}
             </h3>
-          </div>
-          <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
-            <ScrollArea className="w-full" tabIndex={0}>
-              <Table className="min-w-[1000px]">
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">In Plant</TableHead>
-                    <TableHead className="font-bold">In Date Time</TableHead>
-                    <TableHead className="font-bold">Out Plant</TableHead>
-                    <TableHead className="font-bold">Out Date Time</TableHead>
-                    <TableHead className="font-bold text-center">Hours</TableHead>
-                    <TableHead className="font-bold">Type</TableHead>
-                    <TableHead className="font-bold">Approval Status</TableHead>
-                    {isSuperAdmin && <TableHead className="font-bold text-right">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for eligible work period.</TableCell></TableRow>
-                  ) : (
-                    paginatedHistory.map((h: any) => (
-                      <TableRow key={h.id} className="hover:bg-slate-50/50">
-                        <TableCell className="text-sm font-bold text-slate-900">{h.employeeName}</TableCell>
-                        <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
-                        <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {h.date} {h.outTime || "--:--"}
-                          {h.autoOut && <span className="block text-[8px] font-black text-rose-500 uppercase">Auto OUT by system</span>}
-                        </TableCell>
-                        <TableCell className={cn("font-black text-center", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
-                          {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px] font-black uppercase tracking-tight rounded-full px-3 bg-slate-50 border-slate-200">
-                            {h.attendanceType}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {h.status === 'ABSENT' ? (
-                            <Badge variant="destructive" className="border-none font-bold uppercase text-[9px] px-3 rounded-full">Absent</Badge>
-                          ) : h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY' ? (
-                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-400 font-bold uppercase text-[9px] px-3 rounded-full">{h.status.replace('_', ' ')}</Badge>
-                          ) : h.approved ? (
-                            <Badge className="bg-emerald-600 border-none font-bold uppercase text-[9px] px-3 rounded-full">Approved</Badge>
-                          ) : h.remark ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge 
-                                  variant="destructive" 
-                                  className="border-none font-bold uppercase text-[9px] cursor-pointer hover:bg-rose-600 transition-colors px-3 rounded-full"
-                                  onClick={() => handleViewRejection(h)}
-                                >
-                                  Rejected
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>View Rejection Reason</TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <Badge variant="secondary" className="border-none font-bold uppercase text-[9px] bg-amber-50 text-amber-600 px-3 rounded-full">Pending</Badge>
-                          )}
-                        </TableCell>
-                        {isSuperAdmin && (
-                          <TableCell className="text-right">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-primary hover:bg-primary/5 rounded-full"
-                                  onClick={() => handleAdminEditClick(h)}
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Adjust Logs</TooltipContent>
-                            </Tooltip>
+            <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
+              <ScrollArea className="w-full">
+                <Table className="min-w-[900px]">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-bold">Employee Name</TableHead>
+                      <TableHead className="font-bold">In Plant</TableHead>
+                      <TableHead className="font-bold">In Date Time</TableHead>
+                      <TableHead className="font-bold">Out Date Time</TableHead>
+                      <TableHead className="font-bold text-center">Hours</TableHead>
+                      <TableHead className="font-bold">Approval Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedHistory.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
+                    ) : (
+                      paginatedHistory.map((h: any) => (
+                        <TableRow key={h.id} className="hover:bg-slate-50/50">
+                          <TableCell className="text-sm font-bold">{h.employeeName}</TableCell>
+                          <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
+                          <TableCell className="font-mono text-xs">{h.date} {h.inTime || "--:--"}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {h.date} {h.outTime || "--:--"}
+                            {h.autoOut && <span className="block text-[8px] font-black text-rose-500 uppercase">Auto OUT</span>}
                           </TableCell>
-                        )}
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-            {totalPages > 1 && (
-              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                <div className="text-xs font-bold text-muted-foreground">
-                  Showing {((currentPage - 1) * rowsPerPage) + 1} - {Math.min(currentPage * rowsPerPage, history.length)} of {history.length}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => p - 1)}
-                    className="h-8 rounded-lg font-bold"
-                  >
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
-                  </Button>
-                  <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border border-slate-200 shadow-sm">
-                    Page {currentPage} of {totalPages}
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(p => p + 1)}
-                    className="h-8 rounded-lg font-bold"
-                  >
-                    Next <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </div>
-              </CardFooter>
-            )}
-          </Card>
+                          <TableCell className={cn("font-black text-center", h.status === 'PRESENT' ? "text-emerald-600" : "text-rose-500")}>
+                            {h.hours || 0}h
+                          </TableCell>
+                          <TableCell>
+                            {h.approved ? (
+                              <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+              {totalPages > 1 && (
+                <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold">Previous</Button>
+                  <span className="text-xs font-black">Page {currentPage} of {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold">Next</Button>
+                </CardFooter>
+              )}
+            </Card>
+          </div>
         </div>
 
+        {/* IN/OUT Dialogs */}
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 font-black text-xl">
-                <Navigation className="w-5 h-5 text-primary" /> Confirm Check-In
-              </DialogTitle>
-            </DialogHeader>
+          <DialogContent className="sm:max-w-md rounded-2xl">
+            <DialogHeader><DialogTitle className="flex items-center gap-2 font-black">Confirm Check-In</DialogTitle></DialogHeader>
             <div className="space-y-6 py-4">
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
                 <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-100 shrink-0">
-                    <MapPin className="w-5 h-5 text-slate-400" />
-                  </div>
+                  <MapPin className="w-5 h-5 text-slate-400 shrink-0 mt-1" />
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Current Location</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Current Location</p>
                     <p className="text-sm font-bold text-slate-700 leading-snug">{detectedAddress || "Locating..."}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4 pt-4 border-t border-slate-200">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-sm border border-primary/10 shrink-0">
-                    <Building2 className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Detected Plant</p>
-                    <p className="text-sm font-bold text-primary">{detectedPlant ? detectedPlant.name : "Field / Remote"}</p>
                   </div>
                 </div>
               </div>
               {!detectedPlant && (
                 <div className="space-y-3 px-1">
-                  <Label className="font-black text-[10px] uppercase tracking-widest text-slate-500">Work Mode Selection</Label>
+                  <Label className="font-black text-[10px] uppercase text-slate-500">Work Mode Selection</Label>
                   <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
-                    <SelectTrigger className="h-14 bg-white border-slate-200 rounded-2xl font-bold shadow-sm focus:ring-primary">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-14 rounded-2xl font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="FIELD" className="font-bold">Field Work</SelectItem>
-                      <SelectItem value="WFH" className="font-bold">Work From Home</SelectItem>
+                      <SelectItem value="FIELD">Field Work</SelectItem>
+                      <SelectItem value="WFH">Work From Home</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button 
-                className="w-full h-14 rounded-2xl font-black bg-primary text-lg shadow-xl shadow-primary/30 active:scale-[0.98] transition-all" 
-                onClick={handleConfirmCheckIn}
-              >
-                Confirm Check-In
-              </Button>
+              <Button className="w-full h-14 rounded-2xl font-black bg-primary text-lg" onClick={handleConfirmCheckIn}>Confirm Check-In</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 font-black text-xl">
-                <Navigation className="w-5 h-5 text-rose-500" /> Confirm Check-Out
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm border border-slate-100 shrink-0">
-                    <MapPin className="w-5 h-5 text-slate-400" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Current Location</p>
-                    <p className="text-sm font-bold text-slate-700 leading-snug">{detectedAddress || "Locating..."}</p>
-                  </div>
-                </div>
-              </div>
+          <DialogContent className="sm:max-w-md rounded-2xl">
+            <DialogHeader><DialogTitle className="flex items-center gap-2 font-black">Confirm Check-Out</DialogTitle></DialogHeader>
+            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+               <p className="text-sm font-bold text-slate-700">{detectedAddress || "Locating..."}</p>
             </div>
             <DialogFooter>
-              <Button 
-                className="w-full h-14 rounded-2xl font-black bg-rose-500 hover:bg-rose-600 text-lg shadow-xl shadow-rose-500/30 active:scale-[0.98] transition-all" 
-                onClick={handleConfirmCheckOut}
-              >
-                Confirm Check-Out
-              </Button>
+              <Button className="w-full h-14 rounded-2xl font-black bg-rose-500 hover:bg-rose-600 text-lg" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-primary" />
-                Adjust Attendance Logs
+        {/* Leave Request Popup */}
+        <Dialog open={activeDialog === "LEAVE"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
+          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
+            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+              <DialogTitle className="text-xl font-black flex items-center gap-2">
+                <FileText className="w-6 h-6 text-primary" /> Create Leave Request
               </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Employee</p>
-                <p className="font-bold text-slate-700">{selectedRecordToEdit?.employeeName}</p>
-                <p className="text-xs text-muted-foreground">{selectedRecordToEdit?.date}</p>
+              <div className="mt-4 flex flex-col gap-1">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{effectiveEmployeeName} • {effectiveEmployeeId}</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">{registeredEmployee?.department} / {registeredEmployee?.designation}</p>
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold">In Time (24h)</Label>
-                  <Input 
-                    type="time" 
-                    value={editTimes.in} 
-                    onChange={(e) => setEditTimes(prev => ({...prev, in: e.target.value}))}
-                    className="bg-white"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold">Out Time (24h)</Label>
-                  <Input 
-                    type="time" 
-                    value={editTimes.out} 
-                    onChange={(e) => setEditTimes(prev => ({...prev, out: e.target.value}))}
-                    className="bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                <p className="text-[10px] font-bold text-amber-700 leading-relaxed">
-                  Note: Updating these times will automatically recalculate working hours and status based on organization thresholds.
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl">Cancel</Button>
-              <Button className="bg-primary px-8 rounded-xl font-bold" onClick={handleSaveAdminEdit}>Update Log</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isRejectionDialogOpen} onOpenChange={setIsRejectionDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center mb-2">
-                <MessageCircle className="w-6 h-6 text-rose-600" />
-              </div>
-              <DialogTitle className="text-xl font-black">Log Rejection Reason</DialogTitle>
-              <DialogDescription>
-                Record for {selectedRecordForRejection?.date} was declined by HR.
-              </DialogDescription>
             </DialogHeader>
             
-            <div className="py-6">
-              <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl space-y-3">
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">HR Remark:</p>
-                <p className="text-sm font-bold text-slate-700 leading-relaxed italic">
-                  "{selectedRecordForRejection?.remark || "No specific reason provided."}"
-                </p>
+            <div className="p-6 space-y-6 bg-white">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-500">From Date *</Label>
+                  <Input 
+                    type="date" 
+                    value={leaveFrom} 
+                    onChange={(e) => setLeaveFrom(e.target.value)} 
+                    className="h-12 bg-slate-50 border-slate-200 font-bold"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-500">To Date *</Label>
+                  <Input 
+                    type="date" 
+                    value={leaveTo} 
+                    onChange={(e) => setLeaveTo(e.target.value)} 
+                    className="h-12 bg-slate-50 border-slate-200 font-bold"
+                  />
+                </div>
               </div>
-              
-              <div className="mt-6 flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <AlertCircle className="w-3.5 h-3.5" />
-                Attempt: {selectedRecordForRejection?.rejectionCount || 1} of 2
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Purpose / Reason *</Label>
+                <Input 
+                  placeholder="Reason for leave request..." 
+                  value={leavePurpose} 
+                  onChange={(e) => setLeavePurpose(e.target.value)} 
+                  className="h-12 bg-slate-50 border-slate-200 font-bold"
+                />
+              </div>
+
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3">
+                <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-blue-700 font-medium leading-relaxed uppercase">
+                  Calculated Duration: {differenceInDays(parseISO(leaveTo || leaveFrom), parseISO(leaveFrom)) + 1} Day(s). Note: Only future dates are allowed.
+                </p>
               </div>
             </div>
 
-            <DialogFooter className="flex flex-col sm:flex-row gap-2">
-              <Button variant="ghost" onClick={() => setIsRejectionDialogOpen(false)} className="rounded-xl font-bold flex-1">
-                Close
+            <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
+              <Button variant="ghost" className="flex-1 h-12 rounded-xl font-bold text-rose-600 hover:bg-rose-50" onClick={() => setActiveDialog("NONE")}>Cancel</Button>
+              <Button className="flex-1 h-12 rounded-xl font-black bg-primary shadow-lg shadow-primary/20" onClick={handleSendLeaveRequest} disabled={isSubmittingLeave}>
+                {isSubmittingLeave ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Request"}
               </Button>
-              {(selectedRecordForRejection?.rejectionCount || 0) < 2 && (
-                <Button 
-                  onClick={handleResubmit} 
-                  className="bg-primary rounded-xl font-black flex-1 shadow-lg shadow-primary/20 gap-2"
-                >
-                  <SendHorizontal className="w-4 h-4" /> Sent Again
-                </Button>
-              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
