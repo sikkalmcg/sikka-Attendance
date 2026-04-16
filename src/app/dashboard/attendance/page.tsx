@@ -115,6 +115,11 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
+  const todayStr = useMemo(() => {
+    if (!isMounted) return "";
+    return format(getISTTime(), "yyyy-MM-dd");
+  }, [isMounted]);
+
   const isAdminRole = useMemo(() => {
     return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
   }, [currentUser]);
@@ -743,6 +748,7 @@ export default function AttendancePage() {
                   <Input 
                     type="date" 
                     value={leaveFrom} 
+                    min={todayStr}
                     onChange={(e) => setLeaveFrom(e.target.value)} 
                     className="h-12 bg-slate-50 border-slate-200 font-bold"
                   />
@@ -752,6 +758,7 @@ export default function AttendancePage() {
                   <Input 
                     type="date" 
                     value={leaveTo} 
+                    min={leaveFrom || todayStr}
                     onChange={(e) => setLeaveTo(e.target.value)} 
                     className="h-12 bg-slate-50 border-slate-200 font-bold"
                   />
