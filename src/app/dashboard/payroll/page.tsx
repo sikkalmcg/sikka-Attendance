@@ -709,26 +709,28 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {adjustLeaveEmp && (
             <div className="flex flex-col max-h-[90vh]">
-              {/* Header Box - Reduced height by 20% */}
-              <div className="p-6 bg-white border-b shrink-0">
-                <div className="flex justify-between items-start">
-                  <div className="flex gap-4 items-center">
-                    <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <User className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-black text-slate-900 leading-tight">{adjustLeaveEmp.name}</h2>
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{adjustLeaveEmp.employeeId} • {adjustLeaveEmp.department}</p>
-                    </div>
+              {/* Accessibility Compliant Header */}
+              <DialogHeader className="p-6 bg-white border-b shrink-0 flex-row items-center justify-between">
+                <div className="flex gap-4 items-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <User className="w-6 h-6 text-primary" />
                   </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Remaining Advance Leave</p>
-                    <Badge className="text-lg px-4 py-1 bg-emerald-500 hover:bg-emerald-600 rounded-lg">{adjustmentState.remainingBalance} Days</Badge>
+                  <div>
+                    <DialogTitle className="text-xl font-black text-slate-900 leading-tight">
+                      {adjustLeaveEmp.name}
+                    </DialogTitle>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      {adjustLeaveEmp.employeeId} • {adjustLeaveEmp.department}
+                    </p>
                   </div>
                 </div>
-              </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Remaining Advance Leave</p>
+                  <Badge className="text-lg px-4 py-1 bg-emerald-500 hover:bg-emerald-600 rounded-lg">{adjustmentState.remainingBalance} Days</Badge>
+                </div>
+              </DialogHeader>
 
-              {/* Salary Info Boxes - Reduced height by 40% (py-5) */}
+              {/* Salary Info Boxes */}
               <div className="grid grid-cols-3 gap-0 border-b bg-slate-50/50 shrink-0">
                 <div className="py-5 px-8 border-r border-slate-200/60 text-center">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Salary Month</p>
@@ -805,7 +807,6 @@ export default function PayrollPage() {
                 </div>
               </div>
 
-              {/* Footer Box - Reduced height by 25% (p-6) */}
               <div className="p-6 bg-white border-t flex justify-end gap-4 shrink-0">
                 <Button variant="ghost" className="h-12 px-10 font-bold text-rose-500 hover:bg-rose-50 rounded-xl" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
                 <Button className="h-12 px-16 bg-primary hover:bg-primary/90 font-black rounded-xl shadow-lg shadow-primary/20 text-lg" onClick={handlePostAdjustment} disabled={isProcessing}>
