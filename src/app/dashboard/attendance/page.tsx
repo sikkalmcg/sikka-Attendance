@@ -438,7 +438,11 @@ export default function AttendancePage() {
         const { latitude: lat, longitude: lng } = pos.coords;
         setCurrentGPS({ lat, lng });
         
-        const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
+        // Multi-Plant Authorized Detection Logic
+        const authorizedUnitIds = registeredEmployee?.unitIds || [];
+        const authorizedPlants = (plants || []).filter(p => authorizedUnitIds.includes(p.id));
+        
+        const plant = authorizedPlants.find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
         setDetectedPlant(plant || null);
         
         const address = await fetchAddress(lat, lng);
@@ -489,7 +493,7 @@ export default function AttendancePage() {
 
     addRecord('attendance', newRecord);
     addRecord('notifications', {
-      message: `${effectiveEmployeeName} marked IN at ${time} (${type})`,
+      message: `${effectiveEmployeeName} marked IN at ${time} (${type}${detectedPlant ? ' - ' + detectedPlant.name : ''})`,
       timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
       read: false
     });
@@ -754,9 +758,20 @@ export default function AttendancePage() {
                   </div>
                 </div>
               </div>
-              {!detectedPlant && (
+              
+              {detectedPlant ? (
+                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
+                    <Factory className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Authorized Plant Detected</p>
+                    <p className="text-sm font-black text-emerald-900">{detectedPlant.name}</p>
+                  </div>
+                </div>
+              ) : (
                 <div className="space-y-3 px-1">
-                  <Label className="font-black text-[10px] uppercase text-slate-500">Work Mode Selection</Label>
+                  <Label className="font-black text-[10px] uppercase text-slate-500 tracking-widest">Work Mode Selection</Label>
                   <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
                     <SelectTrigger className="h-14 rounded-2xl font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -764,6 +779,9 @@ export default function AttendancePage() {
                       <SelectItem value="WFH">Work From Home</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-[9px] font-bold text-rose-500 uppercase flex items-center gap-1.5 px-1">
+                    <Info className="w-3 h-3" /> No authorized geofence detected at this location.
+                  </p>
                 </div>
               )}
             </div>
@@ -801,7 +819,7 @@ export default function AttendancePage() {
             <div className="p-6 space-y-6 bg-white">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-500">From Date *</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">From Date *</Label>
                   <Input 
                     type="date" 
                     value={leaveFrom} 
@@ -817,7 +835,7 @@ export default function AttendancePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-500">To Date *</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">To Date *</Label>
                   <Input 
                     type="date" 
                     value={leaveTo} 
@@ -829,7 +847,7 @@ export default function AttendancePage() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500">Purpose / Reason *</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Purpose / Reason *</Label>
                 <Input 
                   placeholder="Reason for leave request..." 
                   value={leavePurpose} 

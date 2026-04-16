@@ -84,7 +84,8 @@ export interface Employee {
   designation: string;
   joinDate: string;
   firmId: string;
-  unitId: string;
+  unitId?: string; // Legacy
+  unitIds: string[]; // Support multiple plants
   bankName: string;
   accountNo: string;
   ifscCode: string;

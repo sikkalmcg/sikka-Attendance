@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Dialog, 
   DialogContent, 
@@ -53,7 +54,8 @@ import {
   AlertTriangle,
   Clock,
   TrendingUp as GrowthIcon,
-  TrendingDown as LossIcon
+  TrendingDown as LossIcon,
+  Factory
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -128,6 +130,7 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
   isGovComplianceEnabled: true,
   salary: { ...INITIAL_SALARY_STRUCTURE },
   salaryHistory: [],
+  unitIds: [],
   active: true
 };
 
@@ -240,8 +243,8 @@ export default function EmployeesPage() {
       return;
     }
 
-    if (!formData.firmId || !formData.unitId) {
-      toast({ variant: "destructive", title: "Validation Error", description: "Firm and Unit selection are mandatory." });
+    if (!formData.firmId || !formData.unitIds || formData.unitIds.length === 0) {
+      toast({ variant: "destructive", title: "Validation Error", description: "Firm and at least one Unit selection are mandatory." });
       return;
     }
 
@@ -293,6 +296,16 @@ export default function EmployeesPage() {
     setEditEmployee(null);
     setFormData({ ...INITIAL_FORM_DATA });
     setIsProcessing(false); // Safety reset
+  };
+
+  const toggleUnit = (id: string) => {
+    setFormData(prev => {
+      const current = prev.unitIds || [];
+      const updated = current.includes(id) 
+        ? current.filter(x => x !== id) 
+        : [...current, id];
+      return { ...prev, unitIds: updated };
+    });
   };
 
   const handlePostSalaryRevision = async () => {
@@ -536,7 +549,7 @@ export default function EmployeesPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="space-y-2">
                         <Label>Firm Name</Label>
-                        <Select value={formData.firmId} onValueChange={(v) => setFormData(prev => ({...prev, firmId: v, unitId: undefined}))}>
+                        <Select value={formData.firmId} onValueChange={(v) => setFormData(prev => ({...prev, firmId: v, unitIds: []}))}>
                           <SelectTrigger><SelectValue placeholder="Select Firm" /></SelectTrigger>
                           <SelectContent>
                             {firms.map(f => (
@@ -546,19 +559,25 @@ export default function EmployeesPage() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Unit / Plant</Label>
-                        <Select 
-                          value={formData.unitId} 
-                          onValueChange={(v) => setFormData(prev => ({...prev, unitId: v}))}
-                          disabled={!formData.firmId}
-                        >
-                          <SelectTrigger><SelectValue placeholder={formData.firmId ? "Select Unit" : "Select Firm First"} /></SelectTrigger>
-                          <SelectContent>
-                            {availableUnits.map(u => (
-                              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Label className="flex items-center gap-2">Authorized Unit(s) / Plant(s) *</Label>
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 max-h-40 overflow-y-auto space-y-2">
+                          {!formData.firmId ? (
+                             <p className="text-[10px] text-muted-foreground uppercase font-bold text-center py-4">Select Firm First</p>
+                          ) : availableUnits.length === 0 ? (
+                             <p className="text-[10px] text-muted-foreground uppercase font-bold text-center py-4">No Units Defined</p>
+                          ) : (
+                            availableUnits.map(u => (
+                              <div key={u.id} className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-100">
+                                <Checkbox 
+                                  id={`unit-${u.id}`} 
+                                  checked={(formData.unitIds || []).includes(u.id)}
+                                  onCheckedChange={() => toggleUnit(u.id)}
+                                />
+                                <Label htmlFor={`unit-${u.id}`} className="text-xs font-bold cursor-pointer flex-1">{u.name}</Label>
+                              </div>
+                            ))
+                          )}
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label>Employee ID</Label>
