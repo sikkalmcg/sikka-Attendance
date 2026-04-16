@@ -472,16 +472,11 @@ export default function EmployeesPage() {
                           </Tooltip>
                           
                           <DropdownMenu>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" disabled={isProcessing}>
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                              </TooltipTrigger>
-                              <TooltipContent>More Actions</TooltipContent>
-                            </Tooltip>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" disabled={isProcessing}>
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-52">
                               <DropdownMenuItem onClick={() => { setSalaryRevision(emp); setRevisionData({ ...emp.salary }); }}>
                                 <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary

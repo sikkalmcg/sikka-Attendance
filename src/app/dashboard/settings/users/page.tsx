@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -294,12 +295,7 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell className="text-right pr-6">
                       <DropdownMenu>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-slate-400" /></Button></DropdownMenuTrigger>
-                          </TooltipTrigger>
-                          <TooltipContent>Manage User</TooltipContent>
-                        </Tooltip>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-slate-400" /></Button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem onClick={() => handleOpenModal(user)} className="font-semibold"><Pencil className="w-4 h-4 mr-2" /> Edit Permissions</DropdownMenuItem>
                           <DropdownMenuItem onClick={() => { setUserToAction(user); setIsResetPasswordOpen(true); }} className="font-semibold"><Key className="w-4 h-4 mr-2" /> Change Password</DropdownMenuItem>

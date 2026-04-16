@@ -641,11 +641,9 @@ export default function PayrollPage() {
                                 <div className="flex justify-end gap-1">
                                   {emp?.isGovComplianceEnabled ? (
                                     <DropdownMenu>
-                                      <Tooltip><TooltipTrigger asChild>
-                                        <DropdownMenuTrigger asChild>
-                                          <Button variant="ghost" size="icon" disabled={!hasUnpaid}><CreditCard className="w-4 h-4 text-primary" /></Button>
-                                        </DropdownMenuTrigger>
-                                      </TooltipTrigger><TooltipContent>Process Payments</TooltipContent></Tooltip>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" disabled={!hasUnpaid}><CreditCard className="w-4 h-4 text-primary" /></Button>
+                                      </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="w-48">
                                         <DropdownMenuItem disabled={remainingSalary <= 0} onClick={() => { setPaySalaryRec(p); setPaymentAmount(remainingSalary); }}>Pay Salary</DropdownMenuItem>
                                         <DropdownMenuItem disabled={remainingPF <= 0} onClick={() => { setPayPFRec(p); setPfPaidEmp(p.pfAmountEmployee - (p.pfPaidAmountEmployee || 0)); setPfPaidEx(p.pfAmountEmployer - (p.pfPaidAmountEmployer || 0)); }}>Pay PF</DropdownMenuItem>
