@@ -40,7 +40,9 @@ import {
   FileText,
   Info,
   ChevronRight,
-  History
+  History,
+  AlertTriangle,
+  ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -49,19 +51,27 @@ import { differenceInDays, parseISO, format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function ApprovalsPage() {
-  const { attendanceRecords, leaveRequests, updateRecord, addRecord } = useData();
+  const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
   const [pendingType, setPendingType] = useState("attendance");
   const [historyType, setHistoryType] = useState("attendance");
 
-  // Dialog States
+  // Dialog States - Leave
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
   const [isLeaveApproveOpen, setIsLeaveApproveOpen] = useState(false);
   const [isLeaveRejectOpen, setIsLeaveRejectOpen] = useState(false);
   const [leaveEditDates, setLeaveEditDates] = useState({ from: "", to: "" });
   const [leaveRejectReason, setLeaveRejectReason] = useState("");
+
+  // Dialog States - Attendance
+  const [selectedAttendance, setSelectedAttendance] = useState<AttendanceRecord | null>(null);
+  const [isAttendanceEditOpen, setIsAttendanceEditOpen] = useState(false);
+  const [isAttendanceRejectOpen, setIsAttendanceRejectOpen] = useState(false);
+  const [attendanceEditData, setAttendanceEditData] = useState({ date: "", inTime: "", outTime: "" });
+  const [attendanceRejectReason, setAttendanceRejectReason] = useState("");
+
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { toast } = useToast();
@@ -75,9 +85,17 @@ export default function ApprovalsPage() {
     const search = searchTerm.toLowerCase();
     return (attendanceRecords || [])
       .filter(rec => !rec.approved && !rec.remark)
+      .map(rec => {
+        const emp = (employees || []).find(e => e.employeeId === rec.employeeId);
+        return {
+          ...rec,
+          dept: emp?.department || "N/A",
+          desig: emp?.designation || "N/A"
+        };
+      })
       .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [attendanceRecords, searchTerm]);
+  }, [attendanceRecords, employees, searchTerm]);
 
   const pendingLeaves = useMemo(() => {
     const search = searchTerm.toLowerCase();
@@ -103,6 +121,7 @@ export default function ApprovalsPage() {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [leaveRequests, searchTerm]);
 
+  // Attendance Actions
   const handleApproveAttendance = (id: string) => {
     if (isProcessing) return;
     setIsProcessing(true);
@@ -112,6 +131,64 @@ export default function ApprovalsPage() {
     } finally { setIsProcessing(false); }
   };
 
+  const handleOpenAttendanceEdit = (rec: AttendanceRecord) => {
+    setSelectedAttendance(rec);
+    setAttendanceEditData({
+      date: rec.date,
+      inTime: rec.inTime || "",
+      outTime: rec.outTime || ""
+    });
+    setIsAttendanceEditOpen(true);
+  };
+
+  const handlePostAttendanceEdit = () => {
+    if (!selectedAttendance || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      // Calculate Hours
+      let finalHours = 0;
+      if (attendanceEditData.inTime && attendanceEditData.outTime) {
+        const inDT = new Date(`${attendanceEditData.date}T${attendanceEditData.inTime}`);
+        const outDT = new Date(`${attendanceEditData.date}T${attendanceEditData.outTime}`);
+        const diff = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+        finalHours = parseFloat(diff.toFixed(2));
+      }
+
+      updateRecord('attendance', selectedAttendance.id, {
+        date: attendanceEditData.date,
+        inTime: attendanceEditData.inTime,
+        outTime: attendanceEditData.outTime,
+        hours: finalHours
+      });
+      toast({ title: "Record Updated", description: "Attendance timings adjusted successfully." });
+      setIsAttendanceEditOpen(false);
+    } finally { setIsProcessing(false); }
+  };
+
+  const handleOpenAttendanceReject = (rec: any) => {
+    setSelectedAttendance(rec);
+    setAttendanceRejectReason("");
+    setIsAttendanceRejectOpen(true);
+  };
+
+  const handlePostAttendanceReject = () => {
+    if (!selectedAttendance || !attendanceRejectReason.trim() || isProcessing) {
+      toast({ variant: "destructive", title: "Reason Required" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      updateRecord('attendance', selectedAttendance.id, {
+        approved: false,
+        remark: attendanceRejectReason,
+        status: 'ABSENT' // Or marked for revision
+      });
+      toast({ variant: "destructive", title: "Log Rejected", description: "Reason recorded in audit history." });
+      setIsAttendanceRejectOpen(false);
+    } finally { setIsProcessing(false); }
+  };
+
+  // Leave Actions
   const handleOpenLeaveApprove = (l: LeaveRequest) => {
     setSelectedLeave(l);
     setLeaveEditDates({ from: l.fromDate, to: l.toDate });
@@ -213,45 +290,92 @@ export default function ApprovalsPage() {
             <TabsContent value="attendance">
               <Card className="border-slate-200 shadow-sm overflow-hidden">
                 <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4">Employee</TableHead>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Date</TableHead>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / OUT</TableHead>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Hours</TableHead>
-                        <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pendingAttendance.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground font-medium">No pending attendance logs found.</TableCell></TableRow>
-                      ) : (
-                        pendingAttendance.map((rec) => (
-                          <TableRow key={rec.id} className="hover:bg-slate-50/50 transition-colors">
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-bold uppercase text-slate-700">{rec.employeeName}</span>
-                                <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm font-medium text-slate-600">{rec.date}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs font-bold text-slate-900">{rec.inTime || "--:--"}</span>
-                                <ChevronRight className="w-3 h-3 text-slate-300" />
-                                <span className="font-mono text-xs font-bold text-rose-500">{rec.outTime || "--:--"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center font-black text-sm text-slate-700">{rec.hours}h</TableCell>
-                            <TableCell className="text-right pr-6">
-                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 font-black text-[10px] uppercase px-4 shadow-lg shadow-emerald-900/10" onClick={() => handleApproveAttendance(rec.id)} disabled={isProcessing}>Approve</Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                  <ScrollArea className="w-full">
+                    <Table className="min-w-[1200px]">
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN Date Time</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Date Time</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Working Hour</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Type</TableHead>
+                          <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pendingAttendance.length === 0 ? (
+                          <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground font-medium">No pending attendance logs found.</TableCell></TableRow>
+                        ) : (
+                          pendingAttendance.map((rec: any) => (
+                            <TableRow key={rec.id} className="hover:bg-slate-50/50 transition-colors">
+                              <TableCell className="px-6 py-4">
+                                <div className="flex flex-col">
+                                  <span className="font-bold uppercase text-slate-700 text-sm leading-tight">{rec.employeeName}</span>
+                                  <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-xs font-bold text-slate-600 leading-tight">{rec.dept}</span>
+                                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">{rec.desig}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date}</span>
+                                  <span className="text-xs font-mono font-bold text-slate-900">{rec.inTime || "--:--"}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date}</span>
+                                  <span className="text-xs font-mono font-bold text-rose-500">{rec.outTime || "--:--"}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="secondary" className="font-black text-xs px-3 bg-slate-100 text-slate-700">{rec.hours}h</Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-slate-200">{rec.attendanceType}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right pr-6">
+                                <div className="flex justify-end items-center gap-1">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8 text-slate-400 hover:text-primary" 
+                                    onClick={() => handleOpenAttendanceEdit(rec)}
+                                    disabled={isProcessing}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    className="bg-emerald-600 hover:bg-emerald-700 h-8 font-black text-[10px] uppercase px-4 shadow-sm" 
+                                    onClick={() => handleApproveAttendance(rec.id)} 
+                                    disabled={isProcessing}
+                                  >
+                                    Approve
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost"
+                                    className="text-rose-600 hover:bg-rose-50 h-8 font-black text-[10px] uppercase px-4" 
+                                    onClick={() => handleOpenAttendanceReject(rec)} 
+                                    disabled={isProcessing}
+                                  >
+                                    Reject
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -262,12 +386,12 @@ export default function ApprovalsPage() {
                   <Table>
                     <TableHeader className="bg-slate-50/50">
                       <TableRow>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee Name / ID</TableHead>
                         <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
                         <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">From Date</TableHead>
                         <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">To Date</TableHead>
                         <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Days</TableHead>
-                        <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Actions</TableHead>
+                        <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -276,7 +400,7 @@ export default function ApprovalsPage() {
                       ) : (
                         pendingLeaves.map((l) => (
                           <TableRow key={l.id} className="hover:bg-slate-50/50 transition-colors">
-                            <TableCell>
+                            <TableCell className="px-6">
                               <div className="flex flex-col">
                                 <span className="font-bold uppercase text-slate-700">{l.employeeName}</span>
                                 <span className="text-[10px] font-mono text-slate-400 font-bold">{l.employeeId}</span>
@@ -390,8 +514,8 @@ export default function ApprovalsPage() {
                           <TableRow>
                             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
                             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Range</TableHead>
-                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Days</TableHead>
-                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Purpose</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-center">Days</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest">Purpose</TableHead>
                             <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -423,7 +547,7 @@ export default function ApprovalsPage() {
                                       {l.status}
                                     </Badge>
                                     {l.status === 'REJECTED' && l.rejectReason && (
-                                      <span className="text-[8px] font-bold text-rose-400 max-w-[120px] truncate">R: {l.rejectReason}</span>
+                                      <span className="text-[8px] font-bold text-rose-400 max-w-[1200px] truncate">R: {l.rejectReason}</span>
                                     )}
                                   </div>
                                 </TableCell>
@@ -440,6 +564,106 @@ export default function ApprovalsPage() {
           </Tabs>
         </div>
       )}
+
+      {/* Attendance Edit Dialog */}
+      <Dialog open={isAttendanceEditOpen} onOpenChange={setIsAttendanceEditOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
+          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+            <DialogTitle className="text-xl font-black flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" /> Edit Attendance Log
+            </DialogTitle>
+            <div className="mt-4">
+              <p className="text-xs font-bold text-primary uppercase tracking-widest">{selectedAttendance?.employeeName} ({selectedAttendance?.employeeId})</p>
+            </div>
+          </DialogHeader>
+          <div className="p-8 space-y-6">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Attendance Date</Label>
+              <Input 
+                type="date" 
+                value={attendanceEditData.date} 
+                onChange={(e) => setAttendanceEditData(p => ({...p, date: e.target.value}))} 
+                className="h-12 bg-slate-50 font-bold" 
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Time</Label>
+                <Input 
+                  type="time" 
+                  value={attendanceEditData.inTime} 
+                  onChange={(e) => setAttendanceEditData(p => ({...p, inTime: e.target.value}))} 
+                  className="h-12 bg-slate-50 font-bold" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Time</Label>
+                <Input 
+                  type="time" 
+                  value={attendanceEditData.outTime} 
+                  onChange={(e) => setAttendanceEditData(p => ({...p, outTime: e.target.value}))} 
+                  className="h-12 bg-slate-50 font-bold" 
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="p-6 bg-slate-50 border-t flex gap-3">
+            <Button variant="ghost" className="flex-1 h-12 rounded-xl font-bold" onClick={() => setIsAttendanceEditOpen(false)}>Cancel</Button>
+            <Button className="flex-1 h-12 rounded-xl font-black bg-primary shadow-lg shadow-primary/20" onClick={handlePostAttendanceEdit} disabled={isProcessing}>Save Adjustments</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attendance Reject Dialog */}
+      <Dialog open={isAttendanceRejectOpen} onOpenChange={setIsAttendanceRejectOpen}>
+        <DialogContent className="sm:max-w-2xl rounded-2xl p-0 overflow-hidden">
+          <DialogHeader className="p-6 bg-rose-600 text-white shrink-0">
+            <div className="flex justify-between items-start">
+              <div className="space-y-1">
+                <DialogTitle className="text-xl font-black flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-100" /> Reject Attendance Log
+                </DialogTitle>
+                <p className="text-xs font-bold text-rose-100 uppercase tracking-widest">{selectedAttendance?.employeeName} ({selectedAttendance?.employeeId})</p>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <div className="p-0 border-b bg-slate-50 flex divide-x">
+             <div className="flex-1 p-4 text-center">
+               <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Dept / Desig</p>
+               <p className="text-[11px] font-bold text-slate-700">{(selectedAttendance as any)?.dept} / {(selectedAttendance as any)?.desig}</p>
+             </div>
+             <div className="flex-1 p-4 text-center">
+               <p className="text-[9px] font-black text-slate-400 uppercase mb-1">IN Date Time</p>
+               <p className="text-[11px] font-bold text-slate-700">{selectedAttendance?.date} {selectedAttendance?.inTime}</p>
+             </div>
+             <div className="flex-1 p-4 text-center">
+               <p className="text-[9px] font-black text-slate-400 uppercase mb-1">OUT Date Time</p>
+               <p className="text-[11px] font-bold text-rose-600">{selectedAttendance?.date} {selectedAttendance?.outTime}</p>
+             </div>
+             <div className="flex-1 p-4 text-center">
+               <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Working / Type</p>
+               <p className="text-[11px] font-bold text-slate-700">{selectedAttendance?.hours}h / {selectedAttendance?.attendanceType}</p>
+             </div>
+          </div>
+
+          <div className="p-8 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Rejection Reason *</Label>
+              <Textarea 
+                placeholder="Specify why this log is being declined (e.g. Invalid geofence entry, time mismatch)..." 
+                value={attendanceRejectReason} 
+                onChange={(e) => setAttendanceRejectReason(e.target.value)}
+                className="min-h-[120px] bg-slate-50 font-medium focus-visible:ring-rose-500 border-slate-200"
+              />
+            </div>
+          </div>
+          <DialogFooter className="p-6 bg-slate-50 border-t flex gap-3">
+            <Button variant="ghost" className="flex-1 h-12 rounded-xl font-bold" onClick={() => setIsAttendanceRejectOpen(false)}>Cancel</Button>
+            <Button className="flex-1 h-12 rounded-xl font-black bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-900/10" onClick={handlePostAttendanceReject} disabled={isProcessing}>Reject Log</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Leave Approval Dialog */}
       <Dialog open={isLeaveApproveOpen} onOpenChange={setIsLeaveApproveOpen}>
