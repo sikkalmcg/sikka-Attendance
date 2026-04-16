@@ -59,7 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
-import { differenceInDays, parseISO, format } from "date-fns";
+import { differenceInDays, parseISO, format, isSameDay, startOfToday } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 export default function ApprovalsPage() {
@@ -98,8 +98,12 @@ export default function ApprovalsPage() {
 
   // Filtered Data Sets
   const pendingAttendance = useMemo(() => {
+    if (!isMounted) return [];
     const search = searchTerm.toLowerCase();
-    return (attendanceRecords || [])
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+
+    // 1. Get actual records that need approval
+    const actualPending = (attendanceRecords || [])
       .filter(rec => !rec.approved && !rec.remark)
       .map(rec => {
         const emp = (employees || []).find(e => e.employeeId === rec.employeeId);
@@ -108,10 +112,38 @@ export default function ApprovalsPage() {
           dept: emp?.department || "N/A",
           desig: emp?.designation || "N/A"
         };
-      })
+      });
+
+    // 2. Identify employees who are missing records for TODAY (Absent)
+    const missingRecords: any[] = [];
+    (employees || []).filter(e => e.active).forEach(emp => {
+      const hasRecord = (attendanceRecords || []).some(r => r.employeeId === emp.employeeId && r.date === todayStr);
+      if (!hasRecord) {
+        missingRecords.push({
+          id: `virtual-absent-${emp.employeeId}-${todayStr}`,
+          employeeId: emp.employeeId,
+          employeeName: emp.name,
+          date: todayStr,
+          inTime: null,
+          outTime: null,
+          hours: 0,
+          status: 'ABSENT',
+          attendanceType: 'ABSENT',
+          address: 'N/A',
+          approved: false,
+          dept: emp.department,
+          desig: emp.designation,
+          isVirtual: true
+        });
+      }
+    });
+
+    const combined = [...actualPending, ...missingRecords];
+
+    return combined
       .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [attendanceRecords, employees, searchTerm]);
+  }, [attendanceRecords, employees, searchTerm, isMounted]);
 
   const pendingLeaves = useMemo(() => {
     const search = searchTerm.toLowerCase();
@@ -146,21 +178,40 @@ export default function ApprovalsPage() {
   }, [leaveRequests, searchTerm]);
 
   // Attendance Actions
-  const handleApproveAttendance = (id: string) => {
+  const handleApproveAttendance = (rec: any) => {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
       const approverName = currentUser?.fullName || "HR_ADMIN";
-      updateRecord('attendance', id, { 
-        approved: true, 
-        remark: "",
-        approvedBy: approverName 
-      });
+      
+      if (rec.isVirtual) {
+        // Create new record for absent
+        const newRec: Partial<AttendanceRecord> = {
+          employeeId: rec.employeeId,
+          employeeName: rec.employeeName,
+          date: rec.date,
+          status: 'ABSENT',
+          attendanceType: 'FIELD', // Default for corrections
+          approved: true,
+          approvedBy: approverName,
+          hours: 0,
+          inTime: null,
+          outTime: null,
+          address: 'System Generated Absence'
+        };
+        addRecord('attendance', newRec);
+      } else {
+        updateRecord('attendance', rec.id, { 
+          approved: true, 
+          remark: "",
+          approvedBy: approverName 
+        });
+      }
       toast({ title: "Attendance Approved" });
     } finally { setIsProcessing(false); }
   };
 
-  const handleOpenAttendanceEdit = (rec: AttendanceRecord) => {
+  const handleOpenAttendanceEdit = (rec: any) => {
     setSelectedAttendance(rec);
     setAttendanceEditData({
       date: rec.date,
@@ -183,12 +234,29 @@ export default function ApprovalsPage() {
         finalHours = parseFloat(diff.toFixed(2));
       }
 
-      updateRecord('attendance', selectedAttendance.id, {
-        date: attendanceEditData.date,
-        inTime: attendanceEditData.inTime,
-        outTime: attendanceEditData.outTime,
-        hours: finalHours
-      });
+      if ((selectedAttendance as any).isVirtual) {
+         const newRec: Partial<AttendanceRecord> = {
+          employeeId: selectedAttendance.employeeId,
+          employeeName: selectedAttendance.employeeName,
+          date: attendanceEditData.date,
+          status: 'PRESENT',
+          attendanceType: 'FIELD',
+          inTime: attendanceEditData.inTime,
+          outTime: attendanceEditData.outTime,
+          hours: finalHours,
+          approved: false,
+          address: 'Manual Admin Entry'
+        };
+        addRecord('attendance', newRec);
+      } else {
+        updateRecord('attendance', selectedAttendance.id, {
+          date: attendanceEditData.date,
+          inTime: attendanceEditData.inTime,
+          outTime: attendanceEditData.outTime,
+          hours: finalHours
+        });
+      }
+      
       toast({ title: "Record Updated", description: "Attendance timings adjusted successfully." });
       setIsAttendanceEditOpen(false);
     } finally { setIsProcessing(false); }
@@ -207,11 +275,24 @@ export default function ApprovalsPage() {
     }
     setIsProcessing(true);
     try {
-      updateRecord('attendance', selectedAttendance.id, {
-        approved: false,
-        remark: attendanceRejectReason,
-        status: 'ABSENT' 
-      });
+      if ((selectedAttendance as any).isVirtual) {
+         const newRec: Partial<AttendanceRecord> = {
+          employeeId: selectedAttendance.employeeId,
+          employeeName: selectedAttendance.employeeName,
+          date: selectedAttendance.date,
+          status: 'ABSENT',
+          attendanceType: 'FIELD',
+          remark: attendanceRejectReason,
+          approved: false
+        };
+        addRecord('attendance', newRec);
+      } else {
+        updateRecord('attendance', selectedAttendance.id, {
+          approved: false,
+          remark: attendanceRejectReason,
+          status: 'ABSENT' 
+        });
+      }
       toast({ variant: "destructive", title: "Log Rejected", description: "Reason recorded in audit history." });
       setIsAttendanceRejectOpen(false);
     } finally { setIsProcessing(false); }
@@ -432,7 +513,7 @@ export default function ApprovalsPage() {
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN Date Time</TableHead>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Date Time</TableHead>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Working Hour</TableHead>
-                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Type</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type</TableHead>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>
                           <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                         </TableRow>
@@ -442,7 +523,7 @@ export default function ApprovalsPage() {
                           <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground font-medium">No pending attendance logs found.</TableCell></TableRow>
                         ) : (
                           pendingAttendance.map((rec: any) => (
-                            <TableRow key={rec.id} className="hover:bg-slate-50/50 transition-colors">
+                            <TableRow key={rec.id} className={cn("hover:bg-slate-50/50 transition-colors", rec.isVirtual && "bg-rose-50/30")}>
                               <TableCell className="px-6 py-4">
                                 <div className="flex flex-col">
                                   <span className="font-bold uppercase text-slate-700 text-sm leading-tight">{rec.employeeName}</span>
@@ -458,7 +539,7 @@ export default function ApprovalsPage() {
                               <TableCell>
                                 <div className="flex flex-col">
                                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date}</span>
-                                  <span className="text-xs font-mono font-bold text-slate-900">{rec.inTime || "--:--"}</span>
+                                  <span className={cn("text-xs font-mono font-bold", !rec.inTime && "text-rose-500 italic")}>{rec.inTime || "--:--"}</span>
                                 </div>
                               </TableCell>
                               <TableCell>
@@ -471,20 +552,28 @@ export default function ApprovalsPage() {
                                 <Badge variant="secondary" className="font-black text-xs px-3 bg-slate-100 text-slate-700">{rec.hours}h</Badge>
                               </TableCell>
                               <TableCell className="text-center">
-                                <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-slate-200">{rec.attendanceType}</Badge>
+                                <Badge 
+                                  variant="outline" 
+                                  className={cn(
+                                    "font-black text-[9px] uppercase tracking-widest border-slate-200",
+                                    rec.attendanceType === 'ABSENT' ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-white"
+                                  )}
+                                >
+                                  {rec.attendanceType}
+                                </Badge>
                               </TableCell>
                               <TableCell>
                                 <div className="flex flex-col gap-1">
                                   <div className="flex items-center gap-1.5">
-                                    <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                                    <MapPin className={cn("w-3 h-3 shrink-0", rec.address === 'N/A' ? "text-slate-300" : "text-emerald-500")} />
                                     <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.address || "N/A"}>
                                       {rec.address || "No IN Location"}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-1.5">
-                                    <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                                    <MapPin className={cn("w-3 h-3 shrink-0", rec.outTime ? "text-rose-500" : "text-slate-300")} />
                                     <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.addressOut || "N/A"}>
-                                      {rec.addressOut || (rec.outTime ? "Location pending" : "Shift In-Progress")}
+                                      {rec.addressOut || (rec.outTime ? "Location pending" : (rec.isVirtual ? "N/A" : "Shift In-Progress"))}
                                     </span>
                                   </div>
                                 </div>
@@ -504,14 +593,14 @@ export default function ApprovalsPage() {
                                     size="sm" 
                                     className={cn(
                                       "h-8 font-black text-[10px] uppercase px-4 shadow-sm",
-                                      rec.outTime 
+                                      (rec.outTime || rec.status === 'ABSENT')
                                         ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
                                         : "bg-slate-200 text-slate-400 cursor-not-allowed hover:bg-slate-200"
                                     )}
-                                    onClick={() => rec.outTime && handleApproveAttendance(rec.id)} 
-                                    disabled={isProcessing || !rec.outTime}
+                                    onClick={() => (rec.outTime || rec.status === 'ABSENT') && handleApproveAttendance(rec)} 
+                                    disabled={isProcessing || (!rec.outTime && rec.status !== 'ABSENT')}
                                   >
-                                    {rec.outTime ? "Approve" : "Locked"}
+                                    {(rec.outTime || rec.status === 'ABSENT') ? "Approve" : "Locked"}
                                   </Button>
                                   <Button 
                                     size="sm" 
@@ -886,11 +975,11 @@ export default function ApprovalsPage() {
              </div>
              <div className="flex-1 p-4 text-center">
                <p className="text-[9px] font-black text-slate-400 uppercase mb-1">IN Date Time</p>
-               <p className="text-[11px] font-bold text-slate-700">{selectedAttendance?.date} {selectedAttendance?.inTime}</p>
+               <p className="text-[11px] font-bold text-slate-700">{selectedAttendance?.date} {selectedAttendance?.inTime || '--:--'}</p>
              </div>
              <div className="flex-1 p-4 text-center">
                <p className="text-[9px] font-black text-slate-400 uppercase mb-1">OUT Date Time</p>
-               <p className="text-[11px] font-bold text-rose-600">{selectedAttendance?.date} {selectedAttendance?.outTime}</p>
+               <p className="text-[11px] font-bold text-rose-600">{selectedAttendance?.date} {selectedAttendance?.outTime || '--:--'}</p>
              </div>
              <div className="flex-1 p-4 text-center">
                <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Working / Type</p>

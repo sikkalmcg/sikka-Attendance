@@ -680,13 +680,15 @@ export default function AttendancePage() {
                     <TableHead className="font-bold">In Plant</TableHead>
                     <TableHead className="font-bold">In Date Time</TableHead>
                     <TableHead className="font-bold">Out Date Time</TableHead>
+                    <TableHead className="font-bold text-center">Type</TableHead>
                     <TableHead className="font-bold text-center">Hours</TableHead>
+                    <TableHead className="font-bold text-center">Attendance Status</TableHead>
                     <TableHead className="font-bold">Approval Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
                   ) : (
                     paginatedHistory.map((h: any) => (
                       <TableRow key={h.id} className="hover:bg-slate-50/50">
@@ -697,8 +699,23 @@ export default function AttendancePage() {
                           {h.date} {h.outTime || "--:--"}
                           {h.autoOut && <span className="block text-[8px] font-black text-rose-500 uppercase">Auto OUT</span>}
                         </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className="text-[9px] font-black uppercase">{h.attendanceType}</Badge>
+                        </TableCell>
                         <TableCell className={cn("font-black text-center", h.status === 'PRESENT' ? "text-emerald-600" : "text-rose-500")}>
                           {h.hours || 0}h
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge 
+                            className={cn(
+                              "text-[9px] font-black uppercase tracking-widest px-3",
+                              h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : 
+                              h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : 
+                              "bg-slate-50 text-slate-700"
+                            )}
+                          >
+                            {h.status}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {h.approved ? (
