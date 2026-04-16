@@ -54,12 +54,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
 import { User, Role } from "@/lib/types";
@@ -243,340 +237,333 @@ export default function UserManagementPage() {
   if (!isMounted) return null;
 
   return (
-    <TooltipProvider>
-      <div className="space-y-6 pb-12">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Access Control Center</h1>
-            <p className="text-muted-foreground">Provision secure user accounts with page-level restrictions.</p>
-          </div>
-          <Button className="font-bold shadow-lg shadow-primary/20 bg-primary" onClick={() => handleOpenModal()} disabled={isProcessing}>
-            <UserPlus className="w-4 h-4 mr-2" />
-            Create Security User
-          </Button>
+    <div className="space-y-6 pb-12">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Access Control Center</h1>
+          <p className="text-muted-foreground">Provision secure user accounts with page-level restrictions.</p>
         </div>
-
-        <Card className="border-slate-200 shadow-sm overflow-hidden">
-          <CardHeader className="border-b border-slate-100 bg-slate-50/50">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search administrators..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-bold">Full Name</TableHead>
-                  <TableHead className="font-bold">Username</TableHead>
-                  <TableHead className="font-bold">Role</TableHead>
-                  <TableHead className="font-bold">Permissions</TableHead>
-                  <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id} className="hover:bg-slate-50/50">
-                    <TableCell className="font-bold">{user.fullName}</TableCell>
-                    <TableCell className="font-mono text-primary text-xs tracking-tight">{user.username}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] uppercase font-black bg-white border-slate-200">
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {user.permissions?.slice(0, 3).map(p => (
-                          <Badge key={p} variant="secondary" className="text-[9px] bg-slate-100 border-none font-bold">{p}</Badge>
-                        ))}
-                        {(user.permissions?.length || 0) > 3 && (
-                          <Badge variant="secondary" className="text-[9px] bg-primary/5 text-primary border-none font-bold">+{user.permissions!.length - 3} more</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" disabled={isProcessing}>
-                            <MoreVertical className="w-4 h-4 text-slate-400" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenModal(user); }} className="font-semibold"><Pencil className="w-4 h-4 mr-2" /> Edit Permissions</DropdownMenuItem>
-                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setUserToAction(user); setIsResetPasswordOpen(true); }} className="font-semibold"><Key className="w-4 h-4 mr-2" /> Change Password</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-rose-600 font-bold" onSelect={(e) => { e.preventDefault(); setUserToAction(user); setIsDeleteAlertOpen(true); }} disabled={user.role === 'SUPER_ADMIN'}><Trash2 className="w-4 h-4 mr-2" /> Deactivate User</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Dialog open={isUserModalOpen} onOpenChange={(o) => { if (!o) setIsUserModalOpen(false); }}>
-          <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
-            <DialogHeader className="p-8 pb-4 shrink-0 border-b bg-white z-10">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <DialogTitle className="text-2xl font-black flex items-center gap-3 text-slate-900">
-                    <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <ShieldCheck className="w-6 h-6 text-primary" />
-                    </div>
-                    {editingUser ? `Edit Access: ${editingUser.fullName}` : "Create New Managed User"}
-                  </DialogTitle>
-                  <DialogDescription className="text-slate-500 font-medium">Define identity and assign modular page permissions.</DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-            
-            <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30">
-              <div className="space-y-10 pb-20 pr-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Full Name *</Label>
-                    <Input 
-                      value={formData.fullName || ""} 
-                      onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
-                      className="h-14 bg-white border-slate-200 font-bold text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Username *</Label>
-                    <Input 
-                      value={formData.username || ""} 
-                      onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
-                      disabled={editingUser?.role === 'SUPER_ADMIN'} 
-                      className="h-14 bg-white border-slate-200 font-mono text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary disabled:bg-slate-100 disabled:text-slate-400"
-                    />
-                  </div>
-                </div>
-                
-                {!editingUser && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                    <div className="space-y-2 w-full">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Secure Password *</Label>
-                      <div className="relative">
-                        <Input 
-                          type={showPassword ? "text" : "password"}
-                          value={formData.password || ""} 
-                          onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
-                          className="h-14 bg-white border-slate-200 font-mono text-lg pr-14 rounded-xl shadow-sm focus-visible:ring-primary"
-                        />
-                        <button 
-                          type="button"
-                          className="absolute right-4 top-4 text-slate-400 hover:text-primary transition-colors"
-                          onClick={() => setShowPassword(!showPassword)}
-                        >
-                          {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-0 w-full">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
-                        <Badge className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", 
-                          passwordStrength.label === 'STRONG' ? "bg-emerald-500" : 
-                          passwordStrength.label === 'MEDIUM' ? "bg-amber-500" : 
-                          passwordStrength.label === 'WEAK' ? "bg-rose-500" : "bg-slate-200 text-slate-500"
-                        )}>
-                          {passwordStrength.label}
-                        </Badge>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex gap-1.5">
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 1 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 2 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 3 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 4 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-6 pt-8 border-t border-slate-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Assign Page Access</h3>
-                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Select the modules this user can view and interact with.</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg border-slate-200" onClick={selectAllPermissions} disabled={isProcessing}>Select All</Button>
-                      <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions} disabled={isProcessing}>Clear</Button>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            className="h-9 px-4 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg gap-2"
-                            onClick={handleGlobalPermissionsUpdate}
-                            disabled={isProcessing}
-                          >
-                            <Globe className="w-3.5 h-3.5" /> Apply Globally
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Apply current permissions to all users</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-
-                  <div className="relative">
-                    <SearchIcon className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
-                    <Input 
-                      placeholder="Search available modules..." 
-                      className="pl-12 h-14 bg-white border-slate-200 rounded-xl text-base shadow-sm focus-visible:ring-primary"
-                      value={permissionSearch}
-                      onChange={(e) => setPermissionSearch(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredPermissions.map(perm => {
-                      const isSelected = formData.permissions?.includes(perm);
-                      return (
-                        <div 
-                          key={perm}
-                          onClick={() => !isProcessing && togglePermission(perm)}
-                          className={cn(
-                            "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
-                            isSelected 
-                              ? "bg-primary/5 border-primary shadow-sm" 
-                              : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
-                          )}
-                        >
-                          <Checkbox 
-                            id={`perm-${perm}`}
-                            checked={isSelected}
-                            onCheckedChange={() => togglePermission(perm)}
-                            disabled={isProcessing}
-                            className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
-                          />
-                          <Label 
-                            htmlFor={`perm-${perm}`} 
-                            className="text-sm font-bold text-slate-700 cursor-pointer flex-1"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePermission(perm); }}
-                          >
-                            {perm}
-                          </Label>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="space-y-6 pt-12 border-t border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5 text-slate-400" />
-                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Managed Users Registry</h3>
-                  </div>
-                  <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                    <Table>
-                      <TableHeader className="bg-slate-50">
-                        <TableRow>
-                          <TableHead className="text-[9px] font-black uppercase">Name</TableHead>
-                          <TableHead className="text-[9px] font-black uppercase">Username</TableHead>
-                          <TableHead className="text-[9px] font-black uppercase">Role</TableHead>
-                          <TableHead className="text-[9px] font-black uppercase text-right">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {users.map(u => (
-                          <TableRow key={u.id} className="hover:bg-slate-50/50">
-                            <TableCell className="text-xs font-bold">{u.fullName}</TableCell>
-                            <TableCell className="text-xs font-mono text-primary">{u.username}</TableCell>
-                            <TableCell><Badge variant="outline" className="text-[8px] font-black uppercase py-0">{u.role}</Badge></TableCell>
-                            <TableCell className="text-right">
-                              <Badge className={cn("text-[8px] font-black uppercase py-0", u.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>{u.status}</Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </div>
-            </ScrollArea>
-
-            <DialogFooter className="p-8 bg-slate-50 border-t shrink-0 z-10">
-              <div className="flex justify-end gap-4 w-full">
-                <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-xl font-bold h-14 px-10 text-slate-500 hover:bg-slate-200">Cancel</Button>
-                <Button 
-                  onClick={handleSaveUser} 
-                  disabled={isProcessing}
-                  className="bg-primary hover:bg-primary/90 rounded-xl font-black h-14 px-16 shadow-xl shadow-primary/30 text-lg"
-                >
-                  {isProcessing ? "Processing..." : editingUser ? "Save Changes" : "Create Secure User"}
-                </Button>
-              </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isResetPasswordOpen} onOpenChange={(o) => { if (!o) setIsResetPasswordOpen(false); }}>
-          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-black flex items-center gap-2">
-                <Key className="w-5 h-5 text-primary" />
-                Update Credentials
-              </DialogTitle>
-              <DialogDescription className="font-medium">Reset password for <strong>{userToAction?.username}</strong></DialogDescription>
-            </DialogHeader>
-            <div className="py-6 space-y-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">New Secure Password</Label>
-                <Input 
-                  type="password"
-                  className="h-12 bg-slate-50 border-slate-200 rounded-xl font-mono"
-                  value={formData.password || ""}
-                  onChange={(e) => setFormData(p => ({...p, password: e.target.value}))}
-                />
-              </div>
-            </div>
-            <DialogFooter className="bg-slate-50 -m-6 mt-2 p-6 rounded-b-2xl border-t gap-2">
-              <Button variant="ghost" onClick={() => setIsResetPasswordOpen(false)} className="rounded-xl font-bold">Cancel</Button>
-              <Button onClick={handleSaveUser} disabled={isProcessing} className="bg-primary rounded-xl font-black px-8">Update Password</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
-          <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
-            <AlertDialogHeader>
-              <div className="mx-auto w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-                <AlertTriangle className="w-8 h-8 text-rose-500" />
-              </div>
-              <AlertDialogTitle className="text-center text-2xl font-black">Confirm User Deactivation</AlertDialogTitle>
-              <AlertDialogDescription className="text-center text-slate-500 font-medium pt-2">
-                Are you sure you want to remove <strong>{userToAction?.fullName}</strong>? They will lose all access to assigned pages immediately.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="sm:justify-center gap-3 pt-8 pb-4">
-              <AlertDialogCancel className="rounded-xl font-bold h-12 px-8">Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (userToAction && !isProcessing) {
-                    setIsProcessing(true);
-                    try {
-                      deleteRecord('users', userToAction.id);
-                      toast({ title: "User Deactivated" });
-                      setIsDeleteAlertOpen(false);
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }
-                }} 
-                disabled={isProcessing}
-                className="bg-rose-600 hover:bg-rose-700 rounded-xl font-black h-12 px-8 shadow-lg shadow-rose-100"
-              >
-                {isProcessing ? "Processing..." : "Confirm Deactivation"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button className="font-bold shadow-lg shadow-primary/20 bg-primary" onClick={() => handleOpenModal()} disabled={isProcessing}>
+          <UserPlus className="w-4 h-4 mr-2" />
+          Create Security User
+        </Button>
       </div>
-    </TooltipProvider>
+
+      <Card className="border-slate-200 shadow-sm overflow-hidden">
+        <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search administrators..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-slate-50">
+              <TableRow>
+                <TableHead className="font-bold">Full Name</TableHead>
+                <TableHead className="font-bold">Username</TableHead>
+                <TableHead className="font-bold">Role</TableHead>
+                <TableHead className="font-bold">Permissions</TableHead>
+                <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((user) => (
+                <TableRow key={user.id} className="hover:bg-slate-50/50">
+                  <TableCell className="font-bold">{user.fullName}</TableCell>
+                  <TableCell className="font-mono text-primary text-xs tracking-tight">{user.username}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px] uppercase font-black bg-white border-slate-200">
+                      {user.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {user.permissions?.slice(0, 3).map(p => (
+                        <Badge key={p} variant="secondary" className="text-[9px] bg-slate-100 border-none font-bold">{p}</Badge>
+                      ))}
+                      {(user.permissions?.length || 0) > 3 && (
+                        <Badge variant="secondary" className="text-[9px] bg-primary/5 text-primary border-none font-bold">+{user.permissions!.length - 3} more</Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right pr-6">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" disabled={isProcessing}>
+                          <MoreVertical className="w-4 h-4 text-slate-400" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenModal(user); }} className="font-semibold"><Pencil className="w-4 h-4 mr-2" /> Edit Permissions</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setUserToAction(user); setIsResetPasswordOpen(true); }} className="font-semibold"><Key className="w-4 h-4 mr-2" /> Change Password</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-rose-600 font-bold" onSelect={(e) => { e.preventDefault(); setUserToAction(user); setIsDeleteAlertOpen(true); }} disabled={user.role === 'SUPER_ADMIN'}><Trash2 className="w-4 h-4 mr-2" /> Deactivate User</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={isUserModalOpen} onOpenChange={(o) => { if (!o) setIsUserModalOpen(false); }}>
+        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          <DialogHeader className="p-8 pb-4 shrink-0 border-b bg-white z-10">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <DialogTitle className="text-2xl font-black flex items-center gap-3 text-slate-900">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <ShieldCheck className="w-6 h-6 text-primary" />
+                  </div>
+                  {editingUser ? `Edit Access: ${editingUser.fullName}` : "Create New Managed User"}
+                </DialogTitle>
+                <DialogDescription className="text-slate-500 font-medium">Define identity and assign modular page permissions.</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30">
+            <div className="space-y-10 pb-20 pr-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Full Name *</Label>
+                  <Input 
+                    value={formData.fullName || ""} 
+                    onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
+                    className="h-14 bg-white border-slate-200 font-bold text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Username *</Label>
+                  <Input 
+                    value={formData.username || ""} 
+                    onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
+                    disabled={editingUser?.role === 'SUPER_ADMIN'} 
+                    className="h-14 bg-white border-slate-200 font-mono text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary disabled:bg-slate-100 disabled:text-slate-400"
+                  />
+                </div>
+              </div>
+              
+              {!editingUser && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                  <div className="space-y-2 w-full">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Secure Password *</Label>
+                    <div className="relative">
+                      <Input 
+                        type={showPassword ? "text" : "password"}
+                        value={formData.password || ""} 
+                        onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
+                        className="h-14 bg-white border-slate-200 font-mono text-lg pr-14 rounded-xl shadow-sm focus-visible:ring-primary"
+                      />
+                      <button 
+                        type="button"
+                        className="absolute right-4 top-4 text-slate-400 hover:text-primary transition-colors"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-0 w-full">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
+                      <Badge className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", 
+                        passwordStrength.label === 'STRONG' ? "bg-emerald-500" : 
+                        passwordStrength.label === 'MEDIUM' ? "bg-amber-500" : 
+                        passwordStrength.label === 'WEAK' ? "bg-rose-500" : "bg-slate-200 text-slate-500"
+                      )}>
+                        {passwordStrength.label}
+                      </Badge>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex gap-1.5">
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 1 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 2 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 3 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 4 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-6 pt-8 border-t border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Assign Page Access</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Select the modules this user can view and interact with.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg border-slate-200" onClick={selectAllPermissions} disabled={isProcessing}>Select All</Button>
+                    <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions} disabled={isProcessing}>Clear</Button>
+                    <Button 
+                      variant="secondary" 
+                      size="sm" 
+                      className="h-9 px-4 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg gap-2"
+                      onClick={handleGlobalPermissionsUpdate}
+                      disabled={isProcessing}
+                    >
+                      <Globe className="w-3.5 h-3.5" /> Apply Globally
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <SearchIcon className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                  <Input 
+                    placeholder="Search available modules..." 
+                    className="pl-12 h-14 bg-white border-slate-200 rounded-xl text-base shadow-sm focus-visible:ring-primary"
+                    value={permissionSearch}
+                    onChange={(e) => setPermissionSearch(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredPermissions.map(perm => {
+                    const isSelected = formData.permissions?.includes(perm);
+                    return (
+                      <div 
+                        key={perm}
+                        onClick={() => !isProcessing && togglePermission(perm)}
+                        className={cn(
+                          "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
+                          isSelected 
+                            ? "bg-primary/5 border-primary shadow-sm" 
+                            : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
+                        )}
+                      >
+                        <Checkbox 
+                          id={`perm-${perm}`}
+                          checked={isSelected}
+                          onCheckedChange={() => togglePermission(perm)}
+                          disabled={isProcessing}
+                          className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
+                        />
+                        <Label 
+                          htmlFor={`perm-${perm}`} 
+                          className="text-sm font-bold text-slate-700 cursor-pointer flex-1"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePermission(perm); }}
+                        >
+                          {perm}
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-6 pt-12 border-t border-slate-200">
+                <div className="flex items-center gap-3">
+                  <Users className="w-5 h-5 text-slate-400" />
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Managed Users Registry</h3>
+                </div>
+                <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-[9px] font-black uppercase">Name</TableHead>
+                        <TableHead className="text-[9px] font-black uppercase">Username</TableHead>
+                        <TableHead className="text-[9px] font-black uppercase">Role</TableHead>
+                        <TableHead className="text-[9px] font-black uppercase text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map(u => (
+                        <TableRow key={u.id} className="hover:bg-slate-50/50">
+                          <TableCell className="text-xs font-bold">{u.fullName}</TableCell>
+                          <TableCell className="text-xs font-mono text-primary">{u.username}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-[8px] font-black uppercase py-0">{u.role}</Badge></TableCell>
+                          <TableCell className="text-right">
+                            <Badge className={cn("text-[8px] font-black uppercase py-0", u.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>{u.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+
+          <DialogFooter className="p-8 bg-slate-50 border-t shrink-0 z-10">
+            <div className="flex justify-end gap-4 w-full">
+              <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-xl font-bold h-14 px-10 text-slate-500 hover:bg-slate-200">Cancel</Button>
+              <Button 
+                onClick={handleSaveUser} 
+                disabled={isProcessing}
+                className="bg-primary hover:bg-primary/90 rounded-xl font-black h-14 px-16 shadow-xl shadow-primary/30 text-lg"
+              >
+                {isProcessing ? "Processing..." : editingUser ? "Save Changes" : "Create Secure User"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isResetPasswordOpen} onOpenChange={(o) => { if (!o) setIsResetPasswordOpen(false); }}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" />
+              Update Credentials
+            </DialogTitle>
+            <DialogDescription className="font-medium">Reset password for <strong>{userToAction?.username}</strong></DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">New Secure Password</Label>
+              <Input 
+                type="password"
+                className="h-12 bg-slate-50 border-slate-200 rounded-xl font-mono"
+                value={formData.password || ""}
+                onChange={(e) => setFormData(p => ({...p, password: e.target.value}))}
+              />
+            </div>
+          </div>
+          <DialogFooter className="bg-slate-50 -m-6 mt-2 p-6 rounded-b-2xl border-t gap-2">
+            <Button variant="ghost" onClick={() => setIsResetPasswordOpen(false)} className="rounded-xl font-bold">Cancel</Button>
+            <Button onClick={handleSaveUser} disabled={isProcessing} className="bg-primary rounded-xl font-black px-8">Update Password</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
+          <AlertDialogHeader>
+            <div className="mx-auto w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-rose-500" />
+            </div>
+            <AlertDialogTitle className="text-center text-2xl font-black">Confirm User Deactivation</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 font-medium pt-2">
+              Are you sure you want to remove <strong>{userToAction?.fullName}</strong>? They will lose all access to assigned pages immediately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-8 pb-4">
+            <AlertDialogCancel className="rounded-xl font-bold h-12 px-8">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => {
+                e.preventDefault();
+                if (userToAction && !isProcessing) {
+                  setIsProcessing(true);
+                  try {
+                    deleteRecord('users', userToAction.id);
+                    toast({ title: "User Deactivated" });
+                    setIsDeleteAlertOpen(false);
+                  } finally {
+                    setIsProcessing(false);
+                  }
+                }
+              }} 
+              disabled={isProcessing}
+              className="bg-rose-600 hover:bg-rose-700 rounded-xl font-black h-12 px-8 shadow-lg shadow-rose-100"
+            >
+              {isProcessing ? "Processing..." : "Confirm Deactivation"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
