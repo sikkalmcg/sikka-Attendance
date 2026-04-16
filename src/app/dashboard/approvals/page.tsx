@@ -22,6 +22,16 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +81,10 @@ export default function ApprovalsPage() {
   const [attendanceEditData, setAttendanceEditData] = useState({ date: "", inTime: "", outTime: "" });
   const [attendanceRejectReason, setAttendanceRejectReason] = useState("");
 
+  // Restore State
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
+  const [attendanceToRestore, setAttendanceToRestore] = useState<AttendanceRecord | null>(null);
+
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { toast } = useToast();
@@ -108,9 +122,17 @@ export default function ApprovalsPage() {
     const search = searchTerm.toLowerCase();
     return (attendanceRecords || [])
       .filter(rec => rec.approved)
+      .map(rec => {
+        const emp = (employees || []).find(e => e.employeeId === rec.employeeId);
+        return {
+          ...rec,
+          dept: emp?.department || "N/A",
+          desig: emp?.designation || "N/A"
+        };
+      })
       .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [attendanceRecords, searchTerm]);
+  }, [attendanceRecords, employees, searchTerm]);
 
   const historyLeaves = useMemo(() => {
     const search = searchTerm.toLowerCase();
@@ -180,10 +202,29 @@ export default function ApprovalsPage() {
       updateRecord('attendance', selectedAttendance.id, {
         approved: false,
         remark: attendanceRejectReason,
-        status: 'ABSENT' // Or marked for revision
+        status: 'ABSENT' 
       });
       toast({ variant: "destructive", title: "Log Rejected", description: "Reason recorded in audit history." });
       setIsAttendanceRejectOpen(false);
+    } finally { setIsProcessing(false); }
+  };
+
+  // Restore Action
+  const handleOpenRestoreConfirm = (rec: AttendanceRecord) => {
+    setAttendanceToRestore(rec);
+    setIsRestoreConfirmOpen(true);
+  };
+
+  const handleConfirmRestore = () => {
+    if (!attendanceToRestore || isProcessing) return;
+    setIsProcessing(true);
+    try {
+      updateRecord('attendance', attendanceToRestore.id, { 
+        approved: false, 
+        remark: "" 
+      });
+      toast({ title: "Record Restored", description: "Record moved back to pending list." });
+      setIsRestoreConfirmOpen(false);
     } finally { setIsProcessing(false); }
   };
 
@@ -452,45 +493,79 @@ export default function ApprovalsPage() {
                 <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
                   <CardContent className="p-0">
                     <ScrollArea className="w-full">
-                      <Table>
+                      <Table className="min-w-[1400px]">
                         <TableHeader className="bg-slate-50/50 border-b">
                           <TableRow>
-                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
-                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Date</TableHead>
-                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">IN / OUT</TableHead>
-                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Hours</TableHead>
-                            <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN Date Time</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Date Time</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Working Hour</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Type</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Status</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved by</TableHead>
+                            <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {historyAttendance.length === 0 ? (
-                            <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No approved records found.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No approved records found.</TableCell></TableRow>
                           ) : (
-                            historyAttendance.map((rec) => (
+                            historyAttendance.map((rec: any) => (
                               <TableRow key={rec.id} className="hover:bg-slate-50/30">
                                 <TableCell className="px-6 py-4">
                                   <div className="flex flex-col">
-                                    <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
-                                    <span className="text-[10px] font-mono font-black text-slate-400">{rec.employeeId}</span>
+                                    <span className="font-bold uppercase text-slate-700 text-sm leading-tight">{rec.employeeName}</span>
+                                    <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-sm font-bold text-slate-600">{rec.date}</TableCell>
                                 <TableCell>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono text-[11px] font-bold text-slate-900">{rec.inTime || "--:--"}</span>
-                                    <ChevronRight className="w-3 h-3 text-slate-200" />
-                                    <span className="font-mono text-[11px] font-bold text-slate-900">{rec.outTime || "--:--"}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-slate-600 leading-tight">{rec.dept}</span>
+                                    <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">{rec.desig}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-center font-black text-sm text-slate-700">{rec.hours}h</TableCell>
-                                <TableCell className="text-right pr-6">
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date}</span>
+                                    <span className="text-xs font-mono font-bold text-slate-900">{rec.inTime || "--:--"}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date}</span>
+                                    <span className="text-xs font-mono font-bold text-rose-500">{rec.outTime || "--:--"}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="secondary" className="font-black text-xs px-3 bg-slate-100 text-slate-700">{rec.hours}h</Badge>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-slate-200">{rec.attendanceType}</Badge>
+                                </TableCell>
+                                <TableCell className="text-center">
                                   <Badge className="bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-widest border-none px-3">Approved</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">HR_ADMIN</span>
+                                </TableCell>
+                                <TableCell className="text-right pr-6">
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="h-8 font-black text-[10px] uppercase border-primary text-primary hover:bg-primary/5 gap-1.5"
+                                    onClick={() => handleOpenRestoreConfirm(rec)}
+                                    disabled={isProcessing}
+                                  >
+                                    <RotateCcw className="w-3 h-3" /> Restore
+                                  </Button>
                                 </TableCell>
                               </TableRow>
                             ))
                           )}
                         </TableBody>
                       </Table>
+                      <ScrollBar orientation="horizontal" />
                     </ScrollArea>
                   </CardContent>
                 </Card>
@@ -563,6 +638,31 @@ export default function ApprovalsPage() {
           </Tabs>
         </div>
       )}
+
+      {/* Restore Confirmation Dialog */}
+      <AlertDialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
+        <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
+          <AlertDialogHeader>
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+              <RotateCcw className="w-8 h-8 text-primary" />
+            </div>
+            <AlertDialogTitle className="text-center text-2xl font-black">Confirm Record Restoration</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 font-medium pt-2">
+              This action will move the attendance log for <strong>{attendanceToRestore?.employeeName} ({attendanceToRestore?.employeeId})</strong> on <strong>{attendanceToRestore?.date}</strong> back to the pending list for re-approval.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-8 pb-4">
+            <AlertDialogCancel className="rounded-xl font-bold h-12 px-8">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => { e.preventDefault(); handleConfirmRestore(); }} 
+              disabled={isProcessing}
+              className="bg-primary hover:bg-primary/90 rounded-xl font-black h-12 px-8 shadow-lg shadow-primary/20"
+            >
+              {isProcessing ? "Restoring..." : "Restore Record"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Attendance Edit Dialog */}
       <Dialog open={isAttendanceEditOpen} onOpenChange={setIsAttendanceEditOpen}>
