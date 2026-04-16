@@ -24,7 +24,8 @@ import {
   MessageCircle,
   SendHorizontal,
   FileText,
-  Plus
+  Plus,
+  Info
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
