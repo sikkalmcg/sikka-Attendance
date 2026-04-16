@@ -494,58 +494,6 @@ export default function AttendancePage() {
     toast({ title: "Check-Out Success", description: `Shift ended at ${finalOutTime}.` });
   };
 
-  const handleAdminEditClick = (rec: any) => {
-    setSelectedRecordToEdit(rec);
-    setEditTimes({ in: rec.inTime || "", out: rec.outTime || "" });
-    setIsEditDialogOpen(true);
-  };
-
-  const handleSaveAdminEdit = () => {
-    if (!selectedRecordToEdit || !currentUser) return;
-    const inTime = editTimes.in;
-    const outTime = editTimes.out;
-    let hours = 0;
-    if (inTime && outTime) {
-      const dummyDate = "2024-01-01 ";
-      const start = new Date(dummyDate + inTime);
-      const end = new Date(dummyDate + outTime);
-      const diffMs = end.getTime() - start.getTime();
-      if (!isNaN(diffMs) && diffMs >= 0) {
-        hours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
-      }
-    }
-    const status = hours > ATTENDANCE_RULES.PRESENT_THRESHOLD ? 'PRESENT' : (hours > 0 ? 'HALF_DAY' : 'ABSENT');
-    const isVirtual = selectedRecordToEdit.id.startsWith('virtual-');
-    if (isVirtual) {
-      addRecord('attendance', {
-        employeeId: selectedRecordToEdit.employeeId,
-        employeeName: selectedRecordToEdit.employeeName,
-        date: selectedRecordToEdit.date,
-        inTime,
-        outTime,
-        hours,
-        status: status as any,
-        attendanceType: 'FIELD',
-        lat: 0,
-        lng: 0,
-        address: "Manually adjusted by Admin",
-        approved: true,
-        remark: "Manually posted by Super Admin"
-      });
-    } else {
-      updateRecord('attendance', selectedRecordToEdit.id, { 
-        inTime, 
-        outTime, 
-        hours, 
-        status: status as any,
-        remark: "Adjusted by Super Admin",
-        approved: true 
-      });
-    }
-    setIsEditDialogOpen(false);
-    toast({ title: "Manual Adjustment Applied" });
-  };
-
   if (!isMounted) return null;
 
   return (
@@ -571,164 +519,163 @@ export default function AttendancePage() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Main Attendance Card */}
-          <div className="lg:col-span-4 space-y-6">
-            <Card className="shadow-2xl border-none overflow-hidden bg-white">
-              <div className="h-1 bg-primary" />
-              <CardHeader className="text-center py-4">
-                <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
-                  <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 px-6 pb-8 pt-0">
-                <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
-                  {currentTime ? (
-                    <div className="text-center">
-                      <h2 className="text-5xl font-black tracking-tighter font-mono text-sky-900 leading-none">
-                        {format(currentTime, "HH:mm")}
-                      </h2>
-                      <p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest">
-                        <Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}
-                      </p>
-                    </div>
-                  ) : (
-                    <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
-                  )}
-                </div>
+        {/* Top Section: Gateway Portal and Leave Request Widget side-by-side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+          {/* Gateway Portal Card */}
+          <Card className="shadow-2xl border-none overflow-hidden bg-white h-full">
+            <div className="h-1 bg-primary" />
+            <CardHeader className="text-center py-4">
+              <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
+                <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6 px-6 pb-8 pt-0">
+              <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto transition-all">
+                {currentTime ? (
+                  <div className="text-center">
+                    <h2 className="text-5xl font-black tracking-tighter font-mono text-sky-900 leading-none">
+                      {format(currentTime, "HH:mm")}
+                    </h2>
+                    <p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest">
+                      <Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}
+                    </p>
+                  </div>
+                ) : (
+                  <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
+                )}
+              </div>
 
-                <div className="flex gap-4">
-                  <Button 
-                    className={cn(
-                      "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
-                      isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
-                    )} 
-                    disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} 
-                    onClick={() => requestLocation("IN")}
-                  >
-                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? (lockState.isLocked ? "Locked" : "Mark IN") : "Locked")}
-                  </Button>
-                  
-                  <Button 
-                    className={cn(
-                      "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
-                      isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
-                    )} 
-                    disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} 
-                    onClick={() => requestLocation("OUT")}
-                  >
-                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Mark OUT"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Leave Request Widget */}
-            <Card className="shadow-xl border-none overflow-hidden bg-white">
-              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-primary" /> Leave Requests
-                </CardTitle>
-                <Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={handleCreateLeaveRequest} disabled={!isAccessAllowed}>
-                  <Plus className="w-3 h-3" /> Create Request
+              <div className="flex gap-4">
+                <Button 
+                  className={cn(
+                    "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
+                    isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                  )} 
+                  disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} 
+                  onClick={() => requestLocation("IN")}
+                >
+                  {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? (lockState.isLocked ? "Locked" : "Mark IN") : "Locked")}
                 </Button>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[300px]">
-                  {myLeaveRequests.length === 0 ? (
-                    <div className="p-10 text-center space-y-2">
-                      <p className="text-xs text-muted-foreground font-medium">No leave records found.</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-100">
-                      {myLeaveRequests.map((l) => (
-                        <div key={l.id} className="p-4 space-y-2 hover:bg-slate-50 transition-colors">
-                          <div className="flex justify-between items-start">
-                            <div className="space-y-0.5">
-                              <p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p>
-                              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">{l.days} Day(s) • {l.purpose}</p>
-                            </div>
-                            <Badge 
-                              className={cn(
-                                "text-[9px] font-black uppercase border-none px-2 py-0.5 rounded-full",
-                                l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" :
-                                l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" :
-                                "bg-blue-100 text-blue-600"
-                              )}
-                            >
-                              {l.status.replace('_', ' ')}
-                            </Badge>
-                          </div>
-                          {l.status === 'REJECTED' && l.rejectReason && (
-                            <p className="text-[9px] text-rose-500 font-bold bg-rose-50 p-2 rounded-lg border border-rose-100 italic">
-                              Reason: {l.rejectReason}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
+                
+                <Button 
+                  className={cn(
+                    "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
+                    isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                  )} 
+                  disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} 
+                  onClick={() => requestLocation("OUT")}
+                >
+                  {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Mark OUT"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* History Section */}
-          <div className="lg:col-span-8 space-y-4">
-            <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
-              <History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}
-            </h3>
-            <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
-              <ScrollArea className="w-full">
-                <Table className="min-w-[900px]">
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Employee Name</TableHead>
-                      <TableHead className="font-bold">In Plant</TableHead>
-                      <TableHead className="font-bold">In Date Time</TableHead>
-                      <TableHead className="font-bold">Out Date Time</TableHead>
-                      <TableHead className="font-bold text-center">Hours</TableHead>
-                      <TableHead className="font-bold">Approval Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedHistory.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
-                    ) : (
-                      paginatedHistory.map((h: any) => (
-                        <TableRow key={h.id} className="hover:bg-slate-50/50">
-                          <TableCell className="text-sm font-bold">{h.employeeName}</TableCell>
-                          <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                          <TableCell className="font-mono text-xs">{h.date} {h.inTime || "--:--"}</TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {h.date} {h.outTime || "--:--"}
-                            {h.autoOut && <span className="block text-[8px] font-black text-rose-500 uppercase">Auto OUT</span>}
-                          </TableCell>
-                          <TableCell className={cn("font-black text-center", h.status === 'PRESENT' ? "text-emerald-600" : "text-rose-500")}>
-                            {h.hours || 0}h
-                          </TableCell>
-                          <TableCell>
-                            {h.approved ? (
-                              <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge>
-                            ) : (
-                              <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>
+          {/* Leave Request Widget Card */}
+          <Card className="shadow-xl border-none overflow-hidden bg-white h-full">
+            <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" /> Leave Requests
+              </CardTitle>
+              <Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={handleCreateLeaveRequest} disabled={!isAccessAllowed}>
+                <Plus className="w-3 h-3" /> Create Request
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[240px]">
+                {myLeaveRequests.length === 0 ? (
+                  <div className="p-10 text-center space-y-2">
+                    <p className="text-xs text-muted-foreground font-medium">No leave records found.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {myLeaveRequests.map((l) => (
+                      <div key={l.id} className="p-4 space-y-2 hover:bg-slate-50 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p>
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">{l.days} Day(s) • {l.purpose}</p>
+                          </div>
+                          <Badge 
+                            className={cn(
+                              "text-[9px] font-black uppercase border-none px-2 py-0.5 rounded-full",
+                              l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" :
+                              l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" :
+                              "bg-blue-100 text-blue-600"
                             )}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                          >
+                            {l.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                        {l.status === 'REJECTED' && l.rejectReason && (
+                          <p className="text-[9px] text-rose-500 font-bold bg-rose-50 p-2 rounded-lg border border-rose-100 italic">
+                            Reason: {l.rejectReason}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </ScrollArea>
-              {totalPages > 1 && (
-                <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold">Previous</Button>
-                  <span className="text-xs font-black">Page {currentPage} of {totalPages}</span>
-                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold">Next</Button>
-                </CardFooter>
-              )}
-            </Card>
-          </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Bottom Section: History Oversight Full Width */}
+        <div className="space-y-4">
+          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
+            <History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}
+          </h3>
+          <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
+            <ScrollArea className="w-full">
+              <Table className="min-w-[900px]">
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">In Plant</TableHead>
+                    <TableHead className="font-bold">In Date Time</TableHead>
+                    <TableHead className="font-bold">Out Date Time</TableHead>
+                    <TableHead className="font-bold text-center">Hours</TableHead>
+                    <TableHead className="font-bold">Approval Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedHistory.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
+                  ) : (
+                    paginatedHistory.map((h: any) => (
+                      <TableRow key={h.id} className="hover:bg-slate-50/50">
+                        <TableCell className="text-sm font-bold">{h.employeeName}</TableCell>
+                        <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
+                        <TableCell className="font-mono text-xs">{h.date} {h.inTime || "--:--"}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {h.date} {h.outTime || "--:--"}
+                          {h.autoOut && <span className="block text-[8px] font-black text-rose-500 uppercase">Auto OUT</span>}
+                        </TableCell>
+                        <TableCell className={cn("font-black text-center", h.status === 'PRESENT' ? "text-emerald-600" : "text-rose-500")}>
+                          {h.hours || 0}h
+                        </TableCell>
+                        <TableCell>
+                          {h.approved ? (
+                            <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            {totalPages > 1 && (
+              <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+                <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold">Previous</Button>
+                <span className="text-xs font-black">Page {currentPage} of {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold">Next</Button>
+              </CardFooter>
+            )}
+          </Card>
         </div>
 
         {/* IN/OUT Dialogs */}
