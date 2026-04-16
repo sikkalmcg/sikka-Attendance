@@ -63,7 +63,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
-import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -79,7 +79,7 @@ export default function ApprovalsPage() {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
 
-  // History Filter State
+  // History Filter State - Default to last 30 days
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -107,6 +107,11 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     setIsMounted(true);
+    // Initialize default date range: Last 30 days
+    const today = new Date();
+    const thirtyDaysAgo = subDays(today, 30);
+    setFromDate(format(thirtyDaysAgo, "yyyy-MM-dd"));
+    setToDate(format(today, "yyyy-MM-dd"));
   }, []);
 
   // Reset page on mode/type change
@@ -213,7 +218,6 @@ export default function ApprovalsPage() {
     };
   }, [viewMode, pendingType, historyType, pendingAttendanceList, pendingLeavesList, historyAttendanceList, historyLeavesList, currentPage]);
 
-  // Actions
   const handleApproveAttendance = (rec: any) => {
     if (isProcessing) return;
     setIsProcessing(true);
@@ -354,9 +358,48 @@ export default function ApprovalsPage() {
   };
 
   const resetFilters = () => {
-    setFromDate("");
-    setToDate("");
+    const today = new Date();
+    const thirtyDaysAgo = subDays(today, 30);
+    setFromDate(format(thirtyDaysAgo, "yyyy-MM-dd"));
+    setToDate(format(today, "yyyy-MM-dd"));
     setSearchTerm("");
+  };
+
+  const handleExportHistory = () => {
+    const list = historyType === 'attendance' ? historyAttendanceList : historyLeavesList;
+    if (list.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No records found to export." });
+      return;
+    }
+
+    const headers = historyType === 'attendance' 
+      ? ["Employee Name", "Employee ID", "Dept", "Desig", "Date", "In Time", "Out Time", "Hours", "Type", "Status", "In Address", "Out Address", "Approved By"]
+      : ["Employee Name", "Employee ID", "Dept", "Desig", "From Date", "To Date", "Days", "Status", "Purpose", "Approved By"];
+
+    const csvRows = [
+      headers.join(","),
+      ...list.map(rec => {
+        if (historyType === 'attendance') {
+          return [
+            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.dept}"`, `"${rec.desig}"`, `"${rec.date}"`, `"${rec.inTime || ''}"`, `"${rec.outTime || ''}"`, rec.hours, `"${rec.attendanceType}"`, `"${rec.status}"`, `"${rec.address || ''}"`, `"${rec.addressOut || ''}"`, `"${rec.approvedBy || ''}"`
+          ].join(",");
+        } else {
+          return [
+            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.department}"`, `"${rec.designation}"`, `"${rec.fromDate}"`, `"${rec.toDate}"`, rec.days, `"${rec.status}"`, `"${rec.purpose}"`, `"${rec.approvedBy || ''}"`
+          ].join(",");
+        }
+      })
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${historyType}_Report_${fromDate}_to_${toDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Export Success" });
   };
 
   if (!isMounted) return null;
@@ -394,15 +437,22 @@ export default function ApprovalsPage() {
           onValueChange={viewMode === 'pending' ? setPendingType : setHistoryType} 
           className="w-full"
         >
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-            <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg w-fit">
-              <TabsTrigger value="attendance" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">
-                Attendance {viewMode === 'pending' && `(${pendingAttendanceList.length})`}
-              </TabsTrigger>
-              <TabsTrigger value="leave" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">
-                Leave Requests {viewMode === 'pending' && `(${pendingLeavesList.length})`}
-              </TabsTrigger>
-            </TabsList>
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg w-fit">
+                <TabsTrigger value="attendance" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">
+                  Attendance {viewMode === 'pending' && `(${pendingAttendanceList.length})`}
+                </TabsTrigger>
+                <TabsTrigger value="leave" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">
+                  Leave Requests {viewMode === 'pending' && `(${pendingLeavesList.length})`}
+                </TabsTrigger>
+              </TabsList>
+              {viewMode === 'history' && (
+                <Button variant="outline" size="sm" onClick={handleExportHistory} className="h-9 gap-2 font-bold text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                  <FileSpreadsheet className="w-4 h-4" /> Export Excel
+                </Button>
+              )}
+            </div>
 
             {viewMode === 'history' && (
               <div className="flex flex-wrap items-center gap-2">
@@ -412,11 +462,9 @@ export default function ApprovalsPage() {
                   <span className="text-slate-300 text-[10px]">to</span>
                   <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-7 w-32 border-none bg-transparent text-[10px] font-bold p-0 focus-visible:ring-0" />
                 </div>
-                {(fromDate || toDate) && (
-                  <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8 text-rose-500 hover:bg-rose-50 font-black text-[10px] uppercase gap-1">
-                    <X className="w-3 h-3" /> Reset
-                  </Button>
-                )}
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8 text-rose-500 hover:bg-rose-50 font-black text-[10px] uppercase gap-1">
+                  <X className="w-3 h-3" /> Reset
+                </Button>
               </div>
             )}
           </div>
@@ -440,12 +488,14 @@ export default function ApprovalsPage() {
                       </TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type/Status</TableHead>
                       {currentData.items[0]?.address !== undefined && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>}
+                      {viewMode === 'history' && historyType === 'attendance' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
+                      {viewMode === 'history' && historyType === 'leave' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentData.items.length === 0 ? (
-                      <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={11} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
                     ) : (
                       currentData.items.map((rec: any) => (
                         <TableRow key={rec.id} className={cn("hover:bg-slate-50/50 transition-colors", rec.isVirtual && "bg-rose-50/30")}>
@@ -483,7 +533,7 @@ export default function ApprovalsPage() {
                               variant="outline" 
                               className={cn(
                                 "font-black text-[9px] uppercase tracking-widest border-slate-200 px-3",
-                                rec.status === 'APPROVED' ? "bg-emerald-50 text-emerald-700" :
+                                (rec.status === 'APPROVED' || rec.approved) ? "bg-emerald-50 text-emerald-700" :
                                 rec.status === 'REJECTED' ? "bg-rose-50 text-rose-700" : "bg-white"
                               )}
                             >
@@ -502,6 +552,11 @@ export default function ApprovalsPage() {
                                   <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.addressOut}>{rec.addressOut || (rec.outTime ? "Location pending" : (rec.isVirtual ? "N/A" : "Shift In-Progress"))}</span>
                                 </div>
                               </div>
+                            </TableCell>
+                          )}
+                          {(viewMode === 'history') && (
+                            <TableCell>
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{rec.approvedBy || "---"}</span>
                             </TableCell>
                           )}
                           <TableCell className="text-right pr-6">
@@ -523,7 +578,7 @@ export default function ApprovalsPage() {
                                 historyType === 'attendance' ? (
                                   <Button variant="outline" size="sm" className="h-8 font-black text-[10px] uppercase border-primary text-primary hover:bg-primary/5 gap-1.5" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }} disabled={isProcessing}><RotateCcw className="w-3 h-3" /> Restore</Button>
                                 ) : (
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{rec.approvedBy || "HR_ADMIN"}</span>
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">---</span>
                                 )
                               )}
                             </div>
@@ -631,6 +686,20 @@ export default function ApprovalsPage() {
             <p className="text-xs font-bold text-rose-100 uppercase tracking-widest mt-2">{selectedAttendance?.employeeName} ({selectedAttendance?.employeeId})</p>
           </DialogHeader>
           <div className="p-8 space-y-4">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase">IN Time</p>
+                <p className="text-xs font-bold">{selectedAttendance?.date} {selectedAttendance?.inTime || "--:--"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase">OUT Time</p>
+                <p className="text-xs font-bold">{selectedAttendance?.date} {selectedAttendance?.outTime || "--:--"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase">Working Hours</p>
+                <p className="text-xs font-bold">{selectedAttendance?.hours}h</p>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Rejection Reason *</Label>
               <Textarea placeholder="Specify why this log is being declined..." value={attendanceRejectReason} onChange={(e) => setAttendanceRejectReason(e.target.value)} className="min-h-[120px] bg-slate-50 font-medium focus-visible:ring-rose-500 border-slate-200" />
