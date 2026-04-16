@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -48,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
 import { differenceInDays, parseISO, format } from "date-fns";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 export default function ApprovalsPage() {
   const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord } = useData();
