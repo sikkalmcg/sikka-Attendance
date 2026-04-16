@@ -195,8 +195,9 @@ export default function AttendancePage() {
       toast({ variant: "destructive", title: "Action Blocked", description: "Only registered staff can request leave." });
       return;
     }
-    setLeaveFrom(format(getISTTime(), "yyyy-MM-dd"));
-    setLeaveTo(format(getISTTime(), "yyyy-MM-dd"));
+    const today = format(getISTTime(), "yyyy-MM-dd");
+    setLeaveFrom(today);
+    setLeaveTo(today);
     setLeavePurpose("");
     setActiveDialog("LEAVE");
   };
@@ -730,7 +731,7 @@ export default function AttendancePage() {
 
         {/* Leave Request Popup */}
         <Dialog open={activeDialog === "LEAVE"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
+          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden [&>button]:text-rose-600 [&>button]:opacity-100 [&>button:hover]:text-rose-700">
             <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
               <DialogTitle className="text-xl font-black flex items-center gap-2">
                 <FileText className="w-6 h-6 text-primary" /> Create Leave Request
@@ -749,7 +750,13 @@ export default function AttendancePage() {
                     type="date" 
                     value={leaveFrom} 
                     min={todayStr}
-                    onChange={(e) => setLeaveFrom(e.target.value)} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLeaveFrom(val);
+                      if (leaveTo && val > leaveTo) {
+                        setLeaveTo(val);
+                      }
+                    }} 
                     className="h-12 bg-slate-50 border-slate-200 font-bold"
                   />
                 </div>
