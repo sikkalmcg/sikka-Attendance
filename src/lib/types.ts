@@ -141,6 +141,7 @@ export interface AttendanceRecord {
   inPlant?: string;
   outPlant?: string;
   approved: boolean;
+  approvedBy?: string; // Captured full name of approver
   remark?: string;
   rejectionCount?: number;
   autoOut?: boolean;

@@ -61,7 +61,7 @@ import { differenceInDays, parseISO, format } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 export default function ApprovalsPage() {
-  const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord } = useData();
+  const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord, currentUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
@@ -148,7 +148,12 @@ export default function ApprovalsPage() {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
-      updateRecord('attendance', id, { approved: true, remark: "" });
+      const approverName = currentUser?.fullName || "HR_ADMIN";
+      updateRecord('attendance', id, { 
+        approved: true, 
+        remark: "",
+        approvedBy: approverName 
+      });
       toast({ title: "Attendance Approved" });
     } finally { setIsProcessing(false); }
   };
@@ -222,7 +227,8 @@ export default function ApprovalsPage() {
     try {
       updateRecord('attendance', attendanceToRestore.id, { 
         approved: false, 
-        remark: "" 
+        remark: "",
+        approvedBy: null
       });
       toast({ title: "Record Restored", description: "Record moved back to pending list." });
       setIsRestoreConfirmOpen(false);
@@ -570,7 +576,7 @@ export default function ApprovalsPage() {
                                   <Badge className="bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-widest border-none px-3">Approved</Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">HR_ADMIN</span>
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{rec.approvedBy || "HR_ADMIN"}</span>
                                 </TableCell>
                                 <TableCell className="text-right pr-6">
                                   <Button 
