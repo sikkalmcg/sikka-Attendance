@@ -51,7 +51,8 @@ import {
   ChevronRight,
   User,
   AlertTriangle,
-  Clock
+  Clock,
+  TrendingUp as GrowthIcon
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -941,31 +942,59 @@ export default function EmployeesPage() {
                               <TableHead className="font-bold">From Month</TableHead>
                               <TableHead className="font-bold">To Month</TableHead>
                               <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                              <TableHead className="font-bold text-center">Growth %</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {!viewHistoryEmployee.salaryHistory || viewHistoryEmployee.salaryHistory.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                                   No history records found.
                                 </TableCell>
                               </TableRow>
                             ) : (
-                              [...viewHistoryEmployee.salaryHistory].reverse().map((entry, idx) => (
-                                <TableRow key={idx} className="hover:bg-slate-50/50">
-                                  <TableCell className="font-medium">{entry.fromMonth}</TableCell>
-                                  <TableCell>
-                                    {entry.toMonth === "Present" ? (
-                                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Present</Badge>
-                                    ) : (
-                                      entry.toMonth
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="text-right font-bold text-primary">
-                                    {formatCurrency(entry.monthlyCTC)}
-                                  </TableCell>
-                                </TableRow>
-                              ))
+                              [...viewHistoryEmployee.salaryHistory].reverse().map((entry, idx, arr) => {
+                                // Growth logic: compared to the chronologically previous entry
+                                // Since we are reversed (newest first), the previous entry is at idx + 1
+                                const prevEntry = arr[idx + 1];
+                                let growthLabel: string | null = null;
+                                
+                                if (prevEntry) {
+                                  const diff = entry.monthlyCTC - prevEntry.monthlyCTC;
+                                  const pct = (diff / prevEntry.monthlyCTC) * 100;
+                                  growthLabel = `+${pct.toFixed(1)}%`;
+                                } else {
+                                  growthLabel = "Starting";
+                                }
+
+                                return (
+                                  <TableRow key={idx} className="hover:bg-slate-50/50">
+                                    <TableCell className="font-medium">{entry.fromMonth}</TableCell>
+                                    <TableCell>
+                                      {entry.toMonth === "Present" ? (
+                                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Present</Badge>
+                                      ) : (
+                                        entry.toMonth
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-right font-bold text-primary">
+                                      {formatCurrency(entry.monthlyCTC)}
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                      <Badge 
+                                        variant="outline" 
+                                        className={cn(
+                                          "font-black text-[10px] px-2 py-0 h-6 uppercase",
+                                          growthLabel === "Starting" ? "text-slate-400 bg-slate-50 border-slate-200" : "text-emerald-600 bg-emerald-50 border-emerald-200"
+                                        )}
+                                      >
+                                        {growthLabel === "Starting" ? null : <GrowthIcon className="w-2.5 h-3 mr-1" />}
+                                        {growthLabel}
+                                      </Badge>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })
                             )}
                           </TableBody>
                         </Table>
