@@ -199,6 +199,7 @@ export default function UserManagementPage() {
         toast({ title: "User Created", description: `${userData.fullName} added with controlled access.` });
       }
       setIsUserModalOpen(false);
+      setIsResetPasswordOpen(false);
     } finally {
       setIsProcessing(false);
     }
@@ -249,7 +250,7 @@ export default function UserManagementPage() {
             <h1 className="text-2xl font-bold">Access Control Center</h1>
             <p className="text-muted-foreground">Provision secure user accounts with page-level restrictions.</p>
           </div>
-          <Button className="font-bold shadow-lg shadow-primary/20 bg-primary" onClick={() => handleOpenModal()}>
+          <Button className="font-bold shadow-lg shadow-primary/20 bg-primary" onClick={() => handleOpenModal()} disabled={isProcessing}>
             <UserPlus className="w-4 h-4 mr-2" />
             Create Security User
           </Button>
@@ -295,12 +296,16 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell className="text-right pr-6">
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4 text-slate-400" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" disabled={isProcessing}>
+                            <MoreVertical className="w-4 h-4 text-slate-400" />
+                          </Button>
+                        </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => handleOpenModal(user)} className="font-semibold"><Pencil className="w-4 h-4 mr-2" /> Edit Permissions</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => { setUserToAction(user); setIsResetPasswordOpen(true); }} className="font-semibold"><Key className="w-4 h-4 mr-2" /> Change Password</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleOpenModal(user); }} className="font-semibold"><Pencil className="w-4 h-4 mr-2" /> Edit Permissions</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setUserToAction(user); setIsResetPasswordOpen(true); }} className="font-semibold"><Key className="w-4 h-4 mr-2" /> Change Password</DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-rose-600 font-bold" onClick={() => { setUserToAction(user); setIsDeleteAlertOpen(true); }} disabled={user.role === 'SUPER_ADMIN'}><Trash2 className="w-4 h-4 mr-2" /> Deactivate User</DropdownMenuItem>
+                          <DropdownMenuItem className="text-rose-600 font-bold" onSelect={(e) => { e.preventDefault(); setUserToAction(user); setIsDeleteAlertOpen(true); }} disabled={user.role === 'SUPER_ADMIN'}><Trash2 className="w-4 h-4 mr-2" /> Deactivate User</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -311,7 +316,7 @@ export default function UserManagementPage() {
           </CardContent>
         </Card>
 
-        <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
+        <Dialog open={isUserModalOpen} onOpenChange={(o) => { if (!o) setIsUserModalOpen(false); }}>
           <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
             <DialogHeader className="p-8 pb-4 shrink-0 border-b bg-white z-10">
               <div className="flex items-center justify-between">
@@ -327,9 +332,8 @@ export default function UserManagementPage() {
               </div>
             </DialogHeader>
             
-            <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30" tabIndex={0}>
+            <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30">
               <div className="space-y-10 pb-20 pr-4">
-                {/* Identity Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Full Name *</Label>
@@ -371,7 +375,6 @@ export default function UserManagementPage() {
                       </div>
                     </div>
                     
-                    {/* Password Strength Indicator */}
                     <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-0 w-full">
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
@@ -393,7 +396,6 @@ export default function UserManagementPage() {
                   </div>
                 )}
 
-                {/* Permissions Section */}
                 <div className="space-y-6 pt-8 border-t border-slate-200">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
@@ -401,8 +403,8 @@ export default function UserManagementPage() {
                       <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Select the modules this user can view and interact with.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg border-slate-200" onClick={selectAllPermissions}>Select All</Button>
-                      <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions}>Clear</Button>
+                      <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg border-slate-200" onClick={selectAllPermissions} disabled={isProcessing}>Select All</Button>
+                      <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions} disabled={isProcessing}>Clear</Button>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button 
@@ -410,6 +412,7 @@ export default function UserManagementPage() {
                             size="sm" 
                             className="h-9 px-4 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg gap-2"
                             onClick={handleGlobalPermissionsUpdate}
+                            disabled={isProcessing}
                           >
                             <Globe className="w-3.5 h-3.5" /> Apply Globally
                           </Button>
@@ -435,7 +438,7 @@ export default function UserManagementPage() {
                       return (
                         <div 
                           key={perm}
-                          onClick={() => togglePermission(perm)}
+                          onClick={() => !isProcessing && togglePermission(perm)}
                           className={cn(
                             "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
                             isSelected 
@@ -447,12 +450,13 @@ export default function UserManagementPage() {
                             id={`perm-${perm}`}
                             checked={isSelected}
                             onCheckedChange={() => togglePermission(perm)}
+                            disabled={isProcessing}
                             className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
                           />
                           <Label 
                             htmlFor={`perm-${perm}`} 
                             className="text-sm font-bold text-slate-700 cursor-pointer flex-1"
-                            onClick={(e) => e.preventDefault()}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePermission(perm); }}
                           >
                             {perm}
                           </Label>
@@ -462,7 +466,6 @@ export default function UserManagementPage() {
                   </div>
                 </div>
 
-                {/* All Users Preview Section */}
                 <div className="space-y-6 pt-12 border-t border-slate-200">
                   <div className="flex items-center gap-3">
                     <Users className="w-5 h-5 text-slate-400" />
@@ -511,8 +514,7 @@ export default function UserManagementPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Reset Password Dialog */}
-        <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
+        <Dialog open={isResetPasswordOpen} onOpenChange={(o) => { if (!o) setIsResetPasswordOpen(false); }}>
           <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
             <DialogHeader>
               <DialogTitle className="text-xl font-black flex items-center gap-2">
@@ -553,16 +555,23 @@ export default function UserManagementPage() {
             <AlertDialogFooter className="sm:justify-center gap-3 pt-8 pb-4">
               <AlertDialogCancel className="rounded-xl font-bold h-12 px-8">Cancel</AlertDialogCancel>
               <AlertDialogAction 
-                onClick={() => {
-                  if (userToAction) {
-                    deleteRecord('users', userToAction.id);
-                    toast({ title: "User Deactivated" });
-                    setIsDeleteAlertOpen(false);
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (userToAction && !isProcessing) {
+                    setIsProcessing(true);
+                    try {
+                      deleteRecord('users', userToAction.id);
+                      toast({ title: "User Deactivated" });
+                      setIsDeleteAlertOpen(false);
+                    } finally {
+                      setIsProcessing(false);
+                    }
                   }
                 }} 
+                disabled={isProcessing}
                 className="bg-rose-600 hover:bg-rose-700 rounded-xl font-black h-12 px-8 shadow-lg shadow-rose-100"
               >
-                Confirm Deactivation
+                {isProcessing ? "Processing..." : "Confirm Deactivation"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

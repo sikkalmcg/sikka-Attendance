@@ -239,8 +239,6 @@ export default function PayrollPage() {
   const openAdjustmentDialog = (emp: Employee) => {
     const relevantAttendance = attendanceRecords.filter(r => r.employeeId === emp.employeeId);
     
-    // Logic: Standard month is 26 Working Days + 4 Holidays = 30 Total
-    // Holiday work is attendance marked on a holiday or with "Holiday Work" designation
     const presentOnWorking = relevantAttendance.filter(r => r.status === 'PRESENT' && r.inPlant !== 'Holiday Work').length;
     const holidayPres = relevantAttendance.filter(r => r.inPlant === 'Holiday Work' || r.status === 'HOLIDAY').length; 
     
@@ -249,7 +247,6 @@ export default function PayrollPage() {
     let initialHolidayWork = holidayPres;
     let initialAbsent = Math.max(0, workingDaysCount - initialPresent);
 
-    // AUTO LOGIC: If present < 26 and holiday work exists, shift holiday work to present
     if (initialPresent < workingDaysCount && initialHolidayWork > 0) {
       const needed = workingDaysCount - initialPresent;
       const shift = Math.min(needed, initialHolidayWork);
@@ -323,15 +320,13 @@ export default function PayrollPage() {
   };
 
   const handlePostAdjustment = () => {
-    if (!adjustLeaveEmp) return;
+    if (!adjustLeaveEmp || isProcessing) return;
     setIsProcessing(true);
     try {
-      // Update employee's permanent leave balance
       updateRecord('employees', adjustLeaveEmp.id, { 
         advanceLeaveBalance: adjustmentState.remainingBalance 
       });
       
-      // Mark as adjusted for this session
       setAdjustedEmployees(prev => ({ 
         ...prev, 
         [adjustLeaveEmp.id]: { 
@@ -383,11 +378,6 @@ export default function PayrollPage() {
         pfPaidDate: paymentDate,
         pfHistory: [...(payPFRec.pfHistory || []), historyEntry]
       });
-      addRecord('notifications', {
-        message: `Statutory: PF Payment recorded for ${payPFRec.employeeName} (${payPFRec.month})`,
-        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
-        read: false
-      });
       toast({ title: "PF Payment Recorded" });
       setPayPFRec(null);
       setPaymentRef("");
@@ -404,11 +394,6 @@ export default function PayrollPage() {
         esicAmountEmployer: payESICRec.esicAmountEmployer + esicPaidEx,
         esicPaidDate: paymentDate,
         esicHistory: [...(payESICRec.esicHistory || []), historyEntry]
-      });
-      addRecord('notifications', {
-        message: `Statutory: ESIC Payment recorded for ${payESICRec.employeeName} (${payESICRec.month})`,
-        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
-        read: false
       });
       toast({ title: "ESIC Payment Recorded" });
       setPayESICRec(null);
@@ -540,10 +525,10 @@ export default function PayrollPage() {
                                 <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
                                     <Tooltip><TooltipTrigger asChild>
-                                      <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={() => openAdjustmentDialog(emp)}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Leave"}</Button>
+                                      <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={(e) => { e.stopPropagation(); openAdjustmentDialog(emp); }} disabled={isProcessing}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Leave"}</Button>
                                     </TooltipTrigger><TooltipContent>Review & Adjust Attendance</TooltipContent></Tooltip>
                                     <Tooltip><TooltipTrigger asChild>
-                                      <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => isAdjusted && router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}`)} disabled={!isAdjusted}><Calculator className="w-3 h-3" /> Generate Salary</Button>
+                                      <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={(e) => { e.stopPropagation(); if(isAdjusted) router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}`); }} disabled={!isAdjusted || isProcessing}><Calculator className="w-3 h-3" /> Generate Salary</Button>
                                     </TooltipTrigger><TooltipContent>{isAdjusted ? "Proceed" : "Review first"}</TooltipContent></Tooltip>
                                   </div>
                                 </TableCell>
@@ -642,21 +627,21 @@ export default function PayrollPage() {
                                   {emp?.isGovComplianceEnabled ? (
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" disabled={!hasUnpaid}><CreditCard className="w-4 h-4 text-primary" /></Button>
+                                        <Button variant="ghost" size="icon" disabled={!hasUnpaid || isProcessing}><CreditCard className="w-4 h-4 text-primary" /></Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="w-48">
-                                        <DropdownMenuItem disabled={remainingSalary <= 0} onClick={() => { setPaySalaryRec(p); setPaymentAmount(remainingSalary); }}>Pay Salary</DropdownMenuItem>
-                                        <DropdownMenuItem disabled={remainingPF <= 0} onClick={() => { setPayPFRec(p); setPfPaidEmp(p.pfAmountEmployee - (p.pfPaidAmountEmployee || 0)); setPfPaidEx(p.pfAmountEmployer - (p.pfPaidAmountEmployer || 0)); }}>Pay PF</DropdownMenuItem>
-                                        <DropdownMenuItem disabled={remainingESIC <= 0} onClick={() => { setPayESICRec(p); setEsicPaidEmp(p.esicAmountEmployee - (p.esicPaidAmountEmployee || 0)); setEsicPaidEx(p.esicAmountEmployer - (p.esicAmountEmployer || 0)); }}>Pay ESIC</DropdownMenuItem>
+                                        <DropdownMenuItem disabled={remainingSalary <= 0} onSelect={(e) => { e.preventDefault(); setPaySalaryRec(p); setPaymentAmount(remainingSalary); }}>Pay Salary</DropdownMenuItem>
+                                        <DropdownMenuItem disabled={remainingPF <= 0} onSelect={(e) => { e.preventDefault(); setPayPFRec(p); setPfPaidEmp(p.pfAmountEmployee - (p.pfPaidAmountEmployee || 0)); setPfPaidEx(p.pfAmountEmployer - (p.pfPaidAmountEmployer || 0)); }}>Pay PF</DropdownMenuItem>
+                                        <DropdownMenuItem disabled={remainingESIC <= 0} onSelect={(e) => { e.preventDefault(); setPayESICRec(p); setEsicPaidEmp(p.esicAmountEmployee - (p.esicPaidAmountEmployee || 0)); setEsicPaidEx(p.esicAmountEmployer - (p.esicAmountEmployer || 0)); }}>Pay ESIC</DropdownMenuItem>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   ) : (
                                     <Tooltip><TooltipTrigger asChild>
-                                      <Button variant="ghost" size="icon" disabled={remainingSalary <= 0} onClick={() => { setPaySalaryRec(p); setPaymentAmount(remainingSalary); }}><CreditCard className="w-4 h-4 text-primary" /></Button>
+                                      <Button variant="ghost" size="icon" disabled={remainingSalary <= 0 || isProcessing} onClick={(e) => { e.stopPropagation(); setPaySalaryRec(p); setPaymentAmount(remainingSalary); }}><CreditCard className="w-4 h-4 text-primary" /></Button>
                                     </TooltipTrigger><TooltipContent>Pay Salary</TooltipContent></Tooltip>
                                   )}
                                   <Tooltip><TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" onClick={() => handleDownloadAndPrint(p)}><Download className="w-4 h-4 text-slate-500" /></Button>
+                                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDownloadAndPrint(p); }} disabled={isProcessing}><Download className="w-4 h-4 text-slate-500" /></Button>
                                   </TooltipTrigger><TooltipContent>Quick Download (PDF)</TooltipContent></Tooltip>
                                 </div>
                               </TableCell>
@@ -712,7 +697,7 @@ export default function PayrollPage() {
                             <TableCell className="text-right pr-6">
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="outline" size="sm" className="font-bold h-8" onClick={() => setViewAdvanceEmployee(item)}>View</Button>
+                                  <Button variant="outline" size="sm" className="font-bold h-8" onClick={(e) => { e.stopPropagation(); setViewAdvanceEmployee(item); }}>View</Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Detailed Voucher Audit</TooltipContent>
                               </Tooltip>
@@ -760,7 +745,7 @@ export default function PayrollPage() {
         </Tabs>
 
         {/* Adjust Leave Main Dialog */}
-        <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => !o && setAdjustLeaveEmp(null)}>
+        <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => { if (!o && !isProcessing) setAdjustLeaveEmp(null); }}>
           <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             {adjustLeaveEmp && (
               <>
@@ -822,7 +807,7 @@ export default function PayrollPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             {adjustmentState.present < adjustmentState.monthWorkingDays && adjustmentState.remainingBalance > 0 && (
-                              <Button variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase gap-2 hover:bg-primary hover:text-white" onClick={handleOpenSubAdjustment}>
+                              <Button variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase gap-2 hover:bg-primary hover:text-white" onClick={handleOpenSubAdjustment} disabled={isProcessing}>
                                 <PlusCircle className="w-3 h-3" /> Adjust Leave
                               </Button>
                             )}
@@ -843,8 +828,8 @@ export default function PayrollPage() {
                           <TableCell className="text-right">
                             {adjustmentState.holidayWork > 0 && (
                               <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase gap-2" onClick={handlePayHolidayWork}>Pay Work</Button>
-                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase gap-2 border-emerald-200 text-emerald-600 hover:bg-emerald-50" onClick={handleBankHolidayWork}>Add to Balance</Button>
+                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase gap-2" onClick={handlePayHolidayWork} disabled={isProcessing}>Pay Work</Button>
+                                <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase gap-2 border-emerald-200 text-emerald-600 hover:bg-emerald-50" onClick={handleBankHolidayWork} disabled={isProcessing}>Add to Balance</Button>
                               </div>
                             )}
                           </TableCell>
@@ -866,11 +851,11 @@ export default function PayrollPage() {
                 </div>
 
                 <DialogFooter className="p-6 bg-slate-900 border-t flex flex-row items-center justify-between shrink-0">
-                  <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-slate-800 h-12 px-8 font-bold" onClick={() => setAdjustLeaveEmp(null)}>
+                  <Button variant="ghost" className="text-slate-400 hover:text-white hover:bg-slate-800 h-12 px-8 font-bold" onClick={() => setAdjustLeaveEmp(null)} disabled={isProcessing}>
                     Cancel
                   </Button>
-                  <Button className="bg-primary hover:bg-primary/90 h-12 px-16 font-black rounded-xl text-lg shadow-2xl shadow-primary/30" onClick={handlePostAdjustment}>
-                    Post Adjustment
+                  <Button className="bg-primary hover:bg-primary/90 h-12 px-16 font-black rounded-xl text-lg shadow-2xl shadow-primary/30" onClick={handlePostAdjustment} disabled={isProcessing}>
+                    {isProcessing ? "Posting..." : "Post Adjustment"}
                   </Button>
                 </DialogFooter>
               </>
@@ -879,7 +864,7 @@ export default function PayrollPage() {
         </Dialog>
 
         {/* Sub-Dialog for Leave Balance Adjustment */}
-        <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
+        <Dialog open={isSubAdjustmentOpen} onOpenChange={(o) => { if (!o) setIsSubAdjustmentOpen(false); }}>
           <DialogContent className="sm:max-w-md rounded-2xl shadow-2xl border-none">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 font-black text-xl">
@@ -892,24 +877,24 @@ export default function PayrollPage() {
             <div className="py-8 space-y-4 text-center">
               <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Days to Adjust</Label>
               <div className="flex items-center justify-center gap-6">
-                <Button variant="outline" size="icon" className="h-12 w-12 rounded-full border-2" onClick={() => setSubAdjustmentValue(v => Math.max(0, v - 1))}>
+                <Button variant="outline" size="icon" className="h-12 w-12 rounded-full border-2" onClick={() => setSubAdjustmentValue(v => Math.max(0, v - 1))} disabled={isProcessing}>
                   <MinusCircle className="w-6 h-6" />
                 </Button>
                 <span className="text-5xl font-black text-slate-900 w-20">{subAdjustmentValue}</span>
-                <Button variant="outline" size="icon" className="h-12 w-12 rounded-full border-2" onClick={() => setSubAdjustmentValue(v => Math.min(adjustmentState.remainingBalance, v + 1))}>
+                <Button variant="outline" size="icon" className="h-12 w-12 rounded-full border-2" onClick={() => setSubAdjustmentValue(v => Math.min(adjustmentState.remainingBalance, v + 1))} disabled={isProcessing}>
                   <PlusCircle className="w-6 h-6" />
                 </Button>
               </div>
               <p className="text-[10px] font-bold text-rose-500 uppercase tracking-tight mt-4">Note: This will be deducted from employee's future leave pool.</p>
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="ghost" onClick={() => setIsSubAdjustmentOpen(false)} className="rounded-xl font-bold">Cancel</Button>
-              <Button className="bg-primary rounded-xl font-black px-10 shadow-lg shadow-primary/20" onClick={handleSaveSubAdjustment}>Confirm & Save</Button>
+              <Button variant="ghost" onClick={() => setIsSubAdjustmentOpen(false)} className="rounded-xl font-bold" disabled={isProcessing}>Cancel</Button>
+              <Button className="bg-primary rounded-xl font-black px-10 shadow-lg shadow-primary/20" onClick={handleSaveSubAdjustment} disabled={isProcessing}>Confirm & Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
+        <Dialog open={!!paySalaryRec} onOpenChange={(o) => { if (!o && !isProcessing) setPaySalaryRec(null); }}>
           <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             {paySalaryRec && (
               <>
@@ -947,6 +932,7 @@ export default function PayrollPage() {
                                 value={paymentAmount} 
                                 onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)} 
                                 className="h-14 text-xl font-black text-emerald-600 pl-10"
+                                disabled={isProcessing}
                               />
                               <Banknote className="absolute left-3 top-4 w-5 h-5 text-slate-300" />
                             </div>
@@ -961,7 +947,7 @@ export default function PayrollPage() {
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label className="text-[10px] font-black uppercase text-slate-500">Payment Mode</Label>
-                              <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)}>
+                              <Select value={paymentType} onValueChange={(v: any) => setPaymentType(v)} disabled={isProcessing}>
                                 <SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="BANKING">Banking</SelectItem>
@@ -972,14 +958,14 @@ export default function PayrollPage() {
                             </div>
                             <div className="space-y-2">
                               <Label className="text-[10px] font-black uppercase text-slate-500">Payment Date</Label>
-                              <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-12 font-bold" />
+                              <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-12 font-bold" disabled={isProcessing} />
                             </div>
                           </div>
 
                           {paymentType !== 'CASH' && (
                             <div className="space-y-2">
                               <Label className="text-[10px] font-black uppercase text-slate-500">Reference Number</Label>
-                              <Input placeholder="UTR / Trans ID" value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} className="h-12 font-mono" />
+                              <Input placeholder="UTR / Trans ID" value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} className="h-12 font-mono" disabled={isProcessing} />
                             </div>
                           )}
                         </div>
@@ -1024,7 +1010,7 @@ export default function PayrollPage() {
                     <p className="text-xl font-black text-white">{formatCurrency(paySalaryRec.netPayable - (paySalaryRec.salaryPaidAmount || 0))}</p>
                   </div>
                   <div className="flex gap-3">
-                    <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setPaySalaryRec(null)}>Cancel</Button>
+                    <Button variant="ghost" className="text-slate-400 hover:text-white" onClick={() => setPaySalaryRec(null)} disabled={isProcessing}>Cancel</Button>
                     <Button className="bg-primary hover:bg-primary/90 px-10 h-12 rounded-xl font-black shadow-xl" onClick={handlePostPayment} disabled={isProcessing}>
                       {isProcessing ? "Processing..." : "Post Payment"}
                     </Button>
@@ -1035,7 +1021,7 @@ export default function PayrollPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={!!previewSlip} onOpenChange={(o) => !o && setPreviewSlip(null)}>
+        <Dialog open={!!previewSlip} onOpenChange={(o) => { if (!o) setPreviewSlip(null); }}>
           <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
               <div className="flex items-center gap-3">
@@ -1043,8 +1029,8 @@ export default function PayrollPage() {
                 <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Payroll Slip Preview</DialogTitle>
               </div>
               <div className="flex items-center gap-3 mr-8">
-                <Button className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" onClick={() => handleDownloadAndPrint(previewSlip!)}><Printer className="w-5 h-5" /> Print / Save as PDF</Button>
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)}><X className="h-5 h-5" /></Button>
+                <Button className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" onClick={() => handleDownloadAndPrint(previewSlip!)} disabled={isProcessing}><Printer className="w-5 h-5" /> Print / Save as PDF</Button>
+                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)} disabled={isProcessing}><X className="h-5 h-5" /></Button>
               </div>
             </DialogHeader>
             <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
@@ -1073,7 +1059,7 @@ export default function PayrollPage() {
         document.body
       )}
 
-      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => !o && setViewAdvanceEmployee(null)}>
+      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => { if (!o) setViewAdvanceEmployee(null); }}>
         <DialogContent className="sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewAdvanceEmployee && (
             <>

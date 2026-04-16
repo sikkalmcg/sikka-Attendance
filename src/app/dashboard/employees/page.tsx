@@ -296,6 +296,7 @@ export default function EmployeesPage() {
     setIsRegistrationOpen(false);
     setEditEmployee(null);
     setFormData({ ...INITIAL_FORM_DATA });
+    setIsProcessing(false); // Safety reset
   };
 
   const handlePostSalaryRevision = async () => {
@@ -460,7 +461,12 @@ export default function EmployeesPage() {
                               <Button 
                                 variant="ghost" 
                                 size="icon" 
-                                onClick={() => { setEditEmployee(emp); setFormData({ ...emp }); setIsRegistrationOpen(true); }}
+                                onClick={(e) => { 
+                                  e.stopPropagation();
+                                  setEditEmployee(emp); 
+                                  setFormData({ ...emp }); 
+                                  setIsRegistrationOpen(true); 
+                                }}
                                 disabled={isProcessing}
                               >
                                 <Pencil className="w-4 h-4 text-slate-500" />
@@ -476,16 +482,24 @@ export default function EmployeesPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-52">
-                              <DropdownMenuItem onClick={() => { setSalaryRevision(emp); setRevisionData({ ...emp.salary }); }}>
+                              <DropdownMenuItem onSelect={(e) => { 
+                                e.preventDefault();
+                                setSalaryRevision(emp); 
+                                setRevisionData({ ...emp.salary }); 
+                              }}>
                                 <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setViewHistoryEmployee(emp)}>
+                              <DropdownMenuItem onSelect={(e) => { 
+                                e.preventDefault();
+                                setViewHistoryEmployee(emp); 
+                              }}>
                                 <History className="w-4 h-4 mr-2" /> View Salary Record
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
                                 className={emp.active ? "text-rose-600" : "text-emerald-600"}
-                                onClick={() => {
+                                onSelect={(e) => {
+                                  e.preventDefault();
                                   setEmployeeToToggle(emp);
                                   setIsToggleConfirmOpen(true);
                                 }}
@@ -1035,7 +1049,7 @@ export default function EmployeesPage() {
                     Cancel
                   </AlertDialogCancel>
                   <AlertDialogAction 
-                    onClick={handleToggleStatus}
+                    onClick={(e) => { e.preventDefault(); handleToggleStatus(); }}
                     disabled={isProcessing}
                     className={employeeToToggle?.active ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}
                   >
@@ -1050,4 +1064,3 @@ export default function EmployeesPage() {
     </TooltipProvider>
   );
 }
-
