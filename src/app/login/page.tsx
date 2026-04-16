@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -57,19 +58,34 @@ export default function LoginPage() {
         return;
       }
 
-      // 3. Employee Mock Login (Aadhaar/Mobile) - Support for legacy or direct access
-      if (username.length === 12 && password.length === 10) {
-        localStorage.setItem("user", JSON.stringify({
-          id: "emp-mock",
-          username,
-          fullName: "Employee Name",
-          role: "EMPLOYEE",
-          permissions: ["Attendance"]
-        }));
-        router.push("/dashboard/attendance");
-        toast({ title: "Welcome", description: "Successfully logged in." });
-        setLoading(false);
-        return;
+      // 3. Employee Directory Lookup (Aadhaar/Mobile)
+      // For employees logging in with just Aadhaar/Mobile, we fetch their official name from DB
+      if ((username.length === 12 || username.length === 10) && password.length >= 8) {
+        const employeesRef = collection(db, 'employees');
+        const cleanUsername = username.replace(/\s/g, '');
+        
+        // Check if employee exists in official registry
+        const qEmp = query(employeesRef);
+        const empSnapshot = await getDocs(qEmp);
+        const registeredEmp = empSnapshot.docs.find(doc => {
+          const d = doc.data();
+          return d.aadhaar?.replace(/\s/g, '') === cleanUsername || d.mobile?.replace(/\s/g, '') === cleanUsername;
+        });
+
+        if (registeredEmp) {
+          const empData = registeredEmp.data();
+          localStorage.setItem("user", JSON.stringify({
+            id: registeredEmp.id,
+            username: cleanUsername,
+            fullName: empData.name, // Use verified name from directory
+            role: "EMPLOYEE",
+            permissions: ["Attendance"]
+          }));
+          router.push("/dashboard/attendance");
+          toast({ title: "Welcome", description: `Logon successful as ${empData.name}` });
+          setLoading(false);
+          return;
+        }
       }
 
       setError("Invalid credentials. Please check your username and password.");

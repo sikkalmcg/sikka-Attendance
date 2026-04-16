@@ -69,20 +69,41 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 function HeaderActions() {
-  const { notifications, updateRecord, deleteRecord } = useData();
-  const [user, setUser] = useState<any>(null);
+  const { notifications, employees, users, updateRecord, deleteRecord } = useData();
+  const [localUser, setLocalUser] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
-    if (savedUser) setUser(JSON.parse(savedUser));
+    if (savedUser) setLocalUser(JSON.parse(savedUser));
   }, []);
+
+  // Verified User logic: Sync name and avatar from database in real-time
+  const verifiedUser = useMemo(() => {
+    if (!localUser) return null;
+
+    if (localUser.role === 'EMPLOYEE') {
+      const loginIdent = localUser.username?.replace(/\s/g, '');
+      const dbEmp = employees.find(e => {
+        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
+        const empMobile = e.mobile?.replace(/\s/g, '');
+        return empAadhaar === loginIdent || empMobile === loginIdent;
+      });
+      return dbEmp ? { ...localUser, fullName: dbEmp.name, avatar: dbEmp.avatar } : localUser;
+    }
+
+    if (localUser.role !== 'SUPER_ADMIN') {
+      const dbUser = users.find(u => u.id === localUser.id);
+      return dbUser ? { ...localUser, fullName: dbUser.fullName, avatar: dbUser.avatar } : localUser;
+    }
+
+    return localUser;
+  }, [localUser, employees, users]);
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
   
-  // LOGIC: Display only "Current" (Today's) actual detail
   const latestNotifications = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     return [...notifications]
@@ -112,15 +133,15 @@ function HeaderActions() {
   };
 
   const handleSaveProfile = (updatedUser: any) => {
-    setUser(updatedUser);
+    setLocalUser(updatedUser);
     localStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
-  if (!user) return null;
+  if (!verifiedUser) return null;
 
   return (
     <div className="flex items-center gap-5">
-      {user.role !== 'EMPLOYEE' && (
+      {verifiedUser.role !== 'EMPLOYEE' && (
         <Popover onOpenChange={(open) => open && markAllRead()}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -195,27 +216,22 @@ function HeaderActions() {
       )}
 
       <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <div className="flex items-center gap-3 pl-2 cursor-pointer group hover:bg-slate-50 p-1 rounded-xl transition-colors">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-bold text-slate-900 leading-none">{user.fullName}</p>
-                  <p className="text-[10px] font-black text-primary mt-1.5 uppercase tracking-wider leading-none">{user.role?.replace(/_/g, " ")}</p>
-                </div>
-                <Avatar className="h-10 w-10 border border-slate-200 shadow-sm transition-transform group-hover:scale-105">
-                  <AvatarImage src={user.avatar || `https://picsum.photos/seed/${user.username}/40/40`} />
-                  <AvatarFallback className="bg-slate-100 text-slate-400 font-bold">{user.fullName?.[0]}</AvatarFallback>
-                </Avatar>
-              </div>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>User Menu & Profile</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <div className="flex items-center gap-3 pl-2 cursor-pointer group hover:bg-slate-50 p-1 rounded-xl transition-colors">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-bold text-slate-900 leading-none">{verifiedUser.fullName}</p>
+              <p className="text-[10px] font-black text-primary mt-1.5 uppercase tracking-wider leading-none">{verifiedUser.role?.replace(/_/g, " ")}</p>
+            </div>
+            <Avatar className="h-10 w-10 border border-slate-200 shadow-sm transition-transform group-hover:scale-105">
+              <AvatarImage src={verifiedUser.avatar || `https://picsum.photos/seed/${verifiedUser.username}/40/40`} />
+              <AvatarFallback className="bg-slate-100 text-slate-400 font-bold">{verifiedUser.fullName?.[0]}</AvatarFallback>
+            </Avatar>
+          </div>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56 mt-2 rounded-xl shadow-xl">
           <DropdownMenuLabel className="font-bold text-xs uppercase tracking-widest text-slate-400">My Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="gap-2 cursor-pointer py-2.5 font-semibold" onClick={() => setIsSettingsOpen(true)}>
+          <DropdownMenuItem className="gap-2 cursor-pointer py-2.5 font-semibold" onSelect={(e) => { e.preventDefault(); setIsSettingsOpen(true); }}>
             <Settings className="w-4 h-4 text-slate-500" /> Settings
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -228,7 +244,7 @@ function HeaderActions() {
       <ProfileSettingsDialog 
         isOpen={isSettingsOpen} 
         onOpenChange={setIsSettingsOpen} 
-        user={user} 
+        user={verifiedUser} 
         onSave={handleSaveProfile}
       />
     </div>
@@ -236,10 +252,17 @@ function HeaderActions() {
 }
 
 function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen: boolean, onOpenChange: (o: boolean) => void, user: any, onSave: (u: any) => void }) {
+  const { updateRecord, employees } = useData();
   const [name, setName] = useState(user.fullName);
   const [avatar, setAvatar] = useState(user.avatar || "");
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setName(user.fullName);
+    setAvatar(user.avatar || "");
+  }, [user]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -257,14 +280,40 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       toast({ variant: "destructive", title: "Name required", description: "Please enter your full name." });
       return;
     }
-    onSave({ ...user, fullName: name, avatar });
-    onOpenChange(false);
-    toast({ title: "Profile Updated", description: "Your settings have been saved successfully." });
+
+    setIsProcessing(true);
+    try {
+      // 1. If it's a managed user (Admin/HR), update Firestore 'users' collection
+      if (user.role !== 'SUPER_ADMIN' && user.role !== 'EMPLOYEE' && user.id) {
+        updateRecord('users', user.id, { fullName: name, avatar: avatar });
+      }
+
+      // 2. If it's an employee, find and update 'employees' collection
+      if (user.role === 'EMPLOYEE') {
+        const loginIdent = user.username?.replace(/\s/g, '');
+        const dbEmp = employees.find(e => {
+          const empAadhaar = e.aadhaar?.replace(/\s/g, '');
+          const empMobile = e.mobile?.replace(/\s/g, '');
+          return empAadhaar === loginIdent || empMobile === loginIdent;
+        });
+        if (dbEmp) {
+          updateRecord('employees', dbEmp.id, { avatar: avatar }); // Name is read-only for employees in this dialog
+        }
+      }
+
+      onSave({ ...user, fullName: name, avatar });
+      onOpenChange(false);
+      toast({ title: "Profile Updated", description: "Your settings have been saved successfully." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to update profile record." });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -287,6 +336,7 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
                 variant="secondary" 
                 className="absolute bottom-0 right-0 h-8 w-8 rounded-full shadow-lg border-2 border-white bg-primary text-white hover:bg-primary/90"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
               >
                 <Camera className="w-4 h-4" />
               </Button>
@@ -303,7 +353,11 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
                 onChange={(e) => setName(e.target.value)} 
                 className="h-12 bg-slate-50 border-slate-200 rounded-xl font-bold"
                 placeholder="Enter your name"
+                disabled={user.role === 'EMPLOYEE' || isProcessing}
               />
+              {user.role === 'EMPLOYEE' && (
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Verified via Employee Directory</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="font-bold text-xs uppercase text-slate-500 tracking-wider">Username (Read-only)</Label>
@@ -312,8 +366,10 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl font-bold">Cancel</Button>
-          <Button className="bg-primary rounded-xl font-bold px-8 shadow-lg shadow-primary/20" onClick={handleSave}>Save Changes</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl font-bold" disabled={isProcessing}>Cancel</Button>
+          <Button className="bg-primary rounded-xl font-bold px-8 shadow-lg shadow-primary/20" onClick={handleSave} disabled={isProcessing}>
+            {isProcessing ? "Saving..." : "Save Changes"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -323,14 +379,33 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
 function SidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const { employees, users } = useData();
+  const [localUser, setLocalUser] = useState<any>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
-    if (savedUser) setUser(JSON.parse(savedUser));
+    if (savedUser) setLocalUser(JSON.parse(savedUser));
   }, []);
 
-  if (!user) return null;
+  const verifiedUser = useMemo(() => {
+    if (!localUser) return null;
+    if (localUser.role === 'EMPLOYEE') {
+      const loginIdent = localUser.username?.replace(/\s/g, '');
+      const dbEmp = employees.find(e => {
+        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
+        const empMobile = e.mobile?.replace(/\s/g, '');
+        return empAadhaar === loginIdent || empMobile === loginIdent;
+      });
+      return dbEmp ? { ...localUser, fullName: dbEmp.name } : localUser;
+    }
+    if (localUser.role !== 'SUPER_ADMIN') {
+      const dbUser = users.find(u => u.id === localUser.id);
+      return dbUser ? { ...localUser, fullName: dbUser.fullName } : localUser;
+    }
+    return localUser;
+  }, [localUser, employees, users]);
+
+  if (!verifiedUser) return null;
 
   const menuItems = [
     { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Dashboard" },
@@ -346,9 +421,9 @@ function SidebarNav() {
   ];
 
   const filteredMenu = menuItems.filter(item => {
-    const isSuperAdmin = user.role === 'SUPER_ADMIN';
-    const hasRole = item.roles.includes(user.role);
-    const hasPermission = isSuperAdmin || item.permission === 'Dashboard' || user.permissions?.includes(item.permission);
+    const isSuperAdmin = verifiedUser.role === 'SUPER_ADMIN';
+    const hasRole = item.roles.includes(verifiedUser.role);
+    const hasPermission = isSuperAdmin || item.permission === 'Dashboard' || verifiedUser.permissions?.includes(item.permission);
     return hasRole && hasPermission;
   });
 
