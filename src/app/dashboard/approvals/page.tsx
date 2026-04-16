@@ -35,45 +35,33 @@ import {
   RotateCcw,
   Clock,
   Building2,
-  Home,
-  Navigation,
-  Info,
-  FileSpreadsheet,
-  Download,
   CalendarDays,
   UserCheck,
-  FileText
+  FileText,
+  Info,
+  ChevronRight,
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ATTENDANCE_RULES } from "@/lib/constants";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
 import { differenceInDays, parseISO, format } from "date-fns";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function ApprovalsPage() {
   const { attendanceRecords, leaveRequests, updateRecord, addRecord } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("attendance");
-  const [subTab, setSubTab] = useState("pending");
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 20;
+  const [viewMode, setViewMode] = useState("pending");
+  const [pendingType, setPendingType] = useState("attendance");
 
   // Dialog States
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
-  const [isVerifyDialogOpen, setIsVerifyDialogOpen] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
-  const [editTimes, setEditTimes] = useState({ in: "", out: "" });
-  const [rejectRemark, setRejectRemark] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  // Leave Dialog States
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
   const [isLeaveApproveOpen, setIsLeaveApproveOpen] = useState(false);
   const [isLeaveRejectOpen, setIsLeaveRejectOpen] = useState(false);
   const [leaveEditDates, setLeaveEditDates] = useState({ from: "", to: "" });
   const [leaveRejectReason, setLeaveRejectReason] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const { toast } = useToast();
 
@@ -81,38 +69,48 @@ export default function ApprovalsPage() {
     setIsMounted(true);
   }, []);
 
-  const filteredAttendance = useMemo(() => {
-    const sorted = [...(attendanceRecords || [])].sort((a, b) => b.date.localeCompare(a.date));
-    return sorted.filter(rec => {
-      const name = (rec.employeeName || "").toLowerCase();
-      const id = (rec.employeeId || "").toLowerCase();
-      const matchesSearch = name.includes(searchTerm.toLowerCase()) || id.includes(searchTerm.toLowerCase());
-      if (subTab === "pending") return matchesSearch && !rec.approved && (!rec.remark);
-      return matchesSearch && rec.approved;
-    });
-  }, [attendanceRecords, searchTerm, subTab]);
+  // Filtered Data Sets
+  const pendingAttendance = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return (attendanceRecords || [])
+      .filter(rec => !rec.approved && !rec.remark)
+      .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [attendanceRecords, searchTerm]);
 
-  const filteredLeaves = useMemo(() => {
-    const sorted = [...(leaveRequests || [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return sorted.filter(l => {
-      const name = (l.employeeName || "").toLowerCase();
-      const id = (l.employeeId || "").toLowerCase();
-      const matchesSearch = name.includes(searchTerm.toLowerCase()) || id.includes(searchTerm.toLowerCase());
-      if (subTab === "pending") return matchesSearch && l.status === 'UNDER_PROCESS';
-      return matchesSearch && l.status !== 'UNDER_PROCESS';
-    });
-  }, [leaveRequests, searchTerm, subTab]);
+  const pendingLeaves = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return (leaveRequests || [])
+      .filter(l => l.status === 'UNDER_PROCESS')
+      .filter(l => (l.employeeName || "").toLowerCase().includes(search) || (l.employeeId || "").toLowerCase().includes(search))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [leaveRequests, searchTerm]);
+
+  const historyAttendance = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return (attendanceRecords || [])
+      .filter(rec => rec.approved)
+      .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [attendanceRecords, searchTerm]);
+
+  const historyLeaves = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return (leaveRequests || [])
+      .filter(l => l.status !== 'UNDER_PROCESS')
+      .filter(l => (l.employeeName || "").toLowerCase().includes(search) || (l.employeeId || "").toLowerCase().includes(search))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [leaveRequests, searchTerm]);
 
   const handleApproveAttendance = (id: string) => {
     if (isProcessing) return;
     setIsProcessing(true);
     try {
       updateRecord('attendance', id, { approved: true, remark: "" });
-      toast({ title: "Approved" });
+      toast({ title: "Attendance Approved" });
     } finally { setIsProcessing(false); }
   };
 
-  // Leave Logic
   const handleOpenLeaveApprove = (l: LeaveRequest) => {
     setSelectedLeave(l);
     setLeaveEditDates({ from: l.fromDate, to: l.toDate });
@@ -135,7 +133,7 @@ export default function ApprovalsPage() {
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
         read: false
       });
-      toast({ title: "Leave Approved", description: `Duration updated to ${days} day(s).` });
+      toast({ title: "Leave Approved" });
       setIsLeaveApproveOpen(false);
     } finally { setIsProcessing(false); }
   };
@@ -170,11 +168,11 @@ export default function ApprovalsPage() {
   if (!isMounted) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Organizational Approvals</h1>
-          <p className="text-muted-foreground">Verify attendance logs and employee leave requests.</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Organizational Approvals</h1>
+          <p className="text-muted-foreground text-sm">Verify live attendance logs and manage employee leave cycles.</p>
         </div>
       </div>
 
@@ -188,126 +186,243 @@ export default function ApprovalsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSubTab("pending"); }} className="w-full md:w-auto">
-          <TabsList className="grid w-full grid-cols-2 bg-slate-100">
-            <TabsTrigger value="attendance" className="font-bold gap-2"><UserCheck className="w-4 h-4" /> Attendance</TabsTrigger>
-            <TabsTrigger value="leave" className="font-bold gap-2"><CalendarDays className="w-4 h-4" /> Leave Request</TabsTrigger>
+        <Tabs value={viewMode} onValueChange={setViewMode} className="w-full md:w-auto">
+          <TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[240px]">
+            <TabsTrigger value="pending" className="text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm">Pending</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs font-black data-[state=active]:bg-white data-[state=active]:shadow-sm">History</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <div className="flex justify-end">
-        <Tabs value={subTab} onValueChange={setSubTab} className="w-full md:w-auto">
-          <TabsList className="grid w-full grid-cols-2 h-9">
-            <TabsTrigger value="pending" className="text-xs">Pending</TabsTrigger>
-            <TabsTrigger value="approved" className="text-xs">History</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {viewMode === 'pending' ? (
+        <div className="space-y-6">
+          <Tabs value={pendingType} onValueChange={setPendingType} className="w-full">
+            <div className="flex items-center gap-4 mb-4">
+              <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg">
+                <TabsTrigger value="attendance" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">Attendance</TabsTrigger>
+                <TabsTrigger value="leave" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">Leave Requests</TabsTrigger>
+              </TabsList>
+              <div className="h-px flex-1 bg-slate-100" />
+            </div>
 
-      <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <CardContent className="p-0">
-          {activeTab === 'attendance' ? (
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-bold">Employee</TableHead>
-                  <TableHead className="font-bold">Date</TableHead>
-                  <TableHead className="font-bold">IN / OUT</TableHead>
-                  <TableHead className="font-bold text-center">Hours</TableHead>
-                  <TableHead className="font-bold">Status</TableHead>
-                  <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAttendance.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
-                ) : (
-                  filteredAttendance.map((rec) => (
-                    <TableRow key={rec.id} className="hover:bg-slate-50/50">
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-bold uppercase">{rec.employeeName}</span>
-                          <span className="text-xs font-mono text-primary">{rec.employeeId}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm font-medium">{rec.date}</TableCell>
-                      <TableCell>
-                        <span className="font-mono text-xs font-bold text-primary">{rec.inTime || "--:--"}</span>
-                        <span className="mx-2 text-slate-300">/</span>
-                        <span className="font-mono text-xs font-bold text-rose-500">{rec.outTime || "--:--"}</span>
-                      </TableCell>
-                      <TableCell className="text-center font-bold text-xs">{rec.hours}h</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-3 py-0.5", rec.approved ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600")}>
-                          {rec.approved ? "Approved" : "Pending"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right pr-6">
-                        {subTab === 'pending' && (
-                          <div className="flex justify-end gap-2">
-                             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 font-bold" onClick={() => handleApproveAttendance(rec.id)} disabled={isProcessing}>Approve</Button>
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          ) : (
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-bold">Employee Name / ID</TableHead>
-                  <TableHead className="font-bold">Dept / Designation</TableHead>
-                  <TableHead className="font-bold">From Date</TableHead>
-                  <TableHead className="font-bold">To Date</TableHead>
-                  <TableHead className="font-bold text-center">Days</TableHead>
-                  <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLeaves.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No leave applications.</TableCell></TableRow>
-                ) : (
-                  filteredLeaves.map((l) => (
-                    <TableRow key={l.id} className="hover:bg-slate-50/50">
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-bold uppercase">{l.employeeName}</span>
-                          <span className="text-xs font-mono text-slate-400">{l.employeeId}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                         <div className="flex flex-col">
-                          <span className="text-sm font-medium leading-tight">{l.department}</span>
-                          <span className="text-[10px] text-muted-foreground">{l.designation}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm font-bold text-primary">{l.fromDate}</TableCell>
-                      <TableCell className="text-sm font-bold text-rose-500">{l.toDate}</TableCell>
-                      <TableCell className="text-center font-black text-slate-700">{l.days}</TableCell>
-                      <TableCell className="text-right pr-6">
-                        {l.status === 'UNDER_PROCESS' ? (
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" className="h-8 font-bold border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => handleOpenLeaveReject(l)} disabled={isProcessing}>Reject</Button>
-                            <Button size="sm" className="h-8 font-bold bg-primary shadow-sm" onClick={() => handleOpenLeaveApprove(l)} disabled={isProcessing}>Approve</Button>
-                          </div>
-                        ) : (
-                          <Badge className={cn("text-[9px] font-black uppercase px-4 py-1", l.status === 'APPROVED' ? "bg-emerald-600" : "bg-rose-600")}>
-                            {l.status}
-                          </Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+            <TabsContent value="attendance">
+              <Card className="border-slate-200 shadow-sm overflow-hidden">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4">Employee</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Date</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / OUT</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Hours</TableHead>
+                        <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingAttendance.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground font-medium">No pending attendance logs found.</TableCell></TableRow>
+                      ) : (
+                        pendingAttendance.map((rec) => (
+                          <TableRow key={rec.id} className="hover:bg-slate-50/50 transition-colors">
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-bold uppercase text-slate-700">{rec.employeeName}</span>
+                                <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm font-medium text-slate-600">{rec.date}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-bold text-slate-900">{rec.inTime || "--:--"}</span>
+                                <ChevronRight className="w-3 h-3 text-slate-300" />
+                                <span className="font-mono text-xs font-bold text-rose-500">{rec.outTime || "--:--"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center font-black text-sm text-slate-700">{rec.hours}h</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 font-black text-[10px] uppercase px-4 shadow-lg shadow-emerald-900/10" onClick={() => handleApproveAttendance(rec.id)} disabled={isProcessing}>Approve</Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="leave">
+              <Card className="border-slate-200 shadow-sm overflow-hidden">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50">
+                      <TableRow>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">From Date</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">To Date</TableHead>
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Days</TableHead>
+                        <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingLeaves.length === 0 ? (
+                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-medium">No pending leave applications.</TableCell></TableRow>
+                      ) : (
+                        pendingLeaves.map((l) => (
+                          <TableRow key={l.id} className="hover:bg-slate-50/50 transition-colors">
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-bold uppercase text-slate-700">{l.employeeName}</span>
+                                <span className="text-[10px] font-mono text-slate-400 font-bold">{l.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                               <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-600">{l.department}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase font-medium">{l.designation}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm font-bold text-primary">{l.fromDate}</TableCell>
+                            <TableCell className="text-sm font-bold text-rose-500">{l.toDate}</TableCell>
+                            <TableCell className="text-center font-black text-slate-700">{l.days}</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" className="h-8 font-black text-[10px] uppercase border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => handleOpenLeaveReject(l)} disabled={isProcessing}>Reject</Button>
+                                <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-primary shadow-sm" onClick={() => handleOpenLeaveApprove(l)} disabled={isProcessing}>Approve</Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      ) : (
+        <div className="space-y-12">
+          {/* Approved Attendance Section */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 shadow-sm">
+                <UserCheck className="w-5 h-5 text-emerald-600" />
+              </div>
+              <h3 className="font-black text-sm uppercase tracking-[0.2em] text-slate-500">Approved Attendance History</h3>
+            </div>
+            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50 border-b">
+                      <TableRow>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Date</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">IN / OUT</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Hours</TableHead>
+                        <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {historyAttendance.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No approved records found.</TableCell></TableRow>
+                      ) : (
+                        historyAttendance.map((rec) => (
+                          <TableRow key={rec.id} className="hover:bg-slate-50/30">
+                            <TableCell className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
+                                <span className="text-[10px] font-mono font-black text-slate-400">{rec.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm font-bold text-slate-600">{rec.date}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[11px] font-bold text-slate-900">{rec.inTime || "--:--"}</span>
+                                <ChevronRight className="w-3 h-3 text-slate-200" />
+                                <span className="font-mono text-[11px] font-bold text-slate-900">{rec.outTime || "--:--"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center font-black text-sm text-slate-700">{rec.hours}h</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Badge className="bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-widest border-none px-3">Approved</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Leave History Section */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 shadow-sm">
+                <CalendarDays className="w-5 h-5 text-blue-600" />
+              </div>
+              <h3 className="font-black text-sm uppercase tracking-[0.2em] text-slate-500">Leave Application History</h3>
+            </div>
+            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table>
+                    <TableHeader className="bg-slate-50/50 border-b">
+                      <TableRow>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Range</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Days</TableHead>
+                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Purpose</TableHead>
+                        <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {historyLeaves.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No historical applications found.</TableCell></TableRow>
+                      ) : (
+                        historyLeaves.map((l) => (
+                          <TableRow key={l.id} className="hover:bg-slate-50/30">
+                            <TableCell className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="font-bold uppercase text-slate-700 text-sm">{l.employeeName}</span>
+                                <span className="text-[10px] font-mono text-slate-400 font-bold">{l.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-600">{l.fromDate}</span>
+                                <span className="text-xs font-bold text-slate-400">{l.toDate}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-center font-black text-slate-700">{l.days}</TableCell>
+                            <TableCell className="max-w-xs truncate text-[11px] font-medium text-slate-500 italic">
+                              "{l.purpose}"
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex flex-col items-end gap-1">
+                                <Badge className={cn("text-[9px] font-black uppercase tracking-widest px-3 py-0.5 border-none", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
+                                  {l.status}
+                                </Badge>
+                                {l.status === 'REJECTED' && l.rejectReason && (
+                                  <span className="text-[8px] font-bold text-rose-400 max-w-[120px] truncate">R: {l.rejectReason}</span>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* Leave Approval Dialog */}
       <Dialog open={isLeaveApproveOpen} onOpenChange={setIsLeaveApproveOpen}>
