@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
@@ -130,7 +129,12 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       };
     }
 
-    const records = attendanceRecords.filter(r => r.employeeId === employee.employeeId);
+    // Filter attendance records to only include dates after joining date
+    const records = attendanceRecords.filter(r => 
+      r.employeeId === employee.employeeId && 
+      (!employee.joinDate || r.date >= employee.joinDate)
+    );
+    
     const presents = records.filter(r => r.status === 'PRESENT').length;
     const halfDays = records.filter(r => r.status === 'HALF_DAY').length;
     const holidays = records.filter(r => r.status === 'HOLIDAY').length;
@@ -290,7 +294,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
                 />
                 {isDeductionError && (
                   <p className="flex items-center gap-1.5 text-[10px] text-rose-600 font-black uppercase tracking-widest mt-3">
-                    <AlertCircle className="w-3 h-3" />
+                    <AlertCircle className="w-3 heart-3" />
                     Deduction amount cannot be greater than Net Pay ({formatCurrency(netPayBeforeDeduction)})
                   </p>
                 )}

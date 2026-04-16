@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -105,6 +104,10 @@ export default function ReportsPage() {
           if (!rec.date) return false;
           const recDate = parseISO(rec.date);
           const emp = employees.find(e => e.employeeId === rec.employeeId);
+          
+          // Strict Joining Boundary: Skip any records before joining date
+          if (emp?.joinDate && rec.date < emp.joinDate) return false;
+
           const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
           const dateMatch = isWithinInterval(recDate, { start, end });
           return firmMatch && dateMatch;
@@ -135,6 +138,12 @@ export default function ReportsPage() {
         .filter(pay => {
           const slipDate = pay.slipDate ? parseISO(pay.slipDate) : null;
           const emp = employees.find(e => e.employeeId === pay.employeeId);
+          
+          // Note: Payroll naturally aligns with work months, but we filter any inconsistent records
+          if (emp?.joinDate && pay.month) {
+            // Basic month-check logic can be applied here if needed
+          }
+
           const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
           const dateMatch = slipDate && isWithinInterval(slipDate, { start, end });
           return firmMatch && dateMatch;

@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -220,6 +220,9 @@ export default function AttendancePage() {
       return (attendanceRecords || [])
         .filter(r => {
           try {
+            // Apply global rule: filter even for admins if it's before the specific employee's join date
+            const emp = employees.find(e => e.employeeId === r.employeeId);
+            if (emp?.joinDate && r.date < emp.joinDate) return false;
             return new Date(r.date) >= limitDate;
           } catch (e) {
             return false;
@@ -232,11 +235,19 @@ export default function AttendancePage() {
         });
     }
 
-    const today = new Date();
+    const today = startOfDay(new Date());
     const fortyFiveDaysAgo = subDays(today, 45);
-    fortyFiveDaysAgo.setHours(0, 0, 0, 0);
+    
+    // Strict Boundary: History starts at max(45 days ago, joining date)
+    let historyStartDate = fortyFiveDaysAgo;
+    if (registeredEmployee?.joinDate) {
+      const joinDate = parseISO(registeredEmployee.joinDate);
+      if (isAfter(joinDate, fortyFiveDaysAgo)) {
+        historyStartDate = joinDate;
+      }
+    }
 
-    const dateRange = eachDayOfInterval({ start: fortyFiveDaysAgo, end: today });
+    const dateRange = eachDayOfInterval({ start: historyStartDate, end: today });
     
     return dateRange.map(date => {
       const dateStr = format(date, 'yyyy-MM-dd');
@@ -299,7 +310,7 @@ export default function AttendancePage() {
         isNonWorkingDay: false
       }] as any;
     }).filter(Boolean).flat().reverse();
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords]);
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, registeredEmployee, employees]);
 
   const paginatedHistory = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
@@ -330,9 +341,19 @@ export default function AttendancePage() {
       return;
     }
 
-    if (type === "IN" && lockState.isLocked) {
-      toast({ variant: "destructive", title: "Wait Period", description: `You can mark attendance after ${lockState.unlockTime}.` });
-      return;
+    // Joining Date Boundary Validation
+    if (type === "IN") {
+      const istNow = getISTTime();
+      const todayStr = format(istNow, "yyyy-MM-dd");
+      if (registeredEmployee?.joinDate && todayStr < registeredEmployee.joinDate) {
+        toast({ variant: "destructive", title: "Action Blocked", description: "Attendance cannot be marked before employee joining date." });
+        return;
+      }
+
+      if (lockState.isLocked) {
+        toast({ variant: "destructive", title: "Wait Period", description: `You can mark attendance after ${lockState.unlockTime}.` });
+        return;
+      }
     }
 
     setIsLoadingLocation(true);
@@ -371,6 +392,13 @@ export default function AttendancePage() {
     const now = getISTTime();
     const time = format(now, "HH:mm");
     const today = format(now, "yyyy-MM-dd");
+
+    // Redundant but safe validation
+    if (registeredEmployee?.joinDate && today < registeredEmployee.joinDate) {
+      toast({ variant: "destructive", title: "Action Blocked", description: "Attendance cannot be marked before employee joining date." });
+      return;
+    }
+
     const type = detectedPlant ? 'OFFICE' : manualType;
 
     const newRecord: Partial<AttendanceRecord> = {
@@ -644,7 +672,7 @@ export default function AttendancePage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for last 45 days.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground font-medium">No records found for eligible work period.</TableCell></TableRow>
                   ) : (
                     paginatedHistory.map((h: any) => (
                       <TableRow key={h.id} className="hover:bg-slate-50/50">
