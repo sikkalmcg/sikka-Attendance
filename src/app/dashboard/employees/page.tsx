@@ -49,7 +49,7 @@ import {
   Banknote,
   ShieldCheck,
   ChevronRight,
-  User,
+  User as UserIcon,
   AlertTriangle,
   Clock,
   TrendingUp as GrowthIcon,
@@ -138,10 +138,12 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 };
 
 export default function EmployeesPage() {
-  const { employees, firms, addRecord, updateRecord } = useData();
+  const { employees, firms, addRecord, updateRecord, currentUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
+
+  const isSuperAdmin = useMemo(() => currentUser?.role === 'SUPER_ADMIN', [currentUser]);
 
   // Modal States
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
@@ -338,6 +340,10 @@ export default function EmployeesPage() {
 
   const handleToggleStatus = async () => {
     if (!employeeToToggle || isProcessing) return;
+    if (!isSuperAdmin) {
+      toast({ variant: "destructive", title: "Restricted", description: "Only Super Admin can deactivate employees." });
+      return;
+    }
     setIsProcessing(true);
     
     try {
@@ -496,16 +502,18 @@ export default function EmployeesPage() {
                                 <History className="w-4 h-4 mr-2" /> View Salary Record
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className={emp.active ? "text-rose-600" : "text-emerald-600"}
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  setEmployeeToToggle(emp);
-                                  setIsToggleConfirmOpen(true);
-                                }}
-                              >
-                                {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate</> : <><CheckCircle className="w-4 h-4 mr-2" /> Activate</>}
-                              </DropdownMenuItem>
+                              {isSuperAdmin && (
+                                <DropdownMenuItem 
+                                  className={emp.active ? "text-rose-600 font-bold" : "text-emerald-600 font-bold"}
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    setEmployeeToToggle(emp);
+                                    setIsToggleConfirmOpen(true);
+                                  }}
+                                >
+                                  {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate</> : <><CheckCircle className="w-4 h-4 mr-2" /> Activate</>}
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -699,7 +707,7 @@ export default function EmployeesPage() {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 space-y-4">
-                              <h5 className="text-xs font-bold text-emerald-800 flex items-center gap-2"><User className="w-3 h-3" /> Employee Contribution</h5>
+                              <h5 className="text-xs font-bold text-emerald-800 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee Contribution</h5>
                               <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                   <Label className="text-[10px] text-emerald-600 font-bold uppercase">PF %</Label>

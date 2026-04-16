@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
 import { 
   Employee, 
   AttendanceRecord, 
@@ -23,6 +23,7 @@ import {
   setDocumentNonBlocking
 } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 interface DataContextType {
   employees: Employee[];
@@ -39,12 +40,20 @@ interface DataContextType {
   updateRecord: (col: string, id: string, data: any) => void;
   deleteRecord: (col: string, id: string) => void;
   setRecord: (col: string, id: string, data: any) => void;
+  currentUser: any;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const db = useFirestore();
+  const { toast } = useToast();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("user");
+    if (saved) setCurrentUser(JSON.parse(saved));
+  }, []);
 
   // Real-time Firestore Subscriptions
   const employeesQuery = useMemoFirebase(() => collection(db, 'employees'), [db]);
@@ -74,18 +83,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const notificationsQuery = useMemoFirebase(() => collection(db, 'notifications'), [db]);
   const { data: notifications } = useCollection<AppNotification>(notificationsQuery);
 
-  // Firestore Mutation Helpers
+  // Helper to check if current user is Super Admin
+  const isSuperAdmin = () => currentUser?.role === 'SUPER_ADMIN';
+
+  // Firestore Mutation Helpers with RBAC
   const addRecord = (col: string, data: any) => {
+    // Standard role check can be added here if certain collections are restricted
     const colRef = collection(db, col);
     addDocumentNonBlocking(colRef, { ...data, createdAt: new Date().toISOString() });
   };
 
   const updateRecord = (col: string, id: string, data: any) => {
+    // Block deactivation of Super Admin or critical system users if needed
     const docRef = doc(db, col, id);
     updateDocumentNonBlocking(docRef, { ...data, updatedAt: new Date().toISOString() });
   };
 
   const deleteRecord = (col: string, id: string) => {
+    if (!isSuperAdmin()) {
+      toast({
+        variant: "destructive",
+        title: "Permission Denied",
+        description: "Only Super Admin accounts are authorized to delete records."
+      });
+      return;
+    }
     const docRef = doc(db, col, id);
     deleteDocumentNonBlocking(docRef);
   };
@@ -108,8 +130,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addRecord,
     updateRecord,
     deleteRecord,
-    setRecord
-  }), [employees, attendance, vouchers, payroll, plants, firms, users, holidays, notifications]);
+    setRecord,
+    currentUser
+  }), [employees, attendance, vouchers, payroll, plants, firms, users, holidays, notifications, currentUser]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

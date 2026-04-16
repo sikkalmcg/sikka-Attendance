@@ -18,7 +18,7 @@ import {
 import { 
   LayoutDashboard, 
   UserCheck, 
-  Users, 
+  Users as UsersIcon, 
   Calendar, 
   FileText, 
   Settings, 
@@ -69,7 +69,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 function HeaderActions() {
-  const { notifications, employees, users, updateRecord, deleteRecord } = useData();
+  const { notifications, employees, users, updateRecord, deleteRecord, currentUser: contextUser } = useData();
   const [localUser, setLocalUser] = useState<any>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const router = useRouter();
@@ -82,25 +82,26 @@ function HeaderActions() {
 
   // Verified User logic: Sync name and avatar from database in real-time
   const verifiedUser = useMemo(() => {
-    if (!localUser) return null;
+    const userToVerify = contextUser || localUser;
+    if (!userToVerify) return null;
 
-    if (localUser.role === 'EMPLOYEE') {
-      const loginIdent = localUser.username?.replace(/\s/g, '');
+    if (userToVerify.role === 'EMPLOYEE') {
+      const loginIdent = userToVerify.username?.replace(/\s/g, '');
       const dbEmp = employees.find(e => {
         const empAadhaar = e.aadhaar?.replace(/\s/g, '');
         const empMobile = e.mobile?.replace(/\s/g, '');
         return empAadhaar === loginIdent || empMobile === loginIdent;
       });
-      return dbEmp ? { ...localUser, fullName: dbEmp.name, avatar: dbEmp.avatar } : localUser;
+      return dbEmp ? { ...userToVerify, fullName: dbEmp.name, avatar: dbEmp.avatar } : userToVerify;
     }
 
-    if (localUser.role !== 'SUPER_ADMIN') {
-      const dbUser = users.find(u => u.id === localUser.id);
-      return dbUser ? { ...localUser, fullName: dbUser.fullName, avatar: dbUser.avatar } : localUser;
+    if (userToVerify.role !== 'SUPER_ADMIN') {
+      const dbUser = users.find(u => u.id === userToVerify.id);
+      return dbUser ? { ...userToVerify, fullName: dbUser.fullName, avatar: dbUser.avatar } : userToVerify;
     }
 
-    return localUser;
-  }, [localUser, employees, users]);
+    return userToVerify;
+  }, [contextUser, localUser, employees, users]);
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
   
@@ -121,6 +122,10 @@ function HeaderActions() {
   };
 
   const handleClearLogs = () => {
+    if (verifiedUser?.role !== 'SUPER_ADMIN') {
+      toast({ variant: "destructive", title: "Restricted", description: "Only Super Admin can clear logs." });
+      return;
+    }
     latestNotifications.forEach(n => {
       deleteRecord('notifications', n.id);
     });
@@ -200,7 +205,7 @@ function HeaderActions() {
                 </div>
               )}
             </ScrollArea>
-            {latestNotifications.length > 0 && (
+            {latestNotifications.length > 0 && verifiedUser.role === 'SUPER_ADMIN' && (
               <div className="p-3 bg-slate-50 border-t text-center">
                 <Button 
                   variant="ghost" 
@@ -379,7 +384,7 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
 function SidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { employees, users } = useData();
+  const { employees, users, currentUser: contextUser } = useData();
   const [localUser, setLocalUser] = useState<any>(null);
 
   useEffect(() => {
@@ -388,22 +393,23 @@ function SidebarNav() {
   }, []);
 
   const verifiedUser = useMemo(() => {
-    if (!localUser) return null;
-    if (localUser.role === 'EMPLOYEE') {
-      const loginIdent = localUser.username?.replace(/\s/g, '');
+    const userToVerify = contextUser || localUser;
+    if (!userToVerify) return null;
+    if (userToVerify.role === 'EMPLOYEE') {
+      const loginIdent = userToVerify.username?.replace(/\s/g, '');
       const dbEmp = employees.find(e => {
         const empAadhaar = e.aadhaar?.replace(/\s/g, '');
         const empMobile = e.mobile?.replace(/\s/g, '');
         return empAadhaar === loginIdent || empMobile === loginIdent;
       });
-      return dbEmp ? { ...localUser, fullName: dbEmp.name } : localUser;
+      return dbEmp ? { ...userToVerify, fullName: dbEmp.name } : userToVerify;
     }
-    if (localUser.role !== 'SUPER_ADMIN') {
-      const dbUser = users.find(u => u.id === localUser.id);
-      return dbUser ? { ...localUser, fullName: dbUser.fullName } : localUser;
+    if (userToVerify.role !== 'SUPER_ADMIN') {
+      const dbUser = users.find(u => u.id === userToVerify.id);
+      return dbUser ? { ...userToVerify, fullName: dbUser.fullName } : userToVerify;
     }
-    return localUser;
-  }, [localUser, employees, users]);
+    return userToVerify;
+  }, [contextUser, localUser, employees, users]);
 
   if (!verifiedUser) return null;
 
@@ -411,7 +417,7 @@ function SidebarNav() {
     { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Dashboard" },
     { title: "Mark Attendance", icon: UserCheck, path: "/dashboard/attendance", roles: ["EMPLOYEE", "SUPER_ADMIN", "ADMIN", "HR"], permission: "Attendance" },
     { title: "Approvals", icon: FileText, path: "/dashboard/approvals", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Approvals" },
-    { title: "Employees", icon: Users, path: "/dashboard/employees", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Employees" },
+    { title: "Employees", icon: UsersIcon, path: "/dashboard/employees", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Employees" },
     { title: "Payroll", icon: CreditCard, path: "/dashboard/payroll", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Payroll" },
     { title: "Vouchers", icon: FileText, path: "/dashboard/vouchers", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Vouchers" },
     { title: "Holidays", icon: Calendar, path: "/dashboard/holidays", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Holidays" },
@@ -507,6 +513,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setIsAuthorized(canAccessAttendance);
       if (!canAccessAttendance) router.push("/dashboard/attendance");
     } else if (requiredPermission) {
+      // Check for strict permission match
       const hasPerm = userData.permissions?.includes(requiredPermission) || requiredPermission === "Dashboard";
       setIsAuthorized(hasPerm);
     } else {
@@ -522,7 +529,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Access Denied</h1>
         <p className="text-slate-500 font-medium text-center max-w-sm mb-8">
-          You do not have the required permissions to view this module. Please contact your system administrator.
+          You do not have the required permissions to view this module. Only Super Admin can access system-level settings and deletions.
         </p>
         <Button 
           className="bg-primary px-8 h-12 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2"

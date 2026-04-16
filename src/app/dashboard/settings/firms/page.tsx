@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,11 +94,13 @@ const STATE_CODES: Record<string, string> = {
 };
 
 export default function FirmsAndPlantsPage() {
-  const { firms, plants, addRecord, updateRecord, deleteRecord } = useData();
+  const { firms, plants, addRecord, updateRecord, deleteRecord, currentUser } = useData();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("plants");
   const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isSuperAdmin = useMemo(() => currentUser?.role === 'SUPER_ADMIN', [currentUser]);
 
   // Plant Form State
   const [plantDraft, setPlantDraft] = useState<Partial<Plant>>({ radius: 700 });
@@ -439,14 +441,16 @@ export default function FirmsAndPlantsPage() {
                                 <TooltipContent>Edit Plant Settings</TooltipContent>
                               </Tooltip>
                               
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setPlantToRemove(p)}>
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Remove Plant</TooltipContent>
-                              </Tooltip>
+                              {isSuperAdmin && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setPlantToRemove(p)}>
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Remove Plant</TooltipContent>
+                                </Tooltip>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -764,14 +768,16 @@ export default function FirmsAndPlantsPage() {
                                 <TooltipContent>Edit Firm Details</TooltipContent>
                               </Tooltip>
                               
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setFirmToRemove(f)}>
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>De-register Firm</TooltipContent>
-                              </Tooltip>
+                              {isSuperAdmin && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => setFirmToRemove(f)}>
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>De-register Firm</TooltipContent>
+                                </Tooltip>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
