@@ -32,16 +32,15 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { AttendanceRecord, Plant, Employee } from "@/lib/types";
+import { AttendanceRecord, Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter } from "date-fns";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -63,6 +62,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
+
+// Utility for IST time handling
+const getISTTime = () => {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+};
 
 export default function AttendancePage() {
   const { attendanceRecords, addRecord, updateRecord, plants, holidays, employees } = useData();
@@ -95,8 +99,8 @@ export default function AttendancePage() {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
     
-    setCurrentTime(new Date());
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    setCurrentTime(getISTTime());
+    const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -130,11 +134,82 @@ export default function AttendancePage() {
     return registeredEmployee?.name || currentUser?.fullName || "Employee Name";
   }, [registeredEmployee, currentUser]);
 
-  const todayRecord = useMemo(() => {
-    if (!currentUser) return null;
-    const todayStr = new Date().toISOString().split('T')[0];
-    return (attendanceRecords || []).find(r => r.employeeId === effectiveEmployeeId && r.date === todayStr);
-  }, [currentUser, attendanceRecords, effectiveEmployeeId]);
+  // Logic for Active Record and Restriction
+  const employeeRecords = useMemo(() => {
+    if (!effectiveEmployeeId) return [];
+    return (attendanceRecords || []).filter(r => r.employeeId === effectiveEmployeeId);
+  }, [attendanceRecords, effectiveEmployeeId]);
+
+  const activeRecord = useMemo(() => {
+    return employeeRecords.find(r => !r.outTime);
+  }, [employeeRecords]);
+
+  const lastOutRecord = useMemo(() => {
+    return [...employeeRecords]
+      .filter(r => r.outTime)
+      .sort((a, b) => {
+        const dateTimeA = new Date(`${a.date}T${a.outTime}`);
+        const dateTimeB = new Date(`${b.date}T${b.outTime}`);
+        return dateTimeB.getTime() - dateTimeA.getTime();
+      })[0];
+  }, [employeeRecords]);
+
+  const lockState = useMemo(() => {
+    if (!lastOutRecord || !lastOutRecord.outTime) return { isLocked: false, unlockTime: null };
+    
+    const lastOutDateTime = new Date(`${lastOutRecord.date}T${lastOutRecord.outTime}`);
+    const allowedDateTime = addHours(lastOutDateTime, 8);
+    const now = getISTTime();
+    
+    const isLocked = isAfter(allowedDateTime, now);
+    return { 
+      isLocked, 
+      unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null 
+    };
+  }, [lastOutRecord, currentTime]); // Re-check as time passes
+
+  // Auto-OUT Rule (16 Hours)
+  useEffect(() => {
+    if (!activeRecord || !activeRecord.inTime || !isMounted) return;
+
+    const checkAutoOut = () => {
+      const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
+      const now = getISTTime();
+      const diff = differenceInHours(now, inDateTime);
+
+      if (diff >= 16) {
+        // FINAL_OUT_TIME = IN_TIME + 16hr - 8hr = IN_TIME + 8hr
+        const finalOutDateTime = addHours(inDateTime, 8);
+        const outDate = format(finalOutDateTime, "yyyy-MM-dd");
+        const outTimeStr = format(finalOutDateTime, "HH:mm");
+
+        updateRecord('attendance', activeRecord.id, {
+          outTime: outTimeStr,
+          hours: 8.0,
+          status: 'PRESENT',
+          autoOut: true,
+          addressOut: "Auto marked by system",
+          outPlant: activeRecord.inPlant || "Auto-OUT"
+        });
+
+        addRecord('notifications', {
+          message: `AUTO-OUT: ${activeRecord.employeeName} shift closed automatically after 16 hours.`,
+          timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+          read: false
+        });
+
+        toast({ 
+          title: "Session Expired", 
+          description: "System auto-marked OUT (16h Rule). 8h shift stored.",
+          variant: "destructive"
+        });
+      }
+    };
+
+    const interval = setInterval(checkAutoOut, 60000); // Check every minute
+    checkAutoOut(); // Initial check
+    return () => clearInterval(interval);
+  }, [activeRecord, isMounted]);
 
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
@@ -164,25 +239,25 @@ export default function AttendancePage() {
     
     return dateRange.map(date => {
       const dateStr = format(date, 'yyyy-MM-dd');
-      const existingRecord = (attendanceRecords || []).find(r => r.employeeId === effectiveEmployeeId && r.date === dateStr);
+      const existingRecords = employeeRecords.filter(r => r.date === dateStr);
       
       const isSun = isSunday(date);
       const holiday = (holidays || []).find(h => h.date === dateStr);
       const isNonWorkingDay = isSun || !!holiday;
       const nonWorkingDayLabel = isSun ? "WEEKLY_OFF" : (holiday ? "HOLIDAY" : null);
 
-      if (existingRecord) {
-        return {
-          ...existingRecord,
+      if (existingRecords.length > 0) {
+        return existingRecords.map(rec => ({
+          ...rec,
           isNonWorkingDay,
           nonWorkingDayLabel
-        };
+        }));
       }
 
       if (isSameDay(date, today)) return null;
 
       if (isSun) {
-        return {
+        return [{
           id: `virtual-sun-${dateStr}`,
           employeeId: effectiveEmployeeId,
           employeeName: effectiveEmployeeName,
@@ -192,11 +267,11 @@ export default function AttendancePage() {
           approved: true,
           isNonWorkingDay: true,
           nonWorkingDayLabel: "WEEKLY_OFF"
-        } as any;
+        }] as any;
       }
 
       if (holiday) {
-        return {
+        return [{
           id: `virtual-hol-${dateStr}`,
           employeeId: effectiveEmployeeId,
           employeeName: effectiveEmployeeName,
@@ -206,10 +281,10 @@ export default function AttendancePage() {
           approved: true,
           isNonWorkingDay: true,
           nonWorkingDayLabel: "HOLIDAY"
-        } as any;
+        }] as any;
       }
 
-      return {
+      return [{
         id: `virtual-abs-${dateStr}`,
         employeeId: effectiveEmployeeId,
         employeeName: effectiveEmployeeName,
@@ -221,15 +296,16 @@ export default function AttendancePage() {
         inTime: null,
         outTime: null,
         isNonWorkingDay: false
-      } as any;
-    }).filter(Boolean).reverse();
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted]);
+      }] as any;
+    }).filter(Boolean).flat().reverse();
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords]);
 
-  const totalPages = Math.ceil(history.length / rowsPerPage);
   const paginatedHistory = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
     return history.slice(start, start + rowsPerPage);
   }, [history, currentPage]);
+
+  const totalPages = Math.ceil(history.length / rowsPerPage);
 
   const fetchAddress = async (lat: number, lng: number) => {
     try {
@@ -250,6 +326,11 @@ export default function AttendancePage() {
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
       toast({ variant: "destructive", title: "Action Blocked", description: "You must be a registered employee to mark attendance." });
+      return;
+    }
+
+    if (type === "IN" && lockState.isLocked) {
+      toast({ variant: "destructive", title: "Wait Period", description: `You can mark attendance after ${lockState.unlockTime}.` });
       return;
     }
 
@@ -285,9 +366,10 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckIn = () => {
-    if (!currentUser || !currentGPS || !isAccessAllowed) return;
-    const time = format(new Date(), "HH:mm");
-    const today = new Date().toISOString().split('T')[0];
+    if (!currentUser || !currentGPS || !isAccessAllowed || lockState.isLocked) return;
+    const now = getISTTime();
+    const time = format(now, "HH:mm");
+    const today = format(now, "yyyy-MM-dd");
     const type = detectedPlant ? 'OFFICE' : manualType;
 
     const newRecord: Partial<AttendanceRecord> = {
@@ -309,8 +391,8 @@ export default function AttendancePage() {
 
     addRecord('attendance', newRecord);
     addRecord('notifications', {
-      message: `${effectiveEmployeeName} (${effectiveEmployeeId}) marked IN at ${time} (${type})`,
-      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      message: `${effectiveEmployeeName} marked IN at ${time} (${type})`,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
       read: false
     });
     setActiveDialog("NONE");
@@ -318,18 +400,20 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckOut = () => {
-    if (!todayRecord || !currentGPS || !isAccessAllowed) return;
-    const time = format(new Date(), "HH:mm");
+    if (!activeRecord || !currentGPS || !isAccessAllowed) return;
+    const now = getISTTime();
+    const time = format(now, "HH:mm");
     const typeOut = detectedPlant ? 'OFFICE' : manualType;
     
-    const inDateTime = new Date(`${todayRecord.date} ${todayRecord.inTime}`);
-    const outDateTime = new Date(`${todayRecord.date} ${time}`);
+    const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
+    const outDateTime = new Date(`${format(now, "yyyy-MM-dd")}T${time}`);
     const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
     let finalOutTime = time;
     let finalHours = parseFloat(diffHours.toFixed(2));
     let isAuto = false;
 
+    // Standard Shift Auto-Correction (Max 16 hours check)
     if (diffHours > 16) {
       const autoOutDate = new Date(inDateTime.getTime() + (8 * 60 * 60 * 1000));
       finalOutTime = format(autoOutDate, "HH:mm");
@@ -337,7 +421,7 @@ export default function AttendancePage() {
       isAuto = true;
     }
 
-    updateRecord('attendance', todayRecord.id, { 
+    updateRecord('attendance', activeRecord.id, { 
       outTime: finalOutTime, 
       hours: finalHours,
       attendanceTypeOut: typeOut,
@@ -349,12 +433,12 @@ export default function AttendancePage() {
     });
 
     addRecord('notifications', {
-      message: `${todayRecord.employeeName} (${todayRecord.employeeId}) marked OUT at ${finalOutTime} (Worked: ${finalHours}h)`,
-      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      message: `${activeRecord.employeeName} marked OUT at ${finalOutTime} (Worked: ${finalHours}h)`,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
       read: false
     });
     setActiveDialog("NONE");
-    toast({ title: "Check-Out Success", description: isAuto ? "Auto-checkout applied (8h rule)." : `Shift ended at ${finalOutTime}.` });
+    toast({ title: "Check-Out Success", description: `Shift ended at ${finalOutTime}.` });
   };
 
   const handleAdminEditClick = (rec: any) => {
@@ -412,7 +496,7 @@ export default function AttendancePage() {
 
     addRecord('notifications', {
       message: `ADMIN: ${currentUser.fullName} manually adjusted logs for ${selectedRecordToEdit.date}`,
-      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
       read: false
     });
     setIsEditDialogOpen(false);
@@ -434,7 +518,7 @@ export default function AttendancePage() {
 
     addRecord('notifications', {
       message: `${selectedRecordForRejection.employeeName} resubmitted logs for ${selectedRecordForRejection.date}`,
-      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
       read: false
     });
 
@@ -453,6 +537,16 @@ export default function AttendancePage() {
             <AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle>
             <AlertDescription className="text-rose-700">
               Your login identity (Aadhaar/Mobile) is not found in the official Employee Directory. Only registered staff can access the Gateway Portal. Please contact HR for profile registration.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {lockState.isLocked && isAccessAllowed && (
+          <Alert className="bg-amber-50 border-amber-200 animate-in fade-in slide-in-from-top-2">
+            <Lock className="h-5 w-5 text-amber-600" />
+            <AlertTitle className="font-bold text-amber-800">Check-In Restricted</AlertTitle>
+            <AlertDescription className="text-amber-700 font-medium">
+              Organization policy requires a mandatory 8-hour cooling period between shifts. You can mark attendance after <span className="font-black underline">{lockState.unlockTime}</span>.
             </AlertDescription>
           </Alert>
         )}
@@ -495,15 +589,15 @@ export default function AttendancePage() {
                   <Button 
                     className={cn(
                       "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
-                      isAccessAllowed ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                      isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90 shadow-primary/20" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
                     )} 
-                    disabled={!isAccessAllowed || isLoadingLocation || (!!todayRecord && !!todayRecord.inTime)} 
+                    disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} 
                     onClick={() => requestLocation("IN")}
                   >
-                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? "Mark Check-In" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>)}
+                    {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? (lockState.isLocked ? <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Locked</span> : "Mark Check-In") : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>)}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Log Arrival Time</TooltipContent>
+                <TooltipContent>{lockState.isLocked ? `Wait until ${lockState.unlockTime}` : "Log Arrival Time"}</TooltipContent>
               </Tooltip>
               
               <Tooltip>
@@ -511,9 +605,9 @@ export default function AttendancePage() {
                   <Button 
                     className={cn(
                       "flex-1 h-14 text-sm font-black rounded-2xl transition-all active:scale-95 shadow-lg",
-                      isAccessAllowed ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+                      isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600 shadow-rose-100" : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
                     )} 
-                    disabled={!isAccessAllowed || isLoadingLocation || !todayRecord || (!!todayRecord && !!todayRecord.outTime)} 
+                    disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} 
                     onClick={() => requestLocation("OUT")}
                   >
                     {isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : (isAccessAllowed ? "Mark Check-Out" : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> Locked</span>)}
@@ -557,7 +651,10 @@ export default function AttendancePage() {
                         <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.inTime || "--:--"}</TableCell>
                         <TableCell className="text-sm font-bold text-slate-700">{h.outPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{h.date} {h.outTime || "--:--"}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {h.date} {h.outTime || "--:--"}
+                          {h.autoOut && <span className="block text-[8px] font-black text-rose-500 uppercase">Auto OUT by system</span>}
+                        </TableCell>
                         <TableCell className={cn("font-black text-center", (h.status === 'ABSENT' || h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "text-rose-500" : "text-emerald-600")}>
                           {h.status === 'ABSENT' ? "0.00h" : (h.status === 'WEEKLY_OFF' || h.status === 'HOLIDAY') ? "0h" : `${h.hours || 0}h`}
                         </TableCell>

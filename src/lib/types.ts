@@ -141,7 +141,8 @@ export interface AttendanceRecord {
   approved: boolean;
   remark?: string;
   rejectionCount?: number;
-  autoCheckout?: boolean;
+  autoOut?: boolean;
+  autoCheckout?: boolean; // Maintain compatibility
 }
 
 export interface AppNotification {
