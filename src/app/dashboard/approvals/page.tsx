@@ -532,13 +532,14 @@ export default function ApprovalsPage() {
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Working Hour</TableHead>
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Type</TableHead>
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved by</TableHead>
                             <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {historyAttendance.length === 0 ? (
-                            <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No approved records found.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground">No approved records found.</TableCell></TableRow>
                           ) : (
                             historyAttendance.map((rec: any) => (
                               <TableRow key={rec.id} className="hover:bg-slate-50/30">
@@ -574,6 +575,22 @@ export default function ApprovalsPage() {
                                 </TableCell>
                                 <TableCell className="text-center">
                                   <Badge className="bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-widest border-none px-3">Approved</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                                      <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.address || "N/A"}>
+                                        {rec.address || "No IN Location"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                                      <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.addressOut || "N/A"}>
+                                        {rec.addressOut || "No OUT Location"}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{rec.approvedBy || "HR_ADMIN"}</span>
@@ -759,7 +776,7 @@ export default function ApprovalsPage() {
           <div className="p-0 border-b bg-slate-50 flex divide-x">
              <div className="flex-1 p-4 text-center">
                <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Dept / Desig</p>
-               <p className="text-[11px] font-bold text-slate-700">{(selectedAttendance as any)?.dept} / {(selectedAttendance as any)?.desig}</p>
+               <p className="text-11px font-bold text-slate-700">{(selectedAttendance as any)?.dept} / {(selectedAttendance as any)?.desig}</p>
              </div>
              <div className="flex-1 p-4 text-center">
                <p className="text-[9px] font-black text-slate-400 uppercase mb-1">IN Date Time</p>
