@@ -200,8 +200,12 @@ export default function ApprovalsPage() {
           <Tabs value={pendingType} onValueChange={setPendingType} className="w-full">
             <div className="flex items-center gap-4 mb-4">
               <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg">
-                <TabsTrigger value="attendance" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">Attendance</TabsTrigger>
-                <TabsTrigger value="leave" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">Leave Requests</TabsTrigger>
+                <TabsTrigger value="attendance" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">
+                  Attendance ({pendingAttendance.length})
+                </TabsTrigger>
+                <TabsTrigger value="leave" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">
+                  Leave Requests ({pendingLeaves.length})
+                </TabsTrigger>
               </TabsList>
               <div className="h-px flex-1 bg-slate-100" />
             </div>
