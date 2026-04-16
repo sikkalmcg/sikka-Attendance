@@ -54,6 +54,7 @@ export default function ApprovalsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
   const [pendingType, setPendingType] = useState("attendance");
+  const [historyType, setHistoryType] = useState("attendance");
 
   // Dialog States
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
@@ -303,124 +304,136 @@ export default function ApprovalsPage() {
           </Tabs>
         </div>
       ) : (
-        <div className="space-y-12">
-          {/* Approved Attendance Section */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 shadow-sm">
-                <UserCheck className="w-5 h-5 text-emerald-600" />
-              </div>
-              <h3 className="font-black text-sm uppercase tracking-[0.2em] text-slate-500">Approved Attendance History</h3>
+        <div className="space-y-6">
+          <Tabs value={historyType} onValueChange={setHistoryType} className="w-full">
+            <div className="flex items-center gap-4 mb-4">
+              <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg">
+                <TabsTrigger value="attendance" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">Attendance History</TabsTrigger>
+                <TabsTrigger value="leave" className="text-[10px] font-black uppercase tracking-widest px-6 h-7">Leave History</TabsTrigger>
+              </TabsList>
+              <div className="h-px flex-1 bg-slate-100" />
             </div>
-            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
-              <CardContent className="p-0">
-                <ScrollArea className="w-full">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50 border-b">
-                      <TableRow>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Date</TableHead>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">IN / OUT</TableHead>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Hours</TableHead>
-                        <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {historyAttendance.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No approved records found.</TableCell></TableRow>
-                      ) : (
-                        historyAttendance.map((rec) => (
-                          <TableRow key={rec.id} className="hover:bg-slate-50/30">
-                            <TableCell className="px-6 py-4">
-                              <div className="flex flex-col">
-                                <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
-                                <span className="text-[10px] font-mono font-black text-slate-400">{rec.employeeId}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm font-bold text-slate-600">{rec.date}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-[11px] font-bold text-slate-900">{rec.inTime || "--:--"}</span>
-                                <ChevronRight className="w-3 h-3 text-slate-200" />
-                                <span className="font-mono text-[11px] font-bold text-slate-900">{rec.outTime || "--:--"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center font-black text-sm text-slate-700">{rec.hours}h</TableCell>
-                            <TableCell className="text-right pr-6">
-                              <Badge className="bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-widest border-none px-3">Approved</Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
 
-          {/* Leave History Section */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 shadow-sm">
-                <CalendarDays className="w-5 h-5 text-blue-600" />
-              </div>
-              <h3 className="font-black text-sm uppercase tracking-[0.2em] text-slate-500">Leave Application History</h3>
-            </div>
-            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
-              <CardContent className="p-0">
-                <ScrollArea className="w-full">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50 border-b">
-                      <TableRow>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Range</TableHead>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Days</TableHead>
-                        <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Purpose</TableHead>
-                        <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {historyLeaves.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No historical applications found.</TableCell></TableRow>
-                      ) : (
-                        historyLeaves.map((l) => (
-                          <TableRow key={l.id} className="hover:bg-slate-50/30">
-                            <TableCell className="px-6 py-4">
-                              <div className="flex flex-col">
-                                <span className="font-bold uppercase text-slate-700 text-sm">{l.employeeName}</span>
-                                <span className="text-[10px] font-mono text-slate-400 font-bold">{l.employeeId}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-bold text-slate-600">{l.fromDate}</span>
-                                <span className="text-xs font-bold text-slate-400">{l.toDate}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center font-black text-slate-700">{l.days}</TableCell>
-                            <TableCell className="max-w-xs truncate text-[11px] font-medium text-slate-500 italic">
-                              "{l.purpose}"
-                            </TableCell>
-                            <TableCell className="text-right pr-6">
-                              <div className="flex flex-col items-end gap-1">
-                                <Badge className={cn("text-[9px] font-black uppercase tracking-widest px-3 py-0.5 border-none", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
-                                  {l.status}
-                                </Badge>
-                                {l.status === 'REJECTED' && l.rejectReason && (
-                                  <span className="text-[8px] font-bold text-rose-400 max-w-[120px] truncate">R: {l.rejectReason}</span>
-                                )}
-                              </div>
-                            </TableCell>
+            <TabsContent value="attendance">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center border border-emerald-100 shadow-sm">
+                    <UserCheck className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <h3 className="font-black text-sm uppercase tracking-[0.2em] text-slate-500">Approved Attendance Records</h3>
+                </div>
+                <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+                  <CardContent className="p-0">
+                    <ScrollArea className="w-full">
+                      <Table>
+                        <TableHeader className="bg-slate-50/50 border-b">
+                          <TableRow>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Date</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">IN / OUT</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Hours</TableHead>
+                            <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
+                        </TableHeader>
+                        <TableBody>
+                          {historyAttendance.length === 0 ? (
+                            <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No approved records found.</TableCell></TableRow>
+                          ) : (
+                            historyAttendance.map((rec) => (
+                              <TableRow key={rec.id} className="hover:bg-slate-50/30">
+                                <TableCell className="px-6 py-4">
+                                  <div className="flex flex-col">
+                                    <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
+                                    <span className="text-[10px] font-mono font-black text-slate-400">{rec.employeeId}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-sm font-bold text-slate-600">{rec.date}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-[11px] font-bold text-slate-900">{rec.inTime || "--:--"}</span>
+                                    <ChevronRight className="w-3 h-3 text-slate-200" />
+                                    <span className="font-mono text-[11px] font-bold text-slate-900">{rec.outTime || "--:--"}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center font-black text-sm text-slate-700">{rec.hours}h</TableCell>
+                                <TableCell className="text-right pr-6">
+                                  <Badge className="bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-widest border-none px-3">Approved</Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="leave">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 shadow-sm">
+                    <CalendarDays className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h3 className="font-black text-sm uppercase tracking-[0.2em] text-slate-500">Processed Leave Applications</h3>
+                </div>
+                <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
+                  <CardContent className="p-0">
+                    <ScrollArea className="w-full">
+                      <Table>
+                        <TableHeader className="bg-slate-50/50 border-b">
+                          <TableRow>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Range</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 text-center">Days</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Purpose</TableHead>
+                            <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {historyLeaves.length === 0 ? (
+                            <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No historical applications found.</TableCell></TableRow>
+                          ) : (
+                            historyLeaves.map((l) => (
+                              <TableRow key={l.id} className="hover:bg-slate-50/30">
+                                <TableCell className="px-6 py-4">
+                                  <div className="flex flex-col">
+                                    <span className="font-bold uppercase text-slate-700 text-sm">{l.employeeName}</span>
+                                    <span className="text-[10px] font-mono text-slate-400 font-bold">{l.employeeId}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-slate-600">{l.fromDate}</span>
+                                    <span className="text-xs font-bold text-slate-400">{l.toDate}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center font-black text-slate-700">{l.days}</TableCell>
+                                <TableCell className="max-w-xs truncate text-[11px] font-medium text-slate-500 italic">
+                                  "{l.purpose}"
+                                </TableCell>
+                                <TableCell className="text-right pr-6">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <Badge className={cn("text-[9px] font-black uppercase tracking-widest px-3 py-0.5 border-none", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
+                                      {l.status}
+                                    </Badge>
+                                    {l.status === 'REJECTED' && l.rejectReason && (
+                                      <span className="text-[8px] font-bold text-rose-400 max-w-[120px] truncate">R: {l.rejectReason}</span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
       )}
 
