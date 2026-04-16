@@ -25,7 +25,8 @@ import {
   SendHorizontal,
   FileText,
   Plus,
-  Info
+  Info,
+  X
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -38,7 +39,7 @@ import {
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant, LeaveRequest } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays, addDays, isWithinInterval } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -156,11 +157,21 @@ export default function AttendancePage() {
   }, [attendanceRecords, effectiveEmployeeId]);
 
   const myLeaveRequests = useMemo(() => {
-    if (!effectiveEmployeeId) return [];
+    if (!effectiveEmployeeId || !isMounted) return [];
+    const now = getISTTime();
+    
     return (leaveRequests || [])
-      .filter(l => l.employeeId === effectiveEmployeeId)
+      .filter(l => {
+        if (l.employeeId !== effectiveEmployeeId) return false;
+        
+        // Auto cleanup logic: After To Date + 7 days
+        const cleanupDate = addDays(parseISO(l.toDate), 7);
+        if (isAfter(now, cleanupDate)) return false;
+        
+        return true;
+      })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [leaveRequests, effectiveEmployeeId]);
+  }, [leaveRequests, effectiveEmployeeId, isMounted]);
 
   const activeRecord = useMemo(() => {
     return employeeRecords.find(r => !r.outTime);
@@ -208,13 +219,40 @@ export default function AttendancePage() {
       return;
     }
 
-    const today = format(getISTTime(), "yyyy-MM-dd");
+    const istNow = getISTTime();
+    const today = format(istNow, "yyyy-MM-dd");
+    
     if (leaveFrom < today) {
       toast({ variant: "destructive", title: "Invalid Date", description: "Leave from date cannot be in the past." });
       return;
     }
     if (leaveTo < leaveFrom) {
       toast({ variant: "destructive", title: "Invalid Date", description: "To date must be after From date." });
+      return;
+    }
+
+    // Overlapping Request Validation Logic
+    const newFrom = parseISO(leaveFrom);
+    const newTo = parseISO(leaveTo);
+
+    const hasOverlap = (leaveRequests || []).some(l => {
+      if (l.employeeId !== effectiveEmployeeId) return false;
+      if (l.status === 'REJECTED') return false;
+
+      const existingFrom = parseISO(l.fromDate);
+      const existingTo = parseISO(l.toDate);
+      const interval = { start: existingFrom, end: existingTo };
+
+      // Validation logic: (newFromDate BETWEEN existingRange) OR (newToDate BETWEEN existingRange)
+      return isWithinInterval(newFrom, interval) || isWithinInterval(newTo, interval);
+    });
+
+    if (hasOverlap) {
+      toast({ 
+        variant: "destructive", 
+        title: "Request Blocked", 
+        description: "Leave request already exists for selected date. Please wait for approval or rejection." 
+      });
       return;
     }
 
@@ -236,7 +274,7 @@ export default function AttendancePage() {
       addRecord('leaveRequests', newLeave);
       addRecord('notifications', {
         message: `New Leave Request: ${effectiveEmployeeName} (${days} days)`,
-        timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
+        timestamp: format(istNow, "yyyy-MM-dd HH:mm:ss"),
         read: false
       });
 
@@ -488,7 +526,8 @@ export default function AttendancePage() {
       lngOut: currentGPS.lng,
       addressOut: detectedAddress,
       outPlant: detectedPlant?.name || typeOut,
-      autoCheckout: isAuto
+      autoCheckout: isAuto,
+      autoOut: isAuto
     });
 
     addRecord('notifications', {
@@ -591,7 +630,7 @@ export default function AttendancePage() {
               <ScrollArea className="h-[240px]">
                 {myLeaveRequests.length === 0 ? (
                   <div className="p-10 text-center space-y-2">
-                    <p className="text-xs text-muted-foreground font-medium">No leave records found.</p>
+                    <p className="text-xs text-muted-foreground font-medium">No active leave records found.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100">
