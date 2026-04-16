@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -331,7 +332,7 @@ export default function ApprovalsPage() {
               <Card className="border-slate-200 shadow-sm overflow-hidden">
                 <CardContent className="p-0">
                   <ScrollArea className="w-full">
-                    <Table className="min-w-[1200px]">
+                    <Table className="min-w-[1400px]">
                       <TableHeader className="bg-slate-50/50">
                         <TableRow>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
@@ -340,12 +341,13 @@ export default function ApprovalsPage() {
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Date Time</TableHead>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Working Hour</TableHead>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Type</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>
                           <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {pendingAttendance.length === 0 ? (
-                          <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground font-medium">No pending attendance logs found.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground font-medium">No pending attendance logs found.</TableCell></TableRow>
                         ) : (
                           pendingAttendance.map((rec: any) => (
                             <TableRow key={rec.id} className="hover:bg-slate-50/50 transition-colors">
@@ -370,7 +372,7 @@ export default function ApprovalsPage() {
                               <TableCell>
                                 <div className="flex flex-col">
                                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date}</span>
-                                  <span className="text-xs font-mono font-bold text-rose-500">{rec.outTime || "--:--"}</span>
+                                  <span className={cn("text-xs font-mono font-bold", rec.outTime ? "text-rose-500" : "text-slate-300 italic")}>{rec.outTime || "--:--"}</span>
                                 </div>
                               </TableCell>
                               <TableCell className="text-center">
@@ -378,6 +380,22 @@ export default function ApprovalsPage() {
                               </TableCell>
                               <TableCell className="text-center">
                                 <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-slate-200">{rec.attendanceType}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                                    <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.address || "N/A"}>
+                                      {rec.address || "No IN Location"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                                    <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.addressOut || "N/A"}>
+                                      {rec.addressOut || (rec.outTime ? "Location pending" : "Shift In-Progress")}
+                                    </span>
+                                  </div>
+                                </div>
                               </TableCell>
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end items-center gap-1">
@@ -392,11 +410,16 @@ export default function ApprovalsPage() {
                                   </Button>
                                   <Button 
                                     size="sm" 
-                                    className="bg-emerald-600 hover:bg-emerald-700 h-8 font-black text-[10px] uppercase px-4 shadow-sm" 
-                                    onClick={() => handleApproveAttendance(rec.id)} 
-                                    disabled={isProcessing}
+                                    className={cn(
+                                      "h-8 font-black text-[10px] uppercase px-4 shadow-sm",
+                                      rec.outTime 
+                                        ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                                        : "bg-slate-200 text-slate-400 cursor-not-allowed hover:bg-slate-200"
+                                    )}
+                                    onClick={() => rec.outTime && handleApproveAttendance(rec.id)} 
+                                    disabled={isProcessing || !rec.outTime}
                                   >
-                                    Approve
+                                    {rec.outTime ? "Approve" : "Locked"}
                                   </Button>
                                   <Button 
                                     size="sm" 
@@ -502,7 +525,7 @@ export default function ApprovalsPage() {
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Date Time</TableHead>
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Working Hour</TableHead>
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Type</TableHead>
-                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Status</TableHead>
+                            <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
                             <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved by</TableHead>
                             <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                           </TableRow>
