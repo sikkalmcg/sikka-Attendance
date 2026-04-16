@@ -253,7 +253,8 @@ export default function ApprovalsPage() {
         status: 'APPROVED',
         fromDate: leaveEditDates.from,
         toDate: leaveEditDates.to,
-        days: days
+        days: days,
+        approvedBy: currentUser?.fullName || "HR_ADMIN"
       });
       addRecord('notifications', {
         message: `Leave Approved: ${selectedLeave.employeeName} (${days} days)`,
@@ -280,7 +281,8 @@ export default function ApprovalsPage() {
     try {
       updateRecord('leaveRequests', selectedLeave.id, {
         status: 'REJECTED',
-        rejectReason: leaveRejectReason
+        rejectReason: leaveRejectReason,
+        approvedBy: currentUser?.fullName || "HR_ADMIN"
       });
       addRecord('notifications', {
         message: `Leave Rejected: ${selectedLeave.employeeName}`,
@@ -343,7 +345,7 @@ export default function ApprovalsPage() {
 
     const headers = [
       "Employee Name", "Employee ID", "Department", "Designation", 
-      "From Date", "To Date", "Days", "Purpose", "Status", "Reject Reason"
+      "From Date", "To Date", "Days", "Purpose", "Status", "Reject Reason", "Approved By"
     ];
 
     const csvContent = [
@@ -358,7 +360,8 @@ export default function ApprovalsPage() {
         `"${l.days}"`,
         `"${l.purpose}"`,
         `"${l.status}"`,
-        `"${l.rejectReason || 'N/A'}"`
+        `"${l.rejectReason || 'N/A'}"`,
+        `"${l.approvedBy || 'HR_ADMIN'}"`
       ].join(","))
     ].join("\n");
 
@@ -720,19 +723,21 @@ export default function ApprovalsPage() {
                 <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
                   <CardContent className="p-0">
                     <ScrollArea className="w-full">
-                      <Table>
+                      <Table className="min-w-[1200px]">
                         <TableHeader className="bg-slate-50/50 border-b">
                           <TableRow>
                             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400 py-4 px-6">Employee</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Dept / Designation</TableHead>
                             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Range</TableHead>
                             <TableHead className="font-bold text-[10px] uppercase tracking-widest text-center">Days</TableHead>
                             <TableHead className="font-bold text-[10px] uppercase tracking-widest">Purpose</TableHead>
+                            <TableHead className="font-bold text-[10px] uppercase tracking-widest text-slate-400">Approved By</TableHead>
                             <TableHead className="text-right font-bold text-[10px] uppercase tracking-widest text-slate-400 pr-6">Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {historyLeaves.length === 0 ? (
-                            <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No historical applications found.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No historical applications found.</TableCell></TableRow>
                           ) : (
                             historyLeaves.map((l) => (
                               <TableRow key={l.id} className="hover:bg-slate-50/30">
@@ -744,6 +749,12 @@ export default function ApprovalsPage() {
                                 </TableCell>
                                 <TableCell>
                                   <div className="flex flex-col">
+                                    <span className="text-xs font-bold text-slate-600 leading-tight">{l.department}</span>
+                                    <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter">{l.designation}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col">
                                     <span className="text-xs font-bold text-slate-600">{l.fromDate}</span>
                                     <span className="text-xs font-bold text-slate-400">{l.toDate}</span>
                                   </div>
@@ -751,6 +762,9 @@ export default function ApprovalsPage() {
                                 <TableCell className="text-center font-black text-slate-700">{l.days}</TableCell>
                                 <TableCell className="max-w-xs truncate text-[11px] font-medium text-slate-500 italic">
                                   "{l.purpose}"
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{l.approvedBy || "HR_ADMIN"}</span>
                                 </TableCell>
                                 <TableCell className="text-right pr-6">
                                   <div className="flex flex-col items-end gap-1">
@@ -767,6 +781,7 @@ export default function ApprovalsPage() {
                           )}
                         </TableBody>
                       </Table>
+                      <ScrollBar orientation="horizontal" />
                     </ScrollArea>
                   </CardContent>
                 </Card>

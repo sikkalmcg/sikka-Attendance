@@ -160,6 +160,7 @@ export interface LeaveRequest {
   purpose: string;
   status: 'UNDER_PROCESS' | 'APPROVED' | 'REJECTED';
   rejectReason?: string;
+  approvedBy?: string; // Added field for approver/rejecter tracking
   createdAt: string;
 }
 
