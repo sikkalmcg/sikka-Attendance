@@ -135,7 +135,7 @@ function HeaderActions() {
   };
 
   const handleLogout = () => {
-    Cookies.remove('sikka_session');
+    Cookies.remove('sikka_session', { path: '/' });
     localStorage.removeItem("user");
     router.push("/login");
   };
@@ -143,7 +143,7 @@ function HeaderActions() {
   const handleSaveProfile = (updatedUser: any) => {
     setLocalUser(updatedUser);
     const sessionData = JSON.stringify(updatedUser);
-    Cookies.set('sikka_session', sessionData, { expires: 365 });
+    Cookies.set('sikka_session', sessionData, { expires: 365, path: '/' });
     localStorage.setItem("user", sessionData);
   };
 
@@ -467,7 +467,7 @@ function SidebarNav() {
       </SidebarContent>
       <SidebarFooter className="p-4">
         <Button variant="ghost" className="w-full justify-start text-rose-600 font-bold hover:bg-rose-50 hover:text-rose-700 group-data-[collapsible=icon]:p-2" onClick={() => {
-          Cookies.remove('sikka_session');
+          Cookies.remove('sikka_session', { path: '/' });
           localStorage.removeItem("user");
           router.push("/login");
         }}>
@@ -505,7 +505,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         
         // If user is deactivated or deleted, force logout
         if (!docSnap.exists() || (userData.role === 'EMPLOYEE' && !docSnap.data().active)) {
-          Cookies.remove('sikka_session');
+          Cookies.remove('sikka_session', { path: '/' });
           localStorage.removeItem("user");
           router.push("/login");
         }

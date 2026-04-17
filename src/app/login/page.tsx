@@ -31,7 +31,8 @@ export default function LoginPage() {
   const persistSession = (userData: any) => {
     const sessionData = JSON.stringify(userData);
     // Persistent for 365 days as per requirement
-    Cookies.set('sikka_session', sessionData, { expires: 365, secure: true, sameSite: 'strict' });
+    // Added path: '/' to ensure cookie is available on all routes
+    Cookies.set('sikka_session', sessionData, { expires: 365, path: '/' });
     localStorage.setItem("user", sessionData);
   };
 
