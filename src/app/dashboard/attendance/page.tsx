@@ -87,7 +87,6 @@ export default function AttendancePage() {
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
-  const [manualType, setManualType] = useState<'FIELD' | 'WFH'>('FIELD');
 
   // Leave Form State
   const [leaveFrom, setLeaveFrom] = useState("");
@@ -412,14 +411,16 @@ export default function AttendancePage() {
       return;
     }
 
-    if (type === "IN") {
-      const istNow = getISTTime();
-      const todayStr = format(istNow, "yyyy-MM-dd");
-      if (registeredEmployee?.joinDate && todayStr < registeredEmployee.joinDate) {
-        toast({ variant: "destructive", title: "Action Blocked", description: "Attendance cannot be marked before employee joining date." });
-        return;
-      }
+    const istNow = getISTTime();
+    const todayStr = format(istNow, "yyyy-MM-dd");
+    
+    // Fetch and validate Active From Date (joinDate)
+    if (registeredEmployee?.joinDate && todayStr < registeredEmployee.joinDate) {
+      toast({ variant: "destructive", title: "Action Blocked", description: `You can start marking attendance only from ${format(parseISO(registeredEmployee.joinDate), 'dd MMM yyyy')} onwards.` });
+      return;
+    }
 
+    if (type === "IN") {
       if (lockState.isLocked) {
         toast({ variant: "destructive", title: "Wait Period", description: `You can mark attendance after ${lockState.unlockTime}.` });
         return;
@@ -438,7 +439,7 @@ export default function AttendancePage() {
         const { latitude: lat, longitude: lng } = pos.coords;
         setCurrentGPS({ lat, lng });
         
-        // Multi-Plant Authorized Detection Logic
+        // Multi-Plant Authorized Detection Logic (Radius validation)
         const authorizedUnitIds = registeredEmployee?.unitIds || [];
         const authorizedPlants = (plants || []).filter(p => authorizedUnitIds.includes(p.id));
         
@@ -462,17 +463,10 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckIn = () => {
-    if (!currentUser || !currentGPS || !isAccessAllowed || lockState.isLocked) return;
+    if (!currentUser || !currentGPS || !isAccessAllowed || lockState.isLocked || !detectedPlant) return;
     const now = getISTTime();
     const time = format(now, "HH:mm");
     const today = format(now, "yyyy-MM-dd");
-
-    if (registeredEmployee?.joinDate && today < registeredEmployee.joinDate) {
-      toast({ variant: "destructive", title: "Action Blocked", description: "Attendance cannot be marked before employee joining date." });
-      return;
-    }
-
-    const type = detectedPlant ? 'OFFICE' : manualType;
 
     const newRecord: Partial<AttendanceRecord> = {
       employeeId: effectiveEmployeeId,
@@ -482,18 +476,18 @@ export default function AttendancePage() {
       outTime: null,
       hours: 0,
       status: 'PRESENT',
-      attendanceType: type,
+      attendanceType: 'OFFICE',
       lat: currentGPS.lat,
       lng: currentGPS.lng,
       address: detectedAddress,
-      inPlant: detectedPlant?.name || type,
+      inPlant: detectedPlant.name,
       approved: false,
       rejectionCount: 0
     };
 
     addRecord('attendance', newRecord);
     addRecord('notifications', {
-      message: `${effectiveEmployeeName} marked IN at ${time} (${type}${detectedPlant ? ' - ' + detectedPlant.name : ''})`,
+      message: `${effectiveEmployeeName} marked IN at ${time} (OFFICE - ${detectedPlant.name})`,
       timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
       read: false
     });
@@ -502,10 +496,9 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckOut = () => {
-    if (!activeRecord || !currentGPS || !isAccessAllowed) return;
+    if (!activeRecord || !currentGPS || !isAccessAllowed || !detectedPlant) return;
     const now = getISTTime();
     const time = format(now, "HH:mm");
-    const typeOut = detectedPlant ? 'OFFICE' : manualType;
     
     const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
     const outDateTime = new Date(`${format(now, "yyyy-MM-dd")}T${time}`);
@@ -525,11 +518,11 @@ export default function AttendancePage() {
     updateRecord('attendance', activeRecord.id, { 
       outTime: finalOutTime, 
       hours: finalHours,
-      attendanceTypeOut: typeOut,
+      attendanceTypeOut: 'OFFICE',
       latOut: currentGPS.lat,
       lngOut: currentGPS.lng,
       addressOut: detectedAddress,
-      outPlant: detectedPlant?.name || typeOut,
+      outPlant: detectedPlant.name,
       autoCheckout: isAuto,
       autoOut: isAuto
     });
@@ -890,23 +883,28 @@ export default function AttendancePage() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3 px-1">
-                  <Label className="font-black text-[10px] uppercase text-slate-500 tracking-widest">Work Mode Selection</Label>
-                  <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
-                    <SelectTrigger className="h-14 rounded-2xl font-bold"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FIELD">Field Work</SelectItem>
-                      <SelectItem value="WFH">Work From Home</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[9px] font-bold text-rose-500 uppercase flex items-center gap-1.5 px-1">
-                    <Info className="w-3 h-3" /> No authorized geofence detected at this location.
-                  </p>
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3">
+                  <div className="w-10 h-10 bg-rose-500 rounded-xl flex items-center justify-center shrink-0">
+                    <ShieldAlert className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-rose-600 tracking-widest">Restricted Location</p>
+                    <p className="text-xs font-bold text-rose-900 leading-snug">You are outside the authorized 0.7 KM radius of assigned plants. Marking attendance is prohibited.</p>
+                  </div>
                 </div>
               )}
             </div>
             <DialogFooter>
-              <Button className="w-full h-14 rounded-2xl font-black bg-primary text-lg" onClick={handleConfirmCheckIn}>Confirm Check-In</Button>
+              <Button 
+                className={cn(
+                  "w-full h-14 rounded-2xl font-black text-lg",
+                  detectedPlant ? "bg-primary" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                )} 
+                onClick={handleConfirmCheckIn}
+                disabled={!detectedPlant}
+              >
+                {detectedPlant ? "Confirm Check-In" : "Check-In Blocked"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -914,11 +912,34 @@ export default function AttendancePage() {
         <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
           <DialogContent className="sm:max-w-md rounded-2xl">
             <DialogHeader><DialogTitle className="flex items-center gap-2 font-black">Confirm Check-Out</DialogTitle></DialogHeader>
-            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-               <p className="text-sm font-bold text-slate-700">{detectedAddress || "Locating..."}</p>
+            <div className="space-y-6 py-4">
+              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                 <p className="text-sm font-bold text-slate-700">{detectedAddress || "Locating..."}</p>
+              </div>
+
+              {!detectedPlant && (
+                <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3">
+                  <div className="w-10 h-10 bg-rose-500 rounded-xl flex items-center justify-center shrink-0">
+                    <ShieldAlert className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-rose-600 tracking-widest">Restricted Location</p>
+                    <p className="text-xs font-bold text-rose-900 leading-snug">You must be within 0.7 KM of an authorized plant to mark check-out.</p>
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
-              <Button className="w-full h-14 rounded-2xl font-black bg-rose-500 hover:bg-rose-600 text-lg" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button>
+              <Button 
+                className={cn(
+                  "w-full h-14 rounded-2xl font-black text-lg",
+                  detectedPlant ? "bg-rose-500 hover:bg-rose-600" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                )} 
+                onClick={handleConfirmCheckOut}
+                disabled={!detectedPlant}
+              >
+                {detectedPlant ? "Confirm Check-Out" : "Check-Out Blocked"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
