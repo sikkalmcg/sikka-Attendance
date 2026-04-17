@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -67,6 +66,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import Cookies from 'js-cookie';
+import { getFirestore, doc, getDoc } from "firebase/firestore";
 
 function HeaderActions() {
   const { notifications, employees, users, updateRecord, deleteRecord, currentUser: contextUser } = useData();
@@ -76,11 +77,12 @@ function HeaderActions() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) setLocalUser(JSON.parse(savedUser));
+    const session = Cookies.get('sikka_session');
+    if (session) {
+      setLocalUser(JSON.parse(session));
+    }
   }, []);
 
-  // Verified User logic: Sync name and avatar from database in real-time
   const verifiedUser = useMemo(() => {
     const userToVerify = contextUser || localUser;
     if (!userToVerify) return null;
@@ -133,13 +135,16 @@ function HeaderActions() {
   };
 
   const handleLogout = () => {
+    Cookies.remove('sikka_session');
     localStorage.removeItem("user");
     router.push("/login");
   };
 
   const handleSaveProfile = (updatedUser: any) => {
     setLocalUser(updatedUser);
-    localStorage.setItem("user", JSON.stringify(updatedUser));
+    const sessionData = JSON.stringify(updatedUser);
+    Cookies.set('sikka_session', sessionData, { expires: 365 });
+    localStorage.setItem("user", sessionData);
   };
 
   if (!verifiedUser) return null;
@@ -293,12 +298,10 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
 
     setIsProcessing(true);
     try {
-      // 1. If it's a managed user (Admin/HR), update Firestore 'users' collection
       if (user.role !== 'SUPER_ADMIN' && user.role !== 'EMPLOYEE' && user.id) {
         updateRecord('users', user.id, { fullName: name, avatar: avatar });
       }
 
-      // 2. If it's an employee, find and update 'employees' collection
       if (user.role === 'EMPLOYEE') {
         const loginIdent = user.username?.replace(/\s/g, '');
         const dbEmp = employees.find(e => {
@@ -307,7 +310,7 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
           return empAadhaar === loginIdent || empMobile === loginIdent;
         });
         if (dbEmp) {
-          updateRecord('employees', dbEmp.id, { avatar: avatar }); // Name is read-only for employees in this dialog
+          updateRecord('employees', dbEmp.id, { avatar: avatar });
         }
       }
 
@@ -388,8 +391,10 @@ function SidebarNav() {
   const [localUser, setLocalUser] = useState<any>(null);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) setLocalUser(JSON.parse(savedUser));
+    const session = Cookies.get('sikka_session');
+    if (session) {
+      setLocalUser(JSON.parse(session));
+    }
   }, []);
 
   const verifiedUser = useMemo(() => {
@@ -462,6 +467,7 @@ function SidebarNav() {
       </SidebarContent>
       <SidebarFooter className="p-4">
         <Button variant="ghost" className="w-full justify-start text-rose-600 font-bold hover:bg-rose-50 hover:text-rose-700 group-data-[collapsible=icon]:p-2" onClick={() => {
+          Cookies.remove('sikka_session');
           localStorage.removeItem("user");
           router.push("/login");
         }}>
@@ -478,18 +484,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [user, setUser] = useState<any>(null);
+  const db = getFirestore();
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (!savedUser) {
+    const session = Cookies.get('sikka_session');
+    if (!session) {
       router.push("/login");
       return;
     }
 
-    const userData = JSON.parse(savedUser);
+    const userData = JSON.parse(session);
     setUser(userData);
     
-    // Authorization Check Logic
+    // Validate session with backend on start
+    const validateSession = async () => {
+      if (userData.id && userData.role !== 'SUPER_ADMIN') {
+        const col = userData.role === 'EMPLOYEE' ? 'employees' : 'users';
+        const docRef = doc(db, col, userData.id);
+        const docSnap = await getDoc(docRef);
+        
+        // If user is deactivated or deleted, force logout
+        if (!docSnap.exists() || (userData.role === 'EMPLOYEE' && !docSnap.data().active)) {
+          Cookies.remove('sikka_session');
+          localStorage.removeItem("user");
+          router.push("/login");
+        }
+      }
+    };
+
+    validateSession();
+    
     const menuPermissions: Record<string, string> = {
       "/dashboard": "Dashboard",
       "/dashboard/attendance": "Attendance",
@@ -513,13 +537,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setIsAuthorized(canAccessAttendance);
       if (!canAccessAttendance) router.push("/dashboard/attendance");
     } else if (requiredPermission) {
-      // Check for strict permission match
       const hasPerm = userData.permissions?.includes(requiredPermission) || requiredPermission === "Dashboard";
       setIsAuthorized(hasPerm);
     } else {
       setIsAuthorized(true); 
     }
-  }, [router, pathname]);
+  }, [router, pathname, db]);
 
   if (isAuthorized === false) {
     return (

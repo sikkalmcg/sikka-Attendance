@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { SUPER_ADMIN_USER } from "@/lib/constants";
@@ -9,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
+import Cookies from 'js-cookie';
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -20,6 +20,21 @@ export default function LoginPage() {
   const router = useRouter();
   const db = getFirestore();
 
+  useEffect(() => {
+    // Check if user is already logged in via cookies on mount
+    const session = Cookies.get('sikka_session');
+    if (session) {
+      router.push('/dashboard');
+    }
+  }, [router]);
+
+  const persistSession = (userData: any) => {
+    const sessionData = JSON.stringify(userData);
+    // Persistent for 365 days as per requirement
+    Cookies.set('sikka_session', sessionData, { expires: 365, secure: true, sameSite: 'strict' });
+    localStorage.setItem("user", sessionData);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -28,7 +43,8 @@ export default function LoginPage() {
     try {
       // 1. Check Super Admin Hardcoded Fallback
       if (username === SUPER_ADMIN_USER.username && password === SUPER_ADMIN_USER.password) {
-        localStorage.setItem("user", JSON.stringify({ ...SUPER_ADMIN_USER, id: "super-1" }));
+        const userData = { ...SUPER_ADMIN_USER, id: "super-1" };
+        persistSession(userData);
         router.push("/dashboard");
         toast({ title: "Welcome back, Admin", description: "Login successful." });
         setLoading(false);
@@ -44,7 +60,7 @@ export default function LoginPage() {
         const userDoc = querySnapshot.docs[0];
         const userData = { id: userDoc.id, ...userDoc.data() };
         
-        localStorage.setItem("user", JSON.stringify(userData));
+        persistSession(userData);
         
         // Redirect based on permissions/role
         if (userData.role === 'EMPLOYEE') {
@@ -59,12 +75,10 @@ export default function LoginPage() {
       }
 
       // 3. Employee Directory Lookup (Aadhaar/Mobile)
-      // For employees logging in with just Aadhaar/Mobile, we fetch their official name from DB
       if ((username.length === 12 || username.length === 10) && password.length >= 8) {
         const employeesRef = collection(db, 'employees');
         const cleanUsername = username.replace(/\s/g, '');
         
-        // Check if employee exists in official registry
         const qEmp = query(employeesRef);
         const empSnapshot = await getDocs(qEmp);
         const registeredEmp = empSnapshot.docs.find(doc => {
@@ -74,13 +88,14 @@ export default function LoginPage() {
 
         if (registeredEmp) {
           const empData = registeredEmp.data();
-          localStorage.setItem("user", JSON.stringify({
+          const userData = {
             id: registeredEmp.id,
             username: cleanUsername,
-            fullName: empData.name, // Use verified name from directory
+            fullName: empData.name, 
             role: "EMPLOYEE",
             permissions: ["Attendance"]
-          }));
+          };
+          persistSession(userData);
           router.push("/dashboard/attendance");
           toast({ title: "Welcome", description: `Logon successful as ${empData.name}` });
           setLoading(false);
@@ -101,10 +116,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#E9EDF0] p-4 font-sans">
-      {/* Main Container with Golden Border */}
       <div className="w-full max-w-[800px] aspect-[4/3] bg-[#E9EDF0] border-[12px] border-[#C59D2E] rounded-xl shadow-2xl relative flex flex-col p-12">
         
-        {/* Header Logo & Title */}
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
             <div className="w-24 h-24 relative rounded-xl overflow-hidden shadow-lg border-2 border-white bg-white">
@@ -125,7 +138,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Login Form */}
         <div className="flex-1 flex flex-col items-center">
           <form onSubmit={handleLogin} className="w-full max-w-sm space-y-4">
             {error && (
@@ -183,13 +195,11 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Footer */}
         <div className="mt-auto flex justify-between items-end border-t border-slate-300 pt-4">
           <p className="text-[11px] text-slate-500 font-medium lowercase">
             copyright@ Sikka Industries & Logistics All rights Reserved
           </p>
           
-          {/* Official Logo Display in Footer */}
           <div className="w-16 h-16 bg-[#1A1A3A] flex items-center justify-center rounded-sm overflow-hidden">
             <div className="w-full h-full relative">
               <Image 
@@ -202,7 +212,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Bottom Left Accent Detail */}
         <div className="absolute bottom-0 left-0 w-40 h-4 bg-[#C59D2E] rounded-tr-full opacity-80" />
       </div>
     </div>
