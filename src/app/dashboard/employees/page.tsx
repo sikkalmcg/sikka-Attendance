@@ -216,7 +216,7 @@ export default function EmployeesPage() {
 
   const updateFormSalary = (field: string, val: number) => {
     setFormData(prev => {
-      const s = prev.salary || { ...INITIAL_SALARY_STRUCTURE };
+      const s = { ...INITIAL_SALARY_STRUCTURE, ...(prev.salary || {}) };
       const newBasic = field === 'basic' ? val : s.basic;
       const newHra = field === 'hra' ? val : (field === 'basic' ? Math.round(val * 0.5) : s.hra);
       const newAllowance = field === 'allowance' ? val : s.allowance;
@@ -225,7 +225,7 @@ export default function EmployeesPage() {
         pfEmp: field === 'pfRateEmp' ? val : s.pfRateEmp,
         esicEmp: field === 'esicRateEmp' ? val : s.esicRateEmp,
         pfEx: field === 'pfRateEx' ? val : s.pfRateEx,
-        esicRateEx: field === 'esicRateEx' ? val : s.esicRateEx,
+        esicEx: field === 'esicRateEx' ? val : s.esicRateEx,
       };
       
       return {
@@ -686,12 +686,15 @@ export default function EmployeesPage() {
                           checked={formData.isGovComplianceEnabled} 
                           onCheckedChange={(c) => {
                             setFormData(prev => {
-                              const s = prev.salary || { ...INITIAL_SALARY_STRUCTURE };
+                              const s = { ...INITIAL_SALARY_STRUCTURE, ...(prev.salary || {}) };
                               return { 
                                 ...prev, 
                                 isGovComplianceEnabled: c,
                                 salary: calculateSalaryMetrics(s.basic, s.hra, s.allowance, c, { 
-                                  pfEmp: s.pfRateEmp, esicEmp: s.esicRateEmp, pfEx: s.pfRateEx, esicEx: s.esicRateEx 
+                                  pfEmp: s.pfRateEmp ?? INITIAL_SALARY_STRUCTURE.pfRateEmp, 
+                                  esicEmp: s.esicRateEmp ?? INITIAL_SALARY_STRUCTURE.esicRateEmp, 
+                                  pfEx: s.pfRateEx ?? INITIAL_SALARY_STRUCTURE.pfRateEx, 
+                                  esicEx: s.esicRateEx ?? INITIAL_SALARY_STRUCTURE.esicRateEx 
                                 })
                               };
                             });
@@ -721,7 +724,7 @@ export default function EmployeesPage() {
                                 <Input 
                                   type="number" 
                                   className="h-8 text-xs bg-white" 
-                                  value={formData.salary?.pfRateEmp || 12} 
+                                  value={formData.salary?.pfRateEmp ?? 12} 
                                   onChange={(e) => updateFormSalary('pfRateEmp', parseFloat(e.target.value) || 0)}
                                 />
                                 <p className="text-sm font-bold">{formatCurrency(formData.salary?.employeePF || 0)}</p>
@@ -731,7 +734,7 @@ export default function EmployeesPage() {
                                 <Input 
                                   type="number" 
                                   className="h-8 text-xs bg-white" 
-                                  value={formData.salary?.esicRateEmp || 0.75} 
+                                  value={formData.salary?.esicRateEmp ?? 0.75} 
                                   onChange={(e) => updateFormSalary('esicRateEmp', parseFloat(e.target.value) || 0)}
                                 />
                                 <p className="text-sm font-bold">{formatCurrency(formData.salary?.employeeESIC || 0)}</p>
@@ -747,7 +750,7 @@ export default function EmployeesPage() {
                                 <Input 
                                   type="number" 
                                   className="h-8 text-xs bg-white" 
-                                  value={formData.salary?.pfRateEx || 13} 
+                                  value={formData.salary?.pfRateEx ?? 13} 
                                   onChange={(e) => updateFormSalary('pfRateEx', parseFloat(e.target.value) || 0)}
                                 />
                                 <p className="text-sm font-bold">{formatCurrency(formData.salary?.employerPF || 0)}</p>
@@ -757,7 +760,7 @@ export default function EmployeesPage() {
                                 <Input 
                                   type="number" 
                                   className="h-8 text-xs bg-white" 
-                                  value={formData.salary?.esicRateEx || 3.25} 
+                                  value={formData.salary?.esicRateEx ?? 3.25} 
                                   onChange={(e) => updateFormSalary('esicRateEx', parseFloat(e.target.value) || 0)}
                                 />
                                 <p className="text-sm font-bold">{formatCurrency(formData.salary?.employerESIC || 0)}</p>
