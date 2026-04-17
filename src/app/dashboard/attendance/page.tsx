@@ -26,7 +26,8 @@ import {
   FileText,
   Plus,
   Info,
-  X
+  X,
+  Factory
 } from "lucide-react";
 import { calculateDistance, cn } from "@/lib/utils";
 import { 
@@ -94,12 +95,11 @@ export default function AttendancePage() {
   const [leavePurpose, setLeavePurpose] = useState("");
   const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
 
+  // Super Admin Edit State
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedRecordToEdit, setSelectedRecordToEdit] = useState<any>(null);
   const [editTimes, setEditTimes] = useState({ in: "", out: "" });
-
-  const [isRejectionDialogOpen, setIsRejectionDialogOpen] = useState(false);
-  const [selectedRecordForRejection, setSelectedRecordForRejection] = useState<AttendanceRecord | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
@@ -543,6 +543,62 @@ export default function AttendancePage() {
     toast({ title: "Check-Out Success", description: `Shift ended at ${finalOutTime}.` });
   };
 
+  // Super Admin Edit Handlers
+  const handleOpenEditDialog = (rec: any) => {
+    setSelectedRecordToEdit(rec);
+    setEditTimes({ in: rec.inTime || "", out: rec.outTime || "" });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!isSuperAdmin || !selectedRecordToEdit || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      let finalHours = 0;
+      if (editTimes.in && editTimes.out) {
+        const inDT = new Date(`${selectedRecordToEdit.date}T${editTimes.in}`);
+        const outDT = new Date(`${selectedRecordToEdit.date}T${editTimes.out}`);
+        const diff = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+        finalHours = parseFloat(diff.toFixed(2));
+      }
+
+      const isVirtual = selectedRecordToEdit.id?.toString().startsWith('virtual-');
+
+      if (isVirtual) {
+        // Convert virtual to real record
+        const newRec: Partial<AttendanceRecord> = {
+          employeeId: selectedRecordToEdit.employeeId,
+          employeeName: selectedRecordToEdit.employeeName,
+          date: selectedRecordToEdit.date,
+          inTime: editTimes.in || null,
+          outTime: editTimes.out || null,
+          hours: finalHours,
+          status: finalHours > 0 ? 'PRESENT' : 'ABSENT',
+          attendanceType: 'FIELD',
+          approved: false,
+          address: 'Super Admin Manual Entry'
+        };
+        addRecord('attendance', newRec);
+      } else {
+        // Update existing record
+        updateRecord('attendance', selectedRecordToEdit.id, {
+          inTime: editTimes.in || null,
+          outTime: editTimes.out || null,
+          hours: finalHours,
+          status: finalHours > 0 ? 'PRESENT' : 'ABSENT'
+        });
+      }
+
+      toast({ title: "Record Adjusted", description: `Attendance timings updated for ${selectedRecordToEdit.employeeName}.` });
+      setIsEditDialogOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to update attendance timings." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (!isMounted) return null;
 
   return (
@@ -677,7 +733,7 @@ export default function AttendancePage() {
           </h3>
           <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
             <ScrollArea className="w-full">
-              <Table className="min-w-[900px]">
+              <Table className="min-w-[1000px]">
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead className="font-bold">Employee Name</TableHead>
@@ -688,15 +744,16 @@ export default function AttendancePage() {
                     <TableHead className="font-bold text-center">Hours</TableHead>
                     <TableHead className="font-bold text-center">Attendance Status</TableHead>
                     <TableHead className="font-bold">Approval Status</TableHead>
+                    {isSuperAdmin && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground">No records found.</TableCell></TableRow>
                   ) : (
                     paginatedHistory.map((h: any) => (
                       <TableRow key={h.id} className="hover:bg-slate-50/50">
-                        <TableCell className="text-sm font-bold">{h.employeeName}</TableCell>
+                        <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
                         <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
                         <TableCell className="font-mono text-xs">{h.date} {h.inTime || "--:--"}</TableCell>
                         <TableCell className="font-mono text-xs">
@@ -728,6 +785,18 @@ export default function AttendancePage() {
                             <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>
                           )}
                         </TableCell>
+                        {isSuperAdmin && (
+                          <TableCell className="text-right pr-6">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-400 hover:text-primary"
+                              onClick={() => handleOpenEditDialog(h)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}
@@ -743,6 +812,57 @@ export default function AttendancePage() {
             )}
           </Card>
         </div>
+
+        {/* Edit Attendance Dialog (Super Admin) */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
+            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+              <DialogTitle className="text-xl font-black flex items-center gap-2"><Pencil className="w-5 h-5 text-primary" /> Edit Attendance Log</DialogTitle>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-primary uppercase tracking-widest">{selectedRecordToEdit?.employeeName} ({selectedRecordToEdit?.employeeId})</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Date: {selectedRecordToEdit?.date}</p>
+              </div>
+            </DialogHeader>
+            <div className="p-8 space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Time</Label>
+                  <Input 
+                    type="time" 
+                    value={editTimes.in} 
+                    onChange={(e) => setEditTimes(p => ({...p, in: e.target.value}))} 
+                    className="h-12 bg-slate-50 font-bold text-lg" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Time</Label>
+                  <Input 
+                    type="time" 
+                    value={editTimes.out} 
+                    onChange={(e) => setEditTimes(p => ({...p, out: e.target.value}))} 
+                    className="h-12 bg-slate-50 font-bold text-lg" 
+                  />
+                </div>
+              </div>
+              <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3">
+                <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-blue-700 font-bold uppercase leading-relaxed">
+                  Note: Updating timings will automatically recalculate working hours and status. Virtual records will be promoted to real entries.
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
+              <Button variant="ghost" className="flex-1 h-12 rounded-xl font-bold" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+              <Button 
+                className="flex-1 h-12 rounded-xl font-black bg-primary shadow-lg shadow-primary/20" 
+                onClick={handleSaveEdit} 
+                disabled={isProcessing}
+              >
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* IN/OUT Dialogs */}
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
