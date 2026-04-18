@@ -55,7 +55,8 @@ import {
   Clock,
   TrendingUp as GrowthIcon,
   TrendingDown as LossIcon,
-  Factory
+  Factory,
+  FileSpreadsheet
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -135,7 +136,7 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 };
 
 export default function EmployeesPage() {
-  const { employees, firms, addRecord, updateRecord, currentUser } = useData();
+  const { employees, firms, plants, addRecord, updateRecord, currentUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
@@ -177,6 +178,71 @@ export default function EmployeesPage() {
       return name.includes(search) || id.includes(search) || aadhaar.includes(search);
     });
   }, [employees, searchTerm]);
+
+  const handleExportExcel = () => {
+    if (employees.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No employee records found to export." });
+      return;
+    }
+
+    const headers = [
+      "Employee ID", "Full Name", "Father Name", "Aadhaar Number", "Mobile", "Join Date",
+      "Department", "Designation", "Firm Name", "Authorized Units", "Address",
+      "Bank Name", "Account Number", "IFSC Code", "Gov Compliance", "PF Number", "ESIC Number",
+      "Basic Salary", "HRA", "Allowances", "Gross Salary", "Employee PF", "Employee ESIC",
+      "Employer PF", "Employer ESIC", "Net Payable", "Monthly CTC", "Status"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...employees.map(emp => {
+        const firm = firms.find(f => f.id === emp.firmId);
+        const unitNames = (emp.unitIds || []).map(id => plants.find(p => p.id === id)?.name || id).join(" / ");
+        
+        return [
+          `"${emp.employeeId}"`,
+          `"${emp.name}"`,
+          `"${emp.fatherName || ""}"`,
+          `"${emp.aadhaar}"`,
+          `"${emp.mobile}"`,
+          `"${emp.joinDate}"`,
+          `"${emp.department}"`,
+          `"${emp.designation}"`,
+          `"${firm?.name || ""}"`,
+          `"${unitNames}"`,
+          `"${(emp.address || "").replace(/\n/g, " ")}"`,
+          `"${emp.bankName || ""}"`,
+          `"${emp.accountNo || ""}"`,
+          `"${emp.ifscCode || ""}"`,
+          `"${emp.isGovComplianceEnabled ? "YES" : "NO"}"`,
+          `"${emp.pfNumber || ""}"`,
+          `"${emp.esicNumber || ""}"`,
+          emp.salary?.basic || 0,
+          emp.salary?.hra || 0,
+          emp.salary?.allowance || 0,
+          emp.salary?.grossSalary || 0,
+          emp.salary?.employeePF || 0,
+          emp.salary?.employeeESIC || 0,
+          emp.salary?.employerPF || 0,
+          emp.salary?.employerESIC || 0,
+          emp.salary?.netSalary || 0,
+          emp.salary?.monthlyCTC || 0,
+          `"${emp.active ? "ACTIVE" : "INACTIVE"}"`
+        ].join(",");
+      })
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Employee_Directory_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast({ title: "Export Success", description: "The employee directory has been exported to CSV." });
+  };
 
   const calculateSalaryMetrics = (
     basic: number, 
@@ -393,16 +459,26 @@ export default function EmployeesPage() {
           <h1 className="text-2xl font-bold">Employee Directory</h1>
           <p className="text-muted-foreground">Manage workforce profiles and statutory payroll compliance.</p>
         </div>
-        <Button 
-          className="font-bold shadow-lg shadow-primary/20" 
-          onClick={() => {
-            setFormData({ ...INITIAL_FORM_DATA });
-            setIsRegistrationOpen(true);
-          }}
-          disabled={isProcessing}
-        >
-          <UserPlus className="w-4 h-4 mr-2" /> Add Employee
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline"
+            className="font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            onClick={handleExportExcel}
+            disabled={isProcessing}
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" /> Export Excel
+          </Button>
+          <Button 
+            className="font-bold shadow-lg shadow-primary/20" 
+            onClick={() => {
+              setFormData({ ...INITIAL_FORM_DATA });
+              setIsRegistrationOpen(true);
+            }}
+            disabled={isProcessing}
+          >
+            <UserPlus className="w-4 h-4 mr-2" /> Add Employee
+          </Button>
+        </div>
       </div>
 
       <Card className="border-slate-200 shadow-sm overflow-hidden">
