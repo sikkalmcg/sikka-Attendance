@@ -85,7 +85,26 @@ export function checkIfSunday(date: Date | string) {
   return isSunday(d);
 }
 
+/**
+ * Standard Date Format: MM/dd/yyyy
+ */
 export function formatDate(date: Date | string) {
   const d = typeof date === 'string' ? parseISO(date) : date;
-  return format(d, "PPP");
+  return format(d, "MM/dd/yyyy");
+}
+
+/**
+ * Color logic for working hours
+ */
+export function getWorkingHoursColor(hours: number) {
+  if (hours <= 6) return "text-rose-600 bg-rose-50 border-rose-200";
+  if (hours <= 9) return "text-orange-600 bg-orange-50 border-orange-200";
+  return "text-emerald-600 bg-emerald-50 border-emerald-200";
+}
+
+export function formatMinutesToHHMM(minutes: number) {
+  if (!minutes || minutes <= 0) return "00:00";
+  const h = Math.floor(minutes / 60);
+  const m = Math.floor(minutes % 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }

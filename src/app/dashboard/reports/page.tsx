@@ -47,7 +47,8 @@ import {
 } from "@/components/ui/tooltip";
 import { format, subDays, isWithinInterval, parseISO } from "date-fns";
 import { useData } from "@/context/data-context";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency, cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 type ReportType = "ATTENDANCE" | "PAYROLL";
 
@@ -55,16 +56,13 @@ export default function ReportsPage() {
   const { employees, attendanceRecords, payrollRecords, plants, firms } = useData();
   const { toast } = useToast();
 
-  // Dialog State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [activeReport, setActiveReport] = useState<ReportType | null>(null);
   
-  // Filter States
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedFirmIds, setSelectedFirmIds] = useState<string[]>([]);
 
-  // View States
   const [viewData, setViewData] = useState<any[] | null>(null);
   const [viewType, setViewType] = useState<ReportType | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -104,10 +102,7 @@ export default function ReportsPage() {
           if (!rec.date) return false;
           const recDate = parseISO(rec.date);
           const emp = employees.find(e => e.employeeId === rec.employeeId);
-          
-          // Strict Joining Boundary: Skip any records before joining date
           if (emp?.joinDate && rec.date < emp.joinDate) return false;
-
           const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
           const dateMatch = isWithinInterval(recDate, { start, end });
           return firmMatch && dateMatch;
@@ -124,13 +119,15 @@ export default function ReportsPage() {
             fatherName: emp?.fatherName || "N/A",
             department: emp?.department || "N/A",
             designation: emp?.designation || "N/A",
-            inDateTime: `${rec.date} ${rec.inTime || "--:--"}`,
+            inDateTime: `${formatDate(rec.date)} ${rec.inTime || "--:--"}`,
             inLocation: rec.address || "N/A",
-            outDateTime: `${rec.date} ${rec.outTime || "--:--"}`,
+            outDateTime: `${formatDate(rec.date)} ${rec.outTime || "--:--"}`,
             outLocation: rec.addressOut || "N/A",
+            outHour: formatMinutesToHHMM(rec.unapprovedOutDuration || 0),
+            hours: rec.hours,
             attendanceType: rec.attendanceType,
             status: rec.status,
-            approvedBy: rec.approved ? "HR_ADMIN" : "PENDING"
+            approvedBy: rec.approved ? (rec.approvedBy || "HR_ADMIN") : "PENDING"
           };
         });
     } else {
@@ -138,12 +135,6 @@ export default function ReportsPage() {
         .filter(pay => {
           const slipDate = pay.slipDate ? parseISO(pay.slipDate) : null;
           const emp = employees.find(e => e.employeeId === pay.employeeId);
-          
-          // Note: Payroll naturally aligns with work months, but we filter any inconsistent records
-          if (emp?.joinDate && pay.month) {
-            // Basic month-check logic can be applied here if needed
-          }
-
           const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
           const dateMatch = slipDate && isWithinInterval(slipDate, { start, end });
           return firmMatch && dateMatch;
@@ -156,7 +147,7 @@ export default function ReportsPage() {
             firmName: firm?.name || "N/A",
             unit: plant?.name || "N/A",
             slipNo: pay.slipNo || "N/A",
-            slipDate: pay.slipDate || "N/A",
+            slipDate: pay.slipDate ? formatDate(pay.slipDate) : "N/A",
             employeeId: pay.employeeId,
             employeeName: pay.employeeName,
             department: emp?.department || "N/A",
@@ -165,15 +156,15 @@ export default function ReportsPage() {
             earningDays: pay.totalEarningDays,
             netPayable: pay.netPayable,
             salaryPaid: pay.salaryPaidAmount,
-            paidDate: pay.salaryPaidDate || "N/A",
+            paidDate: pay.salaryPaidDate ? formatDate(pay.salaryPaidDate) : "N/A",
             pfEmployee: pay.pfAmountEmployee,
             pfEmployer: pay.pfAmountEmployer,
-            pfPaid: pay.pfPaidAmountEmployee + pay.pfAmountEmployer,
-            pfPaidDate: pay.pfPaidDate || "N/A",
+            pfPaid: (pay.pfPaidAmountEmployee || 0) + (pay.pfPaidAmountEmployer || 0),
+            pfPaidDate: pay.pfPaidDate ? formatDate(pay.pfPaidDate) : "N/A",
             esicEmployee: pay.esicAmountEmployee,
             esicEmployer: pay.esicAmountEmployer,
-            esicPaid: pay.esicPaidAmountEmployee + pay.esicPaidAmountEmployer,
-            esicPaidDate: pay.esicPaidDate || "N/A"
+            esicPaid: (pay.esicPaidAmountEmployee || 0) + (pay.esicPaidAmountEmployer || 0),
+            esicPaidDate: pay.esicPaidDate ? formatDate(pay.esicPaidDate) : "N/A"
           };
         });
     }
@@ -266,7 +257,7 @@ export default function ReportsPage() {
                     {viewType === "ATTENDANCE" ? "Attendance Ledger View" : "Payroll Summary View"}
                   </CardTitle>
                   <CardDescription className="text-slate-400 font-bold">
-                    Period: {fromDate} to {toDate} | {viewData.length} Records Found
+                    Period: {formatDate(fromDate)} to {formatDate(toDate)} | {viewData.length} Records Found
                   </CardDescription>
                 </div>
                 <Tooltip>
@@ -295,9 +286,15 @@ export default function ReportsPage() {
                         <TableRow key={idx} className="hover:bg-slate-50/50">
                           {Object.entries(row).map(([key, val], i) => (
                             <TableCell key={i} className="px-6 py-4 text-xs font-medium text-slate-600">
-                              {typeof val === 'number' && key.toLowerCase().includes('amount' || 'payable' || 'salary' || 'pf' || 'esic' || 'net') 
+                              {key === 'hours' ? (
+                                <Badge variant="outline" className={cn("font-black", getWorkingHoursColor(val as number))}>
+                                  {String(val)}h
+                                </Badge>
+                              ) : (
+                                typeof val === 'number' && (key.toLowerCase().includes('amount') || key.toLowerCase().includes('payable') || key.toLowerCase().includes('salary') || key.toLowerCase().includes('pf') || key.toLowerCase().includes('esic') || key.toLowerCase().includes('net')) 
                                 ? formatCurrency(val) 
-                                : String(val)}
+                                : String(val)
+                              )}
                             </TableCell>
                           ))}
                         </TableRow>
@@ -335,7 +332,6 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {/* Report Generation Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>

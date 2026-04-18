@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -31,7 +30,7 @@ import {
   Briefcase,
   Home
 } from "lucide-react";
-import { calculateDistance, cn } from "@/lib/utils";
+import { calculateDistance, cn, formatDate, getWorkingHoursColor } from "@/lib/utils";
 import { 
   Table, 
   TableHeader, 
@@ -42,7 +41,7 @@ import {
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant, LeaveRequest } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays, addDays, isWithinInterval } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays, addDays, isWithinInterval, differenceInMinutes } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -73,7 +72,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
 
-// Utility for IST time handling
 const getISTTime = () => {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 };
@@ -92,13 +90,11 @@ export default function AttendancePage() {
   const [detectedAddress, setDetectedAddress] = useState("");
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH">("FIELD");
 
-  // Leave Form State
   const [leaveFrom, setLeaveFrom] = useState("");
   const [leaveTo, setLeaveTo] = useState("");
   const [leavePurpose, setLeavePurpose] = useState("");
   const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
 
-  // Super Admin Edit State
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedRecordToEdit, setSelectedRecordToEdit] = useState<any>(null);
   const [editTimes, setEditTimes] = useState({ in: "", out: "" });
@@ -195,6 +191,42 @@ export default function AttendancePage() {
     const isLocked = isAfter(allowedDateTime, now);
     return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
   }, [lastOutRecord, currentTime]);
+
+  // Logic for unapproved out detection
+  useEffect(() => {
+    if (activeRecord && isAccessAllowed) {
+      const interval = setInterval(() => {
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            const { latitude: lat, longitude: lng } = pos.coords;
+            const nearestPlant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
+            
+            const now = getISTTime();
+            const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
+            const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
+
+            // Trigger Notification if OUT of plant while checked IN
+            if (!nearestPlant && activeRecord.attendanceType === 'OFFICE' && !activeRecord.lastDetectedOutAt) {
+              updateRecord('attendance', activeRecord.id, { lastDetectedOutAt: format(now, "HH:mm"), lastOutCheckTime: now.toISOString() });
+              addRecord('notifications', {
+                message: `OUT event: ${effectiveEmployeeName} moved beyond 0.7 KM. Current hours: ${diffHours.toFixed(2)}h`,
+                timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+                read: false
+              });
+            } else if (nearestPlant && activeRecord.lastDetectedOutAt) {
+              const outAt = new Date(`${activeRecord.date}T${activeRecord.lastDetectedOutAt}`);
+              const durationMinutes = differenceInMinutes(now, outAt);
+              updateRecord('attendance', activeRecord.id, { 
+                unapprovedOutDuration: (activeRecord.unapprovedOutDuration || 0) + durationMinutes,
+                lastDetectedOutAt: null 
+              });
+            }
+          });
+        }
+      }, 60000); // Check every minute
+      return () => clearInterval(interval);
+    }
+  }, [activeRecord, isAccessAllowed, plants, updateRecord, addRecord, effectiveEmployeeName]);
 
   const handleCreateLeaveRequest = () => {
     if (!isAccessAllowed) {
@@ -344,11 +376,8 @@ export default function AttendancePage() {
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setCurrentGPS({ lat, lng });
-        
-        // Scan all plants to see if user is near any registered location
         const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
         setDetectedPlant(plant || null);
-        
         const address = await fetchAddress(lat, lng);
         setDetectedAddress(address);
         setIsLoadingLocation(false);
@@ -381,7 +410,8 @@ export default function AttendancePage() {
       lng: currentGPS.lng,
       address: detectedAddress,
       inPlant: detectedPlant?.name || "Remote",
-      approved: false
+      approved: false,
+      unapprovedOutDuration: 0
     };
 
     addRecord('attendance', newRecord);
@@ -401,15 +431,22 @@ export default function AttendancePage() {
     let finalHours = parseFloat(diffHours.toFixed(2));
     let isAuto = diffHours > 16;
 
+    // RULE: Auto-OUT after 16 hours capped at 8 hours
     if (isAuto) {
       const autoOutDate = new Date(inDateTime.getTime() + (8 * 60 * 60 * 1000));
       finalOutTime = format(autoOutDate, "HH:mm");
       finalHours = 8.0;
     }
 
+    // Deduct unapproved out duration if any
+    if (activeRecord.unapprovedOutDuration && activeRecord.unapprovedOutDuration > 0) {
+      const deductionHours = activeRecord.unapprovedOutDuration / 60;
+      finalHours = Math.max(0, finalHours - deductionHours);
+    }
+
     updateRecord('attendance', activeRecord.id, { 
       outTime: finalOutTime, 
-      hours: finalHours,
+      hours: parseFloat(finalHours.toFixed(2)),
       attendanceTypeOut: detectedPlant ? 'OFFICE' : selectedType,
       latOut: currentGPS.lat,
       lngOut: currentGPS.lng,
@@ -456,7 +493,6 @@ export default function AttendancePage() {
         });
       }
       toast({ title: "Record Adjusted" });
-      setIsEditDialogOpen(true);
       setIsEditDialogOpen(false);
     } finally { setIsProcessing(false); }
   };
@@ -480,7 +516,7 @@ export default function AttendancePage() {
             <CardHeader className="text-center py-4"><CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800"><ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal</CardTitle></CardHeader>
             <CardContent className="space-y-6 px-6 pb-8">
               <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto">
-                {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMMM-yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
+                {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "MM/dd/yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
               </div>
               <div className="flex gap-4">
                 <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} onClick={() => requestLocation("IN")}>{isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Mark IN"}</Button>
@@ -496,7 +532,7 @@ export default function AttendancePage() {
                 {myLeaveRequests.length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground font-medium">No active leave records.</div>) : (
                   <div className="divide-y divide-slate-100">{myLeaveRequests.map((l) => (
                     <div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors">
-                      <div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div>
+                      <div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'MM/dd')} - {format(parseISO(l.toDate), 'MM/dd')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div>
                       <Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge>
                     </div>
                   ))}</div>
@@ -528,11 +564,15 @@ export default function AttendancePage() {
                       <TableRow key={h.id} className="hover:bg-slate-50/50">
                         <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
                         <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs">{h.date} {h.inTime || "--:--"}</TableCell>
-                        <TableCell className="font-mono text-xs">{h.date} {h.outTime || "--:--"}</TableCell>
+                        <TableCell className="font-mono text-xs">{formatDate(h.date)} {h.inTime || "--:--"}</TableCell>
+                        <TableCell className="font-mono text-xs">{formatDate(h.date)} {h.outTime || "--:--"}</TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="text-[9px] font-black uppercase">{h.attendanceType}</Badge></TableCell>
                         <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
-                        <TableCell className="text-center font-black">{h.hours || 0}h</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
+                            {h.hours || 0}h
+                          </Badge>
+                        </TableCell>
                         <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
                         {isSuperAdmin && (<TableCell className="text-right pr-6"><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setSelectedRecordToEdit(h); setEditTimes({ in: h.inTime || "", out: h.outTime || "" }); setIsEditDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button></TableCell>)}
                       </TableRow>
@@ -545,7 +585,6 @@ export default function AttendancePage() {
           </Card>
         </div>
 
-        {/* IN Check Dialog */}
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
           <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
@@ -605,7 +644,6 @@ export default function AttendancePage() {
           </DialogContent>
         </Dialog>
 
-        {/* Edit Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
             <DialogHeader className="p-6 bg-slate-900 text-white"><DialogTitle className="text-xl font-black flex items-center gap-2"><Pencil className="w-5 h-5 text-primary" /> Edit Attendance</DialogTitle></DialogHeader>

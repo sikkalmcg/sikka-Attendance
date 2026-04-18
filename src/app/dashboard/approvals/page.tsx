@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -60,7 +59,7 @@ import {
   Filter,
   ArrowRightCircle
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
 import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays } from "date-fns";
@@ -76,28 +75,23 @@ export default function ApprovalsPage() {
   const [pendingType, setPendingType] = useState("attendance");
   const [historyType, setHistoryType] = useState("attendance");
 
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
 
-  // History Filter State - Default to last 30 days
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  // Dialog States - Leave
   const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
   const [isLeaveApproveOpen, setIsLeaveApproveOpen] = useState(false);
   const [isLeaveRejectOpen, setIsLeaveRejectOpen] = useState(false);
   const [leaveEditDates, setLeaveEditDates] = useState({ from: "", to: "" });
   const [leaveRejectReason, setLeaveRejectReason] = useState("");
 
-  // Dialog States - Attendance
   const [selectedAttendance, setSelectedAttendance] = useState<AttendanceRecord | null>(null);
   const [isAttendanceEditOpen, setIsAttendanceEditOpen] = useState(false);
   const [isAttendanceRejectOpen, setIsAttendanceRejectOpen] = useState(false);
   const [attendanceEditData, setAttendanceEditData] = useState({ date: "", inTime: "", outTime: "" });
   const [attendanceRejectReason, setAttendanceRejectReason] = useState("");
 
-  // Restore State
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
   const [attendanceToRestore, setAttendanceToRestore] = useState<AttendanceRecord | null>(null);
 
@@ -107,19 +101,16 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    // Initialize default date range: Last 30 days
     const today = new Date();
     const thirtyDaysAgo = subDays(today, 30);
     setFromDate(format(thirtyDaysAgo, "yyyy-MM-dd"));
     setToDate(format(today, "yyyy-MM-dd"));
   }, []);
 
-  // Reset page on mode/type change
   useEffect(() => {
     setCurrentPage(1);
   }, [viewMode, pendingType, historyType, fromDate, toDate]);
 
-  // Data Selectors
   const pendingAttendanceList = useMemo(() => {
     if (!isMounted) return [];
     const search = searchTerm.toLowerCase();
@@ -154,7 +145,8 @@ export default function ApprovalsPage() {
           approved: false,
           dept: emp.department,
           desig: emp.designation,
-          isVirtual: true
+          isVirtual: true,
+          unapprovedOutDuration: 0
         });
       }
     });
@@ -204,7 +196,6 @@ export default function ApprovalsPage() {
     return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [leaveRequests, searchTerm, fromDate, toDate]);
 
-  // Current Paginated Data
   const currentData = useMemo(() => {
     const list = viewMode === 'pending' 
       ? (pendingType === 'attendance' ? pendingAttendanceList : pendingLeavesList)
@@ -235,7 +226,8 @@ export default function ApprovalsPage() {
           hours: 0,
           inTime: null,
           outTime: null,
-          address: 'System Generated Absence'
+          address: 'System Generated Absence',
+          unapprovedOutDuration: 0
         };
         addRecord('attendance', newRec);
       } else {
@@ -273,7 +265,8 @@ export default function ApprovalsPage() {
           outTime: attendanceEditData.outTime,
           hours: finalHours,
           approved: false,
-          address: 'Manual Admin Entry'
+          address: 'Manual Admin Entry',
+          unapprovedOutDuration: 0
         });
       } else {
         updateRecord('attendance', selectedAttendance.id, {
@@ -306,7 +299,8 @@ export default function ApprovalsPage() {
           status: 'ABSENT',
           attendanceType: 'FIELD',
           remark: attendanceRejectReason,
-          approved: false
+          approved: false,
+          unapprovedOutDuration: 0
         });
       } else {
         updateRecord('attendance', selectedAttendance.id, { approved: false, remark: attendanceRejectReason, status: 'ABSENT' });
@@ -373,7 +367,7 @@ export default function ApprovalsPage() {
     }
 
     const headers = historyType === 'attendance' 
-      ? ["Employee Name", "Employee ID", "Dept", "Desig", "Date", "In Time", "Out Time", "Hours", "Type", "Status", "In Address", "Out Address", "Approved By"]
+      ? ["Employee Name", "Employee ID", "Dept", "Desig", "Date", "In Time", "Out Time", "Out Hour", "Hours", "Type", "Status", "In Address", "Out Address", "Approved By"]
       : ["Employee Name", "Employee ID", "Dept", "Desig", "From Date", "To Date", "Days", "Status", "Purpose", "Approved By"];
 
     const csvRows = [
@@ -381,11 +375,11 @@ export default function ApprovalsPage() {
       ...list.map(rec => {
         if (historyType === 'attendance') {
           return [
-            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.dept}"`, `"${rec.desig}"`, `"${rec.date}"`, `"${rec.inTime || ''}"`, `"${rec.outTime || ''}"`, rec.hours, `"${rec.attendanceType}"`, `"${rec.status}"`, `"${rec.address || ''}"`, `"${rec.addressOut || ''}"`, `"${rec.approvedBy || ''}"`
+            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.dept}"`, `"${rec.desig}"`, `"${formatDate(rec.date)}"`, `"${rec.inTime || ''}"`, `"${rec.outTime || ''}"`, `"${formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}"`, rec.hours, `"${rec.attendanceType}"`, `"${rec.status}"`, `"${rec.address || ''}"`, `"${rec.addressOut || ''}"`, `"${rec.approvedBy || ''}"`
           ].join(",");
         } else {
           return [
-            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.department}"`, `"${rec.designation}"`, `"${rec.fromDate}"`, `"${rec.toDate}"`, rec.days, `"${rec.status}"`, `"${rec.purpose}"`, `"${rec.approvedBy || ''}"`
+            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.department}"`, `"${rec.designation}"`, `"${formatDate(rec.fromDate)}"`, `"${formatDate(rec.toDate)}"`, rec.days, `"${rec.status}"`, `"${rec.purpose}"`, `"${rec.approvedBy || ''}"`
           ].join(",");
         }
       })
@@ -472,7 +466,7 @@ export default function ApprovalsPage() {
           <Card className="border-slate-200 shadow-sm overflow-hidden">
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1300px]">
+                <Table className="min-w-[1400px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
@@ -483,6 +477,7 @@ export default function ApprovalsPage() {
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">
                         {viewMode === 'pending' || (viewMode === 'history' && historyType === 'attendance') ? 'OUT Date Time' : 'To Date'}
                       </TableHead>
+                      {pendingType === 'attendance' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Out Hour</TableHead>}
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">
                         {currentData.items[0]?.days !== undefined ? 'Days' : 'Working Hour'}
                       </TableHead>
@@ -495,7 +490,7 @@ export default function ApprovalsPage() {
                   </TableHeader>
                   <TableBody>
                     {currentData.items.length === 0 ? (
-                      <TableRow><TableCell colSpan={11} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={12} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
                     ) : (
                       currentData.items.map((rec: any) => (
                         <TableRow key={rec.id} className={cn("hover:bg-slate-50/50 transition-colors", rec.isVirtual && "bg-rose-50/30")}>
@@ -513,18 +508,25 @@ export default function ApprovalsPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date || rec.fromDate}</span>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.date || rec.fromDate)}</span>
                               <span className={cn("text-xs font-mono font-bold", !rec.inTime && rec.status === 'PRESENT' && "text-rose-500 italic")}>{rec.inTime || "--:--"}</span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{rec.date || rec.toDate}</span>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.date || rec.toDate)}</span>
                               <span className={cn("text-xs font-mono font-bold", rec.outTime ? "text-rose-500" : "text-slate-300 italic")}>{rec.outTime || "--:--"}</span>
                             </div>
                           </TableCell>
+                          {pendingType === 'attendance' && (
+                            <TableCell className="text-center">
+                              <span className="text-xs font-mono font-bold text-rose-600">
+                                {formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}
+                              </span>
+                            </TableCell>
+                          )}
                           <TableCell className="text-center">
-                            <Badge variant="secondary" className="font-black text-xs px-3 bg-slate-100 text-slate-700">
+                            <Badge variant="outline" className={cn("font-black text-xs px-3", rec.days === undefined ? getWorkingHoursColor(rec.hours) : "bg-slate-100 text-slate-700")}>
                               {rec.days !== undefined ? `${rec.days}d` : `${rec.hours}h`}
                             </Badge>
                           </TableCell>

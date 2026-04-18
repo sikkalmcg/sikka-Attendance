@@ -1,4 +1,3 @@
-
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'HR' | 'EMPLOYEE';
 
 export interface User {
@@ -131,7 +130,7 @@ export interface AttendanceRecord {
   outTime: string | null;
   hours: number;
   status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'FIELD' | 'WFH';
-  attendanceType: 'OFFICE' | 'FIELD' | 'WFH';
+  attendanceType: 'OFFICE' | 'FIELD' | 'WFH' | 'ABSENT';
   attendanceTypeOut?: 'OFFICE' | 'FIELD' | 'WFH';
   lat: number;
   lng: number;
@@ -142,11 +141,16 @@ export interface AttendanceRecord {
   inPlant?: string;
   outPlant?: string;
   approved: boolean;
-  approvedBy?: string; // Captured full name of approver
+  approvedBy?: string; 
   remark?: string;
   rejectionCount?: number;
   autoOut?: boolean;
-  autoCheckout?: boolean; // Maintain compatibility
+  autoCheckout?: boolean; 
+  
+  // Unapproved movement tracking
+  unapprovedOutDuration?: number; // In minutes
+  lastDetectedOutAt?: string | null; // HH:mm
+  lastOutCheckTime?: string; // ISO string
 }
 
 export interface LeaveRequest {
@@ -161,7 +165,7 @@ export interface LeaveRequest {
   purpose: string;
   status: 'UNDER_PROCESS' | 'APPROVED' | 'REJECTED';
   rejectReason?: string;
-  approvedBy?: string; // Added field for approver/rejecter tracking
+  approvedBy?: string; 
   createdAt: string;
 }
 
