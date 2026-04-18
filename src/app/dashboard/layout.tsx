@@ -178,7 +178,7 @@ function HeaderActions() {
                 </Badge>
               )}
             </div>
-            <ScrollArea className="max-h-[400px]" tabIndex={0}>
+            <ScrollArea className="max-h-[400px] custom-blue-scrollbar" tabIndex={0}>
               {latestNotifications.length === 0 ? (
                 <div className="p-10 text-center space-y-3">
                   <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
