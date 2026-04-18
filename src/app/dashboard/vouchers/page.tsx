@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -130,11 +129,9 @@ export default function VouchersPage() {
     }).reverse();
   }, [vouchers, searchTerm, employees]);
 
-  // Vouchers with Recovery Logic Auto-Sync
   const vouchersWithRecovery = useMemo(() => {
     if (!isMounted) return [];
     
-    // Group vouchers by employee for FIFO recovery calculation
     const vouchersByEmp: Record<string, any[]> = {};
     [...vouchers].sort((a,b) => a.date.localeCompare(b.date)).forEach(v => {
       if (v.status === 'PAID') {
@@ -300,15 +297,20 @@ export default function VouchersPage() {
   };
 
   const handleDownloadPDF = (v: Voucher) => {
+    if (!v) return;
     const originalTitle = document.title;
     document.title = v.voucherNo || "Voucher_Slip";
     setPrintVoucher(v);
-    toast({ title: "Quick Download", description: "Preparing Voucher for export..." });
+    toast({ title: "One-Click Download", description: "Generating document for PDF export..." });
+    
+    // Using a 500ms delay to ensure React renders the portal while keeping user activation context
     setTimeout(() => {
+      window.focus();
       window.print();
       document.title = originalTitle;
-      setPrintVoucher(null);
-    }, 1200);
+      // Small delay after print dialog opens before clearing the print state
+      setTimeout(() => setPrintVoucher(null), 1000);
+    }, 500);
   };
 
   const handleExportVouchersExcel = () => {

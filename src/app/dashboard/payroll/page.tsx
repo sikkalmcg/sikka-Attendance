@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -244,7 +243,6 @@ export default function PayrollPage() {
     let initialHolidayWork = holidayPres;
     let initialAbsent = Math.max(0, workingDaysCount - initialPresent);
 
-    // Auto Adjustment logic per requirements
     if (initialPresent < workingDaysCount && initialHolidayWork > 0) {
       const needed = workingDaysCount - initialPresent;
       const shift = Math.min(needed, initialHolidayWork);
@@ -401,15 +399,18 @@ export default function PayrollPage() {
   };
 
   const handleDownloadAndPrint = (p: PayrollRecord) => {
+    if (!p) return;
     const originalTitle = document.title;
     document.title = p.slipNo || "Salary_Slip";
     setPrintSlip(p);
-    toast({ title: "Generating PDF", description: "Applying high-fidelity render for A4 export..." });
+    toast({ title: "Quick Print", description: "Preparing Salary Slip for A4 export..." });
+    
     setTimeout(() => {
+      window.focus();
       window.print();
       document.title = originalTitle;
-      setPrintSlip(null);
-    }, 1200);
+      setTimeout(() => setPrintSlip(null), 1000);
+    }, 500);
   };
 
   const handleViewSlip = (p: PayrollRecord) => {
@@ -726,7 +727,6 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {adjustLeaveEmp && (
             <div className="flex flex-col max-h-[90vh]">
-              {/* Accessibility Compliant Header */}
               <DialogHeader className="p-6 bg-white border-b shrink-0 flex-row items-center justify-between">
                 <div className="flex gap-4 items-center">
                   <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
@@ -747,7 +747,6 @@ export default function PayrollPage() {
                 </div>
               </DialogHeader>
 
-              {/* Salary Info Boxes */}
               <div className="grid grid-cols-3 gap-0 border-b bg-slate-50/50 shrink-0">
                 <div className="py-5 px-8 border-r border-slate-200/60 text-center">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Salary Month</p>
@@ -817,9 +816,6 @@ export default function PayrollPage() {
                         <h3 className="text-3xl font-black text-white leading-none">{adjustmentState.earningDays}</h3>
                       </div>
                     </div>
-                    <div className="text-right text-white/40 text-[10px] font-bold uppercase tracking-widest max-w-[200px]">
-                      Attendance recalculated based on working days and applied adjustments.
-                    </div>
                   </div>
                 </div>
               </div>
@@ -835,153 +831,6 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Sub Adjustment Dialog */}
-      <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-primary" /> Adjust from Leave Balance
-            </DialogTitle>
-            <DialogDescription>Convert stored leave balance into paid attendance.</DialogDescription>
-          </DialogHeader>
-          <div className="py-6 space-y-6">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
-              <span className="text-sm font-bold text-slate-600">Available Balance</span>
-              <Badge className="bg-emerald-500 text-base py-1 px-3">{adjustmentState.remainingBalance} Days</Badge>
-            </div>
-            <div className="space-y-2">
-              <Label className="font-bold text-slate-700">Days to Adjust</Label>
-              <Input 
-                type="number" 
-                value={subAdjustmentValue} 
-                onChange={(e) => setSubAdjustmentValue(Math.max(0, parseFloat(e.target.value) || 0))}
-                className="h-12 bg-white font-black text-lg focus:ring-primary"
-              />
-              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">Max limit: {Math.min(adjustmentState.remainingBalance, adjustmentState.monthWorkingDays - adjustmentState.present)} days</p>
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0 border-t pt-4">
-            <Button variant="ghost" onClick={() => setIsSubAdjustmentOpen(false)} className="rounded-xl font-bold">Cancel</Button>
-            <Button className="bg-primary rounded-xl font-bold px-8" onClick={handleSaveSubAdjustment}>Apply Adjustment</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* View Advance Voucher Ledger Dialog */}
-      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => { if (!o) setViewAdvanceEmployee(null); }}>
-        <DialogContent className="sm:max-w-6xl max-h-[85vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
-          {viewAdvanceEmployee && (
-            <>
-              <DialogHeader className="p-6 bg-white border-b shrink-0 flex-row items-center justify-between">
-                <div className="flex gap-4 items-center">
-                  <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center">
-                    <Wallet className="w-6 h-6 text-emerald-600" />
-                  </div>
-                  <div>
-                    <DialogTitle className="text-xl font-black text-slate-900 leading-tight">
-                      Voucher Ledger: {viewAdvanceEmployee.emp.name}
-                    </DialogTitle>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      {viewAdvanceEmployee.emp.employeeId} • {viewAdvanceEmployee.emp.department}
-                    </p>
-                  </div>
-                </div>
-              </DialogHeader>
-              <ScrollArea className="flex-1">
-                <Table>
-                  <TableHeader className="bg-slate-50 sticky top-0 z-10">
-                    <TableRow>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Voucher No</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Date</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-right">Amount</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-primary">Recovered</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-rose-600">Remaining</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Purpose</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Mode</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Reference</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {viewAdvanceEmployee.vouchers.map((v: any) => (
-                      <TableRow key={v.id} className="hover:bg-slate-50/50">
-                        <TableCell className="font-mono font-bold text-xs">{v.voucherNo}</TableCell>
-                        <TableCell className="text-xs">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
-                        <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
-                        <TableCell className="text-right font-black text-primary">{formatCurrency(v.recovered)}</TableCell>
-                        <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
-                        <TableCell className="text-xs max-w-[200px] truncate" title={v.purpose}>{v.purpose}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[9px] font-black uppercase">{v.paymentMode}</Badge></TableCell>
-                        <TableCell className="font-mono text-[10px]">{v.paymentReference || "N/A"}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-              <DialogFooter className="p-4 bg-slate-50 border-t">
-                <Button variant="ghost" onClick={() => setViewAdvanceEmployee(null)} className="font-bold">Close Ledger</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Advance Leave History Dialog */}
-      <Dialog open={!!viewLeaveHistoryEmployee} onOpenChange={(o) => { if (!o) setViewLeaveHistoryEmployee(null); }}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
-          {viewLeaveHistoryEmployee && (
-            <>
-              <DialogHeader className="p-6 bg-white border-b shrink-0 flex-row items-center justify-between">
-                <div className="flex gap-4 items-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-                    <History className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <DialogTitle className="text-xl font-black text-slate-900 leading-tight">
-                      Leave History: {viewLeaveHistoryEmployee.name}
-                    </DialogTitle>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                      {viewLeaveHistoryEmployee.employeeId}
-                    </p>
-                  </div>
-                </div>
-              </DialogHeader>
-              <ScrollArea className="flex-1">
-                <Table>
-                  <TableHeader className="bg-slate-50 sticky top-0 z-10">
-                    <TableRow>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Employee Name</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Month</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Leave Taken</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leaveHistoryData.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">No leave adjustment history found.</TableCell>
-                      </TableRow>
-                    ) : (
-                      leaveHistoryData.map((h, i) => (
-                        <TableRow key={i} className="hover:bg-slate-50/50">
-                          <TableCell className="font-bold text-xs uppercase">{h.employeeName}</TableCell>
-                          <TableCell className="font-bold text-xs">{h.month}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge className="bg-primary hover:bg-primary font-black">{h.leave} Day(s)</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-              <DialogFooter className="p-4 bg-slate-50 border-t">
-                <Button variant="ghost" onClick={() => setViewLeaveHistoryEmployee(null)} className="font-bold">Close History</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Salary Payment Dialog */}
       <Dialog open={!!paySalaryRec} onOpenChange={(o) => { if (!o) setPaySalaryRec(null); }}>
         <DialogContent className="sm:max-w-md">
           {paySalaryRec && (
@@ -1023,6 +872,87 @@ export default function PayrollPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {isMounted && printSlip && createPortal(
+        <div className="print-only">
+          <SalarySlipContent payroll={printSlip} employees={employees} firms={firms} plants={plants} />
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function SalarySlipContent({ payroll, employees, firms, plants }: any) {
+  const emp = employees.find((e: any) => e.employeeId === payroll.employeeId);
+  const firm = firms.find((f: any) => f.id === emp?.firmId);
+  const [mmm, yy] = payroll.month.split('-');
+  const fullMonth = `${mmm}-20${yy}`;
+
+  return (
+    <div className="font-calibri text-slate-900 p-10 bg-white">
+       <div className="text-center border-b-2 border-slate-900 pb-4">
+         <h1 className="text-2xl font-black uppercase tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h1>
+         <p className="text-xs font-bold text-slate-500 italic">{firm?.registeredAddress}</p>
+         <h2 className="text-lg font-black mt-2 underline decoration-1 underline-offset-4">PAYSLIP FOR THE MONTH OF {fullMonth.toUpperCase()}</h2>
+       </div>
+       
+       <div className="grid grid-cols-2 border-x-2 border-b-2 border-slate-900 text-sm">
+         <SlipRow label="Employee ID" value={payroll.employeeId} />
+         <SlipRow label="Employee Name" value={payroll.employeeName} />
+         <SlipRow label="Department" value={emp?.department} />
+         <SlipRow label="Designation" value={emp?.designation} />
+         <SlipRow label="Aadhaar No" value={emp?.aadhaar} />
+         <SlipRow label="Bank Account" value={emp?.accountNo} />
+       </div>
+
+       <div className="grid grid-cols-2 mt-8 border-2 border-slate-900 font-bold">
+         <div className="border-r-2 border-slate-900 p-2 bg-slate-50 text-center uppercase tracking-widest text-xs">Earnings</div>
+         <div className="p-2 bg-slate-50 text-center uppercase tracking-widest text-xs">Deductions / Adjustments</div>
+       </div>
+
+       <div className="grid grid-cols-2 border-x-2 border-b-2 border-slate-900">
+         <div className="border-r-2 border-slate-900">
+           <SlipRow label="Basic Salary" value={formatCurrency(emp?.salary?.basic || 0)} />
+           <SlipRow label="HRA" value={formatCurrency(emp?.salary?.hra || 0)} />
+           <SlipRow label="Incentive" value={formatCurrency(payroll.incentiveAmt || 0)} />
+           <SlipRow label="Holiday Work" value={formatCurrency(payroll.holidayWorkAmt || 0)} />
+         </div>
+         <div>
+           <SlipRow label="Advance Recovery" value={formatCurrency(payroll.advanceRecovery || 0)} />
+           <SlipRow label="Leave Adjust" value={`${payroll.adjustLeave || 0} Day(s)`} />
+           <SlipRow label="Absent Days" value={payroll.absent} />
+         </div>
+       </div>
+
+       <div className="bg-slate-900 text-white p-4 flex justify-between items-center mt-10">
+         <span className="font-black uppercase tracking-[0.2em] text-xs">Total Net Payable</span>
+         <span className="text-3xl font-black">{formatCurrency(payroll.netPayable)}</span>
+       </div>
+       
+       <div className="mt-4 p-2 bg-slate-50 border border-slate-200 italic text-xs">
+         <strong>In Words:</strong> {numberToIndianWords(payroll.netPayable)}
+       </div>
+
+       <div className="flex justify-between items-end mt-32 px-10">
+          <div className="text-center space-y-2">
+            <div className="w-48 border-b-2 border-slate-900" />
+            <p className="text-[10px] font-black uppercase">Employee Signature</p>
+          </div>
+          <div className="text-center space-y-2">
+            <div className="w-48 border-b-2 border-slate-900" />
+            <p className="text-[10px] font-black uppercase tracking-widest">Authorized Signatory</p>
+          </div>
+       </div>
+    </div>
+  );
+}
+
+function SlipRow({ label, value }: { label: string, value: any }) {
+  return (
+    <div className="flex justify-between border-b border-slate-200 p-2 px-4 last:border-b-0">
+      <span className="font-bold text-[11px] text-slate-500 uppercase">{label}</span>
+      <span className="font-black text-xs">{value || "---"}</span>
     </div>
   );
 }
