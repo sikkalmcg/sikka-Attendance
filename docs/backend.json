@@ -1,95 +1,1132 @@
-
 {
   "entities": {
     "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "User",
       "type": "object",
+      "description": "Represents a user of the HRMS system with specific roles and permissions.",
       "properties": {
-        "id": { "type": "string" },
-        "fullName": { "type": "string" },
-        "username": { "type": "string" },
-        "role": { "type": "string" },
-        "status": { "type": "string" },
-        "permissions": { "type": "array", "items": { "type": "string" } }
-      }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm this user is associated with. (Relationship: Firm 1:N User)"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "The full name of the user."
+        },
+        "username": {
+          "type": "string",
+          "description": "Unique username for login."
+        },
+        "role": {
+          "type": "string",
+          "description": "The assigned role of the user, determining access level.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "isSuperAdmin": {
+          "type": "boolean",
+          "description": "A flag indicating if the user is the immutable SUPER ADMIN with full override access. (CRITICAL RULE)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the user record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the user record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "firmId",
+        "fullName",
+        "username",
+        "role",
+        "isSuperAdmin",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Firm": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Firm",
       "type": "object",
+      "description": "Represents a company or organization within SikkaTrack HR, supporting multi-firm operations.",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "gstin": { "type": "string" },
-        "logo": { "type": "string" },
-        "units": { "type": "array" }
-      }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Firm entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The official name of the firm."
+        },
+        "gstNumber": {
+          "type": "string",
+          "description": "The Goods and Services Tax (GST) registration number of the firm, must be unique."
+        },
+        "panNumber": {
+          "type": "string",
+          "description": "The Permanent Account Number (PAN) of the firm, must be unique and adhere to specific format."
+        },
+        "pfRegistrationNumber": {
+          "type": "string",
+          "description": "The Provident Fund (PF) registration number for the firm."
+        },
+        "esicRegistrationNumber": {
+          "type": "string",
+          "description": "The Employees' State Insurance Corporation (ESIC) registration number for the firm."
+        },
+        "addresses": {
+          "type": "array",
+          "description": "An array of physical addresses associated with the firm.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "logoUrl": {
+          "type": "string",
+          "description": "URL to the firm's logo, used for dynamic display in the UI.",
+          "format": "uri"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the firm record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the firm record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "gstNumber",
+        "panNumber",
+        "pfRegistrationNumber",
+        "esicRegistrationNumber",
+        "addresses",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Plant": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Plant",
       "type": "object",
+      "description": "Represents a physical plant or location operated by a firm, used for GPS-based attendance validation.",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "firmId": { "type": "string" },
-        "lat": { "type": "number" },
-        "lng": { "type": "number" }
-      }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Plant entity."
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm that owns this plant. (Relationship: Firm 1:N Plant)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the plant."
+        },
+        "latitude": {
+          "type": "number",
+          "description": "The geographical latitude of the plant's main location."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "The geographical longitude of the plant's main location."
+        },
+        "address": {
+          "type": "string",
+          "description": "The physical address of the plant, often derived from GPS coordinates."
+        },
+        "allowedRadius": {
+          "type": "number",
+          "description": "The maximum allowed distance (in meters) from the plant's GPS coordinates for valid attendance marking."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the plant record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the plant record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "firmId",
+        "name",
+        "latitude",
+        "longitude",
+        "address",
+        "allowedRadius",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Employee": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Employee",
       "type": "object",
+      "description": "Stores detailed information about an employee, including personal, contact, and salary details.",
       "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "employeeId": { "type": "string" },
-        "firmId": { "type": "string" },
-        "unitId": { "type": "string" }
-      }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Employee entity."
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm this employee belongs to. (Relationship: Firm 1:N Employee)"
+        },
+        "plantId": {
+          "type": "string",
+          "description": "Reference to the Plant this employee is assigned to. (Relationship: Plant 1:N Employee)"
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "The internal, unique employee ID used within the organization."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the employee."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the employee."
+        },
+        "aadhaarNumber": {
+          "type": "string",
+          "description": "The unique 12-digit Aadhaar number of the employee."
+        },
+        "panNumber": {
+          "type": "string",
+          "description": "The unique Permanent Account Number (PAN) of the employee, adhering to specific format."
+        },
+        "department": {
+          "type": "string",
+          "description": "The department the employee works in."
+        },
+        "designation": {
+          "type": "string",
+          "description": "The job title or designation of the employee."
+        },
+        "mobileNumber": {
+          "type": "string",
+          "description": "The mobile number of the employee, used as their login password."
+        },
+        "basicSalary": {
+          "type": "number",
+          "description": "The basic component of the employee's salary."
+        },
+        "hraSalary": {
+          "type": "number",
+          "description": "The House Rent Allowance (HRA) component of the employee's salary."
+        },
+        "daSalary": {
+          "type": "number",
+          "description": "The Dearness Allowance (DA) component of the employee's salary."
+        },
+        "allowanceSalary": {
+          "type": "number",
+          "description": "Other allowances component of the employee's salary."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "A flag indicating if the employee record is active (true) or deactivated (false), enabling soft deletion."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the employee record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the employee record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "firmId",
+        "plantId",
+        "employeeId",
+        "firstName",
+        "lastName",
+        "aadhaarNumber",
+        "panNumber",
+        "department",
+        "designation",
+        "mobileNumber",
+        "basicSalary",
+        "hraSalary",
+        "daSalary",
+        "allowanceSalary",
+        "isActive",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Attendance": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Attendance",
       "type": "object",
+      "description": "Records daily employee attendance, including IN/OUT times, calculated hours, and GPS location data.",
       "properties": {
-        "id": { "type": "string" },
-        "employeeId": { "type": "string" },
-        "date": { "type": "string" },
-        "status": { "type": "string" }
-      }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Attendance entity."
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Reference to the Employee whose attendance is being recorded. (Relationship: Employee 1:N Attendance)"
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm the employee belongs to, for filtering and reporting. (Derived from Employee)"
+        },
+        "plantId": {
+          "type": "string",
+          "description": "Reference to the Plant where the attendance was marked, for GPS validation. (Derived from Employee)"
+        },
+        "date": {
+          "type": "string",
+          "description": "The calendar date for which the attendance is recorded.",
+          "format": "date"
+        },
+        "inTime": {
+          "type": "string",
+          "description": "The time the employee marked 'IN'.",
+          "format": "date-time"
+        },
+        "outTime": {
+          "type": "string",
+          "description": "The time the employee marked 'OUT', or auto-logged out.",
+          "format": "date-time"
+        },
+        "hoursWorked": {
+          "type": "number",
+          "description": "The total calculated working hours for the day (outTime - inTime)."
+        },
+        "attendanceStatus": {
+          "type": "string",
+          "description": "The calculated attendance status based on working hours and holiday rules.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inLocationLatitude": {
+          "type": "number",
+          "description": "Latitude captured when the employee marked 'IN'."
+        },
+        "inLocationLongitude": {
+          "type": "number",
+          "description": "Longitude captured when the employee marked 'IN'."
+        },
+        "inLocationAddress": {
+          "type": "string",
+          "description": "Address captured from Google API when the employee marked 'IN'."
+        },
+        "outLocationLatitude": {
+          "type": "number",
+          "description": "Latitude captured when the employee marked 'OUT', if available."
+        },
+        "outLocationLongitude": {
+          "type": "number",
+          "description": "Longitude captured when the employee marked 'OUT', if available."
+        },
+        "outLocationAddress": {
+          "type": "string",
+          "description": "Address captured from Google API when the employee marked 'OUT', if available."
+        },
+        "isApproved": {
+          "type": "boolean",
+          "description": "A flag indicating if the attendance record has been approved by an administrator."
+        },
+        "approvalStatus": {
+          "type": "string",
+          "description": "The current status of the attendance record in the approval workflow.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "approvedByUserId": {
+          "type": "string",
+          "description": "Reference to the User who last performed an approval action (approve/reject/edit). (Relationship: User 1:N Attendance)"
+        },
+        "approvalRemarks": {
+          "type": "string",
+          "description": "Mandatory remarks provided when an attendance record is rejected."
+        },
+        "approvalActionDate": {
+          "type": "string",
+          "description": "Timestamp when the last approval action (approve/reject/edit) was taken.",
+          "format": "date-time"
+        },
+        "originalInTime": {
+          "type": "string",
+          "description": "The original IN time before any edits by an administrator.",
+          "format": "date-time"
+        },
+        "originalOutTime": {
+          "type": "string",
+          "description": "The original OUT time before any edits by an administrator.",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the attendance record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the attendance record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "employeeId",
+        "firmId",
+        "plantId",
+        "date",
+        "inTime",
+        "hoursWorked",
+        "attendanceStatus",
+        "inLocationLatitude",
+        "inLocationLongitude",
+        "inLocationAddress",
+        "isApproved",
+        "approvalStatus",
+        "createdAt",
+        "updatedAt"
+      ]
     },
-    "LeaveRequest": {
-      "title": "LeaveRequest",
+    "Holiday": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Holiday",
       "type": "object",
+      "description": "Manages declared holidays, which impact attendance calculations.",
       "properties": {
-        "id": { "type": "string" },
-        "employeeId": { "type": "string" },
-        "employeeName": { "type": "string" },
-        "department": { "type": "string" },
-        "designation": { "type": "string" },
-        "fromDate": { "type": "string" },
-        "toDate": { "type": "string" },
-        "days": { "type": "number" },
-        "purpose": { "type": "string" },
-        "status": { "type": "string", "enum": ["UNDER_PROCESS", "APPROVED", "REJECTED"] },
-        "rejectReason": { "type": "string" },
-        "createdAt": { "type": "string" }
-      }
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Holiday entity."
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm for which this holiday is applicable. (Relationship: Firm 1:N Holiday)"
+        },
+        "date": {
+          "type": "string",
+          "description": "The specific date of the holiday.",
+          "format": "date"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the festival or reason for the holiday."
+        },
+        "isSunday": {
+          "type": "boolean",
+          "description": "A flag indicating if the holiday falls on a Sunday (auto-marked)."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the holiday record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the holiday record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "firmId",
+        "date",
+        "name",
+        "isSunday",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SalaryHistory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "SalaryHistory",
+      "type": "object",
+      "description": "Tracks changes in an employee's salary over time, maintaining a historical record.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the SalaryHistory entity."
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Reference to the Employee whose salary history is recorded. (Relationship: Employee 1:N SalaryHistory)"
+        },
+        "effectiveDate": {
+          "type": "string",
+          "description": "The date from which the new salary structure became effective.",
+          "format": "date"
+        },
+        "oldBasicSalary": {
+          "type": "number",
+          "description": "The basic salary component before the change."
+        },
+        "oldHraSalary": {
+          "type": "number",
+          "description": "The HRA component before the change."
+        },
+        "oldDaSalary": {
+          "type": "number",
+          "description": "The DA component before the change."
+        },
+        "oldAllowanceSalary": {
+          "type": "number",
+          "description": "The allowance component before the change."
+        },
+        "newBasicSalary": {
+          "type": "number",
+          "description": "The basic salary component after the change."
+        },
+        "newHraSalary": {
+          "type": "number",
+          "description": "The HRA component after the change."
+        },
+        "newDaSalary": {
+          "type": "number",
+          "description": "The DA component after the change."
+        },
+        "newAllowanceSalary": {
+          "type": "number",
+          "description": "The allowance component after the change."
+        },
+        "changeReason": {
+          "type": "string",
+          "description": "A description of the reason for the salary change (e.g., 'Annual Increment', 'Promotion')."
+        },
+        "changedByUserId": {
+          "type": "string",
+          "description": "Reference to the User who initiated this salary change. (Relationship: User 1:N SalaryHistory)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the salary history record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the salary history record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "employeeId",
+        "effectiveDate",
+        "oldBasicSalary",
+        "oldHraSalary",
+        "oldDaSalary",
+        "oldAllowanceSalary",
+        "newBasicSalary",
+        "newHraSalary",
+        "newDaSalary",
+        "newAllowanceSalary",
+        "changeReason",
+        "changedByUserId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Payroll": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Payroll",
+      "type": "object",
+      "description": "Stores the generated monthly payroll details for each employee, including calculations and statutory deductions.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Payroll entity."
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Reference to the Employee for whom this payroll is generated. (Relationship: Employee 1:N Payroll)"
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm for payroll generation and reporting. (Derived from Employee)"
+        },
+        "payrollNumber": {
+          "type": "string",
+          "description": "Unique auto-generated payroll number (Format: S + FY + 5 digit)."
+        },
+        "month": {
+          "type": "string",
+          "description": "The month for which the payroll is generated (e.g., 'January' or '01')."
+        },
+        "year": {
+          "type": "string",
+          "description": "The year for which the payroll is generated (e.g., '2023')."
+        },
+        "payableDays": {
+          "type": "number",
+          "description": "The number of days payable, calculated from approved attendance (Present + Half Day / 2)."
+        },
+        "grossSalary": {
+          "type": "number",
+          "description": "The total gross salary (Basic + HRA + DA + Allowance)."
+        },
+        "employeePfContribution": {
+          "type": "number",
+          "description": "The employee's contribution to Provident Fund (12% of Basic Salary)."
+        },
+        "employerPfContribution": {
+          "type": "number",
+          "description": "The employer's contribution to Provident Fund (13% of Basic Salary)."
+        },
+        "employeeEsicContribution": {
+          "type": "number",
+          "description": "The employee's contribution to Employees' State Insurance Corporation (0.75% of Gross Salary)."
+        },
+        "employerEsicContribution": {
+          "type": "number",
+          "description": "The employer's contribution to Employees' State Insurance Corporation (3.25% of Gross Salary)."
+        },
+        "netSalary": {
+          "type": "number",
+          "description": "The net salary after employee's PF and ESIC deductions (Gross - PFemp - ESICemp)."
+        },
+        "advanceDeduction": {
+          "type": "number",
+          "description": "Total amount deducted from employee's advances for this payroll cycle."
+        },
+        "finalPayableAmount": {
+          "type": "number",
+          "description": "The final amount to be paid to the employee for this payroll cycle (Net Salary - Advance Deduction)."
+        },
+        "totalCappedRemuneration": {
+          "type": "number",
+          "description": "The Cost to Company (CTC) for the employee (Gross + Employer PF + Employer ESIC)."
+        },
+        "isPaid": {
+          "type": "boolean",
+          "description": "A flag indicating if the total final payable amount for this payroll has been disbursed."
+        },
+        "generatedByUserId": {
+          "type": "string",
+          "description": "Reference to the User who generated this payroll record. (Relationship: User 1:N Payroll)"
+        },
+        "generationDate": {
+          "type": "string",
+          "description": "Timestamp when the payroll record was generated.",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the payroll record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the payroll record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "employeeId",
+        "firmId",
+        "payrollNumber",
+        "month",
+        "year",
+        "payableDays",
+        "grossSalary",
+        "employeePfContribution",
+        "employerPfContribution",
+        "employeeEsicContribution",
+        "employerEsicContribution",
+        "netSalary",
+        "advanceDeduction",
+        "finalPayableAmount",
+        "totalCappedRemuneration",
+        "isPaid",
+        "generatedByUserId",
+        "generationDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PayrollPayment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PayrollPayment",
+      "type": "object",
+      "description": "Records individual payment transactions made against a generated payroll, supporting multiple payments per payroll.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the PayrollPayment entity."
+        },
+        "payrollId": {
+          "type": "string",
+          "description": "Reference to the Payroll record this payment is for. (Relationship: Payroll 1:N PayrollPayment)"
+        },
+        "paymentDate": {
+          "type": "string",
+          "description": "The date and time when the payment was made.",
+          "format": "date-time"
+        },
+        "paidAmount": {
+          "type": "number",
+          "description": "The specific amount paid in this transaction."
+        },
+        "paymentMode": {
+          "type": "string",
+          "description": "The method used for this payment.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "transactionReference": {
+          "type": "string",
+          "description": "A reference number or identifier for the payment transaction (e.g., cheque number, bank transaction ID)."
+        },
+        "paidByUserId": {
+          "type": "string",
+          "description": "Reference to the User who recorded this payment. (Relationship: User 1:N PayrollPayment)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the payroll payment record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the payroll payment record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "payrollId",
+        "paymentDate",
+        "paidAmount",
+        "paymentMode",
+        "paidByUserId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Voucher": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Voucher",
+      "type": "object",
+      "description": "Manages advance vouchers issued to employees, tracking requested amounts and payment status.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Voucher entity."
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm issuing this voucher. (Derived from Employee)"
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Reference to the Employee who received the advance voucher. (Relationship: Employee 1:N Voucher)"
+        },
+        "voucherNumber": {
+          "type": "string",
+          "description": "Unique auto-generated voucher number (Format: FY + 5 digit)."
+        },
+        "voucherDate": {
+          "type": "string",
+          "description": "The date when the voucher was created/issued.",
+          "format": "date"
+        },
+        "purpose": {
+          "type": "string",
+          "description": "The stated purpose for which the advance amount is requested."
+        },
+        "advanceAmount": {
+          "type": "number",
+          "description": "The total advance amount requested in this voucher."
+        },
+        "totalPaidAmount": {
+          "type": "number",
+          "description": "The cumulative amount paid against this voucher."
+        },
+        "balanceAmount": {
+          "type": "number",
+          "description": "The remaining balance of the advance amount not yet paid or deducted."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the advance voucher.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "issuedByUserId": {
+          "type": "string",
+          "description": "Reference to the User who created this voucher. (Relationship: User 1:N Voucher)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the voucher record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the voucher record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "firmId",
+        "employeeId",
+        "voucherNumber",
+        "voucherDate",
+        "purpose",
+        "advanceAmount",
+        "totalPaidAmount",
+        "balanceAmount",
+        "status",
+        "issuedByUserId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VoucherPayment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VoucherPayment",
+      "type": "object",
+      "description": "Records individual payment transactions made for advance vouchers.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the VoucherPayment entity."
+        },
+        "voucherId": {
+          "type": "string",
+          "description": "Reference to the Voucher this payment is made against. (Relationship: Voucher 1:N VoucherPayment)"
+        },
+        "paymentDate": {
+          "type": "string",
+          "description": "The date and time when this payment for the voucher was made.",
+          "format": "date-time"
+        },
+        "paidAmount": {
+          "type": "number",
+          "description": "The specific amount paid in this transaction for the voucher."
+        },
+        "paymentMode": {
+          "type": "string",
+          "description": "The method used for this voucher payment.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "transactionReference": {
+          "type": "string",
+          "description": "A reference number or identifier for the voucher payment transaction (e.g., cheque number, bank transaction ID)."
+        },
+        "paidByUserId": {
+          "type": "string",
+          "description": "Reference to the User who recorded this voucher payment. (Relationship: User 1:N VoucherPayment)"
+        },
+        "payrollId": {
+          "type": "string",
+          "description": "Optional reference to the Payroll record if this voucher payment was deducted from a salary. (Relationship: Payroll 1:N VoucherPayment)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the voucher payment record was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the voucher payment record was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "voucherId",
+        "paymentDate",
+        "paidAmount",
+        "paymentMode",
+        "paidByUserId",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "auth": {
-    "providers": ["password"]
+    "providers": [
+      "password",
+      "anonymous"
+    ]
   },
   "firestore": {
     "structure": [
-      { "path": "/users/{userId}", "definition": { "entityName": "User", "description": "Admin users" } },
-      { "path": "/firms/{firmId}", "definition": { "entityName": "Firm", "description": "Legal entities" } },
-      { "path": "/plants/{plantId}", "definition": { "entityName": "Plant", "description": "Geofence locations" } },
-      { "path": "/employees/{employeeId}", "definition": { "entityName": "Employee", "description": "Workforce profiles" } },
-      { "path": "/attendance/{attendanceId}", "definition": { "entityName": "Attendance", "description": "Daily logs" } },
-      { "path": "/payroll/{payrollId}", "definition": { "entityName": "Payroll", "description": "Monthly earnings" } },
-      { "path": "/vouchers/{voucherId}", "definition": { "entityName": "Voucher", "description": "Cash advances" } },
-      { "path": "/holidays/{holidayId}", "definition": { "entityName": "Holiday", "description": "Organization calendar" } },
-      { "path": "/notifications/{notifId}", "definition": { "entityName": "Notification", "description": "Activity alerts" } },
-      { "path": "/leaveRequests/{leaveId}", "definition": { "entityName": "LeaveRequest", "description": "Employee leave applications" } }
-    ]
+      {
+        "path": "users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles, including their associated firm ID, role, and the `isSuperAdmin` flag for global override. Authorization relies on `request.auth.uid` matching `{userId}` or `isSuperAdmin` being true, providing essential context for firm-level and system-wide access control.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user (Firebase Authentication UID)."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}",
+        "definition": {
+          "entityName": "Firm",
+          "schema": {
+            "$ref": "#/backend/entities/Firm"
+          },
+          "description": "Top-level collection storing details for each HRMS firm. Access is controlled by `firmId`, ensuring that only authorized users (e.g., Admins/HR) associated with this specific firm can manage its data.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the firm."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/plants/{plantId}",
+        "definition": {
+          "entityName": "Plant",
+          "schema": {
+            "$ref": "#/backend/entities/Plant"
+          },
+          "description": "Subcollection storing physical plant locations and their associated GPS data for a specific firm. `firmId` is inherited from the parent path. This structure ensures firm-specific management and authorization without requiring cross-document reads in security rules.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "plantId",
+              "description": "The unique identifier of the plant."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/employees/{employeeId}",
+        "definition": {
+          "entityName": "Employee",
+          "schema": {
+            "$ref": "#/backend/entities/Employee"
+          },
+          "description": "Subcollection storing detailed employee profiles. `firmId` is inherited from the path. This structure facilitates efficient querying and authorization of employee data within their respective firms.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier of the employee."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/employees/{employeeId}/attendance/{attendanceId}",
+        "definition": {
+          "entityName": "Attendance",
+          "schema": {
+            "$ref": "#/backend/entities/Attendance"
+          },
+          "description": "Subcollection recording daily attendance for a specific employee. Includes denormalized `firmId` and `plantId` (copied from the employee's record) directly within each attendance document. This denormalization ensures Authorization Independence, allowing rules to evaluate permissions without fetching parent `Employee` or `Firm` documents, and supports efficient QAPs for filtering attendance by firm or plant.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier of the parent employee."
+            },
+            {
+              "name": "attendanceId",
+              "description": "The unique identifier of the attendance record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/employees/{employeeId}/salaryHistory/{salaryHistoryId}",
+        "definition": {
+          "entityName": "SalaryHistory",
+          "schema": {
+            "$ref": "#/backend/entities/SalaryHistory"
+          },
+          "description": "Subcollection tracking historical changes in salary for a specific employee. `firmId` and `employeeId` are inherited from the path. `changedByUserId` is stored to record who initiated the change, allowing for audit trails.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier of the parent employee."
+            },
+            {
+              "name": "salaryHistoryId",
+              "description": "The unique identifier of the salary history record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/employees/{employeeId}/payroll/{payrollId}",
+        "definition": {
+          "entityName": "Payroll",
+          "schema": {
+            "$ref": "#/backend/entities/Payroll"
+          },
+          "description": "Subcollection storing monthly payroll details for a specific employee. Includes denormalized `firmId` (copied from the employee's record) directly within each payroll document. This denormalization ensures Authorization Independence for firm-level access, and supports QAPs for payroll reporting.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier of the parent employee."
+            },
+            {
+              "name": "payrollId",
+              "description": "The unique identifier of the payroll record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/employees/{employeeId}/payroll/{payrollId}/payments/{payrollPaymentId}",
+        "definition": {
+          "entityName": "PayrollPayment",
+          "schema": {
+            "$ref": "#/backend/entities/PayrollPayment"
+          },
+          "description": "Subcollection recording individual payment transactions made against a specific employee's payroll. Includes denormalized `firmId` and `employeeId` for Authorization Independence, enabling secure access checks directly on the payment document without fetching parent records.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier of the parent employee."
+            },
+            {
+              "name": "payrollId",
+              "description": "The unique identifier of the parent payroll record."
+            },
+            {
+              "name": "payrollPaymentId",
+              "description": "The unique identifier of the payroll payment record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/employees/{employeeId}/vouchers/{voucherId}",
+        "definition": {
+          "entityName": "Voucher",
+          "schema": {
+            "$ref": "#/backend/entities/Voucher"
+          },
+          "description": "Subcollection managing advance vouchers issued to a specific employee. Includes denormalized `firmId` (copied from the employee's record) directly within each voucher document. This denormalization ensures Authorization Independence for firm-level access and supports QAPs for voucher management.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier of the parent employee."
+            },
+            {
+              "name": "voucherId",
+              "description": "The unique identifier of the voucher record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/employees/{employeeId}/vouchers/{voucherId}/payments/{voucherPaymentId}",
+        "definition": {
+          "entityName": "VoucherPayment",
+          "schema": {
+            "$ref": "#/backend/entities/VoucherPayment"
+          },
+          "description": "Subcollection recording individual payment transactions made for a specific advance voucher. Includes denormalized `firmId` and `employeeId` for Authorization Independence, enabling secure access checks directly on the payment document without fetching parent records. `payrollId` is an optional reference if payment was deducted from salary.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "employeeId",
+              "description": "The unique identifier of the parent employee."
+            },
+            {
+              "name": "voucherId",
+              "description": "The unique identifier of the parent voucher record."
+            },
+            {
+              "name": "voucherPaymentId",
+              "description": "The unique identifier of the voucher payment record."
+            }
+          ]
+        }
+      },
+      {
+        "path": "firms/{firmId}/holidays/{holidayId}",
+        "definition": {
+          "entityName": "Holiday",
+          "schema": {
+            "$ref": "#/backend/entities/Holiday"
+          },
+          "description": "Subcollection storing declared holidays applicable to a specific firm. `firmId` is inherited from the parent path. This structure ensures firm-specific holiday management without requiring cross-document reads in security rules.",
+          "params": [
+            {
+              "name": "firmId",
+              "description": "The unique identifier of the parent firm."
+            },
+            {
+              "name": "holidayId",
+              "description": "The unique identifier of the holiday record."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed following the core principles of Authorization Independence, Structural Segregation, and Access Modeling to ensure security, scalability, and debuggability for the SikkaTrack HR system. The primary strategy involves using hierarchical paths for firm-owned and employee-owned data, combined with crucial denormalization of authorization context.\n\n**Authorization Independence (CRITICAL):**\nTo eliminate the need for `get()` calls in security rules and enable atomic operations, key authorization fields are denormalized into subcollection documents. Specifically:\n\n1.  **`firmId` Denormalization**: The `firmId` is explicitly included in the `User`, `Attendance`, `Payroll`, `Voucher`, `PayrollPayment`, and `VoucherPayment` documents. Although `Plant`, `Employee`, and `Holiday` are already within `/firms/{firmId}/` subcollections, having `firmId` directly in the aforementioned documents means that any security rule for these collections can check `resource.data.firmId` against `request.auth.uid`'s associated `firmId` (obtained once from `/users/{uid}`) without needing to traverse or `get()` parent documents. This prevents complex rule dependencies and allows for batched writes that cross collection boundaries without rule failures due to missing parent data.\n2.  **`plantId` Denormalization**: The `plantId` is denormalized into the `Attendance` document. This allows `Attendance` records to be authorized directly based on the associated `plantId` (e.g., for GPS validation checks) without requiring a `get()` call to the parent `Employee` document to derive its assigned plant.\n3.  **`employeeId` Denormalization**: For `PayrollPayment` and `VoucherPayment` documents, `employeeId` is denormalized. This ensures that rules can directly verify payment ownership and association without fetching the parent `Payroll` or `Voucher` document to retrieve the `employeeId`.\n\nThis denormalization strategy makes authorization checks atomic, explicit, and significantly reduces the complexity and potential for errors in security rules, aligning perfectly with the 'Authorization Independence' mandate.\n\n**QAPs (Rules are not Filters):**\nThe recommended structure inherently supports Query Authorization Principles (QAPs), ensuring that security rules are not used as filters but rather enforce authorized access to explicitly scoped data. This is achieved through:\n\n1.  **Hierarchical Path-Based Scoping**: The core of the structure is built around `firms/{firmId}/` and `firms/{firmId}/employees/{employeeId}/` hierarchies. For instance, `firms/{firmId}/plants` means any query (list operation) on this path is automatically scoped to a specific firm. Similarly, `firms/{firmId}/employees/{employeeId}/attendance` naturally scopes attendance queries to a particular employee within a specific firm.\n2.  **Explicit Authorization Context in Path**: The `firmId` and `employeeId` are always present as path parameters in relevant subcollections (e.g., `{firmId}` for `Plant` and `Holiday` collections, and `{firmId}/{employeeId}` for `Attendance`, `SalaryHistory`, `Payroll`, `Voucher`, and their respective payment subcollections). This allows security rules to directly compare `request.auth.uid`'s firm/employee context with the `firmId` and `employeeId` variables extracted from the path (`allow list: if request.auth.firmId == firmId`). This eliminates the need for `where()` clauses or complex server-side filtering to enforce security, as data is already partitioned by authorization context.\n3.  **Denormalized Fields for `list` Operations**: While hierarchical paths provide primary scoping, the denormalized `firmId` and `employeeId` fields within documents (e.g., `Attendance.firmId`) offer an additional layer of security and flexibility. For more complex queries that might transcend a direct parent path (though less common in this hierarchical model), rules can still efficiently verify `resource.data.firmId == request.auth.firmId`, allowing for secure `list` operations without relying on rules as filters.\n\nOverall, this design prioritizes clarity, atomicity, and efficient authorization, ensuring that SikkaTrack HR operates securely and scalably with easily maintainable Firestore security rules."
   }
 }

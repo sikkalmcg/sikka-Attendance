@@ -1,10 +1,216 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Enterprise access logic
-    match /{document=**} {
-      allow read, write: if true; // In production, refine this to request.auth != null
+
+    /**
+     * SikkaTrack HRMS Security Rules
+     *
+     * CORE PHILOSOPHY:
+     * This ruleset implements a strict multi-tenant architecture centered around the 'Firm' entity. 
+     * Access is partitioned by firm association, verified against the user's profile. A global 
+     * 'SuperAdmin' role provides an override for system-wide maintenance.
+     *
+     * DATA STRUCTURE:
+     * - /users/{userId}: Global user profiles containing role and firm affinity.
+     * - /firms/{firmId}: The root of the organizational hierarchy.
+     * - /firms/{firmId}/...: All operational data (Employees, Attendance, Payroll, Vouchers, 
+     *   Plants, Holidays) are nested under the specific Firm to ensure logical and physical segregation.
+     *
+     * KEY SECURITY DECISIONS:
+     * 1. User Privacy: Users can only read/write their own profile. Listing users is restricted to SuperAdmins.
+     * 2. Firm Segregation: Access to any data within a firm's tree requires the user's 'firmId' to 
+     *    match the path's 'firmId'.
+     * 3. Relational Integrity: On creation, documents must include internal fields (e.g., firmId, 
+     *    employeeId) that match their path parameters to prevent "orphaned" or mislocated data.
+     * 4. State Safety: All updates and deletes require the document to exist (resource != null).
+     *
+     * DENORMALIZATION FOR AUTHORIZATION:
+     * To ensure high performance and Authorization Independence, 'firmId' and 'employeeId' are 
+     * denormalized into Attendance, Payroll, and Voucher documents. This allows rules to verify 
+     * context directly from the document being accessed.
+     */
+
+    // --- GLOBAL HELPER FUNCTIONS ---
+
+    /** @description Checks if the user is authenticated. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** @description Checks if the authenticated user's UID matches the provided ID. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** @description Retrieves the user's data from the root users collection. */
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    /** @description Checks if the user has the SuperAdmin override flag. */
+    function isSuperAdmin() {
+      return isSignedIn() && getUserData().isSuperAdmin == true;
+    }
+
+    /** @description Checks if the user's assigned firmId matches the path parameter. */
+    function belongsToFirm(firmId) {
+      return isSignedIn() && (getUserData().firmId == firmId || isSuperAdmin());
+    }
+
+    // --- COLLECTION RULES ---
+
+    /**
+     * @description Rules for the User collection. Supports self-management and SuperAdmin control.
+     * @path /users/{userId}
+     * @allow User (userId_123) to (get) their own profile.
+     * @deny User (userId_123) to (list) all users.
+     * @principle Implements Verified Identity and Self-Creation patterns.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isSuperAdmin();
+      allow list: if isSuperAdmin();
+      allow create: if isOwner(userId);
+      allow update: if (resource != null && isOwner(userId)) || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    /**
+     * @description Rules for the Firm collection.
+     * @path /firms/{firmId}
+     * @allow User in Firm A to (get) Firm A details.
+     * @deny User in Firm A to (update) Firm B details.
+     * @principle Enforces Firm-level access control.
+     */
+    match /firms/{firmId} {
+      allow get: if belongsToFirm(firmId);
+      allow list: if isSuperAdmin();
+      // CRITICAL: Cannot implement owner-only writes. The 'Firm' entity is missing an 'ownerId' or 'authorId' field.
+      allow create, update, delete: if isSuperAdmin(); // TODO: Add firm manager validation once schema has ownership field.
+    }
+
+    /**
+     * @description Rules for physical Plant locations.
+     * @path /firms/{firmId}/plants/{plantId}
+     * @allow HR of Firm A to (create) a new Plant for Firm A.
+     * @deny User of Firm B to (list) Plants of Firm A.
+     * @principle Path-based scoping for multi-tenancy.
+     */
+    match /firms/{firmId}/plants/{plantId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if resource != null && belongsToFirm(firmId);
+    }
+
+    /**
+     * @description Rules for Employee profiles.
+     * @path /firms/{firmId}/employees/{employeeId}
+     * @allow Admin of Firm A to (update) Employee 789 in Firm A.
+     * @deny Admin of Firm A to (get) Employee in Firm B.
+     * @principle Restricts HR data to authorized firm members.
+     */
+    match /firms/{firmId}/employees/{employeeId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if resource != null && belongsToFirm(firmId);
+    }
+
+    /**
+     * @description Rules for Attendance records.
+     * @path /firms/{firmId}/employees/{employeeId}/attendance/{attendanceId}
+     * @allow Employee (via app logic) to (create) attendance with their employeeId and firmId.
+     * @deny User to (update) attendance in a different firm.
+     * @principle Validates relational integrity using denormalized context.
+     */
+    match /firms/{firmId}/employees/{employeeId}/attendance/{attendanceId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId && request.resource.data.employeeId == employeeId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if resource != null && belongsToFirm(firmId);
+    }
+
+    /**
+     * @description Rules for Salary History audit trails.
+     * @path /firms/{firmId}/employees/{employeeId}/salaryHistory/{salaryHistoryId}
+     * @allow Admin to (get) history of an employee.
+     * @deny Any user to (delete) salary history records.
+     * @principle Ensures audit persistence.
+     */
+    match /firms/{firmId}/employees/{employeeId}/salaryHistory/{salaryHistoryId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.employeeId == employeeId;
+      allow update: if false; // Salary history should be immutable for audit integrity.
+      allow delete: if isSuperAdmin();
+    }
+
+    /**
+     * @description Rules for monthly Payroll generation.
+     * @path /firms/{firmId}/employees/{employeeId}/payroll/{payrollId}
+     * @allow Finance user to (list) payroll for Firm A.
+     * @deny User to (create) payroll for a mismatched employeeId.
+     * @principle Denormalized firmId validation for performant list operations.
+     */
+    match /firms/{firmId}/employees/{employeeId}/payroll/{payrollId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId && request.resource.data.employeeId == employeeId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if isSuperAdmin();
+    }
+
+    /**
+     * @description Rules for Payroll Payment transactions.
+     * @path /firms/{firmId}/employees/{employeeId}/payroll/{payrollId}/payments/{payrollPaymentId}
+     * @allow Admin to (create) a payment record for a payroll.
+     * @deny Unauthorized user to (get) specific payment details.
+     * @principle Deeply nested path authorization.
+     */
+    match /firms/{firmId}/employees/{employeeId}/payroll/{payrollId}/payments/{payrollPaymentId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId && request.resource.data.employeeId == employeeId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if isSuperAdmin();
+    }
+
+    /**
+     * @description Rules for advance Vouchers.
+     * @path /firms/{firmId}/employees/{employeeId}/vouchers/{voucherId}
+     * @allow Employee to (get) their own voucher status.
+     * @deny User to (update) a voucher in another firm.
+     * @principle Multi-level hierarchy validation.
+     */
+    match /firms/{firmId}/employees/{employeeId}/vouchers/{voucherId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId && request.resource.data.employeeId == employeeId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if resource != null && belongsToFirm(firmId);
+    }
+
+    /**
+     * @description Rules for Voucher Payment transactions.
+     * @path /firms/{firmId}/employees/{employeeId}/vouchers/{voucherId}/payments/{voucherPaymentId}
+     * @allow Finance user to (create) a record of an advance repayment.
+     * @principle Ensures consistent relationship between payment, voucher, and firm.
+     */
+    match /firms/{firmId}/employees/{employeeId}/vouchers/{voucherId}/payments/{voucherPaymentId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId && request.resource.data.employeeId == employeeId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if isSuperAdmin();
+    }
+
+    /**
+     * @description Rules for Firm Holidays.
+     * @path /firms/{firmId}/holidays/{holidayId}
+     * @allow All firm members to (list) holidays.
+     * @deny Non-firm members to (get) holiday dates.
+     * @principle Shared access restricted to firm context.
+     */
+    match /firms/{firmId}/holidays/{holidayId} {
+      allow get, list: if belongsToFirm(firmId);
+      allow create: if belongsToFirm(firmId) && request.resource.data.firmId == firmId;
+      allow update: if resource != null && belongsToFirm(firmId);
+      allow delete: if resource != null && belongsToFirm(firmId);
     }
   }
 }
