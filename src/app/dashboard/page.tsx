@@ -20,7 +20,7 @@ import {
   ChartContainer, 
   ChartTooltip, 
   ChartTooltipContent,
-  ChartLegend,
+  ChartLegend, 
   ChartLegendContent,
   type ChartConfig
 } from "@/components/ui/chart";
@@ -42,11 +42,20 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, formatDate } from "@/lib/utils";
+import { format } from "date-fns";
 
 const chartConfig = {
-  present: {
-    label: "Present Today",
+  office: {
+    label: "In Office",
     color: "hsl(var(--primary))",
+  },
+  field: {
+    label: "Field Work",
+    color: "hsl(var(--chart-2))",
+  },
+  wfh: {
+    label: "W.F.H",
+    color: "hsl(var(--chart-4))",
   },
   absent: {
     label: "Absent Today",
@@ -56,21 +65,25 @@ const chartConfig = {
 
 const PRESENT_STATUSES = ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'];
 
+const getISTTime = () => {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+};
+
 export default function DashboardHome() {
   const { employees, attendanceRecords, vouchers, plants } = useData();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [isPresentModalOpen, setIsPresentModalOpen] = useState(false);
   const [isAbsentModalOpen, setIsAbsentModalOpen] = useState(false);
+  const [todayStr, setTodayStr] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
+    setTodayStr(format(getISTTime(), 'yyyy-MM-dd'));
   }, []);
 
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-
   const stats = useMemo(() => {
-    if (!isMounted) return { totalEmployees: 0, presentToday: 0, absentToday: 0, pendingApprovals: 0, attendancePct: "0" };
+    if (!isMounted || !todayStr) return { totalEmployees: 0, presentToday: 0, absentToday: 0, pendingApprovals: 0, attendancePct: "0" };
     
     const activeEmployees = employees.filter(e => e.active);
     const presentToday = attendanceRecords.filter(r => r.date === todayStr && PRESENT_STATUSES.includes(r.status));
@@ -87,7 +100,7 @@ export default function DashboardHome() {
   }, [employees, attendanceRecords, vouchers, isMounted, todayStr]);
 
   const presentEmployeesData = useMemo(() => {
-    if (!isMounted) return [];
+    if (!isMounted || !todayStr) return [];
     return attendanceRecords
       .filter(r => r.date === todayStr && PRESENT_STATUSES.includes(r.status))
       .map(rec => {
@@ -101,8 +114,7 @@ export default function DashboardHome() {
   }, [attendanceRecords, employees, todayStr, isMounted]);
 
   const absentEmployeesData = useMemo(() => {
-    if (!isMounted) return [];
-    // Only count employees as present if they have a record today with a 'PRESENT' type status
+    if (!isMounted || !todayStr) return [];
     const presentIds = new Set(
       attendanceRecords
         .filter(r => r.date === todayStr && PRESENT_STATUSES.includes(r.status))
@@ -120,24 +132,32 @@ export default function DashboardHome() {
   }, [employees, attendanceRecords, todayStr, isMounted]);
 
   const chartData = useMemo(() => {
-    if (!isMounted || !plants.length) return [];
+    if (!isMounted || !plants.length || !todayStr) return [];
     
     return plants.map(plant => {
-      // Find active employees assigned to this specific plant
       const assignedToPlant = employees.filter(e => 
         e.active && (e.unitIds?.includes(plant.id) || e.unitId === plant.id)
       );
       
-      const presentInPlant = attendanceRecords.filter(r => 
+      const recordsToday = attendanceRecords.filter(r => 
         r.date === todayStr && 
         assignedToPlant.some(e => e.employeeId === r.employeeId) &&
         PRESENT_STATUSES.includes(r.status)
       );
 
+      const office = recordsToday.filter(r => r.attendanceType === 'OFFICE' || !r.attendanceType).length;
+      const field = recordsToday.filter(r => r.attendanceType === 'FIELD').length;
+      const wfh = recordsToday.filter(r => r.attendanceType === 'WFH').length;
+      
+      const presentIds = new Set(recordsToday.map(r => r.employeeId));
+      const absentCount = Math.max(0, assignedToPlant.length - presentIds.size);
+
       return {
         name: plant.name,
-        present: presentInPlant.length,
-        absent: Math.max(0, assignedToPlant.length - presentInPlant.length)
+        office,
+        field,
+        wfh,
+        absent: absentCount
       };
     });
   }, [plants, employees, attendanceRecords, todayStr, isMounted]);
@@ -211,7 +231,9 @@ export default function DashboardHome() {
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend content={<ChartLegendContent />} verticalAlign="top" align="right" />
-                <Bar dataKey="present" fill="var(--color-present)" radius={[4, 4, 0, 0]} barSize={32} />
+                <Bar dataKey="office" stackId="a" fill="var(--color-office)" radius={[0, 0, 0, 0]} barSize={32} />
+                <Bar dataKey="field" stackId="a" fill="var(--color-field)" radius={[0, 0, 0, 0]} barSize={32} />
+                <Bar dataKey="wfh" stackId="a" fill="var(--color-wfh)" radius={[4, 4, 0, 0]} barSize={32} />
                 <Bar dataKey="absent" fill="var(--color-absent)" radius={[4, 4, 0, 0]} barSize={32} />
               </BarChart>
             </ChartContainer>
@@ -261,7 +283,7 @@ export default function DashboardHome() {
               onClick={() => setIsPresentModalOpen(false)}
               className="p-2 hover:bg-slate-100 rounded-full transition-colors absolute right-4 top-4"
             >
-              <X className="w-5 h-5 text-primary" />
+              <X className="h-5 w-5 text-primary" />
             </button>
           </DialogHeader>
           <div className="flex-1 overflow-hidden">
