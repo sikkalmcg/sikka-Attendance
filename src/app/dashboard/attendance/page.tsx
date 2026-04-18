@@ -250,9 +250,16 @@ export default function AttendancePage() {
   };
 
   const handleSendLeaveRequest = () => {
+    // 1. Identification check
+    if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") {
+      toast({ variant: "destructive", title: "Identity Error", description: "Could not identify employee record." });
+      return;
+    }
+
     const istNow = getISTTime();
     const today = format(istNow, "yyyy-MM-dd");
     
+    // 2. Validation Logic
     if (leaveType === "DAYS") {
       if (!leaveFrom || !leaveTo || !leavePurpose.trim()) {
         toast({ variant: "destructive", title: "Missing Fields", description: "Please provide dates and purpose." });
@@ -267,6 +274,7 @@ export default function AttendancePage() {
         return;
       }
     } else {
+      // HALF_DAY
       if (!reachTime || !leavePurpose.trim()) {
         toast({ variant: "destructive", title: "Missing Fields", description: "Please provide reach time and purpose." });
         return;
@@ -278,42 +286,62 @@ export default function AttendancePage() {
       }
     }
 
-    const newFrom = parseISO(leaveType === "DAYS" ? leaveFrom : today);
-    const newTo = parseISO(leaveType === "DAYS" ? leaveTo : today);
+    // 3. Overlap Check
+    const newFromDate = leaveType === "DAYS" ? leaveFrom : today;
+    const newToDate = leaveType === "DAYS" ? leaveTo : today;
+    const newFrom = parseISO(newFromDate);
+    const newTo = parseISO(newToDate);
     
     const hasOverlap = (leaveRequests || []).some(l => {
       if (l.employeeId !== effectiveEmployeeId) return false;
       if (l.status === 'REJECTED') return false;
+      
       const existingFrom = parseISO(l.fromDate);
       const existingTo = parseISO(l.toDate);
+      
+      if (isNaN(existingFrom.getTime()) || isNaN(existingTo.getTime())) return false;
+      
       const interval = { start: existingFrom, end: existingTo };
-      return isWithinInterval(newFrom, interval) || isWithinInterval(newTo, interval);
+      try {
+        return isWithinInterval(newFrom, interval) || isWithinInterval(newTo, interval);
+      } catch (e) {
+        return false;
+      }
     });
 
     if (hasOverlap) {
-      toast({ variant: "destructive", title: "Request Blocked", description: "Leave request already exists for selected date." });
+      toast({ variant: "destructive", title: "Request Blocked", description: "Leave request already exists for the selected date(s)." });
       return;
     }
 
+    // 4. Submit Request
     setIsSubmittingLeave(true);
     try {
-      const days = leaveType === "DAYS" ? (differenceInDays(parseISO(leaveTo), parseISO(leaveFrom)) + 1) : 0.5;
+      const daysCount = leaveType === "DAYS" ? (differenceInDays(newTo, newFrom) + 1) : 0.5;
       const newLeave: Partial<LeaveRequest> = {
         employeeId: effectiveEmployeeId,
         employeeName: effectiveEmployeeName,
         department: registeredEmployee?.department || "N/A",
         designation: registeredEmployee?.designation || "N/A",
-        fromDate: leaveType === "DAYS" ? leaveFrom : today,
-        toDate: leaveType === "DAYS" ? leaveTo : today,
-        days: days,
+        fromDate: newFromDate,
+        toDate: newToDate,
+        days: daysCount,
         purpose: leavePurpose,
         status: 'UNDER_PROCESS',
         leaveType: leaveType,
         reachTime: leaveType === "HALF_DAY" ? reachTime : undefined
       };
+      
       addRecord('leaveRequests', newLeave);
-      toast({ title: "Request Sent", description: "Your leave application is under process." });
+      toast({ title: "Request Sent", description: "Your leave application has been submitted successfully." });
+      
+      // Cleanup and close
       setActiveDialog("NONE");
+      setLeavePurpose("");
+      setReachTime("");
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "System Error", description: "Could not submit request. Please try again." });
     } finally {
       setIsSubmittingLeave(false);
     }
