@@ -11,7 +11,8 @@ import {
   AlertCircle, 
   TrendingUp,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  UserX
 } from "lucide-react";
 import { 
   ChartContainer, 
@@ -39,17 +40,18 @@ export default function DashboardHome() {
   }, []);
 
   const stats = useMemo(() => {
-    if (!isMounted) return { totalEmployees: 0, presentToday: 0, lateComers: 0, pendingApprovals: 0, attendancePct: "0" };
+    if (!isMounted) return { totalEmployees: 0, presentToday: 0, absentToday: 0, pendingApprovals: 0, attendancePct: "0" };
     
     const todayStr = new Date().toISOString().split('T')[0];
     const activeEmployees = employees.filter(e => e.active);
     const presentToday = attendanceRecords.filter(r => r.date === todayStr && (r.status === 'PRESENT' || r.status === 'HALF_DAY'));
+    const absentToday = Math.max(0, activeEmployees.length - presentToday.length);
     const pendingApprovals = attendanceRecords.filter(r => !r.approved).length + vouchers.filter(v => v.status === 'PENDING').length;
 
     return {
       totalEmployees: activeEmployees.length,
       presentToday: presentToday.length,
-      lateComers: 0,
+      absentToday: absentToday,
       pendingApprovals: pendingApprovals,
       attendancePct: activeEmployees.length > 0 ? ((presentToday.length / activeEmployees.length) * 100).toFixed(1) : "0"
     };
@@ -92,12 +94,12 @@ export default function DashboardHome() {
           description="At various plants"
         />
         <StatCard 
-          title="Late Comers" 
-          value={stats.lateComers} 
-          icon={Clock} 
+          title="Absent Today" 
+          value={stats.absentToday} 
+          icon={UserX} 
           trend="0" 
           trendUp={false}
-          description="Today's exceptions"
+          description="Not logged in today"
         />
         <StatCard 
           title="Pending Approvals" 
