@@ -62,7 +62,7 @@ import {
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
-import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays } from "date-fns";
+import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays, isValid } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -119,7 +119,7 @@ export default function ApprovalsPage() {
     const actualPending = (attendanceRecords || [])
       .filter(rec => !rec.approved && !rec.remark)
       .map(rec => {
-        const emp = (employees || []).find(e => e.employeeId === rec.employeeId);
+        const emp = employees.find(e => e.employeeId === rec.employeeId);
         return {
           ...rec,
           dept: emp?.department || "N/A",
@@ -169,7 +169,7 @@ export default function ApprovalsPage() {
     let list = (attendanceRecords || [])
       .filter(rec => rec.approved)
       .map(rec => {
-        const emp = (employees || []).find(e => e.employeeId === rec.employeeId);
+        const emp = employees.find(e => e.employeeId === rec.employeeId);
         return {
           ...rec,
           dept: emp?.department || "N/A",
@@ -254,6 +254,8 @@ export default function ApprovalsPage() {
         const diff = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
         finalHours = parseFloat(diff.toFixed(2));
       }
+      if (isNaN(finalHours)) finalHours = 0;
+
       if ((selectedAttendance as any).isVirtual) {
         addRecord('attendance', {
           employeeId: selectedAttendance.employeeId,
@@ -325,7 +327,15 @@ export default function ApprovalsPage() {
     setIsProcessing(true);
     try {
       const approverName = currentUser?.fullName || "HR_ADMIN";
-      const days = differenceInDays(parseISO(leaveEditDates.to), parseISO(leaveEditDates.from)) + 1;
+      const fromD = parseISO(leaveEditDates.from);
+      const toD = parseISO(leaveEditDates.to);
+
+      if (!isValid(fromD) || !isValid(toD)) {
+        throw new Error("Invalid dates selected for approval.");
+      }
+
+      const diff = differenceInDays(toD, fromD) + 1;
+      const days = isNaN(diff) ? selectedLeave.days : diff;
       
       // Update Leave Request Status
       updateRecord('leaveRequests', selectedLeave.id, {
@@ -368,6 +378,9 @@ export default function ApprovalsPage() {
 
       toast({ title: "Leave Approved" });
       setIsLeaveApproveOpen(false);
+    } catch (error: any) {
+      console.error("Leave approval error:", error);
+      toast({ variant: "destructive", title: "Error", description: error.message || "Failed to approve leave." });
     } finally { setIsProcessing(false); }
   };
 

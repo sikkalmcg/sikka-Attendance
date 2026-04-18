@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant, LeaveRequest } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays, addDays, isWithinInterval, differenceInMinutes } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays, addDays, isWithinInterval, differenceInMinutes, isValid } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -250,7 +250,6 @@ export default function AttendancePage() {
   };
 
   const handleSendLeaveRequest = () => {
-    // 1. Identification check
     if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") {
       toast({ variant: "destructive", title: "Identity Error", description: "Could not identify employee record." });
       return;
@@ -259,7 +258,6 @@ export default function AttendancePage() {
     const istNow = getISTTime();
     const today = format(istNow, "yyyy-MM-dd");
     
-    // 2. Validation Logic
     if (leaveType === "DAYS") {
       if (!leaveFrom || !leaveTo || !leavePurpose.trim()) {
         toast({ variant: "destructive", title: "Missing Fields", description: "Please provide dates and purpose." });
@@ -274,7 +272,6 @@ export default function AttendancePage() {
         return;
       }
     } else {
-      // HALF_DAY
       if (!reachTime || !leavePurpose.trim()) {
         toast({ variant: "destructive", title: "Missing Fields", description: "Please provide reach time and purpose." });
         return;
@@ -286,12 +283,16 @@ export default function AttendancePage() {
       }
     }
 
-    // 3. Overlap Check
     const newFromDate = leaveType === "DAYS" ? leaveFrom : today;
     const newToDate = leaveType === "DAYS" ? leaveTo : today;
     const newFrom = parseISO(newFromDate);
     const newTo = parseISO(newToDate);
     
+    if (!isValid(newFrom) || !isValid(newTo)) {
+      toast({ variant: "destructive", title: "Parsing Error", description: "Could not process selected dates. Please re-select." });
+      return;
+    }
+
     const hasOverlap = (leaveRequests || []).some(l => {
       if (l.employeeId !== effectiveEmployeeId) return false;
       if (l.status === 'REJECTED') return false;
@@ -299,10 +300,10 @@ export default function AttendancePage() {
       const existingFrom = parseISO(l.fromDate);
       const existingTo = parseISO(l.toDate);
       
-      if (isNaN(existingFrom.getTime()) || isNaN(existingTo.getTime())) return false;
+      if (!isValid(existingFrom) || !isValid(existingTo)) return false;
       
-      const interval = { start: existingFrom, end: existingTo };
       try {
+        const interval = { start: existingFrom, end: existingTo };
         return isWithinInterval(newFrom, interval) || isWithinInterval(newTo, interval);
       } catch (e) {
         return false;
@@ -314,10 +315,17 @@ export default function AttendancePage() {
       return;
     }
 
-    // 4. Submit Request
     setIsSubmittingLeave(true);
     try {
-      const daysCount = leaveType === "DAYS" ? (differenceInDays(newTo, newFrom) + 1) : 0.5;
+      let daysCount = 0.5;
+      if (leaveType === "DAYS") {
+        const diff = differenceInDays(newTo, newFrom) + 1;
+        if (isNaN(diff)) {
+          throw new Error("Date calculation error.");
+        }
+        daysCount = diff;
+      }
+
       const newLeave: Partial<LeaveRequest> = {
         employeeId: effectiveEmployeeId,
         employeeName: effectiveEmployeeName,
@@ -335,13 +343,12 @@ export default function AttendancePage() {
       addRecord('leaveRequests', newLeave);
       toast({ title: "Request Sent", description: "Your leave application has been submitted successfully." });
       
-      // Cleanup and close
       setActiveDialog("NONE");
       setLeavePurpose("");
       setReachTime("");
-    } catch (error) {
-      console.error(error);
-      toast({ variant: "destructive", title: "System Error", description: "Could not submit request. Please try again." });
+    } catch (error: any) {
+      console.error("Leave submission error:", error);
+      toast({ variant: "destructive", title: "System Error", description: error.message || "Could not submit request. Please try again." });
     } finally {
       setIsSubmittingLeave(false);
     }
@@ -367,7 +374,7 @@ export default function AttendancePage() {
     let historyStartDate = fortyFiveDaysAgo;
     if (registeredEmployee?.joinDate) {
       const joinDate = parseISO(registeredEmployee.joinDate);
-      if (isAfter(joinDate, fortyFiveDaysAgo)) historyStartDate = joinDate;
+      if (isValid(joinDate) && isAfter(joinDate, fortyFiveDaysAgo)) historyStartDate = joinDate;
     }
 
     const dateRange = eachDayOfInterval({ start: historyStartDate, end: today });
@@ -527,8 +534,8 @@ export default function AttendancePage() {
           date: selectedRecordToEdit.date,
           inTime: editTimes.in || null,
           outTime: editTimes.out || null,
-          hours: finalHours,
-          status: finalHours > 0 ? 'PRESENT' : 'ABSENT',
+          hours: isNaN(finalHours) ? 0 : finalHours,
+          status: (finalHours > 0) ? 'PRESENT' : 'ABSENT',
           attendanceType: 'FIELD',
           approved: false,
           address: 'Manual Entry'
@@ -537,8 +544,8 @@ export default function AttendancePage() {
         updateRecord('attendance', selectedRecordToEdit.id, {
           inTime: editTimes.in || null,
           outTime: editTimes.out || null,
-          hours: finalHours,
-          status: finalHours > 0 ? 'PRESENT' : 'ABSENT'
+          hours: isNaN(finalHours) ? 0 : finalHours,
+          status: (finalHours > 0) ? 'PRESENT' : 'ABSENT'
         });
       }
       toast({ title: "Record Adjusted" });
