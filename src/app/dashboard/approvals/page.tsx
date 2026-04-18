@@ -324,14 +324,48 @@ export default function ApprovalsPage() {
     if (!selectedLeave || isProcessing) return;
     setIsProcessing(true);
     try {
+      const approverName = currentUser?.fullName || "HR_ADMIN";
       const days = differenceInDays(parseISO(leaveEditDates.to), parseISO(leaveEditDates.from)) + 1;
+      
+      // Update Leave Request Status
       updateRecord('leaveRequests', selectedLeave.id, {
         status: 'APPROVED',
         fromDate: leaveEditDates.from,
         toDate: leaveEditDates.to,
         days,
-        approvedBy: currentUser?.fullName || "HR_ADMIN"
+        approvedBy: approverName
       });
+
+      // Special Logic for Half Day: Automatically add 4 hours to attendance
+      if (selectedLeave.leaveType === 'HALF_DAY') {
+        const leaveDate = selectedLeave.fromDate;
+        const existingAttendance = attendanceRecords.find(r => r.employeeId === selectedLeave.employeeId && r.date === leaveDate);
+        
+        if (existingAttendance) {
+          // Add 4 hours to existing attendance
+          updateRecord('attendance', existingAttendance.id, {
+            hours: (existingAttendance.hours || 0) + 4,
+            status: 'PRESENT',
+            approved: true,
+            approvedBy: approverName
+          });
+        } else {
+          // Create new attendance record for the half day
+          addRecord('attendance', {
+            employeeId: selectedLeave.employeeId,
+            employeeName: selectedLeave.employeeName,
+            date: leaveDate,
+            status: 'PRESENT',
+            attendanceType: 'FIELD',
+            hours: 4,
+            approved: true,
+            approvedBy: approverName,
+            address: 'Approved Half Day Leave',
+            unapprovedOutDuration: 0
+          });
+        }
+      }
+
       toast({ title: "Leave Approved" });
       setIsLeaveApproveOpen(false);
     } finally { setIsProcessing(false); }
