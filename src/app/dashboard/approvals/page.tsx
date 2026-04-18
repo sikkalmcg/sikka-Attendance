@@ -503,7 +503,9 @@ export default function ApprovalsPage() {
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">
                         {viewMode === 'pending' || (viewMode === 'history' && historyType === 'attendance') ? 'OUT Date Time' : 'To Date'}
                       </TableHead>
-                      {pendingType === 'attendance' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Out Hour</TableHead>}
+                      {((viewMode === 'pending' && pendingType === 'attendance') || (viewMode === 'history' && historyType === 'attendance')) && (
+                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Out Hour</TableHead>
+                      )}
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">
                         {currentData.items[0]?.days !== undefined ? 'Days' : 'Working Hour'}
                       </TableHead>
@@ -543,7 +545,7 @@ export default function ApprovalsPage() {
                               <span className={cn("text-xs font-mono font-bold", rec.outTime ? "text-rose-500" : "text-slate-300 italic")}>{rec.outTime || "--:--"}</span>
                             </div>
                           </TableCell>
-                          {pendingType === 'attendance' && (
+                          {((viewMode === 'pending' && pendingType === 'attendance') || (viewMode === 'history' && historyType === 'attendance')) && (
                             <TableCell className="text-center">
                               <span className="text-xs font-mono font-bold text-rose-600">
                                 {formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}
