@@ -13,15 +13,18 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   UserX,
-  X
+  X,
+  Factory
 } from "lucide-react";
 import { 
   ChartContainer, 
   ChartTooltip, 
   ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
   type ChartConfig
 } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Legend } from "recharts";
 import { useData } from "@/context/data-context";
 import {
   Dialog,
@@ -41,14 +44,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, formatDate } from "@/lib/utils";
 
 const chartConfig = {
-  attendance: {
-    label: "Attendance",
+  present: {
+    label: "Present Today",
     color: "hsl(var(--primary))",
+  },
+  absent: {
+    label: "Absent Today",
+    color: "hsl(var(--destructive))",
   },
 } satisfies ChartConfig;
 
 export default function DashboardHome() {
-  const { employees, attendanceRecords, vouchers } = useData();
+  const { employees, attendanceRecords, vouchers, plants } = useData();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [isPresentModalOpen, setIsPresentModalOpen] = useState(false);
@@ -105,18 +112,27 @@ export default function DashboardHome() {
   }, [employees, attendanceRecords, todayStr, isMounted]);
 
   const chartData = useMemo(() => {
-    if (!isMounted) return [];
+    if (!isMounted || !plants.length) return [];
     
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return days.map((day, i) => {
-      const baseValue = stats.totalEmployees || 10;
-      const variation = Math.floor((Math.sin(i) + 1) * (baseValue / 2)); 
-      return { 
-        name: day, 
-        attendance: Math.min(baseValue, variation + (baseValue * 0.5))
+    return plants.map(plant => {
+      // Find active employees assigned to this specific plant
+      const assignedToPlant = employees.filter(e => 
+        e.active && (e.unitIds?.includes(plant.id) || e.unitId === plant.id)
+      );
+      
+      const presentInPlant = attendanceRecords.filter(r => 
+        r.date === todayStr && 
+        assignedToPlant.some(e => e.employeeId === r.employeeId) &&
+        ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'].includes(r.status)
+      );
+
+      return {
+        name: plant.name,
+        present: presentInPlant.length,
+        absent: Math.max(0, assignedToPlant.length - presentInPlant.length)
       };
     });
-  }, [stats.totalEmployees, isMounted]);
+  }, [plants, employees, attendanceRecords, todayStr, isMounted]);
 
   if (!isMounted) return null;
 
@@ -163,25 +179,32 @@ export default function DashboardHome() {
         <Card className="lg:col-span-2 shadow-sm border-slate-200">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg font-bold">Attendance Trends</CardTitle>
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Factory className="w-5 h-5 text-primary" />
+                Attendance Trends: Plant-wise
+              </CardTitle>
               <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
                 <TrendingUp className="w-4 h-4" />
-                Live Data
+                Live Feed
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-0">
             <ChartContainer config={chartConfig} className="h-[300px] w-full mt-4">
-              <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+              <BarChart data={chartData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#64748b', fontSize: 10 }}
+                  interval={0}
+                />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="attendance" radius={[4, 4, 0, 0]} barSize={40}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.attendance > (stats.totalEmployees * 0.8) ? 'var(--color-attendance)' : '#33CEE7'} />
-                  ))}
-                </Bar>
+                <Legend content={<ChartLegendContent />} verticalAlign="top" align="right" />
+                <Bar dataKey="present" fill="var(--color-present)" radius={[4, 4, 0, 0]} barSize={32} />
+                <Bar dataKey="absent" fill="var(--color-absent)" radius={[4, 4, 0, 0]} barSize={32} />
               </BarChart>
             </ChartContainer>
           </CardContent>
