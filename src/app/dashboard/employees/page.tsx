@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -26,24 +25,11 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { 
   Search, 
-  MoreHorizontal, 
   UserPlus, 
   TrendingUp, 
   Pencil,
-  CheckCircle,
-  XCircle,
   History,
   CalendarDays,
   Building2,
@@ -51,21 +37,12 @@ import {
   ShieldCheck,
   ChevronRight,
   User as UserIcon,
-  AlertTriangle,
   Clock,
   TrendingUp as GrowthIcon,
   TrendingDown as LossIcon,
   Factory,
-  FileSpreadsheet,
-  UserCircle
+  FileSpreadsheet
 } from "lucide-react";
-import { 
-  DropdownMenu, 
-  DropdownMenuTrigger, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuSeparator 
-} from "@/components/ui/dropdown-menu";
 import { 
   Select, 
   SelectContent, 
@@ -82,7 +59,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, SalaryStructure, Firm } from "@/lib/types";
+import { Employee, SalaryStructure } from "@/lib/types";
 import { DEPARTMENTS, DESIGNATIONS } from "@/lib/constants";
 import { useData } from "@/context/data-context";
 
@@ -143,20 +120,16 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 };
 
 export default function EmployeesPage() {
-  const { employees, firms, plants, addRecord, updateRecord, currentUser } = useData();
+  const { employees, firms, plants, addRecord, updateRecord } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
-
-  const isSuperAdmin = useMemo(() => currentUser?.role === 'SUPER_ADMIN', [currentUser]);
 
   // Modal States
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [salaryRevision, setSalaryRevision] = useState<Employee | null>(null);
   const [viewHistoryEmployee, setViewHistoryEmployee] = useState<Employee | null>(null);
-  const [employeeToToggle, setEmployeeToToggle] = useState<Employee | null>(null);
-  const [isToggleConfirmOpen, setIsToggleConfirmOpen] = useState(false);
   
   // Form States
   const [formData, setFormData] = useState<Partial<Employee>>({ ...INITIAL_FORM_DATA });
@@ -368,7 +341,7 @@ export default function EmployeesPage() {
     setIsRegistrationOpen(false);
     setEditEmployee(null);
     setFormData({ ...INITIAL_FORM_DATA });
-    setIsProcessing(false); // Safety reset
+    setIsProcessing(false);
   };
 
   const toggleUnit = (id: string) => {
@@ -414,32 +387,6 @@ export default function EmployeesPage() {
       console.error("Revision error:", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to post salary revision." });
     } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleToggleStatus = async () => {
-    if (!employeeToToggle || isProcessing) return;
-    if (!isSuperAdmin) {
-      toast({ variant: "destructive", title: "Restricted", description: "Only Super Admin can deactivate employees." });
-      return;
-    }
-    setIsProcessing(true);
-    
-    try {
-      updateRecord('employees', employeeToToggle.id, { active: !employeeToToggle.active });
-      
-      toast({ 
-        title: employeeToToggle.active ? "Employee Deactivated" : "Employee Activated",
-        description: `${employeeToToggle.name} status updated successfully.`
-      });
-      
-    } catch (e) {
-      console.error("Toggle error:", e);
-      toast({ variant: "destructive", title: "Error", description: "Status toggle failed." });
-    } finally {
-      setIsToggleConfirmOpen(false);
-      setEmployeeToToggle(null);
       setIsProcessing(false);
     }
   };
@@ -608,28 +555,6 @@ export default function EmployeesPage() {
                             </TooltipTrigger>
                             <TooltipContent>View Salary Record</TooltipContent>
                           </Tooltip>
-                          
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isProcessing}>
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-52">
-                              {isSuperAdmin && (
-                                <DropdownMenuItem 
-                                  className={emp.active ? "text-rose-600 font-bold" : "text-emerald-600 font-bold"}
-                                  onSelect={(e) => {
-                                    e.preventDefault();
-                                    setEmployeeToToggle(emp);
-                                    setIsToggleConfirmOpen(true);
-                                  }}
-                                >
-                                  {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate Access</> : <><CheckCircle className="w-4 h-4 mr-2" /> Restore Access</>}
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1164,50 +1089,6 @@ export default function EmployeesPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Toggle Status Confirmation Dialog */}
-      <AlertDialog open={isToggleConfirmOpen} onOpenChange={setIsToggleConfirmOpen}>
-        <AlertDialogContent className="sm:max-w-md">
-          {isToggleConfirmOpen && (
-            <>
-              <AlertDialogHeader>
-                <div className="mx-auto w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4">
-                  <AlertTriangle className="w-6 h-6 text-rose-600" />
-                </div>
-                <AlertDialogTitle className="text-center text-xl">
-                  Confirm {employeeToToggle?.active ? "Deactivation" : "Activation"}
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-center pt-2">
-                  Are you sure you want to {employeeToToggle?.active ? "deactivate" : "activate"} <strong>{employeeToToggle?.name}</strong>?
-                  {employeeToToggle?.active ? 
-                    " This user will lose immediate access to the login portal." : 
-                    " This user will regain access to mark attendance and view records."
-                  }
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
-                <AlertDialogCancel 
-                  className="mt-0" 
-                  onClick={() => { 
-                    setIsToggleConfirmOpen(false); 
-                    setEmployeeToToggle(null); 
-                  }}
-                  disabled={isProcessing}
-                >
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={(e) => { e.preventDefault(); handleToggleStatus(); }}
-                  disabled={isProcessing}
-                  className={employeeToToggle?.active ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}
-                >
-                  {isProcessing ? "Processing..." : `Confirm ${employeeToToggle?.active ? "Deactivate" : "Activate"}`}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </>
-          )}
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
