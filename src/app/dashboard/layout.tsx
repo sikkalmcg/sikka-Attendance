@@ -108,11 +108,9 @@ function HeaderActions() {
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
   
   const latestNotifications = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
     return [...notifications]
-      .filter(n => n.timestamp?.startsWith(todayStr))
       .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))
-      .slice(0, 20);
+      .slice(0, 10);
   }, [notifications]);
 
   const markAllRead = () => {
@@ -131,7 +129,7 @@ function HeaderActions() {
     latestNotifications.forEach(n => {
       deleteRecord('notifications', n.id);
     });
-    toast({ title: "Logs Cleared", description: "Today's notification view has been reset." });
+    toast({ title: "Logs Cleared", description: "The notification view has been reset." });
   };
 
   const handleLogout = () => {
@@ -172,7 +170,7 @@ function HeaderActions() {
             <div className="bg-primary p-4 text-white flex items-center justify-between">
               <div>
                 <h3 className="font-black text-sm uppercase tracking-widest">Notifications</h3>
-                <p className="text-[10px] text-white/70 font-bold">Today's actual logs</p>
+                <p className="text-[10px] text-white/70 font-bold">Recent Activity Logs</p>
               </div>
               {unreadCount > 0 && (
                 <Badge variant="secondary" className="bg-white/20 text-white border-none font-bold text-[10px]">
@@ -186,7 +184,7 @@ function HeaderActions() {
                   <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
                     <Bell className="w-6 h-6 text-slate-300" />
                   </div>
-                  <p className="text-xs text-muted-foreground font-bold leading-relaxed">No actual logs for today yet.</p>
+                  <p className="text-xs text-muted-foreground font-bold leading-relaxed">No logs available yet.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100">
@@ -217,7 +215,7 @@ function HeaderActions() {
                   className="text-[10px] font-black uppercase tracking-widest text-primary h-8 w-full hover:bg-primary/5" 
                   onClick={handleClearLogs}
                 >
-                  Clear All Logs
+                  Clear Recent Logs
                 </Button>
               </div>
             )}
