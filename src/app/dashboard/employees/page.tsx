@@ -56,7 +56,8 @@ import {
   TrendingUp as GrowthIcon,
   TrendingDown as LossIcon,
   Factory,
-  FileSpreadsheet
+  FileSpreadsheet,
+  UserCircle
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -72,6 +73,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { 
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -338,7 +345,7 @@ export default function EmployeesPage() {
         salaryHistory: editEmployee ? (formData.salaryHistory || []) : [
           { fromMonth: joinMonthStr, toMonth: "Present", monthlyCTC: formData.salary?.monthlyCTC || 0 }
         ],
-        active: editEmployee ? (formData.active ?? true) : true
+        active: formData.active ?? true
       };
 
       if (editEmployee) {
@@ -494,112 +501,143 @@ export default function EmployeesPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow>
-                <TableHead className="font-bold">Employee Name / ID</TableHead>
-                <TableHead className="font-bold">Aadhaar</TableHead>
-                <TableHead className="font-bold">Dept / Designation</TableHead>
-                <TableHead className="font-bold">Join Date</TableHead>
-                <TableHead className="font-bold text-right">Monthly CTC</TableHead>
-                <TableHead className="font-bold text-center">Status</TableHead>
-                <TableHead className="text-right font-bold pr-6">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
+          <TooltipProvider>
+            <Table>
+              <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No employees found.</TableCell>
+                  <TableHead className="font-bold">Employee Name / ID</TableHead>
+                  <TableHead className="font-bold">Aadhaar</TableHead>
+                  <TableHead className="font-bold">Dept / Designation</TableHead>
+                  <TableHead className="font-bold">Join Date</TableHead>
+                  <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                  <TableHead className="font-bold text-center">Status</TableHead>
+                  <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filtered.map((emp) => (
-                  <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-bold uppercase">{emp.name}</span>
-                        <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">{emp.department}</span>
-                        <span className="text-xs text-muted-foreground">{emp.designation}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{emp.joinDate}</TableCell>
-                    <TableCell className="text-right font-bold text-emerald-600">
-                      {formatCurrency(emp.salary?.monthlyCTC || 0)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge 
-                        variant="outline" 
-                        className={cn(
-                          "px-2 py-0.5 text-[10px] uppercase font-black",
-                          emp.active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
-                        )}
-                      >
-                        {emp.active ? "Active" : "De-active"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <div className="flex justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={(e) => { 
-                            e.stopPropagation();
-                            setEditEmployee(emp); 
-                            setFormData({ ...emp }); 
-                            setIsRegistrationOpen(true); 
-                          }}
-                          disabled={isProcessing}
-                        >
-                          <Pencil className="w-4 h-4 text-slate-500" />
-                        </Button>
-                        
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" disabled={isProcessing}>
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem onSelect={(e) => { 
-                              e.preventDefault();
-                              setSalaryRevision(emp); 
-                              setRevisionData({ ...emp.salary }); 
-                            }}>
-                              <TrendingUp className="w-4 h-4 mr-2 text-emerald-600" /> Increase Salary
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={(e) => { 
-                              e.preventDefault();
-                              setViewHistoryEmployee(emp); 
-                            }}>
-                              <History className="w-4 h-4 mr-2" /> View Salary Record
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {isSuperAdmin && (
-                              <DropdownMenuItem 
-                                className={emp.active ? "text-rose-600 font-bold" : "text-emerald-600 font-bold"}
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  setEmployeeToToggle(emp);
-                                  setIsToggleConfirmOpen(true);
-                                }}
-                              >
-                                {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate</> : <><CheckCircle className="w-4 h-4 mr-2" /> Activate</>}
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No employees found.</TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filtered.map((emp) => (
+                    <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-bold uppercase">{emp.name}</span>
+                          <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">{emp.department}</span>
+                          <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{emp.joinDate}</TableCell>
+                      <TableCell className="text-right font-bold text-emerald-600">
+                        {formatCurrency(emp.salary?.monthlyCTC || 0)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge 
+                          variant="outline" 
+                          className={cn(
+                            "px-2 py-0.5 text-[10px] uppercase font-black",
+                            emp.active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                          )}
+                        >
+                          {emp.active ? "Active" : "De-active"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <div className="flex justify-end items-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-slate-500 hover:text-primary"
+                                onClick={(e) => { 
+                                  e.stopPropagation();
+                                  setEditEmployee(emp); 
+                                  setFormData({ ...emp }); 
+                                  setIsRegistrationOpen(true); 
+                                }}
+                                disabled={isProcessing}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit Profile</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
+                                onClick={(e) => { 
+                                  e.preventDefault();
+                                  setSalaryRevision(emp); 
+                                  setRevisionData({ ...emp.salary }); 
+                                }}
+                                disabled={isProcessing}
+                              >
+                                <TrendingUp className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Increase Salary</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-slate-500 hover:text-primary"
+                                onClick={(e) => { 
+                                  e.preventDefault();
+                                  setViewHistoryEmployee(emp); 
+                                }}
+                                disabled={isProcessing}
+                              >
+                                <History className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>View Salary Record</TooltipContent>
+                          </Tooltip>
+                          
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isProcessing}>
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52">
+                              {isSuperAdmin && (
+                                <DropdownMenuItem 
+                                  className={emp.active ? "text-rose-600 font-bold" : "text-emerald-600 font-bold"}
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    setEmployeeToToggle(emp);
+                                    setIsToggleConfirmOpen(true);
+                                  }}
+                                >
+                                  {emp.active ? <><XCircle className="w-4 h-4 mr-2" /> Deactivate Access</> : <><CheckCircle className="w-4 h-4 mr-2" /> Restore Access</>}
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
         </CardContent>
       </Card>
 
@@ -678,6 +716,22 @@ export default function EmployeesPage() {
                       <div className="space-y-2">
                         <Label>Joining Date *</Label>
                         <Input type="date" value={formData.joinDate || ''} onChange={(e) => setFormData(prev => ({...prev, joinDate: e.target.value}))} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">Employment Status *</Label>
+                        <Select 
+                          value={formData.active === false ? "inactive" : "active"} 
+                          onValueChange={(v) => setFormData(prev => ({...prev, active: v === "active"}))}
+                        >
+                          <SelectTrigger className={cn("h-10 font-bold", formData.active === false ? "text-rose-600" : "text-emerald-600")}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active" className="text-emerald-600 font-bold">Active</SelectItem>
+                            <SelectItem value="inactive" className="text-rose-600 font-bold">Deactivate</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-tight italic">Determines if user can access portal.</p>
                       </div>
                       <div className="space-y-2 md:col-span-3">
                         <Label>Residential Address</Label>

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { SUPER_ADMIN_USER } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, Loader2, Eye, EyeOff, ShieldAlert } from "lucide-react";
 import Image from "next/image";
 import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
@@ -97,6 +97,13 @@ export default function LoginPage() {
         if (registeredEmpDoc) {
           const empData = registeredEmpDoc.data();
           
+          // --- ACCOUNT STATUS CHECK ---
+          if (empData.active === false) {
+            setError("Access Denied: Your account has been deactivated by the administrator.");
+            setLoading(false);
+            return;
+          }
+
           // --- DEVICE BINDING LOGIC ---
           const currentDeviceId = getDeviceId();
           
