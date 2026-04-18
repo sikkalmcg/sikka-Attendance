@@ -303,12 +303,10 @@ export default function VouchersPage() {
     setPrintVoucher(v);
     toast({ title: "One-Click Download", description: "Generating document for PDF export..." });
     
-    // Using a 500ms delay to ensure React renders the portal while keeping user activation context
     setTimeout(() => {
       window.focus();
       window.print();
       document.title = originalTitle;
-      // Small delay after print dialog opens before clearing the print state
       setTimeout(() => setPrintVoucher(null), 1000);
     }, 500);
   };
@@ -765,7 +763,7 @@ export default function VouchersPage() {
             </DialogHeader>
             
             <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
-              <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 sm:p-16 min-h-[297mm] border-4 border-slate-900 rounded-sm">
+              <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 min-h-[297mm] border-4 border-slate-900 rounded-sm">
                 {previewVoucher && <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />}
               </div>
             </ScrollArea>
@@ -789,14 +787,14 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
   const formattedDate = voucher.date ? format(parseISO(voucher.date), 'dd-MMM-yyyy') : "---";
 
   return (
-    <div className="font-serif text-slate-900 space-y-10 bg-white">
+    <div className="font-serif text-slate-900 space-y-6 bg-white">
       <div className="text-center">
-        <h2 className="text-2xl font-black uppercase tracking-[0.3em] underline decoration-2 underline-offset-8">Advance Payment Voucher</h2>
+        <h2 className="text-xl font-black uppercase tracking-[0.3em] underline decoration-2 underline-offset-8">Advance Payment Voucher</h2>
       </div>
 
-      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mt-6">
+      <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mt-4">
         <div className="flex items-start gap-6">
-          <div className="w-16 h-16 border-2 border-slate-200 flex items-center justify-center p-1 rounded-xl bg-white shadow-sm overflow-hidden shrink-0 mt-1">
+          <div className="w-14 h-14 border-2 border-slate-200 flex items-center justify-center p-1 rounded-xl bg-white shadow-sm overflow-hidden shrink-0 mt-1">
             {firm?.logo ? (
               <img src={firm.logo} className="max-h-full max-w-full object-contain" alt="logo" />
             ) : (
@@ -804,33 +802,33 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
             )}
           </div>
           <div className="space-y-1">
-            <h1 className="text-2xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
+            <h1 className="text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h1>
             <div className="space-y-0.5">
-              <p className="text-xs text-slate-500 font-bold italic max-w-md">{firm?.registeredAddress || "Address details not available"}</p>
-              <p className="text-xs font-black text-slate-900 flex gap-2">
+              <p className="text-[10px] text-slate-500 font-bold italic max-w-md">{firm?.registeredAddress || "Address details not available"}</p>
+              <p className="text-[10px] font-black text-slate-900 flex gap-2">
                 <span className="text-slate-400 uppercase tracking-widest">GSTIN:</span> {firm?.gstin || "---"}
               </p>
             </div>
           </div>
         </div>
         
-        <div className="text-right space-y-4 pt-2">
-          <div className="space-y-1.5">
+        <div className="text-right space-y-2 pt-1">
+          <div className="space-y-1">
             <div className="flex justify-end gap-3 text-sm items-baseline">
-              <span className="font-bold text-slate-500 uppercase tracking-widest text-[10px] whitespace-nowrap">VOUCHER NO:</span>
-              <span className="font-mono font-black text-slate-900 text-lg leading-none whitespace-nowrap">{voucher.voucherNo}</span>
+              <span className="font-bold text-slate-500 uppercase tracking-widest text-[9px] whitespace-nowrap">VOUCHER NO:</span>
+              <span className="font-mono font-black text-slate-900 text-base leading-none whitespace-nowrap">{voucher.voucherNo}</span>
             </div>
             <div className="flex justify-end gap-3 text-sm items-baseline">
-              <span className="font-black text-slate-900 text-lg leading-none whitespace-nowrap">{formattedDate}</span>
+              <span className="font-black text-slate-900 text-base leading-none whitespace-nowrap">{formattedDate}</span>
             </div>
           </div>
           
-          <div className="space-y-1.5 pt-4 border-t border-slate-100">
-            <div className="flex justify-end gap-3 text-[10px] items-baseline">
+          <div className="space-y-1 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-3 text-[9px] items-baseline">
               <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">CREATED BY:</span>
               <span className="font-bold text-primary uppercase leading-none whitespace-nowrap">{voucher.createdByName || "SYSTEM"}</span>
             </div>
-            <div className="flex justify-end gap-3 text-[10px] items-baseline">
+            <div className="flex justify-end gap-3 text-[9px] items-baseline">
               <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">APPROVED BY:</span>
               <span className="font-bold text-emerald-600 uppercase leading-none whitespace-nowrap">{voucher.approvedByName || "--"}</span>
             </div>
@@ -838,7 +836,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 mt-6">
+      <div className="grid grid-cols-2 border-2 border-slate-900 divide-x-2 divide-y-2 divide-slate-900 mt-4">
         <DetailCell label="Employee ID" value={emp?.employeeId} />
         <DetailCell label="Employee Name" value={emp?.name} />
         <DetailCell label="Department" value={emp?.department} />
@@ -847,50 +845,50 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         <DetailCell label="Mobile Number" value={emp?.mobile} />
       </div>
 
-      <div className="grid grid-cols-1 border-2 border-slate-900 mt-10">
-        <div className="p-4 border-b-2 border-slate-900 flex items-center justify-between bg-white">
-          <span className="font-black uppercase text-sm tracking-widest">Amount (In Figures)</span>
-          <span className="text-4xl font-black text-slate-900">{formatCurrency(voucher.amount)}</span>
+      <div className="grid grid-cols-1 border-2 border-slate-900 mt-6">
+        <div className="p-3 border-b-2 border-slate-900 flex items-center justify-between bg-white">
+          <span className="font-black uppercase text-xs tracking-widest">Amount (In Figures)</span>
+          <span className="text-3xl font-black text-slate-900">{formatCurrency(voucher.amount)}</span>
         </div>
-        <div className="p-3 bg-slate-50 flex items-start gap-6 border-b-2 border-slate-900">
-          <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Amount in Words:</span>
-          <span className="text-lg font-bold italic underline decoration-slate-300 underline-offset-8 leading-relaxed">
+        <div className="p-2 bg-slate-50 flex items-start gap-6 border-b-2 border-slate-900">
+          <span className="font-black uppercase text-[9px] w-40 shrink-0 text-slate-500 pt-1 tracking-widest">Amount in Words:</span>
+          <span className="text-base font-bold italic underline decoration-slate-300 underline-offset-4 leading-relaxed">
             {numberToIndianWords(voucher.amount)}
           </span>
         </div>
-        <div className="p-3 flex items-start gap-6 bg-white border-b-2 border-slate-900">
-          <span className="font-black uppercase text-[10px] w-48 shrink-0 text-slate-500 pt-1 tracking-widest">Purpose:</span>
-          <span className="text-lg font-medium text-slate-800 leading-relaxed">{voucher.purpose}</span>
+        <div className="p-2 flex items-start gap-6 bg-white border-b-2 border-slate-900">
+          <span className="font-black uppercase text-[9px] w-40 shrink-0 text-slate-500 pt-1 tracking-widest">Purpose:</span>
+          <span className="text-base font-medium text-slate-800 leading-relaxed">{voucher.purpose}</span>
         </div>
         <div className="grid grid-cols-2 divide-x-2 divide-slate-900">
-          <div className="p-3 flex items-center gap-6 bg-slate-50">
-            <span className="font-black uppercase text-[10px] w-32 shrink-0 text-slate-500 tracking-widest">Payment Mode:</span>
-            <span className="text-base font-black text-slate-900 uppercase">{voucher.paymentMode || "---"}</span>
+          <div className="p-2 flex items-center gap-6 bg-slate-50">
+            <span className="font-black uppercase text-[9px] w-32 shrink-0 text-slate-500 tracking-widest">Payment Mode:</span>
+            <span className="text-sm font-black text-slate-900 uppercase">{voucher.paymentMode || "---"}</span>
           </div>
-          <div className="p-3 flex items-center gap-6 bg-slate-50">
-            <span className="font-black uppercase text-[10px] w-32 shrink-0 text-slate-500 tracking-widest">Ref Number:</span>
-            <span className="text-base font-mono font-bold text-slate-900">{voucher.paymentReference || "---"}</span>
+          <div className="p-2 flex items-center gap-6 bg-slate-50">
+            <span className="font-black uppercase text-[9px] w-32 shrink-0 text-slate-500 tracking-widest">Ref Number:</span>
+            <span className="text-sm font-mono font-bold text-slate-900">{voucher.paymentReference || "---"}</span>
           </div>
         </div>
       </div>
 
-      <div className="p-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl italic text-sm text-center leading-relaxed text-slate-600 mt-10">
+      <div className="p-5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl italic text-[11px] text-center leading-relaxed text-slate-600 mt-4">
         "I hereby acknowledge receipt of the aforementioned advance amount and expressly agree and undertake that the same shall be duly recovered and/or adjusted against my future salary, wages, or any other dues payable to me, in accordance with the applicable policies, rules, and regulations of the organization. I further confirm that this authorization is given voluntarily and shall be binding upon me."
       </div>
 
-      <div className="flex justify-between items-end pt-32 px-10">
-        <div className="text-center space-y-4">
-          <div className="w-72 border-b-2 border-slate-900" />
-          <p className="text-xs font-black uppercase tracking-widest text-slate-900">Receiver Signature</p>
+      <div className="flex justify-between items-end pt-16 px-10">
+        <div className="text-center space-y-2">
+          <div className="w-64 border-b-2 border-slate-900" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Receiver Signature</p>
         </div>
-        <div className="text-center space-y-4">
-          <div className="w-72 border-b-2 border-slate-900" />
-          <p className="text-xs font-black uppercase tracking-widest text-slate-900">Authorized Signatory</p>
+        <div className="text-center space-y-2">
+          <div className="w-64 border-b-2 border-slate-900" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Authorized Signatory</p>
         </div>
       </div>
       
-      <div className="pt-20 text-center">
-        <p className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-300 italic">© Sikka Industries & Logistics – Internal Secure Document</p>
+      <div className="pt-8 text-center">
+        <p className="text-[8px] font-black uppercase tracking-[0.5em] text-slate-300 italic">© Sikka Industries & Logistics – Internal Secure Document</p>
       </div>
     </div>
   );
@@ -898,9 +896,9 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
 
 function DetailCell({ label, value }: { label: string, value: any }) {
   return (
-    <div className="flex items-center p-3 bg-white">
-      <span className="text-[10px] font-black uppercase text-slate-400 w-40 shrink-0 tracking-widest whitespace-nowrap">{label}:</span>
-      <span className="text-base font-black text-slate-900 uppercase tracking-tight leading-none">{value || "---"}</span>
+    <div className="flex items-center p-2 bg-white">
+      <span className="text-[9px] font-black uppercase text-slate-400 w-36 shrink-0 tracking-widest whitespace-nowrap">{label}:</span>
+      <span className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none">{value || "---"}</span>
     </div>
   );
 }
