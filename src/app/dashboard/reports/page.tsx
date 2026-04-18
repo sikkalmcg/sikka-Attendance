@@ -171,6 +171,10 @@ export default function ReportsPage() {
   };
 
   const handleExport = (typeOverride?: ReportType) => {
+    if (fromDate && toDate && fromDate > toDate) {
+      toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+      return;
+    }
     const data = processReportData(typeOverride);
     if (data.length === 0) {
       toast({ variant: "destructive", title: "No Data", description: "No records found for the selected filters." });
@@ -198,6 +202,10 @@ export default function ReportsPage() {
   };
 
   const handleView = () => {
+    if (fromDate && toDate && fromDate > toDate) {
+      toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+      return;
+    }
     const data = processReportData();
     if (data.length === 0) {
       toast({ variant: "destructive", title: "No Data", description: "No records found for the selected filters." });
@@ -349,7 +357,15 @@ export default function ReportsPage() {
                   <Input 
                     type="date" 
                     value={fromDate} 
-                    onChange={(e) => setFromDate(e.target.value)} 
+                    max={toDate || undefined}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (toDate && val > toDate) {
+                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                        return;
+                      }
+                      setFromDate(val);
+                    }} 
                     className="h-12 bg-slate-50 border-slate-200 font-bold"
                   />
                 </div>
@@ -358,7 +374,15 @@ export default function ReportsPage() {
                   <Input 
                     type="date" 
                     value={toDate} 
-                    onChange={(e) => setToDate(e.target.value)} 
+                    min={fromDate || undefined}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (fromDate && val < fromDate) {
+                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                        return;
+                      }
+                      setToDate(val);
+                    }} 
                     className="h-12 bg-slate-50 border-slate-200 font-bold"
                   />
                 </div>

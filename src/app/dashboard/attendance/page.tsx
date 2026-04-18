@@ -254,7 +254,7 @@ export default function AttendancePage() {
       return;
     }
     if (leaveTo < leaveFrom) {
-      toast({ variant: "destructive", title: "Invalid Date", description: "To date must be after From date." });
+      toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
       return;
     }
 
@@ -662,8 +662,41 @@ export default function AttendancePage() {
             <DialogHeader className="p-6 bg-slate-900 text-white shrink-0"><DialogTitle className="text-xl font-black">Create Leave Request</DialogTitle></DialogHeader>
             <div className="p-6 space-y-6 bg-white">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">From Date</Label><Input type="date" value={leaveFrom} min={todayStr} onChange={(e) => setLeaveFrom(e.target.value)} className="h-12 font-bold" /></div>
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">To Date</Label><Input type="date" value={leaveTo} min={leaveFrom || todayStr} onChange={(e) => setLeaveTo(e.target.value)} className="h-12 font-bold" /></div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">From Date</Label>
+                  <Input 
+                    type="date" 
+                    value={leaveFrom} 
+                    min={todayStr} 
+                    max={leaveTo || undefined}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (leaveTo && val > leaveTo) {
+                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                        return;
+                      }
+                      setLeaveFrom(val);
+                    }} 
+                    className="h-12 font-bold" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">To Date</Label>
+                  <Input 
+                    type="date" 
+                    value={leaveTo} 
+                    min={leaveFrom || todayStr} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (leaveFrom && val < leaveFrom) {
+                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                        return;
+                      }
+                      setLeaveTo(val);
+                    }} 
+                    className="h-12 font-bold" 
+                  />
+                </div>
               </div>
               <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">Purpose</Label><Input placeholder="Reason..." value={leavePurpose} onChange={(e) => setLeavePurpose(e.target.value)} className="h-12 font-bold" /></div>
             </div>

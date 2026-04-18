@@ -367,8 +367,8 @@ export default function ApprovalsPage() {
     }
 
     const headers = historyType === 'attendance' 
-      ? ["Employee Name", "Employee ID", "Dept", "Desig", "Date", "In Time", "Out Time", "Out Hour", "Hours", "Type", "Status", "In Address", "Out Address", "Approved By"]
-      : ["Employee Name", "Employee ID", "Dept", "Desig", "From Date", "To Date", "Days", "Status", "Purpose", "Approved By"];
+      ? ["Employee Name", "Employee ID", "Dept", "Desig", "Date", "In Time", "Out Time", "Out Hour", "Hours", "Type", "Status", "In Address", "Out Address", "Action By"]
+      : ["Employee Name", "Employee ID", "Dept", "Desig", "From Date", "To Date", "Days", "Status", "Purpose", "Action By"];
 
     const csvRows = [
       headers.join(","),
@@ -449,12 +449,38 @@ export default function ApprovalsPage() {
             </div>
 
             {viewMode === 'history' && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex wrap items-center gap-2">
                 <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-lg shadow-sm">
                   <Filter className="w-3.5 h-3.5 text-slate-400" />
-                  <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-7 w-32 border-none bg-transparent text-[10px] font-bold p-0 focus-visible:ring-0" />
+                  <Input 
+                    type="date" 
+                    value={fromDate} 
+                    max={toDate || undefined}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (toDate && val > toDate) {
+                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                        return;
+                      }
+                      setFromDate(val);
+                    }} 
+                    className="h-7 w-32 border-none bg-transparent text-[10px] font-bold p-0 focus-visible:ring-0" 
+                  />
                   <span className="text-slate-300 text-[10px]">to</span>
-                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-7 w-32 border-none bg-transparent text-[10px] font-bold p-0 focus-visible:ring-0" />
+                  <Input 
+                    type="date" 
+                    value={toDate} 
+                    min={fromDate || undefined}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (fromDate && val < fromDate) {
+                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                        return;
+                      }
+                      setToDate(val);
+                    }} 
+                    className="h-7 w-32 border-none bg-transparent text-[10px] font-bold p-0 focus-visible:ring-0" 
+                  />
                 </div>
                 <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8 text-rose-500 hover:bg-rose-50 font-black text-[10px] uppercase gap-1">
                   <X className="w-3 h-3" /> Reset
@@ -483,8 +509,7 @@ export default function ApprovalsPage() {
                       </TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type/Status</TableHead>
                       {currentData.items[0]?.address !== undefined && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>}
-                      {viewMode === 'history' && historyType === 'attendance' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Action By</TableHead>}
-                      {viewMode === 'history' && historyType === 'leave' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Action By</TableHead>}
+                      {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Action By</TableHead>}
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                     </TableRow>
                   </TableHeader>
