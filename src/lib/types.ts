@@ -168,6 +168,8 @@ export interface LeaveRequest {
   rejectReason?: string;
   approvedBy?: string; 
   createdAt: string;
+  leaveType: 'DAYS' | 'HALF_DAY';
+  reachTime?: string;
 }
 
 export interface AppNotification {
@@ -228,7 +230,6 @@ export interface PayrollRecord {
   pfHistory: StatutoryPaymentRecord[];
 
   esicPaidAmountEmployee: number;
-  esicPaidAmountEmployer: number;
-  esicPaidDate?: string;
+  esicAmountEmployer: number;
   esicHistory: StatutoryPaymentRecord[];
 }

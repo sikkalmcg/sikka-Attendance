@@ -90,8 +90,10 @@ export default function AttendancePage() {
   const [detectedAddress, setDetectedAddress] = useState("");
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH">("FIELD");
 
+  const [leaveType, setLeaveType] = useState<"DAYS" | "HALF_DAY">("DAYS");
   const [leaveFrom, setLeaveFrom] = useState("");
   const [leaveTo, setLeaveTo] = useState("");
+  const [reachTime, setReachTime] = useState("");
   const [leavePurpose, setLeavePurpose] = useState("");
   const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
 
@@ -199,7 +201,6 @@ export default function AttendancePage() {
     return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
   }, [lastOutRecord, currentTime]);
 
-  // Logic for unapproved out detection
   useEffect(() => {
     if (activeRecord && isAccessAllowed) {
       const interval = setInterval(() => {
@@ -212,7 +213,6 @@ export default function AttendancePage() {
             const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
             const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
 
-            // Trigger Notification if OUT of plant while checked IN
             if (!nearestPlant && activeRecord.attendanceType === 'OFFICE' && !activeRecord.lastDetectedOutAt) {
               updateRecord('attendance', activeRecord.id, { lastDetectedOutAt: format(now, "HH:mm"), lastOutCheckTime: now.toISOString() });
               addRecord('notifications', {
@@ -230,7 +230,7 @@ export default function AttendancePage() {
             }
           });
         }
-      }, 60000); // Check every minute
+      }, 60000);
       return () => clearInterval(interval);
     }
   }, [activeRecord, isAccessAllowed, plants, updateRecord, addRecord, effectiveEmployeeName]);
@@ -241,32 +241,46 @@ export default function AttendancePage() {
       return;
     }
     const today = format(getISTTime(), "yyyy-MM-dd");
+    setLeaveType("DAYS");
     setLeaveFrom(today);
     setLeaveTo(today);
+    setReachTime("");
     setLeavePurpose("");
     setActiveDialog("LEAVE");
   };
 
   const handleSendLeaveRequest = () => {
-    if (!leaveFrom || !leaveTo || !leavePurpose.trim()) {
-      toast({ variant: "destructive", title: "Missing Fields", description: "Please provide dates and purpose." });
-      return;
-    }
-
     const istNow = getISTTime();
     const today = format(istNow, "yyyy-MM-dd");
     
-    if (leaveFrom < today) {
-      toast({ variant: "destructive", title: "Invalid Date", description: "Leave from date cannot be in the past." });
-      return;
-    }
-    if (leaveTo < leaveFrom) {
-      toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
-      return;
+    if (leaveType === "DAYS") {
+      if (!leaveFrom || !leaveTo || !leavePurpose.trim()) {
+        toast({ variant: "destructive", title: "Missing Fields", description: "Please provide dates and purpose." });
+        return;
+      }
+      if (leaveFrom < today) {
+        toast({ variant: "destructive", title: "Invalid Date", description: "Leave from date cannot be in the past." });
+        return;
+      }
+      if (leaveTo < leaveFrom) {
+        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+        return;
+      }
+    } else {
+      if (!reachTime || !leavePurpose.trim()) {
+        toast({ variant: "destructive", title: "Missing Fields", description: "Please provide reach time and purpose." });
+        return;
+      }
+      const currentHHMM = format(istNow, "HH:mm");
+      if (reachTime <= currentHHMM) {
+        toast({ variant: "destructive", title: "Invalid Time", description: "Reach time must be in the future." });
+        return;
+      }
     }
 
-    const newFrom = parseISO(leaveFrom);
-    const newTo = parseISO(leaveTo);
+    const newFrom = parseISO(leaveType === "DAYS" ? leaveFrom : today);
+    const newTo = parseISO(leaveType === "DAYS" ? leaveTo : today);
+    
     const hasOverlap = (leaveRequests || []).some(l => {
       if (l.employeeId !== effectiveEmployeeId) return false;
       if (l.status === 'REJECTED') return false;
@@ -283,17 +297,19 @@ export default function AttendancePage() {
 
     setIsSubmittingLeave(true);
     try {
-      const days = differenceInDays(parseISO(leaveTo), parseISO(leaveFrom)) + 1;
+      const days = leaveType === "DAYS" ? (differenceInDays(parseISO(leaveTo), parseISO(leaveFrom)) + 1) : 0.5;
       const newLeave: Partial<LeaveRequest> = {
         employeeId: effectiveEmployeeId,
         employeeName: effectiveEmployeeName,
         department: registeredEmployee?.department || "N/A",
         designation: registeredEmployee?.designation || "N/A",
-        fromDate: leaveFrom,
-        toDate: leaveTo,
+        fromDate: leaveType === "DAYS" ? leaveFrom : today,
+        toDate: leaveType === "DAYS" ? leaveTo : today,
         days: days,
         purpose: leavePurpose,
-        status: 'UNDER_PROCESS'
+        status: 'UNDER_PROCESS',
+        leaveType: leaveType,
+        reachTime: leaveType === "HALF_DAY" ? reachTime : undefined
       };
       addRecord('leaveRequests', newLeave);
       toast({ title: "Request Sent", description: "Your leave application is under process." });
@@ -438,14 +454,12 @@ export default function AttendancePage() {
     let finalHours = parseFloat(diffHours.toFixed(2));
     let isAuto = diffHours > 16;
 
-    // RULE: Auto-OUT after 16 hours capped at 8 hours
     if (isAuto) {
       const autoOutDate = new Date(inDateTime.getTime() + (8 * 60 * 60 * 1000));
       finalOutTime = format(autoOutDate, "HH:mm");
       finalHours = 8.0;
     }
 
-    // Deduct unapproved out duration if any
     if (activeRecord.unapprovedOutDuration && activeRecord.unapprovedOutDuration > 0) {
       const deductionHours = activeRecord.unapprovedOutDuration / 60;
       finalHours = Math.max(0, finalHours - deductionHours);
@@ -513,7 +527,6 @@ export default function AttendancePage() {
           <Alert variant="destructive" className="bg-rose-50 border-rose-200"><ShieldAlert className="h-5 w-5 text-rose-600" /><AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle><AlertDescription className="text-rose-700">Only registered staff can access Gateway Portal.</AlertDescription></Alert>
         )}
 
-        {/* Device Binding Security Alert */}
         {currentUser?.role === 'EMPLOYEE' && registeredEmployee && registeredEmployee.deviceId && registeredEmployee.deviceId !== getDeviceId() && (
           <Alert variant="destructive" className="bg-rose-50 border-rose-200 mb-6 shadow-lg">
             <ShieldAlert className="h-6 w-6 text-rose-600" />
@@ -681,46 +694,106 @@ export default function AttendancePage() {
           <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
             <DialogHeader className="p-6 bg-slate-900 text-white shrink-0"><DialogTitle className="text-xl font-black">Create Leave Request</DialogTitle></DialogHeader>
             <div className="p-6 space-y-6 bg-white">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">From Date</Label>
-                  <Input 
-                    type="date" 
-                    value={leaveFrom} 
-                    min={todayStr} 
-                    max={leaveTo || undefined}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (leaveTo && val > leaveTo) {
-                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
-                        return;
-                      }
-                      setLeaveFrom(val);
-                    }} 
-                    className="h-12 font-bold" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">To Date</Label>
-                  <Input 
-                    type="date" 
-                    value={leaveTo} 
-                    min={leaveFrom || todayStr} 
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (leaveFrom && val < leaveFrom) {
-                        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
-                        return;
-                      }
-                      setLeaveTo(val);
-                    }} 
-                    className="h-12 font-bold" 
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Leave Type</Label>
+                <Select value={leaveType} onValueChange={(v: any) => setLeaveType(v)}>
+                  <SelectTrigger className="h-12 font-bold">
+                    <SelectValue placeholder="Select Leave Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DAYS" className="font-bold">Days</SelectItem>
+                    <SelectItem value="HALF_DAY" className="font-bold">Half Day</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">Purpose</Label><Input placeholder="Reason..." value={leavePurpose} onChange={(e) => setLeavePurpose(e.target.value)} className="h-12 font-bold" /></div>
+
+              {leaveType === "DAYS" ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">From Date</Label>
+                    <Input 
+                      type="date" 
+                      value={leaveFrom} 
+                      min={todayStr} 
+                      max={leaveTo || undefined}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (leaveTo && val > leaveTo) {
+                          toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                          return;
+                        }
+                        setLeaveFrom(val);
+                      }} 
+                      className="h-12 font-bold" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">To Date</Label>
+                    <Input 
+                      type="date" 
+                      value={leaveTo} 
+                      min={leaveFrom || todayStr} 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (leaveFrom && val < leaveFrom) {
+                          toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
+                          return;
+                        }
+                        setLeaveTo(val);
+                      }} 
+                      className="h-12 font-bold" 
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Date & Time</Label>
+                    <Input 
+                      value={currentTime ? format(currentTime, "MM/dd/yyyy HH:mm") : ""} 
+                      disabled 
+                      className="h-12 font-bold bg-slate-50 italic" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Reach Time *</Label>
+                    <Input 
+                      type="time" 
+                      value={reachTime} 
+                      onChange={(e) => setReachTime(e.target.value)} 
+                      className="h-12 font-bold" 
+                    />
+                    <p className="text-[9px] text-muted-foreground font-medium uppercase italic">Specify expected arrival time.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Purpose *</Label>
+                <Input 
+                  placeholder="Reason for leave..." 
+                  value={leavePurpose} 
+                  onChange={(e) => setLeavePurpose(e.target.value)} 
+                  className="h-12 font-bold" 
+                />
+              </div>
             </div>
-            <DialogFooter className="p-6 bg-slate-50 border-t gap-3"><Button variant="ghost" onClick={() => setActiveDialog("NONE")}>Cancel</Button><Button className="bg-primary font-black px-8" onClick={handleSendLeaveRequest} disabled={isSubmittingLeave}>Send Request</Button></DialogFooter>
+            <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
+              <Button 
+                variant="ghost" 
+                onClick={() => setActiveDialog("NONE")} 
+                className="rounded-xl font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 h-11 px-8"
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="bg-primary font-black px-12 h-11 rounded-xl shadow-lg shadow-primary/20" 
+                onClick={handleSendLeaveRequest} 
+                disabled={isSubmittingLeave}
+              >
+                Send Request
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
