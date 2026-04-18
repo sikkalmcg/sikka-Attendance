@@ -123,6 +123,7 @@ export default function PayrollPage() {
   const [previewSlip, setPreviewSlip] = useState<PayrollRecord | null>(null);
   const [printSlip, setPrintSlip] = useState<PayrollRecord | null>(null);
   const [viewAdvanceEmployee, setViewAdvanceEmployee] = useState<{emp: Employee, vouchers: any[]} | null>(null);
+  const [viewLeaveHistoryEmployee, setViewLeaveHistoryEmployee] = useState<Employee | null>(null);
   
   const [adjustmentState, setAdjustmentState] = useState({
     present: 0,
@@ -147,7 +148,7 @@ export default function PayrollPage() {
   const [esicPaidEmp, setEsicPaidEmp] = useState(0);
   const [esicPaidEx, setEsicPaidEx] = useState(0);
 
-  const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, { adjusted: boolean, earningDays: number }>>({});
+  const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, { adjusted: boolean, earningDays: number, balanceUsed: number }>>({});
 
   useEffect(() => {
     setIsMounted(true);
@@ -328,7 +329,8 @@ export default function PayrollPage() {
         ...prev, 
         [adjustLeaveEmp.id]: { 
           adjusted: true, 
-          earningDays: adjustmentState.earningDays 
+          earningDays: adjustmentState.earningDays,
+          balanceUsed: adjustmentState.balanceUsed
         } 
       }));
       
@@ -413,6 +415,21 @@ export default function PayrollPage() {
   const handleViewSlip = (p: PayrollRecord) => {
     setPreviewSlip(p);
   };
+
+  const leaveHistoryData = useMemo(() => {
+    if (!viewLeaveHistoryEmployee) return [];
+    return payrollRecords
+      .filter(p => p.employeeId === viewLeaveHistoryEmployee.employeeId && (p.adjustLeave || 0) > 0)
+      .sort((a, b) => b.month.localeCompare(a.month))
+      .map(p => {
+        const [mmm, yy] = p.month.split('-');
+        return {
+          month: `${mmm}-20${yy}`,
+          leave: p.adjustLeave,
+          employeeName: p.employeeName
+        };
+      });
+  }, [viewLeaveHistoryEmployee, payrollRecords]);
 
   if (!isMounted) return null;
 
@@ -519,7 +536,7 @@ export default function PayrollPage() {
                                 <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
                                     <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={(e) => { e.stopPropagation(); openAdjustmentDialog(emp); }} disabled={isProcessing}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Leave"}</Button>
-                                    <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={(e) => { e.stopPropagation(); if(isAdjusted) router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}`); }} disabled={!isAdjusted || isProcessing}><Calculator className="w-3 h-3" /> Generate Salary</Button>
+                                    <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={(e) => { e.stopPropagation(); if(isAdjusted) router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}&adjustLeave=${adjData.balanceUsed}`); }} disabled={!isAdjusted || isProcessing}><Calculator className="w-3 h-3" /> Generate Salary</Button>
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -602,7 +619,7 @@ export default function PayrollPage() {
                                       <DropdownMenuContent align="end" className="w-48">
                                         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setPaySalaryRec(p); setPaymentAmount(remainingSalary); }} disabled={remainingSalary <= 0}>Pay Salary</DropdownMenuItem>
                                         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setPayPFRec(p); setPfPaidEmp(p.pfAmountEmployee - (p.pfPaidAmountEmployee || 0)); setPfPaidEx(p.pfAmountEmployer - (p.pfPaidAmountEmployer || 0)); }} disabled={remainingPF <= 0}>Pay PF</DropdownMenuItem>
-                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setPayESICRec(p); setEsicPaidEmp(p.esicAmountEmployee - (p.esicPaidAmountEmployee || 0)); setEsicPaidEx(p.esicAmountEmployer - (p.esicPaidAmountEmployer || 0)); }} disabled={remainingESIC <= 0}>Pay ESIC</DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setPayESICRec(p); setEsicPaidEmp(p.esicAmountEmployee - (p.esicPaidAmountEmployee || 0)); setEsicPaidEx(p.esicAmountEmployer - (p.esicAmountEmployer || 0)); }} disabled={remainingESIC <= 0}>Pay ESIC</DropdownMenuItem>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   ) : (
@@ -691,7 +708,7 @@ export default function PayrollPage() {
                           <TableCell><div className="flex flex-col"><span className="font-bold uppercase">{emp.name}</span><span className="text-[10px] font-mono text-slate-400">{emp.employeeId}</span></div></TableCell>
                           <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
                           <TableCell className="text-right pr-6">
-                            <Button variant="ghost" size="sm" className="font-bold gap-2"><History className="w-4 h-4" /> View History</Button>
+                            <Button variant="ghost" size="sm" className="font-bold gap-2" onClick={() => setViewLeaveHistoryEmployee(emp)}><History className="w-4 h-4" /> View History</Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -847,6 +864,120 @@ export default function PayrollPage() {
             <Button variant="ghost" onClick={() => setIsSubAdjustmentOpen(false)} className="rounded-xl font-bold">Cancel</Button>
             <Button className="bg-primary rounded-xl font-bold px-8" onClick={handleSaveSubAdjustment}>Apply Adjustment</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Advance Voucher Ledger Dialog */}
+      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => { if (!o) setViewAdvanceEmployee(null); }}>
+        <DialogContent className="sm:max-w-6xl max-h-[85vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          {viewAdvanceEmployee && (
+            <>
+              <DialogHeader className="p-6 bg-white border-b shrink-0 flex-row items-center justify-between">
+                <div className="flex gap-4 items-center">
+                  <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center">
+                    <Wallet className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl font-black text-slate-900 leading-tight">
+                      Voucher Ledger: {viewAdvanceEmployee.emp.name}
+                    </DialogTitle>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      {viewAdvanceEmployee.emp.employeeId} • {viewAdvanceEmployee.emp.department}
+                    </p>
+                  </div>
+                </div>
+              </DialogHeader>
+              <ScrollArea className="flex-1">
+                <Table>
+                  <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                    <TableRow>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Voucher No</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-right">Amount</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-primary">Recovered</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-rose-600">Remaining</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Purpose</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Mode</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Reference</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {viewAdvanceEmployee.vouchers.map((v: any) => (
+                      <TableRow key={v.id} className="hover:bg-slate-50/50">
+                        <TableCell className="font-mono font-bold text-xs">{v.voucherNo}</TableCell>
+                        <TableCell className="text-xs">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                        <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
+                        <TableCell className="text-right font-black text-primary">{formatCurrency(v.recovered)}</TableCell>
+                        <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
+                        <TableCell className="text-xs max-w-[200px] truncate" title={v.purpose}>{v.purpose}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[9px] font-black uppercase">{v.paymentMode}</Badge></TableCell>
+                        <TableCell className="font-mono text-[10px]">{v.paymentReference || "N/A"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+              <DialogFooter className="p-4 bg-slate-50 border-t">
+                <Button variant="ghost" onClick={() => setViewAdvanceEmployee(null)} className="font-bold">Close Ledger</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Advance Leave History Dialog */}
+      <Dialog open={!!viewLeaveHistoryEmployee} onOpenChange={(o) => { if (!o) setViewLeaveHistoryEmployee(null); }}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          {viewLeaveHistoryEmployee && (
+            <>
+              <DialogHeader className="p-6 bg-white border-b shrink-0 flex-row items-center justify-between">
+                <div className="flex gap-4 items-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <History className="w-6 h-6 text-primary" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl font-black text-slate-900 leading-tight">
+                      Leave History: {viewLeaveHistoryEmployee.name}
+                    </DialogTitle>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      {viewLeaveHistoryEmployee.employeeId}
+                    </p>
+                  </div>
+                </div>
+              </DialogHeader>
+              <ScrollArea className="flex-1">
+                <Table>
+                  <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                    <TableRow>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Employee Name</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest">Month</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-center">Leave Taken</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {leaveHistoryData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">No leave adjustment history found.</TableCell>
+                      </TableRow>
+                    ) : (
+                      leaveHistoryData.map((h, i) => (
+                        <TableRow key={i} className="hover:bg-slate-50/50">
+                          <TableCell className="font-bold text-xs uppercase">{h.employeeName}</TableCell>
+                          <TableCell className="font-bold text-xs">{h.month}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-primary hover:bg-primary font-black">{h.leave} Day(s)</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+              <DialogFooter className="p-4 bg-slate-50 border-t">
+                <Button variant="ghost" onClick={() => setViewLeaveHistoryEmployee(null)} className="font-bold">Close History</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

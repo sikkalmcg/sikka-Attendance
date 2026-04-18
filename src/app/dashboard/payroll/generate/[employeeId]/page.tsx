@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
@@ -41,6 +42,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   const employeeId = resolvedParams.employeeId;
   const selectedMonth = searchParams.get("month") || "";
   const queryEarningDays = searchParams.get("earningDays");
+  const queryAdjustLeave = searchParams.get("adjustLeave");
 
   const { employees, attendanceRecords, payrollRecords, vouchers, addRecord } = useData();
   const { toast } = useToast();
@@ -189,6 +191,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
 
       const earningDays = currentSummary.attendance;
       const totalDays = currentSummary.totalDays;
+      const adjustLeaveAmt = parseFloat(queryAdjustLeave || "0");
 
       const pfEmp = Math.round((employee.salary.employeePF / totalDays) * earningDays);
       const pfEx = Math.round((employee.salary.employerPF / totalDays) * earningDays);
@@ -201,7 +204,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         month: selectedMonth,
         attendance: currentSummary.attendance,
         absent: currentSummary.absent,
-        adjustLeave: 0,
+        adjustLeave: adjustLeaveAmt,
         totalEarningDays: currentSummary.attendance,
         incentivePct: incentivePct,
         incentiveAmt: incentiveAmt,
@@ -224,7 +227,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
         pfPaidAmountEmployer: 0,
         pfHistory: [],
         esicPaidAmountEmployee: 0,
-        esicPaidAmountEmployer: 0,
+        esicAmountEmployer: 0,
         esicHistory: []
       };
 
