@@ -483,8 +483,8 @@ export default function ApprovalsPage() {
                       </TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type/Status</TableHead>
                       {currentData.items[0]?.address !== undefined && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>}
-                      {viewMode === 'history' && historyType === 'attendance' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
-                      {viewMode === 'history' && historyType === 'leave' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
+                      {viewMode === 'history' && historyType === 'attendance' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Action By</TableHead>}
+                      {viewMode === 'history' && historyType === 'leave' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Action By</TableHead>}
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                     </TableRow>
                   </TableHeader>
