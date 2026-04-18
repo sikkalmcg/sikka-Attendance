@@ -135,28 +135,48 @@ export default function DashboardHome() {
     if (!isMounted || !plants.length || !todayStr) return [];
     
     return plants.map(plant => {
+      // 1. Determine employees authorized for this unit
       const assignedToPlant = employees.filter(e => 
         e.active && (e.unitIds?.includes(plant.id) || e.unitId === plant.id)
       );
       
-      const recordsToday = attendanceRecords.filter(r => 
+      // 2. OFFICE: Anyone physically at this plant right now (based on r.inPlant name)
+      const officeCount = attendanceRecords.filter(r => 
+        r.date === todayStr && 
+        r.inPlant === plant.name &&
+        (r.attendanceType === 'OFFICE' || !r.attendanceType) &&
+        PRESENT_STATUSES.includes(r.status)
+      ).length;
+
+      // 3. FIELD/WFH: Assigned to this plant but marked as remote work
+      const fieldCount = attendanceRecords.filter(r => 
         r.date === todayStr && 
         assignedToPlant.some(e => e.employeeId === r.employeeId) &&
+        r.attendanceType === 'FIELD' &&
         PRESENT_STATUSES.includes(r.status)
-      );
+      ).length;
 
-      const office = recordsToday.filter(r => r.attendanceType === 'OFFICE' || !r.attendanceType).length;
-      const field = recordsToday.filter(r => r.attendanceType === 'FIELD').length;
-      const wfh = recordsToday.filter(r => r.attendanceType === 'WFH').length;
+      const wfhCount = attendanceRecords.filter(r => 
+        r.date === todayStr && 
+        assignedToPlant.some(e => e.employeeId === r.employeeId) &&
+        r.attendanceType === 'WFH' &&
+        PRESENT_STATUSES.includes(r.status)
+      ).length;
       
-      const presentIds = new Set(recordsToday.map(r => r.employeeId));
-      const absentCount = Math.max(0, assignedToPlant.length - presentIds.size);
+      // 4. ABSENT: Assigned to this plant but not present anywhere globally today
+      const presentGloballyIds = new Set(
+        attendanceRecords
+          .filter(r => r.date === todayStr && PRESENT_STATUSES.includes(r.status))
+          .map(r => r.employeeId)
+      );
+      
+      const absentCount = assignedToPlant.filter(e => !presentGloballyIds.has(e.employeeId)).length;
 
       return {
         name: plant.name,
-        office,
-        field,
-        wfh,
+        office: officeCount,
+        field: fieldCount,
+        wfh: wfhCount,
         absent: absentCount
       };
     });
@@ -353,7 +373,7 @@ export default function DashboardHome() {
               onClick={() => setIsAbsentModalOpen(false)}
               className="p-2 hover:bg-slate-100 rounded-full transition-colors absolute right-4 top-4"
             >
-              <X className="w-5 h-5 text-primary" />
+              <X className="h-5 w-5 text-primary" />
             </button>
           </DialogHeader>
           <div className="flex-1 overflow-hidden">
