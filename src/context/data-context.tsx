@@ -24,6 +24,7 @@ import {
   setDocumentNonBlocking
 } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
 interface DataContextType {
@@ -55,37 +56,56 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const saved = localStorage.getItem("user");
     if (saved) setCurrentUser(JSON.parse(saved));
+
+    // Ensure Firebase Auth is active to satisfy Security Rules
+    const auth = getAuth();
+    if (!auth.currentUser) {
+      signInAnonymously(auth).catch(err => console.error("Auth sync error:", err));
+    }
   }, []);
 
-  // Real-time Firestore Subscriptions
-  const employeesQuery = useMemoFirebase(() => collection(db, 'employees'), [db]);
+  const isAdminRole = useMemo(() => {
+    return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
+  }, [currentUser]);
+
+  // Real-time Firestore Subscriptions - Guarded by auth state
+  const employeesQuery = useMemoFirebase(() => currentUser ? collection(db, 'employees') : null, [db, currentUser]);
   const { data: employees } = useCollection<Employee>(employeesQuery);
 
-  const attendanceQuery = useMemoFirebase(() => collection(db, 'attendance'), [db]);
+  const attendanceQuery = useMemoFirebase(() => currentUser ? collection(db, 'attendance') : null, [db, currentUser]);
   const { data: attendance } = useCollection<AttendanceRecord>(attendanceQuery);
 
-  const vouchersQuery = useMemoFirebase(() => collection(db, 'vouchers'), [db]);
+  const vouchersQuery = useMemoFirebase(() => currentUser ? collection(db, 'vouchers') : null, [db, currentUser]);
   const { data: vouchers } = useCollection<Voucher>(vouchersQuery);
 
-  const payrollQuery = useMemoFirebase(() => collection(db, 'payroll'), [db]);
+  const payrollQuery = useMemoFirebase(() => {
+    if (!currentUser || !isAdminRole) return null;
+    return collection(db, 'payroll');
+  }, [db, currentUser, isAdminRole]);
   const { data: payroll } = useCollection<PayrollRecord>(payrollQuery);
 
-  const plantsQuery = useMemoFirebase(() => collection(db, 'plants'), [db]);
+  const plantsQuery = useMemoFirebase(() => currentUser ? collection(db, 'plants') : null, [db, currentUser]);
   const { data: plants } = useCollection<Plant>(plantsQuery);
 
-  const firmsQuery = useMemoFirebase(() => collection(db, 'firms'), [db]);
+  const firmsQuery = useMemoFirebase(() => currentUser ? collection(db, 'firms') : null, [db, currentUser]);
   const { data: firms } = useCollection<Firm>(firmsQuery);
 
-  const usersQuery = useMemoFirebase(() => collection(db, 'users'), [db]);
+  const usersQuery = useMemoFirebase(() => {
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') return null;
+    return collection(db, 'users');
+  }, [db, currentUser]);
   const { data: users } = useCollection<User>(usersQuery);
 
-  const holidaysQuery = useMemoFirebase(() => collection(db, 'holidays'), [db]);
+  const holidaysQuery = useMemoFirebase(() => currentUser ? collection(db, 'holidays') : null, [db, currentUser]);
   const { data: holidays } = useCollection<Holiday>(holidaysQuery);
 
-  const notificationsQuery = useMemoFirebase(() => collection(db, 'notifications'), [db]);
+  const notificationsQuery = useMemoFirebase(() => {
+    if (!currentUser || !isAdminRole) return null;
+    return collection(db, 'notifications');
+  }, [db, currentUser, isAdminRole]);
   const { data: notifications } = useCollection<AppNotification>(notificationsQuery);
 
-  const leaveQuery = useMemoFirebase(() => collection(db, 'leaveRequests'), [db]);
+  const leaveQuery = useMemoFirebase(() => currentUser ? collection(db, 'leaveRequests') : null, [db, currentUser]);
   const { data: leaveRequests } = useCollection<LeaveRequest>(leaveQuery);
 
   // Helper to check if current user is Super Admin

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -8,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import Cookies from 'js-cookie';
 import { getDeviceId } from "@/lib/utils";
 
@@ -42,6 +44,12 @@ export default function LoginPage() {
     setError(null);
 
     try {
+      // Sign in anonymously to satisfy Firebase Security Rules
+      const auth = getAuth();
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+
       // 1. Check Super Admin Hardcoded Fallback
       if (username === SUPER_ADMIN_USER.username && password === SUPER_ADMIN_USER.password) {
         const userData = { ...SUPER_ADMIN_USER, id: "super-1" };
@@ -92,16 +100,15 @@ export default function LoginPage() {
           // --- DEVICE BINDING LOGIC ---
           const currentDeviceId = getDeviceId();
           
-          // Check if this device is already registered with another employee (Aadhaar-based check)
+          // Check if this device is already registered with another employee
           const deviceTakenByOther = empSnapshot.docs.find(d => {
             const data = d.data();
-            // If device ID matches but it's not THIS employee's Aadhaar
             return data.deviceId === currentDeviceId && 
                    data.aadhaar?.replace(/\s/g, '') !== (empData.aadhaar?.replace(/\s/g, '') || cleanUsername);
           });
 
           if (deviceTakenByOther) {
-            setError("Device Security Violation: This device is already registered with another employee. One device per employee is allowed for attendance marking.");
+            setError("Device Security Violation: This device is already registered with another employee.");
             setLoading(false);
             return;
           }
@@ -109,7 +116,6 @@ export default function LoginPage() {
           // Automatically bind/update current device ID for this employee
           const empDocRef = doc(db, 'employees', registeredEmpDoc.id);
           await updateDoc(empDocRef, { deviceId: currentDeviceId });
-          // --- END DEVICE BINDING LOGIC ---
 
           const userData = {
             id: registeredEmpDoc.id,
