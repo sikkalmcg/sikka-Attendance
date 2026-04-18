@@ -30,7 +30,7 @@ import {
   Briefcase,
   Home
 } from "lucide-react";
-import { calculateDistance, cn, formatDate, getWorkingHoursColor } from "@/lib/utils";
+import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId } from "@/lib/utils";
 import { 
   Table, 
   TableHeader, 
@@ -139,7 +139,14 @@ export default function AttendancePage() {
   }, [currentUser, employees]);
 
   const isAccessAllowed = useMemo(() => {
-    return currentUser?.role === 'EMPLOYEE' && !!registeredEmployee && registeredEmployee.active;
+    const currentDevice = getDeviceId();
+    const isEmployee = currentUser?.role === 'EMPLOYEE';
+    const hasEmployeeRecord = !!registeredEmployee && registeredEmployee.active;
+    
+    // Strict Device Binding Enforcement
+    const isBoundDevice = !registeredEmployee?.deviceId || registeredEmployee.deviceId === currentDevice;
+    
+    return isEmployee && hasEmployeeRecord && isBoundDevice;
   }, [currentUser, registeredEmployee]);
 
   const effectiveEmployeeId = useMemo(() => {
@@ -230,7 +237,7 @@ export default function AttendancePage() {
 
   const handleCreateLeaveRequest = () => {
     if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Action Blocked", description: "Only registered staff can request leave." });
+      toast({ variant: "destructive", title: "Action Blocked", description: "Registration and device binding required to request leave." });
       return;
     }
     const today = format(getISTTime(), "yyyy-MM-dd");
@@ -353,7 +360,7 @@ export default function AttendancePage() {
 
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Action Blocked", description: "You must be a registered employee to mark attendance." });
+      toast({ variant: "destructive", title: "Access Denied", description: "You must use your registered device and start date must be active." });
       return;
     }
     if (registeredEmployee?.joinDate && todayStr < registeredEmployee.joinDate) {
@@ -504,6 +511,19 @@ export default function AttendancePage() {
       <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
         {currentUser?.role === 'EMPLOYEE' && !registeredEmployee && (
           <Alert variant="destructive" className="bg-rose-50 border-rose-200"><ShieldAlert className="h-5 w-5 text-rose-600" /><AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle><AlertDescription className="text-rose-700">Only registered staff can access Gateway Portal.</AlertDescription></Alert>
+        )}
+
+        {/* Device Binding Security Alert */}
+        {currentUser?.role === 'EMPLOYEE' && registeredEmployee && registeredEmployee.deviceId && registeredEmployee.deviceId !== getDeviceId() && (
+          <Alert variant="destructive" className="bg-rose-50 border-rose-200 mb-6 shadow-lg">
+            <ShieldAlert className="h-6 w-6 text-rose-600" />
+            <AlertTitle className="font-black text-rose-900 text-lg">Device Security Error</AlertTitle>
+            <AlertDescription className="text-rose-800 font-bold mt-1">
+              Your account is currently linked to another mobile device. Multiple device logins are strictly prohibited to prevent proxy attendance. 
+              <br/><br/>
+              <span className="underline">Action Required:</span> Please use your originally registered device, or Logout and Login again on this device to transfer your official binding.
+            </AlertDescription>
+          </Alert>
         )}
 
         {lockState.isLocked && isAccessAllowed && (

@@ -96,6 +96,7 @@ export interface Employee {
   active: boolean;
   advanceLeaveBalance?: number;
   avatar?: string;
+  deviceId?: string; // Security binding for attendance
 }
 
 export interface Holiday {

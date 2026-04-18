@@ -108,3 +108,17 @@ export function formatMinutesToHHMM(minutes: number) {
   const m = Math.floor(minutes % 60);
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
+
+/**
+ * Generates or retrieves a persistent unique device identifier for this browser instance.
+ */
+export function getDeviceId() {
+  if (typeof window === 'undefined') return null;
+  let id = localStorage.getItem('sikka_device_id');
+  if (!id) {
+    // Generate a new UUID-like identifier
+    id = window.crypto?.randomUUID ? window.crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+    localStorage.setItem('sikka_device_id', id);
+  }
+  return id;
+}

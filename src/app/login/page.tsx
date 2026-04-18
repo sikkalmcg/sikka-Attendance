@@ -7,8 +7,9 @@ import { SUPER_ADMIN_USER } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
-import { getFirestore, collection, query, where, getDocs } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
 import Cookies from 'js-cookie';
+import { getDeviceId } from "@/lib/utils";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -31,7 +32,6 @@ export default function LoginPage() {
   const persistSession = (userData: any) => {
     const sessionData = JSON.stringify(userData);
     // Persistent for 365 days as per requirement
-    // Added path: '/' to ensure cookie is available on all routes
     Cookies.set('sikka_session', sessionData, { expires: 365, path: '/' });
     localStorage.setItem("user", sessionData);
   };
@@ -80,17 +80,39 @@ export default function LoginPage() {
         const employeesRef = collection(db, 'employees');
         const cleanUsername = username.replace(/\s/g, '');
         
-        const qEmp = query(employeesRef);
-        const empSnapshot = await getDocs(qEmp);
-        const registeredEmp = empSnapshot.docs.find(doc => {
+        const empSnapshot = await getDocs(employeesRef);
+        const registeredEmpDoc = empSnapshot.docs.find(doc => {
           const d = doc.data();
           return d.aadhaar?.replace(/\s/g, '') === cleanUsername || d.mobile?.replace(/\s/g, '') === cleanUsername;
         });
 
-        if (registeredEmp) {
-          const empData = registeredEmp.data();
+        if (registeredEmpDoc) {
+          const empData = registeredEmpDoc.data();
+          
+          // --- DEVICE BINDING LOGIC ---
+          const currentDeviceId = getDeviceId();
+          
+          // Check if this device is already registered with another employee (Aadhaar-based check)
+          const deviceTakenByOther = empSnapshot.docs.find(d => {
+            const data = d.data();
+            // If device ID matches but it's not THIS employee's Aadhaar
+            return data.deviceId === currentDeviceId && 
+                   data.aadhaar?.replace(/\s/g, '') !== (empData.aadhaar?.replace(/\s/g, '') || cleanUsername);
+          });
+
+          if (deviceTakenByOther) {
+            setError("Device Security Violation: This device is already registered with another employee. One device per employee is allowed for attendance marking.");
+            setLoading(false);
+            return;
+          }
+
+          // Automatically bind/update current device ID for this employee
+          const empDocRef = doc(db, 'employees', registeredEmpDoc.id);
+          await updateDoc(empDocRef, { deviceId: currentDeviceId });
+          // --- END DEVICE BINDING LOGIC ---
+
           const userData = {
-            id: registeredEmp.id,
+            id: registeredEmpDoc.id,
             username: cleanUsername,
             fullName: empData.name, 
             role: "EMPLOYEE",
