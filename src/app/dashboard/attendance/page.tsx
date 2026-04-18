@@ -326,7 +326,7 @@ export default function AttendancePage() {
         daysCount = diff;
       }
 
-      const newLeave: Partial<LeaveRequest> = {
+      const newLeave: any = {
         employeeId: effectiveEmployeeId,
         employeeName: effectiveEmployeeName,
         department: registeredEmployee?.department || "N/A",
@@ -337,8 +337,11 @@ export default function AttendancePage() {
         purpose: leavePurpose,
         status: 'UNDER_PROCESS',
         leaveType: leaveType,
-        reachTime: leaveType === "HALF_DAY" ? reachTime : undefined
       };
+
+      if (leaveType === "HALF_DAY" && reachTime) {
+        newLeave.reachTime = reachTime;
+      }
       
       addRecord('leaveRequests', newLeave);
       toast({ title: "Request Sent", description: "Your leave application has been submitted successfully." });
