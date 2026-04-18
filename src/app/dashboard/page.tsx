@@ -54,6 +54,8 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
+const PRESENT_STATUSES = ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'];
+
 export default function DashboardHome() {
   const { employees, attendanceRecords, vouchers, plants } = useData();
   const router = useRouter();
@@ -71,7 +73,7 @@ export default function DashboardHome() {
     if (!isMounted) return { totalEmployees: 0, presentToday: 0, absentToday: 0, pendingApprovals: 0, attendancePct: "0" };
     
     const activeEmployees = employees.filter(e => e.active);
-    const presentToday = attendanceRecords.filter(r => r.date === todayStr && (r.status === 'PRESENT' || r.status === 'HALF_DAY' || r.status === 'FIELD' || r.status === 'WFH'));
+    const presentToday = attendanceRecords.filter(r => r.date === todayStr && PRESENT_STATUSES.includes(r.status));
     const absentToday = Math.max(0, activeEmployees.length - presentToday.length);
     const pendingApprovals = attendanceRecords.filter(r => !r.approved).length + vouchers.filter(v => v.status === 'PENDING').length;
 
@@ -87,7 +89,7 @@ export default function DashboardHome() {
   const presentEmployeesData = useMemo(() => {
     if (!isMounted) return [];
     return attendanceRecords
-      .filter(r => r.date === todayStr && (r.status === 'PRESENT' || r.status === 'HALF_DAY' || r.status === 'FIELD' || r.status === 'WFH'))
+      .filter(r => r.date === todayStr && PRESENT_STATUSES.includes(r.status))
       .map(rec => {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         return {
@@ -100,7 +102,13 @@ export default function DashboardHome() {
 
   const absentEmployeesData = useMemo(() => {
     if (!isMounted) return [];
-    const presentIds = new Set(attendanceRecords.filter(r => r.date === todayStr).map(r => r.employeeId));
+    // Only count employees as present if they have a record today with a 'PRESENT' type status
+    const presentIds = new Set(
+      attendanceRecords
+        .filter(r => r.date === todayStr && PRESENT_STATUSES.includes(r.status))
+        .map(r => r.employeeId)
+    );
+
     return employees
       .filter(e => e.active && !presentIds.has(e.employeeId))
       .map(e => ({
@@ -123,7 +131,7 @@ export default function DashboardHome() {
       const presentInPlant = attendanceRecords.filter(r => 
         r.date === todayStr && 
         assignedToPlant.some(e => e.employeeId === r.employeeId) &&
-        ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'].includes(r.status)
+        PRESENT_STATUSES.includes(r.status)
       );
 
       return {
