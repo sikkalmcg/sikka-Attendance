@@ -86,7 +86,8 @@ import { parseISO, format } from "date-fns";
 const generatePayrollMonths = () => {
   const options = [];
   const date = new Date();
-  for (let i = 0; i < 12; i++) {
+  // Start from i = 1 to exclude current month and allow only past 6 months
+  for (let i = 1; i <= 6; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
     const mmm = d.toLocaleString('en-US', { month: 'short' });
     const yy = d.getFullYear().toString().slice(-2);
@@ -161,8 +162,7 @@ export default function PayrollPage() {
 
   const isGenerationAllowed = useMemo(() => {
     if (!selectedMonth) return false;
-    const allowedWindow = PAYROLL_MONTHS.slice(0, 4);
-    return allowedWindow.includes(selectedMonth);
+    return PAYROLL_MONTHS.includes(selectedMonth);
   }, [selectedMonth]);
 
   const pendingGenerationEmployees = useMemo(() => {
@@ -275,7 +275,6 @@ export default function PayrollPage() {
   const openAdjustmentDialog = (emp: Employee) => {
     const relevantAttendance = attendanceRecords.filter(r => r.employeeId === emp.employeeId);
     
-    // Corrected Attendance Logic: Include remote and half days
     const presents = relevantAttendance.filter(r => ['PRESENT', 'FIELD', 'WFH'].includes(r.status) && r.inPlant !== 'Holiday Work').length;
     const halfDays = relevantAttendance.filter(r => r.status === 'HALF_DAY' && r.inPlant !== 'Holiday Work').length;
     const presentOnWorking = presents + (halfDays * 0.5);
@@ -543,7 +542,7 @@ export default function PayrollPage() {
                     <div className="space-y-1">
                       <h3 className="text-lg font-black text-slate-900 tracking-tight">Generation Restricted</h3>
                       <p className="text-sm text-slate-500 font-medium max-w-sm">
-                        For security and compliance, you can only generate salaries for the current month and the previous three months.
+                        For security and compliance, you can only generate salaries for the past six months, excluding the current month.
                       </p>
                     </div>
                   </div>
@@ -563,7 +562,7 @@ export default function PayrollPage() {
                       </TableHeader>
                       <TableBody>
                         {pendingGenerationEmployees.length === 0 ? (
-                          <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">All salaries for {selectedMonth} have been generated.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No pending generation for {selectedMonth}.</TableCell></TableRow>
                         ) : (
                           pendingGenerationEmployees.map((emp) => {
                             const adjData = adjustedEmployees[emp.id];

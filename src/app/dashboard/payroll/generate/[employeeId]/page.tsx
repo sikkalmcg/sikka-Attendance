@@ -59,12 +59,13 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     setSlipDate(new Date().toISOString().split('T')[0]);
   }, []);
 
-  // Restriction logic: Only allow generation for Current + Previous 3 months
+  // Restriction logic: Only allow generation for Past 6 Months (excluding current)
   const isGenerationAllowed = useMemo(() => {
     if (!selectedMonth) return false;
     const allowedOptions = [];
     const date = new Date();
-    for (let i = 0; i < 4; i++) {
+    // Rules: Previous 6 months, skip current
+    for (let i = 1; i <= 6; i++) {
       const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
       const mmm = d.toLocaleString('en-US', { month: 'short' });
       const yy = d.getFullYear().toString().slice(-2);
@@ -76,7 +77,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   // Security Redirect
   useEffect(() => {
     if (isMounted && !isGenerationAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "Salary generation is restricted to the current and previous 3 months." });
+      toast({ variant: "destructive", title: "Access Denied", description: "Salary generation is restricted to the past six months (excluding current)." });
       router.push("/dashboard/payroll");
     }
   }, [isMounted, isGenerationAllowed, router, toast]);
