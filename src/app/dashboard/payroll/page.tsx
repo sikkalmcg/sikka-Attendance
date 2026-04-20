@@ -683,13 +683,13 @@ export default function PayrollPage() {
                     <Table className="min-w-[1300px]">
                       <TableHeader className="bg-slate-50">
                         <TableRow>
-                          <TableHead className="font-bold">Firm / Unit</TableHead>
-                          <TableHead className="font-bold">Employee Name / ID</TableHead>
-                          <TableHead className="font-bold">Aadhaar No</TableHead>
-                          <TableHead className="font-bold">Dept / Designation</TableHead>
-                          <TableHead className="font-bold">Month</TableHead>
-                          <TableHead className="font-bold text-right">Monthly CTC</TableHead>
-                          <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                          <TableHead className="font-bold px-2">Firm / Unit</TableHead>
+                          <TableHead className="font-bold px-2">Employee Name / ID</TableHead>
+                          <TableHead className="font-bold px-2">Aadhaar No</TableHead>
+                          <TableHead className="font-bold px-2">Dept / Designation</TableHead>
+                          <TableHead className="font-bold px-2">Month</TableHead>
+                          <TableHead className="font-bold text-right px-2">Monthly CTC</TableHead>
+                          <TableHead className="text-right font-bold pr-6 px-2">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -703,28 +703,28 @@ export default function PayrollPage() {
                             const plant = plants.find(p => p.id === emp.unitId);
                             return (
                               <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                                <TableCell>
+                                <TableCell className="px-2">
                                   <div className="flex flex-col">
                                     <span className="text-xs font-bold leading-tight">{firm?.name || "--"}</span>
                                     <span className="text-[10px] text-muted-foreground">{plant?.name || "--"}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="px-2">
                                   <div className="flex flex-col">
                                     <span className="font-bold uppercase">{emp.name}</span>
                                     <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                                <TableCell>
+                                <TableCell className="text-xs font-mono px-2">{emp.aadhaar}</TableCell>
+                                <TableCell className="px-2">
                                   <div className="flex flex-col">
                                     <span className="text-sm font-medium">{emp.department}</span>
                                     <span className="text-xs text-muted-foreground">{emp.designation}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell><Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge></TableCell>
-                                <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(emp.salary.monthlyCTC)}</TableCell>
-                                <TableCell className="text-right pr-6">
+                                <TableCell className="px-2"><Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge></TableCell>
+                                <TableCell className="text-right font-bold text-emerald-600 px-2">{formatCurrency(emp.salary.monthlyCTC)}</TableCell>
+                                <TableCell className="text-right pr-6 px-2">
                                   <div className="flex justify-end gap-2">
                                     <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={(e) => { e.stopPropagation(); openAdjustmentDialog(emp); }} disabled={isProcessing}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Leave"}</Button>
                                     <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={(e) => { e.stopPropagation(); if(isAdjusted) router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}&adjustLeave=${adjData.balanceUsed}&addedLeave=${adjData.balanceAdded}`); }} disabled={!isAdjusted || isProcessing}><Calculator className="w-3 h-3" /> Generate Salary</Button>
@@ -765,13 +765,13 @@ export default function PayrollPage() {
                   <Table className="min-w-[1300px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="font-bold">Slip Details</TableHead>
-                        <TableHead className="font-bold">Employee Name / ID</TableHead>
-                        <TableHead className="font-bold">Month</TableHead>
-                        <TableHead className="font-bold text-right">Net Payable</TableHead>
-                        <TableHead className="font-bold text-right">Salary Paid</TableHead>
-                        <TableHead className="font-bold text-center">Paid Date</TableHead>
-                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                        <TableHead className="font-bold px-2">Slip Details</TableHead>
+                        <TableHead className="font-bold px-2">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold px-2">Month</TableHead>
+                        <TableHead className="font-bold text-right px-2">Net Payable</TableHead>
+                        <TableHead className="font-bold text-right px-2">Salary Paid</TableHead>
+                        <TableHead className="font-bold text-center px-2">Paid Date</TableHead>
+                        <TableHead className="text-right font-bold pr-6 px-2">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -787,27 +787,27 @@ export default function PayrollPage() {
 
                           return (
                             <TableRow key={p.id} className="hover:bg-slate-50/50">
-                              <TableCell>
+                              <TableCell className="px-2">
                                 <div className="flex flex-col">
                                   <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => handleViewSlip(p)}>{p.slipNo}</span>
                                   <span className="text-[10px] text-slate-400">{p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}</span>
                                 </div>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="px-2">
                                 <div className="flex flex-col">
                                   <span className="font-bold uppercase">{p.employeeName}</span>
                                   <span className="text-xs font-mono text-slate-400">{p.employeeId}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-center"><Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold">{p.month}</Badge></TableCell>
-                              <TableCell className="text-right font-bold">{formatCurrency(p.netPayable)}</TableCell>
-                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
-                              <TableCell className="text-center">
+                              <TableCell className="text-center px-2"><Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold">{p.month}</Badge></TableCell>
+                              <TableCell className="text-right font-bold px-2">{formatCurrency(p.netPayable)}</TableCell>
+                              <TableCell className="text-right font-bold text-emerald-600 px-2">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                              <TableCell className="text-center px-2">
                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
                                   {p.salaryPaidDate ? format(parseISO(p.salaryPaidDate), 'dd-MMM-yyyy') : "--"}
                                 </span>
                               </TableCell>
-                              <TableCell className="text-right pr-6">
+                              <TableCell className="text-right pr-6 px-2">
                                 <div className="flex justify-end gap-1">
                                   {emp?.isGovComplianceEnabled ? (
                                     <DropdownMenu>
@@ -847,8 +847,8 @@ export default function PayrollPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-                  <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
-                    <Label className="text-[9px] font-black uppercase text-slate-400">From</Label>
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
+                    <Label className="text-[9px] font-black uppercase text-slate-400">FROM</Label>
                     <Select value={historyFromMonth} onValueChange={(val) => {
                       setHistoryFromMonth(val);
                       const monthOrder = [...PAYROLL_MONTHS_10Y].reverse();
@@ -856,13 +856,13 @@ export default function PayrollPage() {
                         setHistoryToMonth(val);
                       }
                     }}>
-                      <SelectTrigger className="h-7 w-28 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 w-24 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0 shadow-none"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <div className="w-px h-4 bg-slate-200" />
-                    <Label className="text-[9px] font-black uppercase text-slate-400">To</Label>
+                    <div className="w-px h-4 bg-slate-200 mx-1" />
+                    <Label className="text-[9px] font-black uppercase text-slate-400">TO</Label>
                     <Select value={historyToMonth} onValueChange={(val) => {
                       const monthOrder = [...PAYROLL_MONTHS_10Y].reverse();
                       if (monthOrder.indexOf(val) < monthOrder.indexOf(historyFromMonth)) {
@@ -871,7 +871,7 @@ export default function PayrollPage() {
                       }
                       setHistoryToMonth(val);
                     }}>
-                      <SelectTrigger className="h-7 w-28 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 w-24 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0 shadow-none"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                       </SelectContent>
@@ -894,12 +894,12 @@ export default function PayrollPage() {
                     <Table className="min-w-[1300px]">
                       <TableHeader className="bg-slate-100/50">
                         <TableRow>
-                          <TableHead className="font-bold">Slip Details</TableHead>
-                          <TableHead className="font-bold">Employee Name / ID</TableHead>
-                          <TableHead className="font-bold">Month</TableHead>
-                          <TableHead className="font-bold text-right">Net Payable</TableHead>
-                          <TableHead className="font-bold text-right">Settled Amount</TableHead>
-                          <TableHead className="font-bold text-center">Settled Date</TableHead>
+                          <TableHead className="font-bold px-2">Slip Details</TableHead>
+                          <TableHead className="font-bold px-2">Employee Name / ID</TableHead>
+                          <TableHead className="font-bold px-2">Month</TableHead>
+                          <TableHead className="font-bold text-right px-2">Net Payable</TableHead>
+                          <TableHead className="font-bold text-right px-2">Settled Amount</TableHead>
+                          <TableHead className="font-bold text-center px-2">Settled Date</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -908,22 +908,22 @@ export default function PayrollPage() {
                         ) : (
                           paymentTabLists.paid.map((p) => (
                             <TableRow key={p.id} className="hover:bg-white/50 transition-colors opacity-80 hover:opacity-100">
-                              <TableCell>
+                              <TableCell className="px-2">
                                 <div className="flex flex-col">
                                   <span className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => handleViewSlip(p)}>{p.slipNo}</span>
                                   <span className="text-[10px] text-slate-400">{p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}</span>
                                 </div>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="px-2">
                                 <div className="flex flex-col">
                                   <span className="font-bold uppercase text-slate-600">{p.employeeName}</span>
                                   <span className="text-xs font-mono text-slate-400">{p.employeeId}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-center"><Badge variant="outline" className="bg-white text-slate-400 font-bold">{p.month}</Badge></TableCell>
-                              <TableCell className="text-right font-bold text-slate-500">{formatCurrency(p.netPayable)}</TableCell>
-                              <TableCell className="text-right font-black text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
-                              <TableCell className="text-center">
+                              <TableCell className="text-center px-2"><Badge variant="outline" className="bg-white text-slate-400 font-bold">{p.month}</Badge></TableCell>
+                              <TableCell className="text-right font-bold text-slate-500 px-2">{formatCurrency(p.netPayable)}</TableCell>
+                              <TableCell className="text-right font-black text-emerald-600 px-2">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                              <TableCell className="text-center px-2">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
                                   {p.salaryPaidDate ? format(parseISO(p.salaryPaidDate), 'dd-MMM-yyyy') : "--"}
                                 </span>
@@ -956,13 +956,13 @@ export default function PayrollPage() {
                   <Table className="min-w-[1200px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="font-bold">Employee Name / ID</TableHead>
-                        <TableHead className="font-bold">Department</TableHead>
-                        <TableHead className="font-bold">Designation</TableHead>
-                        <TableHead className="text-right font-bold">Total Advanced</TableHead>
-                        <TableHead className="text-right font-bold text-primary">Recovered</TableHead>
-                        <TableHead className="text-right font-bold text-rose-600">Remaining</TableHead>
-                        <TableHead className="text-right font-bold pr-6">Action</TableHead>
+                        <TableHead className="font-bold px-2">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold px-2">Department</TableHead>
+                        <TableHead className="font-bold px-2">Designation</TableHead>
+                        <TableHead className="text-right font-bold px-2">Total Advanced</TableHead>
+                        <TableHead className="text-right font-bold text-primary px-2">Recovered</TableHead>
+                        <TableHead className="text-right font-bold text-rose-600 px-2">Remaining</TableHead>
+                        <TableHead className="text-right font-bold pr-6 px-2">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -971,13 +971,13 @@ export default function PayrollPage() {
                       ) : (
                         paginatedAdvanceLedger.map(item => (
                           <TableRow key={item.id} className="hover:bg-slate-50/50">
-                            <TableCell><div className="flex flex-col"><span className="font-bold uppercase">{item.emp.name}</span><span className="text-[10px] font-mono text-primary">{item.emp.employeeId}</span></div></TableCell>
-                            <TableCell className="text-sm font-medium">{item.emp.department}</TableCell>
-                            <TableCell className="text-sm text-slate-600">{item.emp.designation}</TableCell>
-                            <TableCell className="text-right font-bold">{formatCurrency(item.totalAdvAmount)}</TableCell>
-                            <TableCell className="text-right font-bold text-primary">{formatCurrency(item.totalRecoveryAmount)}</TableCell>
-                            <TableCell className="text-right font-black text-rose-600">{formatCurrency(item.totalRemainingAmount)}</TableCell>
-                            <TableCell className="text-right pr-6">
+                            <TableCell className="px-2"><div className="flex flex-col"><span className="font-bold uppercase">{item.emp.name}</span><span className="text-[10px] font-mono text-primary">{item.emp.employeeId}</span></div></TableCell>
+                            <TableCell className="text-sm font-medium px-2">{item.emp.department}</TableCell>
+                            <TableCell className="text-sm text-slate-600 px-2">{item.emp.designation}</TableCell>
+                            <TableCell className="text-right font-bold px-2">{formatCurrency(item.totalAdvAmount)}</TableCell>
+                            <TableCell className="text-right font-bold text-primary px-2">{formatCurrency(item.totalRecoveryAmount)}</TableCell>
+                            <TableCell className="text-right font-black text-rose-600 px-2">{formatCurrency(item.totalRemainingAmount)}</TableCell>
+                            <TableCell className="text-right pr-6 px-2">
                               <Button variant="outline" size="sm" className="font-bold h-8" onClick={(e) => { e.stopPropagation(); setViewAdvanceEmployee(item); }}>View</Button>
                             </TableCell>
                           </TableRow>
@@ -1010,23 +1010,23 @@ export default function PayrollPage() {
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-bold px-6">Employee Name</TableHead>
-                        <TableHead className="font-bold">Department / Designation</TableHead>
-                        <TableHead className="font-bold text-center">Available Balance</TableHead>
-                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                        <TableHead className="font-bold px-2">Department / Designation</TableHead>
+                        <TableHead className="font-bold text-center px-2">Available Balance</TableHead>
+                        <TableHead className="text-right font-bold pr-6 px-2">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {employees.map(emp => (
                         <TableRow key={emp.id} className="hover:bg-slate-50/50">
                           <TableCell className="px-6"><div className="flex flex-col"><span className="font-bold uppercase">{emp.name}</span><span className="text-[10px] font-mono text-slate-400">{emp.employeeId}</span></div></TableCell>
-                          <TableCell>
+                          <TableCell className="px-2">
                             <div className="flex flex-col">
                               <span className="text-xs font-bold text-slate-600">{emp.department}</span>
                               <span className="text-[10px] text-muted-foreground uppercase tracking-tight">{emp.designation}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
-                          <TableCell className="text-right pr-6">
+                          <TableCell className="text-center font-black text-primary px-2">{emp.advanceLeaveBalance || 0} Days</TableCell>
+                          <TableCell className="text-right pr-6 px-2">
                             <Button variant="ghost" size="sm" className="font-bold gap-2 text-primary hover:bg-primary/5" onClick={() => setViewLeaveHistoryEmployee(emp)}>
                               <History className="w-4 h-4" /> View History
                             </Button>
