@@ -33,7 +33,8 @@ import {
   ArrowRightCircle,
   Filter,
   CheckCircle2,
-  Briefcase
+  Briefcase,
+  Info
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -711,4 +712,3 @@ export default function VouchersPage() {
     </TooltipProvider>
   );
 }
-
