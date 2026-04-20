@@ -31,7 +31,8 @@ import {
   Briefcase,
   Home,
   Bell,
-  ArrowRightCircle
+  ArrowRightCircle,
+  Search
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM } from "@/lib/utils";
 import { 
@@ -114,6 +115,18 @@ export default function AttendancePage() {
   const [reminderReadAt, setReminderReadAt] = useState<number | null>(null);
   const [isReminderPopoverOpen, setIsReminderPopoverOpen] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
+
+  // Column Filters
+  const [columnFilters, setColumnFilters] = useState({
+    name: '',
+    inPlant: '',
+    inTime: '',
+    outTime: '',
+    type: '',
+    status: '',
+    hours: '',
+    approval: ''
+  });
 
   const { toast } = useToast();
 
@@ -474,6 +487,8 @@ export default function AttendancePage() {
     const istNow = getISTTime();
     const todayStrLocal = format(istNow, "yyyy-MM-dd");
 
+    let baseList = [];
+
     if (isAdminRole) {
       const limitDate = subDays(istNow, 45);
       const effectiveLimit = isAfter(limitDate, floorDate) ? limitDate : floorDate;
@@ -517,34 +532,51 @@ export default function AttendancePage() {
         });
       }
 
-      return [...actualRecords, ...virtualTodayRecords]
+      baseList = [...actualRecords, ...virtualTodayRecords]
         .sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
+    } else {
+      const today = startOfDay(new Date());
+      const fortyFiveDaysAgo = subDays(today, 45);
+      let historyStartDate = isAfter(fortyFiveDaysAgo, floorDate) ? fortyFiveDaysAgo : floorDate;
+      
+      if (registeredEmployee?.joinDate) {
+        const joinDate = parseISO(registeredEmployee.joinDate);
+        if (isValid(joinDate) && isAfter(joinDate, historyStartDate)) historyStartDate = joinDate;
+      }
+
+      const dateRange = eachDayOfInterval({ start: historyStartDate, end: today });
+      baseList = dateRange.map(date => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const existingRecords = employeeRecords.filter(r => r.date === dateStr);
+        const isSun = isSunday(date);
+        const holiday = (holidays || []).find(h => h.date === dateStr);
+        const isNonWorkingDay = isSun || !!holiday;
+        const nonWorkingDayLabel = isSun ? "WEEKLY_OFF" : (holiday ? "HOLIDAY" : null);
+
+        if (existingRecords.length > 0) return existingRecords.map(rec => ({ ...rec, isNonWorkingDay, nonWorkingDayLabel }));
+        if (isSameDay(date, today)) return null;
+        if (isSun || holiday) return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: nonWorkingDayLabel, attendanceType: '--', approved: true, isNonWorkingDay: true, nonWorkingDayLabel }];
+        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', attendanceType: '--', approved: true, hours: 0, inTime: null, outTime: null, isNonWorkingDay: false }];
+      }).filter(Boolean).flat().reverse();
     }
 
-    const today = startOfDay(new Date());
-    const fortyFiveDaysAgo = subDays(today, 45);
-    let historyStartDate = isAfter(fortyFiveDaysAgo, floorDate) ? fortyFiveDaysAgo : floorDate;
-    
-    if (registeredEmployee?.joinDate) {
-      const joinDate = parseISO(registeredEmployee.joinDate);
-      if (isValid(joinDate) && isAfter(joinDate, historyStartDate)) historyStartDate = joinDate;
-    }
+    // Apply Column Filters
+    return baseList.filter((h: any) => {
+      if (!h) return false;
+      const nameMatch = h.employeeName?.toLowerCase().includes(columnFilters.name.toLowerCase());
+      const plantMatch = (h.inPlant || '--').toLowerCase().includes(columnFilters.inPlant.toLowerCase());
+      const inTimeStr = `${formatDate(h.date)} ${h.inTime || "--:--"}`;
+      const inTimeMatch = inTimeStr.toLowerCase().includes(columnFilters.inTime.toLowerCase());
+      const outTimeStr = `${formatDate(h.date)} ${h.outTime || "--:--"}`;
+      const outTimeMatch = outTimeStr.toLowerCase().includes(columnFilters.outTime.toLowerCase());
+      const typeMatch = (h.attendanceType || '--').toLowerCase().includes(columnFilters.type.toLowerCase());
+      const statusMatch = h.status?.toLowerCase().includes(columnFilters.status.toLowerCase());
+      const hoursMatch = formatHoursToHHMM(h.hours || 0).toLowerCase().includes(columnFilters.hours.toLowerCase());
+      const approvalMatch = (h.approved ? "approved" : "pending").toLowerCase().includes(columnFilters.approval.toLowerCase());
 
-    const dateRange = eachDayOfInterval({ start: historyStartDate, end: today });
-    return dateRange.map(date => {
-      const dateStr = format(date, 'yyyy-MM-dd');
-      const existingRecords = employeeRecords.filter(r => r.date === dateStr);
-      const isSun = isSunday(date);
-      const holiday = (holidays || []).find(h => h.date === dateStr);
-      const isNonWorkingDay = isSun || !!holiday;
-      const nonWorkingDayLabel = isSun ? "WEEKLY_OFF" : (holiday ? "HOLIDAY" : null);
-
-      if (existingRecords.length > 0) return existingRecords.map(rec => ({ ...rec, isNonWorkingDay, nonWorkingDayLabel }));
-      if (isSameDay(date, today)) return null;
-      if (isSun || holiday) return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: nonWorkingDayLabel, attendanceType: '--', approved: true, isNonWorkingDay: true, nonWorkingDayLabel }];
-      return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', attendanceType: '--', approved: true, hours: 0, inTime: null, outTime: null, isNonWorkingDay: false }];
-    }).filter(Boolean).flat().reverse();
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, registeredEmployee, employees]);
+      return nameMatch && plantMatch && inTimeMatch && outTimeMatch && typeMatch && statusMatch && hoursMatch && approvalMatch;
+    });
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, registeredEmployee, employees, columnFilters]);
 
   const paginatedHistory = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
@@ -552,6 +584,11 @@ export default function AttendancePage() {
   }, [history, currentPage]);
 
   const totalPages = Math.ceil(history.length / rowsPerPage);
+
+  const updateColumnFilter = (col: keyof typeof columnFilters, val: string) => {
+    setColumnFilters(prev => ({ ...prev, [col]: val }));
+    setCurrentPage(1);
+  };
 
   const fetchAddress = async (lat: number, lng: number) => {
     try {
@@ -808,23 +845,36 @@ export default function AttendancePage() {
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700"><History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight (Since April-2026)' : 'My Attendance History (Since April-2026)'}</h3>
+          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700"><History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History (Since April-2026)'}</h3>
           <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
             <ScrollArea className="w-full">
               <Table className="min-w-[1000px]">
-                <TableHeader className="bg-slate-50"><TableRow>
-                  <TableHead className="font-bold">Employee Name</TableHead>
-                  <TableHead className="font-bold">In Plant</TableHead>
-                  <TableHead className="font-bold">In Time</TableHead>
-                  <TableHead className="font-bold">Out Time</TableHead>
-                  <TableHead className="font-bold text-center">Type</TableHead>
-                  <TableHead className="font-bold text-center">Status</TableHead>
-                  <TableHead className="font-bold text-center">Hours</TableHead>
-                  <TableHead className="font-bold">Approval</TableHead>
-                  {isSuperAdmin && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
-                </TableRow></TableHeader>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold">Employee Name</TableHead>
+                    <TableHead className="font-bold">In Plant</TableHead>
+                    <TableHead className="font-bold">In Time</TableHead>
+                    <TableHead className="font-bold">Out Time</TableHead>
+                    <TableHead className="font-bold text-center">Type</TableHead>
+                    <TableHead className="font-bold text-center">Status</TableHead>
+                    <TableHead className="font-bold text-center">Hours</TableHead>
+                    <TableHead className="font-bold">Approval</TableHead>
+                    {isSuperAdmin && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
+                  </TableRow>
+                  <TableRow className="bg-white hover:bg-white border-b">
+                    <TableHead className="p-2"><div className="relative"><Search className="absolute left-2 top-2.5 h-3 w-3 text-slate-400" /><Input placeholder="Filter..." className="pl-6 h-8 text-[10px] bg-slate-50" value={columnFilters.name} onChange={(e) => updateColumnFilter('name', e.target.value)} /></div></TableHead>
+                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.inPlant} onChange={(e) => updateColumnFilter('inPlant', e.target.value)} /></TableHead>
+                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.inTime} onChange={(e) => updateColumnFilter('inTime', e.target.value)} /></TableHead>
+                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.outTime} onChange={(e) => updateColumnFilter('outTime', e.target.value)} /></TableHead>
+                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.type} onChange={(e) => updateColumnFilter('type', e.target.value)} /></TableHead>
+                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.status} onChange={(e) => updateColumnFilter('status', e.target.value)} /></TableHead>
+                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.hours} onChange={(e) => updateColumnFilter('hours', e.target.value)} /></TableHead>
+                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.approval} onChange={(e) => updateColumnFilter('approval', e.target.value)} /></TableHead>
+                    {isSuperAdmin && <TableHead />}
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No attendance activity recorded from project start.</TableCell></TableRow>) : (
+                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground">No attendance activity matching your filters.</TableCell></TableRow>) : (
                     paginatedHistory.map((h: any) => (
                       <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
                         <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
