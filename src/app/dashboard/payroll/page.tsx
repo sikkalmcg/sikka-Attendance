@@ -788,7 +788,7 @@ export default function PayrollPage() {
 
       {/* Advance Salary Detailed View Dialog */}
       <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => { if (!o) setViewAdvanceEmployee(null); }}>
-        <DialogContent className="sm:max-w-7xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+        <DialogContent className="sm:max-w-6xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewAdvanceEmployee && (
             <div className="flex flex-col max-h-[90vh]">
               <DialogHeader className="py-1 px-6 bg-white border-b shrink-0 flex flex-row items-center justify-between">
@@ -817,7 +817,7 @@ export default function PayrollPage() {
                 <ScrollArea className="h-full w-full custom-blue-scrollbar">
                   <div className="p-4">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                      <Table className="min-w-[900px]">
+                      <Table className="min-w-[800px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
                             <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Voucher No</TableHead>
