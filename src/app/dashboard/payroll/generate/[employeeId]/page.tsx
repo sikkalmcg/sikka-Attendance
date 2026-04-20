@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect, use } from "react";
-import { useRouter, useSearchParams } from "navigation";
+import { useState, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import { 
   Card, 
   CardHeader, 
@@ -35,11 +35,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { parseISO, isValid } from "date-fns";
 
-export default function GenerateSalaryPage({ params }: { params: Promise<{ employeeId: string }> }) {
+export default function GenerateSalaryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const resolvedParams = use(params);
-  const employeeId = resolvedParams.employeeId;
+  const params = useParams();
+  const employeeId = params.employeeId as string;
   const selectedMonth = searchParams.get("month") || "";
   const queryEarningDays = searchParams.get("earningDays");
   const queryAdjustLeave = searchParams.get("adjustLeave");
