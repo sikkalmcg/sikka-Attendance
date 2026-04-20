@@ -818,7 +818,7 @@ export default function PayrollPage() {
                 <ScrollArea className="h-full w-full custom-blue-scrollbar">
                   <div className="p-6">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                      <Table className="min-w-[1400px]">
+                      <Table className="min-w-[1600px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
                             <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-10 whitespace-nowrap">Employee Name</TableHead>
@@ -828,7 +828,7 @@ export default function PayrollPage() {
                             <TableHead className="font-black text-[10px] uppercase tracking-widest h-10 whitespace-nowrap">Salary Slip</TableHead>
                             <TableHead className="font-black text-[10px] uppercase tracking-widest h-10 whitespace-nowrap">Salary Month</TableHead>
                             <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-primary h-10 whitespace-nowrap">Adjust Amount</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8 text-rose-600 h-10 whitespace-nowrap">Remaining Amount</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8 text-rose-600 h-10 whitespace-nowrap">Remaining Balance</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -850,7 +850,7 @@ export default function PayrollPage() {
                       </Table>
                     </div>
                   </div>
-                  <ScrollBar orientation="horizontal" className="bg-slate-100 h-3" />
+                  <ScrollBar orientation="horizontal" />
                 </ScrollArea>
               </div>
 
@@ -921,7 +921,7 @@ export default function PayrollPage() {
                       </Table>
                     </div>
                   </div>
-                  <ScrollBar orientation="horizontal" className="h-3" />
+                  <ScrollBar orientation="horizontal" />
                 </ScrollArea>
               </div>
 

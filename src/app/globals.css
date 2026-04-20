@@ -93,13 +93,23 @@
 
   /* Specialized scrollbar for popups/previews */
   .custom-blue-scrollbar [data-radix-scroll-area-thumb] {
-    @apply bg-primary opacity-100 min-h-[60px] w-[8px] !important;
+    @apply bg-primary opacity-100 transition-colors !important;
     visibility: visible !important;
   }
   
   .custom-blue-scrollbar [data-radix-scroll-area-scrollbar] {
-    @apply bg-slate-100/80 opacity-100 w-[12px] border-l border-slate-200 !important;
+    @apply bg-slate-100/80 opacity-100 border-slate-200 !important;
     visibility: visible !important;
+  }
+
+  /* Vertical Specific */
+  .custom-blue-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="vertical"] {
+    @apply w-[10px] border-l !important;
+  }
+
+  /* Horizontal Specific */
+  .custom-blue-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="horizontal"] {
+    @apply h-[10px] border-t !important;
   }
 }
 
