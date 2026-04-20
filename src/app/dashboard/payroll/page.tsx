@@ -75,7 +75,8 @@ import {
   PlusCircle,
   MinusCircle,
   ArrowUpRight,
-  Info
+  Info,
+  FileSpreadsheet
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -109,6 +110,10 @@ export default function PayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedFirmId, setSelectedFirmId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Paid History Filters
+  const [historyFromMonth, setHistoryFromMonth] = useState("");
+  const [historyToMonth, setHistoryToMonth] = useState("");
 
   const [advancePage, setAdvancePage] = useState(1);
   const rowsPerPageAdvance = 15;
@@ -152,7 +157,10 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    setSelectedMonth(PAYROLL_MONTHS[0]);
+    const prevMonth = PAYROLL_MONTHS[0];
+    setSelectedMonth(prevMonth);
+    setHistoryFromMonth(prevMonth);
+    setHistoryToMonth(prevMonth);
     setPaymentDate(new Date().toISOString().split('T')[0]);
   }, []);
 
@@ -221,12 +229,16 @@ export default function PayrollPage() {
       const search = searchTerm.toLowerCase();
       const matchesSearch = p.employeeName.toLowerCase().includes(search) || p.employeeId.toLowerCase().includes(search) || (p.slipNo || "").toLowerCase().includes(search);
       const matchesFirm = selectedFirmId === "all" || emp?.firmId === selectedFirmId;
-      const matchesMonth = selectedMonth === "" || p.month === selectedMonth;
-      return matchesSearch && matchesFirm && matchesMonth;
+      return matchesSearch && matchesFirm;
     });
 
     const pending: PayrollRecord[] = [];
     const paid: PayrollRecord[] = [];
+
+    // Order months for range filtering
+    const monthOrder = [...PAYROLL_MONTHS].reverse(); // Oldest to Newest
+    const fromIdx = monthOrder.indexOf(historyFromMonth);
+    const toIdx = monthOrder.indexOf(historyToMonth);
 
     filtered.forEach(p => {
       const remainingSalary = p.netPayable - (p.salaryPaidAmount || 0);
@@ -234,15 +246,23 @@ export default function PayrollPage() {
       const remainingESIC = (p.esicAmountEmployee + p.esicAmountEmployer) - ((p.esicPaidAmountEmployee || 0) + (p.esicPaidAmountEmployer || 0));
       
       const isFullyPaid = remainingSalary <= 0 && remainingPF <= 0 && remainingESIC <= 0;
+      
       if (isFullyPaid) {
-        paid.push(p);
+        // Filter by history range
+        const pMonthIdx = monthOrder.indexOf(p.month);
+        if (pMonthIdx >= fromIdx && pMonthIdx <= toIdx) {
+          paid.push(p);
+        }
       } else {
-        pending.push(p);
+        // Filter pending by global month selector
+        if (selectedMonth === "" || p.month === selectedMonth) {
+          pending.push(p);
+        }
       }
     });
 
     return { pending, paid };
-  }, [payrollRecords, searchTerm, selectedFirmId, employees, selectedMonth]);
+  }, [payrollRecords, searchTerm, selectedFirmId, employees, selectedMonth, historyFromMonth, historyToMonth]);
 
   const advanceLedgerData = useMemo(() => {
     if (!isMounted) return [];
@@ -500,6 +520,51 @@ export default function PayrollPage() {
     setPreviewSlip(p);
   };
 
+  const handleExportPaidHistory = () => {
+    const list = paymentTabLists.paid;
+    if (list.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No records found to export." });
+      return;
+    }
+
+    const headers = [
+      "Slip No", "Slip Date", "Employee ID", "Employee Name", "Month", 
+      "Net Payable", "Settled Amount", "Settled Date", 
+      "PF Employee", "PF Employer", "PF Paid Total",
+      "ESIC Employee", "ESIC Employer", "ESIC Paid Total"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...list.map(p => [
+        `"${p.slipNo}"`, 
+        `"${p.slipDate || ''}"`,
+        `"${p.employeeId}"`, 
+        `"${p.employeeName}"`, 
+        `"${p.month}"`,
+        p.netPayable, 
+        p.salaryPaidAmount, 
+        `"${p.salaryPaidDate || ''}"`,
+        p.pfAmountEmployee,
+        p.pfAmountEmployer,
+        (p.pfPaidAmountEmployee || 0) + (p.pfPaidAmountEmployer || 0),
+        p.esicAmountEmployee,
+        p.esicAmountEmployer,
+        (p.esicPaidAmountEmployee || 0) + (p.esicPaidAmountEmployer || 0)
+      ].join(","))
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Paid_History_${historyFromMonth}_to_${historyToMonth}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Report Downloaded", description: "Excel export for Paid History is complete." });
+  };
+
   const leaveHistoryData = useMemo(() => {
     if (!viewLeaveHistoryEmployee) return [];
     
@@ -745,11 +810,41 @@ export default function PayrollPage() {
 
             {/* Paid History Section */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2 px-1">
-                <div className="p-1.5 bg-emerald-100 rounded-lg">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-1">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-emerald-100 rounded-lg">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Paid History</h3>
                 </div>
-                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Paid History</h3>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+                  <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
+                    <Label className="text-[9px] font-black uppercase text-slate-400">From</Label>
+                    <Select value={historyFromMonth} onValueChange={setHistoryFromMonth}>
+                      <SelectTrigger className="h-7 w-28 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <div className="w-px h-4 bg-slate-200" />
+                    <Label className="text-[9px] font-black uppercase text-slate-400">To</Label>
+                    <Select value={historyToMonth} onValueChange={setHistoryToMonth}>
+                      <SelectTrigger className="h-7 w-28 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-9 gap-2 font-bold text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                    onClick={handleExportPaidHistory}
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> Export Excel
+                  </Button>
+                </div>
               </div>
               
               <Card className="border-none shadow-sm overflow-hidden bg-slate-50/30">
@@ -764,12 +859,11 @@ export default function PayrollPage() {
                           <TableHead className="font-bold text-right">Net Payable</TableHead>
                           <TableHead className="font-bold text-right">Settled Amount</TableHead>
                           <TableHead className="font-bold text-center">Settled Date</TableHead>
-                          <TableHead className="text-right font-bold pr-6">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {paymentTabLists.paid.length === 0 ? (
-                          <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground text-xs font-medium">No historical settled records found.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-xs font-medium">No historical settled records found for selected range.</TableCell></TableRow>
                         ) : (
                           paymentTabLists.paid.map((p) => (
                             <TableRow key={p.id} className="hover:bg-white/50 transition-colors opacity-80 hover:opacity-100">
@@ -792,9 +886,6 @@ export default function PayrollPage() {
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
                                   {p.salaryPaidDate ? format(parseISO(p.salaryPaidDate), 'dd-MMM-yyyy') : "--"}
                                 </span>
-                              </TableCell>
-                              <TableCell className="text-right pr-6">
-                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDownloadAndPrint(p); }}><Printer className="w-4 h-4 text-slate-400" /></Button>
                               </TableCell>
                             </TableRow>
                           ))
@@ -961,9 +1052,9 @@ export default function PayrollPage() {
                 </ScrollArea>
               </div>
 
-              <DialogFooter className="py-0.5 px-6 bg-white border-t flex justify-end shrink-0">
+              <div className="py-0.5 px-6 bg-white border-t flex justify-end shrink-0">
                 <Button variant="ghost" className="h-6 px-4 font-bold text-slate-400 hover:bg-slate-50 rounded-lg text-[10px]" onClick={() => setViewAdvanceEmployee(null)}>Close</Button>
-              </DialogFooter>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -1036,9 +1127,9 @@ export default function PayrollPage() {
                 </ScrollArea>
               </div>
 
-              <DialogFooter className="py-0.5 px-6 bg-white border-t flex justify-end shrink-0">
+              <div className="py-0.5 px-6 bg-white border-t flex justify-end shrink-0">
                 <Button variant="ghost" className="h-6 px-4 font-bold text-slate-400 hover:bg-slate-50 rounded-lg text-[10px]" onClick={() => setViewLeaveHistoryEmployee(null)}>Close</Button>
-              </DialogFooter>
+              </div>
             </div>
           )}
         </DialogContent>
