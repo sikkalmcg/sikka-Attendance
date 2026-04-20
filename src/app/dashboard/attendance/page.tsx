@@ -107,6 +107,11 @@ export default function AttendancePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
 
+  // Reminder States
+  const [reminderReadAt, setReminderReadAt] = useState<number | null>(null);
+  const [isReminderPopoverOpen, setIsReminderPopoverOpen] = useState(false);
+  const [hasAutoOpened, setHasAutoOpened] = useState(false);
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -184,6 +189,70 @@ export default function AttendancePage() {
     return (employeeRecords || []).find(r => !r.outTime);
   }, [employeeRecords]);
 
+  // Load reminder read state
+  useEffect(() => {
+    if (isMounted && effectiveEmployeeId && todayStr) {
+      const stored = localStorage.getItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`);
+      if (stored) setReminderReadAt(parseInt(stored));
+    }
+  }, [isMounted, effectiveEmployeeId, todayStr]);
+
+  // Reminder Logic Rule Definition
+  const showReminderIcon = useMemo(() => {
+    if (!isMounted || !isAccessAllowed || activeRecord || !currentTime || !todayStr) return false;
+    
+    const currentHHMM = format(currentTime, "HH:mm");
+    if (currentHHMM < "10:30") return false;
+
+    const isSun = isSunday(currentTime);
+    const isHoliday = (holidays || []).some(h => h.date === todayStr);
+    if (isSun || isHoliday) return false;
+
+    const hasInToday = (employeeRecords || []).some(r => r.date === todayStr && r.inTime);
+    if (hasInToday) return false;
+
+    const hasApprovedLeave = (myLeaveRequests || []).some(l => {
+      if (l.status !== 'APPROVED') return false;
+      try {
+        const current = parseISO(todayStr);
+        const start = parseISO(l.fromDate);
+        const end = parseISO(l.toDate);
+        return isWithinInterval(current, { start, end });
+      } catch (e) { return false; }
+    });
+    if (hasApprovedLeave) return false;
+
+    // Rule: Auto remove after 30 minutes of viewing
+    if (reminderReadAt) {
+      const diffMins = (currentTime.getTime() - reminderReadAt) / (1000 * 60);
+      if (diffMins >= 30) return false;
+    }
+
+    return true;
+  }, [isMounted, isAccessAllowed, activeRecord, currentTime, todayStr, holidays, employeeRecords, myLeaveRequests, reminderReadAt]);
+
+  // Rule: Auto-display popup on device header if criteria met and not read
+  useEffect(() => {
+    if (showReminderIcon && !reminderReadAt && !hasAutoOpened) {
+      setIsReminderPopoverOpen(true);
+      setHasAutoOpened(true);
+      
+      // Mark as read immediately when popup displays
+      const now = Date.now();
+      setReminderReadAt(now);
+      localStorage.setItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`, now.toString());
+      
+      // Also log to notifications collection
+      addRecord('notifications', {
+        message: `Reminder Displayed: ${effectiveEmployeeName} has not checked in by 10:30 AM.`,
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+        read: false,
+        type: 'ATTENDANCE_REMINDER',
+        employeeId: effectiveEmployeeId
+      });
+    }
+  }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord]);
+
   // Auto-OUT Policy Enforcement (16 Hour Rule)
   useEffect(() => {
     if (activeRecord && isMounted && currentTime && isAccessAllowed) {
@@ -211,51 +280,6 @@ export default function AttendancePage() {
       }
     }
   }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast]);
-
-  // Attendance Reminder Logic
-  useEffect(() => {
-    if (!isMounted || !isAccessAllowed || !currentTime || !todayStr || !effectiveEmployeeId) return;
-
-    // Condition Check: After 10:30 AM
-    const currentHHMM = format(currentTime, "HH:mm");
-    if (currentHHMM < "10:30") return;
-
-    // Condition Check: Working Day (Not Sun/Holiday)
-    const isSun = isSunday(currentTime);
-    const isHoliday = (holidays || []).some(h => h.date === todayStr);
-    if (isSun || isHoliday) return;
-
-    // Condition Check: No IN marked for today
-    const hasInToday = (employeeRecords || []).some(r => r.date === todayStr && r.inTime);
-    if (hasInToday) return;
-
-    // Condition Check: No approved leave for today
-    const hasApprovedLeave = (myLeaveRequests || []).some(l => {
-      if (l.status !== 'APPROVED') return false;
-      try {
-        const current = parseISO(todayStr);
-        const start = parseISO(l.fromDate);
-        const end = parseISO(l.toDate);
-        return isWithinInterval(current, { start, end });
-      } catch (e) { return false; }
-    });
-    if (hasApprovedLeave) return;
-
-    // Trigger System Notification (Once per day)
-    const storageKey = `sikka_reminder_sent_${effectiveEmployeeId}_${todayStr}`;
-    const wasSent = localStorage.getItem(storageKey);
-    
-    if (!wasSent) {
-      addRecord('notifications', {
-        message: `System Reminder (${effectiveEmployeeName}): क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें। मुझे उम्मीद है आप अपनी कंपनी के नियमों का पालन ज़रूर करेंगे। आपका दिन शुभ हो।`,
-        timestamp: format(currentTime, "yyyy-MM-dd HH:mm:ss"),
-        read: false,
-        type: 'ATTENDANCE_REMINDER',
-        employeeId: effectiveEmployeeId
-      });
-      localStorage.setItem(storageKey, 'true');
-    }
-  }, [isMounted, isAccessAllowed, currentTime, todayStr, effectiveEmployeeId, holidays, employeeRecords, myLeaveRequests, addRecord, effectiveEmployeeName]);
 
   const lastOutRecord = useMemo(() => {
     return [...employeeRecords]
@@ -554,6 +578,9 @@ export default function AttendancePage() {
     addRecord('attendance', newRecord);
     setActiveDialog("NONE");
     toast({ title: "Check-In Success", description: "Attendance logged successfully." });
+    
+    // Explicitly ensure reminder is removed immediately on IN
+    setIsReminderPopoverOpen(false);
   };
 
   const handleConfirmCheckOut = () => {
@@ -636,16 +663,6 @@ export default function AttendancePage() {
 
   if (!isMounted) return null;
 
-  const isReminderThresholdMet = isMounted && isAccessAllowed && !activeRecord && format(currentTime || new Date(), "HH:mm") >= "10:30" && !isSunday(currentTime || new Date()) && !(holidays || []).some(h => h.date === todayStr) && !(myLeaveRequests || []).some(l => {
-    if (l.status !== 'APPROVED') return false;
-    try {
-      const current = parseISO(todayStr);
-      const start = parseISO(l.fromDate);
-      const end = parseISO(l.toDate);
-      return isWithinInterval(current, { start, end });
-    } catch (e) { return false; }
-  });
-
   return (
     <TooltipProvider>
       <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
@@ -676,13 +693,13 @@ export default function AttendancePage() {
               <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
                 <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
               </CardTitle>
-              {isReminderThresholdMet && (
+              {showReminderIcon && (
                 <div className="absolute right-4 top-4">
-                  <Popover>
+                  <Popover open={isReminderPopoverOpen} onOpenChange={setIsReminderPopoverOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-rose-50 border border-rose-100 relative hover:bg-rose-100 transition-all">
                         <Bell className="w-5 h-5 text-rose-500" />
-                        <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-rose-600 rounded-full border-2 border-white animate-pulse" />
+                        {!reminderReadAt && <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-rose-600 rounded-full border-2 border-white animate-pulse" />}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80 p-6 rounded-2xl shadow-2xl border-rose-100 bg-white" align="end">
