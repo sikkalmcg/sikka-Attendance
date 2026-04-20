@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/table";
 import { AttendanceRecord, Plant, LeaveRequest } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays, addDays, isWithinInterval, differenceInMinutes, isValid } from "date-fns";
+import { format, subDays, eachDayOfInterval, isSunday, isSameDay, parseISO, addHours, differenceInHours, isAfter, startOfDay, differenceInDays, addDays, isWithinInterval, differenceInMinutes, isValid, isBefore } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -470,12 +470,15 @@ export default function AttendancePage() {
     
     // RESTRICTION: Application floor is April-2026
     const floorDate = parseISO(PROJECT_START_DATE_STR);
+    const istNow = getISTTime();
+    const todayStrLocal = format(istNow, "yyyy-MM-dd");
 
     if (isAdminRole) {
-      const limitDate = subDays(new Date(), 45);
+      const limitDate = subDays(istNow, 45);
       const effectiveLimit = isAfter(limitDate, floorDate) ? limitDate : floorDate;
+      const limitStr = format(effectiveLimit, "yyyy-MM-dd");
       
-      return (attendanceRecords || [])
+      const actualRecords = (attendanceRecords || [])
         .filter(r => {
           try {
             const d = parseISO(r.date);
@@ -485,10 +488,36 @@ export default function AttendancePage() {
             const emp = employees.find(e => e.employeeId === r.employeeId);
             if (emp?.joinDate && r.date < emp.joinDate) return false;
             
-            return d >= effectiveLimit;
+            return r.date >= limitStr;
           } catch (e) { return false; }
-        })
-        .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
+        });
+
+      // For Oversight: Include "Virtual Absents" for Today so the table isn't empty when no logs exist
+      const virtualTodayRecords: any[] = [];
+      if (todayStrLocal >= PROJECT_START_DATE_STR) {
+        employees.filter(e => e.active).forEach(emp => {
+          const hasRecord = actualRecords.some(r => r.employeeId === emp.employeeId && r.date === todayStrLocal);
+          if (!hasRecord) {
+            virtualTodayRecords.push({
+              id: `v-today-${emp.employeeId}`,
+              employeeId: emp.employeeId,
+              employeeName: emp.name,
+              date: todayStrLocal,
+              status: 'ABSENT',
+              attendanceType: '--',
+              approved: true,
+              hours: 0,
+              inTime: null,
+              outTime: null,
+              isVirtual: true,
+              inPlant: '--'
+            });
+          }
+        });
+      }
+
+      return [...actualRecords, ...virtualTodayRecords]
+        .sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
     }
 
     const today = startOfDay(new Date());
@@ -794,9 +823,9 @@ export default function AttendancePage() {
                   {isSuperAdmin && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
                 </TableRow></TableHeader>
                 <TableBody>
-                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No records from project start.</TableCell></TableRow>) : (
+                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No attendance activity recorded from project start.</TableCell></TableRow>) : (
                     paginatedHistory.map((h: any) => (
-                      <TableRow key={h.id} className="hover:bg-slate-50/50">
+                      <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
                         <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
                         <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
                         <TableCell className="font-mono text-xs">{formatDate(h.date)} {h.inTime || "--:--"}</TableCell>
@@ -1002,3 +1031,4 @@ export default function AttendancePage() {
     </TooltipProvider>
   );
 }
+
