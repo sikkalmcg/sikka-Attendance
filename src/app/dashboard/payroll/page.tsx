@@ -85,10 +85,11 @@ import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, F
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { parseISO, format, isValid } from "date-fns";
 
-const generatePayrollMonths = () => {
+const generatePayrollMonths = (count = 120, includeCurrent = true) => {
   const options = [];
   const date = new Date();
-  for (let i = 1; i <= 6; i++) {
+  const startOffset = includeCurrent ? 0 : 1;
+  for (let i = startOffset; i < count + startOffset; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
     const mmm = d.toLocaleString('en-US', { month: 'short' });
     const yy = d.getFullYear().toString().slice(-2);
@@ -97,7 +98,8 @@ const generatePayrollMonths = () => {
   return options;
 };
 
-const PAYROLL_MONTHS = generatePayrollMonths();
+const PAYROLL_MONTHS_10Y = generatePayrollMonths(120, true);
+const PAYROLL_MONTHS_6M_GEN = generatePayrollMonths(6, false);
 
 export default function PayrollPage() {
   const router = useRouter();
@@ -158,7 +160,7 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    const prevMonth = PAYROLL_MONTHS[0];
+    const prevMonth = PAYROLL_MONTHS_6M_GEN[0];
     setSelectedMonth(prevMonth);
     setHistoryFromMonth(prevMonth);
     setHistoryToMonth(prevMonth);
@@ -171,7 +173,7 @@ export default function PayrollPage() {
 
   const isGenerationAllowed = useMemo(() => {
     if (!selectedMonth) return false;
-    return PAYROLL_MONTHS.includes(selectedMonth);
+    return PAYROLL_MONTHS_6M_GEN.includes(selectedMonth);
   }, [selectedMonth]);
 
   const getAttendanceMetricsForMonth = (empId: string, monthStr: string) => {
@@ -236,8 +238,8 @@ export default function PayrollPage() {
     const pending: PayrollRecord[] = [];
     const paid: PayrollRecord[] = [];
 
-    // Order months for range filtering
-    const monthOrder = [...PAYROLL_MONTHS].reverse(); // Oldest to Newest
+    // Order months for range filtering (Oldest to Newest)
+    const monthOrder = [...PAYROLL_MONTHS_10Y].reverse(); 
     const fromIdx = monthOrder.indexOf(historyFromMonth);
     const toIdx = monthOrder.indexOf(historyToMonth);
 
@@ -251,7 +253,7 @@ export default function PayrollPage() {
       if (isFullyPaid) {
         // Filter by history range
         const pMonthIdx = monthOrder.indexOf(p.month);
-        if (pMonthIdx >= fromIdx && pMonthIdx <= toIdx) {
+        if (fromIdx !== -1 && toIdx !== -1 && pMonthIdx >= fromIdx && pMonthIdx <= toIdx) {
           paid.push(p);
         }
       } else {
@@ -529,6 +531,13 @@ export default function PayrollPage() {
       return;
     }
 
+    // Double check chronological range
+    const monthOrder = [...PAYROLL_MONTHS_10Y].reverse();
+    if (monthOrder.indexOf(historyToMonth) < monthOrder.indexOf(historyFromMonth)) {
+      toast({ variant: "destructive", title: "Range Error", description: "To Month cannot be earlier than From Month." });
+      return;
+    }
+
     const headers = [
       "Slip No", "Slip Date", "Employee ID", "Employee Name", "Month", 
       "Net Payable", "Settled Amount", "Settled Date", 
@@ -634,7 +643,7 @@ export default function PayrollPage() {
                     </Select>
                     <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                       <SelectTrigger className="w-full sm:w-40 bg-white h-10"><SelectValue /></SelectTrigger>
-                      <SelectContent>{PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                      <SelectContent>{PAYROLL_MONTHS_6M_GEN.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -731,6 +740,13 @@ export default function PayrollPage() {
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input placeholder="Search pending payments..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
+                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <SelectTrigger className="w-full sm:w-40 bg-white h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All Pending</SelectItem>
+                      {PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -823,18 +839,32 @@ export default function PayrollPage() {
                 <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
                   <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
                     <Label className="text-[9px] font-black uppercase text-slate-400">From</Label>
-                    <Select value={historyFromMonth} onValueChange={setHistoryFromMonth}>
+                    <Select value={historyFromMonth} onValueChange={(val) => {
+                      setHistoryFromMonth(val);
+                      // Auto-correct To Month if it becomes earlier than From Month
+                      const monthOrder = [...PAYROLL_MONTHS_10Y].reverse();
+                      if (monthOrder.indexOf(historyToMonth) < monthOrder.indexOf(val)) {
+                        setHistoryToMonth(val);
+                      }
+                    }}>
                       <SelectTrigger className="h-7 w-28 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        {PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <div className="w-px h-4 bg-slate-200" />
                     <Label className="text-[9px] font-black uppercase text-slate-400">To</Label>
-                    <Select value={historyToMonth} onValueChange={setHistoryToMonth}>
+                    <Select value={historyToMonth} onValueChange={(val) => {
+                      const monthOrder = [...PAYROLL_MONTHS_10Y].reverse();
+                      if (monthOrder.indexOf(val) < monthOrder.indexOf(historyFromMonth)) {
+                        toast({ variant: "destructive", title: "Range Error", description: "To Month cannot be earlier than From Month." });
+                        return;
+                      }
+                      setHistoryToMonth(val);
+                    }}>
                       <SelectTrigger className="h-7 w-28 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {PAYROLL_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        {PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
