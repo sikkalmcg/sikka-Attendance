@@ -97,8 +97,8 @@ export function formatDate(date: Date | string) {
  * Color logic for working hours
  */
 export function getWorkingHoursColor(hours: number) {
-  if (hours <= 6) return "text-rose-600 bg-rose-50 border-rose-200";
-  if (hours <= 9) return "text-orange-600 bg-orange-50 border-orange-200";
+  if (hours < 1.0) return "text-rose-600 bg-rose-50 border-rose-200";
+  if (hours <= 6) return "text-orange-600 bg-orange-50 border-orange-200";
   return "text-emerald-600 bg-emerald-50 border-emerald-200";
 }
 
@@ -106,6 +106,17 @@ export function formatMinutesToHHMM(minutes: number) {
   if (!minutes || minutes <= 0) return "00:00";
   const h = Math.floor(minutes / 60);
   const m = Math.floor(minutes % 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Formats decimal hours into HH:MM (e.g., 8.5 -> 08:30)
+ */
+export function formatHoursToHHMM(hours: number | null | undefined) {
+  if (!hours || hours <= 0) return "00:00";
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 

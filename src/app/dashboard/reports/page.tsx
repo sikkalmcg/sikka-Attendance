@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/tooltip";
 import { format, subDays, isWithinInterval, parseISO } from "date-fns";
 import { useData } from "@/context/data-context";
-import { formatCurrency, cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM } from "@/lib/utils";
+import { formatCurrency, cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 type ReportType = "ATTENDANCE" | "PAYROLL";
@@ -124,7 +124,7 @@ export default function ReportsPage() {
             outDateTime: `${formatDate(rec.date)} ${rec.outTime || "--:--"}`,
             outLocation: rec.addressOut || "N/A",
             outHour: formatMinutesToHHMM(rec.unapprovedOutDuration || 0),
-            hours: rec.hours,
+            hours: formatHoursToHHMM(rec.hours),
             attendanceType: rec.attendanceType,
             status: rec.status,
             approvedBy: rec.approved ? (rec.approvedBy || "HR_ADMIN") : "PENDING"
@@ -295,8 +295,8 @@ export default function ReportsPage() {
                           {Object.entries(row).map(([key, val], i) => (
                             <TableCell key={i} className="px-6 py-4 text-xs font-medium text-slate-600">
                               {key === 'hours' ? (
-                                <Badge variant="outline" className={cn("font-black", getWorkingHoursColor(val as number))}>
-                                  {String(val)}h
+                                <Badge variant="outline" className={cn("font-black", getWorkingHoursColor(parseFloat(String(val).split(':')[0]) + parseFloat(String(val).split(':')[1]) / 60))}>
+                                  {String(val)}
                                 </Badge>
                               ) : (
                                 typeof val === 'number' && (key.toLowerCase().includes('amount') || key.toLowerCase().includes('payable') || key.toLowerCase().includes('salary') || key.toLowerCase().includes('pf') || key.toLowerCase().includes('esic') || key.toLowerCase().includes('net')) 

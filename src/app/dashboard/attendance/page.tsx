@@ -30,7 +30,7 @@ import {
   Briefcase,
   Home
 } from "lucide-react";
-import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId } from "@/lib/utils";
+import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM } from "@/lib/utils";
 import { 
   Table, 
   TableHeader, 
@@ -337,6 +337,7 @@ export default function AttendancePage() {
         purpose: leavePurpose,
         status: 'UNDER_PROCESS',
         leaveType: leaveType,
+        createdAt: new Date().toISOString()
       };
 
       if (leaveType === "HALF_DAY" && reachTime) {
@@ -506,6 +507,7 @@ export default function AttendancePage() {
     updateRecord('attendance', activeRecord.id, { 
       outTime: finalOutTime, 
       hours: parseFloat(finalHours.toFixed(2)),
+      status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
       attendanceTypeOut: detectedPlant ? 'OFFICE' : selectedType,
       latOut: currentGPS.lat,
       lngOut: currentGPS.lng,
@@ -538,7 +540,7 @@ export default function AttendancePage() {
           inTime: editTimes.in || null,
           outTime: editTimes.out || null,
           hours: isNaN(finalHours) ? 0 : finalHours,
-          status: (finalHours > 0) ? 'PRESENT' : 'ABSENT',
+          status: (finalHours >= 1.0) ? 'PRESENT' : 'ABSENT',
           attendanceType: 'FIELD',
           approved: false,
           address: 'Manual Entry'
@@ -548,7 +550,7 @@ export default function AttendancePage() {
           inTime: editTimes.in || null,
           outTime: editTimes.out || null,
           hours: isNaN(finalHours) ? 0 : finalHours,
-          status: (finalHours > 0) ? 'PRESENT' : 'ABSENT'
+          status: (finalHours >= 1.0) ? 'PRESENT' : 'ABSENT'
         });
       }
       toast({ title: "Record Adjusted" });
@@ -641,7 +643,7 @@ export default function AttendancePage() {
                         <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
                         <TableCell className="text-center">
                           <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
-                            {h.hours || 0}h
+                            {formatHoursToHHMM(h.hours || 0)}
                           </Badge>
                         </TableCell>
                         <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>

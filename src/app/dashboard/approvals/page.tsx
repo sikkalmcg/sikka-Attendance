@@ -59,7 +59,7 @@ import {
   Filter,
   ArrowRightCircle
 } from "lucide-react";
-import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM } from "@/lib/utils";
+import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
 import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays, isValid } from "date-fns";
@@ -261,7 +261,7 @@ export default function ApprovalsPage() {
           employeeId: selectedAttendance.employeeId,
           employeeName: selectedAttendance.employeeName,
           date: attendanceEditData.date,
-          status: 'PRESENT',
+          status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
           attendanceType: 'FIELD',
           inTime: attendanceEditData.inTime,
           outTime: attendanceEditData.outTime,
@@ -275,7 +275,8 @@ export default function ApprovalsPage() {
           date: attendanceEditData.date,
           inTime: attendanceEditData.inTime,
           outTime: attendanceEditData.outTime,
-          hours: finalHours
+          hours: finalHours,
+          status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT'
         });
       }
       toast({ title: "Record Updated" });
@@ -353,9 +354,10 @@ export default function ApprovalsPage() {
         
         if (existingAttendance) {
           // Add 4 hours to existing attendance
+          const newHours = (existingAttendance.hours || 0) + 4;
           updateRecord('attendance', existingAttendance.id, {
-            hours: (existingAttendance.hours || 0) + 4,
-            status: 'PRESENT',
+            hours: newHours,
+            status: newHours >= 1.0 ? 'PRESENT' : 'ABSENT',
             approved: true,
             approvedBy: approverName
           });
@@ -365,7 +367,7 @@ export default function ApprovalsPage() {
             employeeId: selectedLeave.employeeId,
             employeeName: selectedLeave.employeeName,
             date: leaveDate,
-            status: 'PRESENT',
+            status: 'PRESENT', // 4 hours is > 1 hour
             attendanceType: 'FIELD',
             hours: 4,
             approved: true,
@@ -422,7 +424,7 @@ export default function ApprovalsPage() {
       ...list.map(rec => {
         if (historyType === 'attendance') {
           return [
-            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.dept}"`, `"${rec.desig}"`, `"${formatDate(rec.date)}"`, `"${rec.inTime || ''}"`, `"${rec.outTime || ''}"`, `"${rec.inPlant || ''}"`, `"${rec.outPlant || ''}"`, `"${formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}"`, rec.hours, `"${rec.attendanceType}"`, `"${rec.status}"`, `"${rec.address || ''}"`, `"${rec.addressOut || ''}"`, `"${rec.approvedBy || ''}"`
+            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.dept}"`, `"${rec.desig}"`, `"${formatDate(rec.date)}"`, `"${rec.inTime || ''}"`, `"${rec.outTime || ''}"`, `"${rec.inPlant || ''}"`, `"${rec.outPlant || ''}"`, `"${formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}"`, `"${formatHoursToHHMM(rec.hours)}"`, `"${rec.attendanceType}"`, `"${rec.status}"`, `"${rec.address || ''}"`, `"${rec.addressOut || ''}"`, `"${rec.approvedBy || ''}"`
           ].join(",");
         } else {
           return [
@@ -557,7 +559,7 @@ export default function ApprovalsPage() {
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Out Hour</TableHead>
                         </>
                       )}
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">
                         {currentData.items[0]?.days !== undefined ? 'Days' : 'Working Hour'}
                       </TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type/Status</TableHead>
@@ -613,7 +615,7 @@ export default function ApprovalsPage() {
                           )}
                           <TableCell className="text-center">
                             <Badge variant="outline" className={cn("font-black text-xs px-3", rec.days === undefined ? getWorkingHoursColor(rec.hours) : "bg-slate-100 text-slate-700")}>
-                              {rec.days !== undefined ? `${rec.days}d` : `${rec.hours}h`}
+                              {rec.days !== undefined ? `${rec.days}d` : formatHoursToHHMM(rec.hours)}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center">
@@ -785,7 +787,7 @@ export default function ApprovalsPage() {
               </div>
               <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase">Working Hours</p>
-                <p className="text-xs font-bold">{selectedAttendance?.hours}h</p>
+                <p className="text-xs font-bold">{formatHoursToHHMM(selectedAttendance?.hours || 0)}</p>
               </div>
             </div>
             <div className="space-y-2">
