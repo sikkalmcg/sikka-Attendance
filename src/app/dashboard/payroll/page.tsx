@@ -209,7 +209,6 @@ export default function PayrollPage() {
     });
   }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth, isGenerationAllowed, attendanceRecords]);
 
-  // Logic to separate pending disbursements from paid history
   const paymentTabLists = useMemo(() => {
     const sorted = [...payrollRecords].sort((a, b) => {
       const dateCompare = (b.slipDate || "").localeCompare(a.slipDate || "");
@@ -260,7 +259,6 @@ export default function PayrollPage() {
         .filter(p => p.employeeId === employee.employeeId)
         .sort((a, b) => (a.slipDate || "").localeCompare(b.slipDate || ""));
 
-      let remainingRecoveryPool = empPayroll.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
       let slipPool = empPayroll.map(p => ({...p, remainingPool: p.advanceRecovery || 0}));
 
       const voucherBreakdown = empVouchers.map(v => {
@@ -1369,7 +1367,7 @@ function SalarySlipContent({ payroll, employees, firms, plants }: any) {
          <SlipRow label="Department" value={emp?.department} />
          <SlipRow label="Designation" value={emp?.designation} />
          <SlipRow label="Aadhaar No" value={emp?.aadhaar} />
-         <SlipRow label="Bank Account" value={emp?.accountNo} />
+         <SlipRow label="Monthly CTC" value={formatCurrency(emp?.salary?.monthlyCTC || 0)} />
        </div>
 
        <div className="grid grid-cols-2 mt-8 border-2 border-slate-900 font-bold">
@@ -1386,13 +1384,12 @@ function SalarySlipContent({ payroll, employees, firms, plants }: any) {
          </div>
          <div>
            <SlipRow label="Advance Recovery" value={formatCurrency(payroll.advanceRecovery || 0)} />
-           <SlipRow label="Leave Adjust" value={`${payroll.adjustLeave || 0} Day(s)`} />
            <SlipRow label="Absent Days" value={payroll.absent} />
          </div>
        </div>
 
        <div className="bg-slate-900 text-white p-4 flex justify-between items-center mt-10">
-         <span className="font-black uppercase tracking-[0.2em] text-xs">Total Net Payable</span>
+         <span className="font-black uppercase tracking-[0.2em] text-[10px]">Total Net Payable (Earning Days Included)</span>
          <span className="text-3xl font-black">{formatCurrency(payroll.netPayable)}</span>
        </div>
        
@@ -1400,7 +1397,13 @@ function SalarySlipContent({ payroll, employees, firms, plants }: any) {
          <strong>In Words:</strong> {numberToIndianWords(payroll.netPayable)}
        </div>
 
-       <div className="flex justify-between items-end mt-32 px-10">
+       <div className="mt-8 p-4 bg-slate-50 border border-slate-100 rounded-xl text-center">
+         <p className="text-[10px] font-bold text-slate-500 italic">
+           Note: This is an auto-generated monthly salary slip of the employee and is considered a valid original document.
+         </p>
+       </div>
+
+       <div className="flex justify-between items-end mt-24 px-10">
           <div className="text-center space-y-2">
             <div className="w-48 border-b-2 border-slate-900" />
             <p className="text-[10px] font-black uppercase">Employee Signature</p>
