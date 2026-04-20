@@ -447,6 +447,9 @@ export default function ApprovalsPage() {
 
   if (!isMounted) return null;
 
+  const isLeaveTypeActive = (viewMode === 'pending' && pendingType === 'leave') || (viewMode === 'history' && historyType === 'leave');
+  const showActionColumn = viewMode === 'pending' || (viewMode === 'history' && historyType === 'attendance');
+
   return (
     <div className="space-y-8 pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -547,12 +550,12 @@ export default function ApprovalsPage() {
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">
-                        {viewMode === 'pending' || (viewMode === 'history' && historyType === 'attendance') ? 'IN Date Time' : 'From Date'}
+                        {isLeaveTypeActive ? 'From Date' : 'IN Date Time'}
                       </TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">
-                        {viewMode === 'pending' || (viewMode === 'history' && historyType === 'attendance') ? 'OUT Date Time' : 'To Date'}
+                        {isLeaveTypeActive ? 'To Date' : 'OUT Date Time'}
                       </TableHead>
-                      {((viewMode === 'pending' && pendingType === 'attendance') || (viewMode === 'history' && historyType === 'attendance')) && (
+                      {!isLeaveTypeActive && (
                         <>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN Plant</TableHead>
                           <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Plant</TableHead>
@@ -560,18 +563,19 @@ export default function ApprovalsPage() {
                         </>
                       )}
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">
-                        {currentData.items[0]?.days !== undefined ? 'Days' : 'Working Hour'}
+                        {isLeaveTypeActive ? 'Days' : 'Working Hour'}
                       </TableHead>
+                      {isLeaveTypeActive && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Purpose</TableHead>}
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
-                      {currentData.items[0]?.address !== undefined && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>}
+                      {!isLeaveTypeActive && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>}
                       {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Action By</TableHead>}
-                      <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
+                      {showActionColumn && <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentData.items.length === 0 ? (
-                      <TableRow><TableCell colSpan={15} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={16} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
                     ) : (
                       currentData.items.map((rec: any) => (
                         <TableRow key={rec.id} className={cn("hover:bg-slate-50/50 transition-colors", rec.isVirtual && "bg-rose-50/30")}>
@@ -590,16 +594,20 @@ export default function ApprovalsPage() {
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.date || rec.fromDate)}</span>
-                              <span className={cn("text-xs font-mono font-bold", !rec.inTime && rec.status === 'PRESENT' && "text-rose-500 italic")}>{rec.inTime || "--:--"}</span>
+                              <span className={cn("text-xs font-mono font-bold", !isLeaveTypeActive && !rec.inTime && rec.status === 'PRESENT' && "text-rose-500 italic")}>
+                                {isLeaveTypeActive ? "" : (rec.inTime || "--:--")}
+                              </span>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.date || rec.toDate)}</span>
-                              <span className={cn("text-xs font-mono font-bold", rec.outTime ? "text-rose-500" : "text-slate-300 italic")}>{rec.outTime || "--:--"}</span>
+                              <span className={cn("text-xs font-mono font-bold", !isLeaveTypeActive && rec.outTime ? "text-rose-500" : "text-slate-300 italic")}>
+                                {isLeaveTypeActive ? "" : (rec.outTime || "--:--")}
+                              </span>
                             </div>
                           </TableCell>
-                          {((viewMode === 'pending' && pendingType === 'attendance') || (viewMode === 'history' && historyType === 'attendance')) && (
+                          {!isLeaveTypeActive && (
                             <>
                               <TableCell>
                                 <span className="text-xs font-bold text-slate-600">{rec.inPlant || "--"}</span>
@@ -615,13 +623,20 @@ export default function ApprovalsPage() {
                             </>
                           )}
                           <TableCell className="text-center">
-                            <Badge variant="outline" className={cn("font-black text-xs px-3", rec.days === undefined ? getWorkingHoursColor(rec.hours) : "bg-slate-100 text-slate-700")}>
-                              {rec.days !== undefined ? `${rec.days}d` : formatHoursToHHMM(rec.hours)}
+                            <Badge variant="outline" className={cn("font-black text-xs px-3", !isLeaveTypeActive ? getWorkingHoursColor(rec.hours) : "bg-slate-100 text-slate-700")}>
+                              {isLeaveTypeActive ? `${rec.days}d` : formatHoursToHHMM(rec.hours)}
                             </Badge>
                           </TableCell>
+                          {isLeaveTypeActive && (
+                            <TableCell>
+                              <span className="text-xs font-medium text-slate-600 truncate max-w-[200px]" title={rec.purpose}>{rec.purpose || "--"}</span>
+                            </TableCell>
+                          )}
                           <TableCell className="text-center">
                             <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-slate-200 px-3">
-                              {rec.attendanceType || "--"}
+                              {isLeaveTypeActive 
+                                ? (rec.leaveType === 'DAYS' ? 'Full Day' : 'Half Day') 
+                                : (rec.attendanceType || "--")}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center">
@@ -636,7 +651,7 @@ export default function ApprovalsPage() {
                               {rec.status}
                             </Badge>
                           </TableCell>
-                          {rec.address !== undefined && (
+                          {!isLeaveTypeActive && (
                             <TableCell>
                               <div className="flex flex-col gap-1">
                                 <div className="flex items-center gap-1.5">
@@ -655,30 +670,30 @@ export default function ApprovalsPage() {
                               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{rec.approvedBy || "---"}</span>
                             </TableCell>
                           )}
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end items-center gap-1">
-                              {viewMode === 'pending' ? (
-                                pendingType === 'attendance' ? (
-                                  <>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleOpenAttendanceEdit(rec)} disabled={isProcessing}><Pencil className="w-3.5 h-3.5" /></Button>
-                                    <Button size="sm" className={cn("h-8 font-black text-[10px] uppercase px-4 shadow-sm", (rec.outTime || rec.status === 'ABSENT') ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => (rec.outTime || rec.status === 'ABSENT') && handleApproveAttendance(rec)} disabled={isProcessing || (!rec.outTime && rec.status !== 'ABSENT')}>{(rec.outTime || rec.status === 'ABSENT') ? "Approve" : "Locked"}</Button>
-                                    <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 font-black text-[10px] uppercase px-4" onClick={() => handleOpenAttendanceReject(rec)} disabled={isProcessing}>Reject</Button>
-                                  </>
+                          {showActionColumn && (
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end items-center gap-1">
+                                {viewMode === 'pending' ? (
+                                  pendingType === 'attendance' ? (
+                                    <>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => handleOpenAttendanceEdit(rec)} disabled={isProcessing}><Pencil className="w-3.5 h-3.5" /></Button>
+                                      <Button size="sm" className={cn("h-8 font-black text-[10px] uppercase px-4 shadow-sm", (rec.outTime || rec.status === 'ABSENT') ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={() => (rec.outTime || rec.status === 'ABSENT') && handleApproveAttendance(rec)} disabled={isProcessing || (!rec.outTime && rec.status !== 'ABSENT')}>{(rec.outTime || rec.status === 'ABSENT') ? "Approve" : "Locked"}</Button>
+                                      <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 font-black text-[10px] uppercase px-4" onClick={() => handleOpenAttendanceReject(rec)} disabled={isProcessing}>Reject</Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button size="sm" variant="outline" className="h-8 font-black text-[10px] uppercase border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => { setSelectedLeave(rec); setLeaveRejectReason(""); setIsLeaveRejectOpen(true); }} disabled={isProcessing}>Reject</Button>
+                                      <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-primary shadow-sm" onClick={() => { setSelectedLeave(rec); setLeaveEditDates({ from: rec.fromDate, to: rec.toDate }); setIsLeaveApproveOpen(true); }} disabled={isProcessing}>Approve</Button>
+                                    </>
+                                  )
                                 ) : (
-                                  <>
-                                    <Button size="sm" variant="outline" className="h-8 font-black text-[10px] uppercase border-rose-200 text-rose-600 hover:bg-rose-50" onClick={() => { setSelectedLeave(rec); setLeaveRejectReason(""); setIsLeaveRejectOpen(true); }} disabled={isProcessing}>Reject</Button>
-                                    <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-primary shadow-sm" onClick={() => { setSelectedLeave(rec); setLeaveEditDates({ from: rec.fromDate, to: rec.toDate }); setIsLeaveApproveOpen(true); }} disabled={isProcessing}>Approve</Button>
-                                  </>
-                                )
-                              ) : (
-                                historyType === 'attendance' ? (
-                                  <Button variant="outline" size="sm" className="h-8 font-black text-[10px] uppercase border-primary text-primary hover:bg-primary/5 gap-1.5" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }} disabled={isProcessing}><RotateCcw className="w-3 h-3" /> Restore</Button>
-                                ) : (
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">---</span>
-                                )
-                              )}
-                            </div>
-                          </TableCell>
+                                  historyType === 'attendance' ? (
+                                    <Button variant="outline" size="sm" className="h-8 font-black text-[10px] uppercase border-primary text-primary hover:bg-primary/5 gap-1.5" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }} disabled={isProcessing}><RotateCcw className="w-3 h-3" /> Restore</Button>
+                                  ) : null
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     )}
