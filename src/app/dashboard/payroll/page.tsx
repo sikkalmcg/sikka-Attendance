@@ -177,7 +177,7 @@ export default function PayrollPage() {
   }, [selectedMonth]);
 
   const getAttendanceMetricsForMonth = (empId: string, monthStr: string) => {
-    if (!monthStr) return { presents: 0, holidayWork: 0 };
+    if (!monthStr || monthStr === 'all') return { presents: 0, holidayWork: 0 };
     const [mmm, yy] = monthStr.split('-');
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const mIndex = monthNames.indexOf(mmm);
@@ -255,7 +255,7 @@ export default function PayrollPage() {
           paid.push(p);
         }
       } else {
-        if (selectedMonth === "" || p.month === selectedMonth) {
+        if (selectedMonth === "all" || p.month === selectedMonth) {
           pending.push(p);
         }
       }
@@ -360,7 +360,7 @@ export default function PayrollPage() {
       holidayBanked: 0,
       holidayPaid: 0,
       balanceUsed: 0,
-      remainingBalance: (emp.advanceLeaveBalance || 0), // Removed +1 as per rule
+      remainingBalance: (emp.advanceLeaveBalance || 0),
       earningDays: initialPresent,
       monthWorkingDays: workingDaysCount,
       monthHolidays: 4,
@@ -754,7 +754,7 @@ export default function PayrollPage() {
                   <Select value={selectedMonth} onValueChange={setSelectedMonth}>
                     <SelectTrigger className="w-full sm:w-40 bg-white h-10"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Pending</SelectItem>
+                      <SelectItem value="all">All Pending</SelectItem>
                       {PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                     </SelectContent>
                   </Select>
