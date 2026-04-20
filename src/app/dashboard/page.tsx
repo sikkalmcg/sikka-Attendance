@@ -7,7 +7,7 @@ import {
   Users, 
   CalendarCheck, 
   AlertCircle, 
-  ArrowUpRight,
+  ArrowUpRight, 
   ArrowDownRight,
   UserX,
   X,
@@ -62,8 +62,9 @@ export default function DashboardHome() {
     const todayLogs = attendanceRecords.filter(r => r.date === todayStr);
     
     const presentToday = todayLogs.filter(r => PRESENT_STATUSES.includes(r.status));
-    const fieldWorkToday = todayLogs.filter(r => r.attendanceType === 'FIELD');
-    const wfhToday = todayLogs.filter(r => r.attendanceType === 'WFH');
+    // Strictly filter field/wfh based on actual presence
+    const fieldWorkToday = presentToday.filter(r => r.attendanceType === 'FIELD');
+    const wfhToday = presentToday.filter(r => r.attendanceType === 'WFH');
     
     const absentToday = Math.max(0, activeEmployees.length - presentToday.length);
     const pendingApprovals = attendanceRecords.filter(r => !r.approved).length + vouchers.filter(v => v.status === 'PENDING').length;
@@ -84,9 +85,13 @@ export default function DashboardHome() {
     return attendanceRecords
       .filter(r => {
         if (r.date !== todayStr) return false;
+        
+        // Logic Hardening: Presence check is mandatory for these specific widgets
+        if (!PRESENT_STATUSES.includes(r.status)) return false;
+
         if (type === 'FIELD') return r.attendanceType === 'FIELD';
         if (type === 'WFH') return r.attendanceType === 'WFH';
-        return PRESENT_STATUSES.includes(r.status);
+        return true; // Default 'PRESENT' category
       })
       .map(rec => {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
