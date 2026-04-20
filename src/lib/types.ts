@@ -201,6 +201,7 @@ export interface PayrollRecord {
   attendance: number;
   absent: number;
   adjustLeave: number;
+  addedLeave?: number; // Added to balance (from holiday work banking)
   totalEarningDays: number;
   incentivePct: number;
   incentiveAmt: number;

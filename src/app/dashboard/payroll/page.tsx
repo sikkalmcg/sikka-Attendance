@@ -147,7 +147,7 @@ export default function PayrollPage() {
   const [esicPaidEmp, setEsicPaidEmp] = useState(0);
   const [esicPaidEx, setEsicPaidEx] = useState(0);
 
-  const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, { adjusted: boolean, earningDays: number, balanceUsed: number }>>({});
+  const [adjustedEmployees, setAdjustedEmployees] = useState<Record<string, { adjusted: boolean, earningDays: number, balanceUsed: number, balanceAdded: number }>>({});
 
   useEffect(() => {
     setIsMounted(true);
@@ -322,7 +322,7 @@ export default function PayrollPage() {
     setAdjustmentState(prev => ({
       ...prev,
       holidayWork: 0,
-      holidayBanked: hw,
+      holidayBanked: prev.holidayBanked + hw,
       remainingBalance: prev.remainingBalance + hw
     }));
     toast({ title: "Banked", description: `${hw} day(s) added to Advance Leave balance.` });
@@ -368,7 +368,8 @@ export default function PayrollPage() {
         [adjustLeaveEmp.id]: { 
           adjusted: true, 
           earningDays: adjustmentState.earningDays,
-          balanceUsed: adjustmentState.balanceUsed
+          balanceUsed: adjustmentState.balanceUsed,
+          balanceAdded: adjustmentState.holidayBanked
         } 
       }));
       
@@ -459,17 +460,34 @@ export default function PayrollPage() {
 
   const leaveHistoryData = useMemo(() => {
     if (!viewLeaveHistoryEmployee) return [];
-    return payrollRecords
-      .filter(p => p.employeeId === viewLeaveHistoryEmployee.employeeId && (p.adjustLeave || 0) > 0)
-      .sort((a, b) => b.month.localeCompare(a.month))
-      .map(p => {
-        const [mmm, yy] = p.month.split('-');
-        return {
-          month: `${mmm}-20${yy}`,
-          leave: p.adjustLeave,
-          employeeName: p.employeeName
-        };
+    
+    // Sort payroll records by month correctly
+    const relevantPayroll = payrollRecords
+      .filter(p => p.employeeId === viewLeaveHistoryEmployee.employeeId && ((p.adjustLeave || 0) > 0 || (p.addedLeave || 0) > 0))
+      .sort((a, b) => {
+        // Simple string comparison for MMM-YY is not reliable, but usually works for standard list
+        // Better to parse if possible, but here we just sort for the history view
+        return a.month.localeCompare(b.month);
       });
+
+    let currentBalance = 0; // Running total calculation
+    return relevantPayroll.map(p => {
+      const [mmm, yy] = p.month.split('-');
+      const formattedMonth = `${mmm}-20${yy}`;
+      const added = p.addedLeave || 0;
+      const adjusted = p.adjustLeave || 0;
+      currentBalance = currentBalance + added - adjusted;
+      
+      return {
+        month: formattedMonth,
+        addLeave: added,
+        adjustLeave: adjusted,
+        remainingLeave: Math.max(0, currentBalance),
+        employeeName: p.employeeName,
+        department: viewLeaveHistoryEmployee.department,
+        designation: viewLeaveHistoryEmployee.designation
+      };
+    }).reverse(); // Latest at top
   }, [viewLeaveHistoryEmployee, payrollRecords]);
 
   if (!isMounted) return null;
@@ -577,7 +595,7 @@ export default function PayrollPage() {
                                 <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
                                     <Button variant="outline" size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "hover:bg-primary/5")} onClick={(e) => { e.stopPropagation(); openAdjustmentDialog(emp); }} disabled={isProcessing}><CalendarClock className="w-3 h-3" /> {isAdjusted ? "Reviewed" : "Adjust Leave"}</Button>
-                                    <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={(e) => { e.stopPropagation(); if(isAdjusted) router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}&adjustLeave=${adjData.balanceUsed}`); }} disabled={!isAdjusted || isProcessing}><Calculator className="w-3 h-3" /> Generate Salary</Button>
+                                    <Button size="sm" className={cn("text-xs font-bold gap-1", isAdjusted ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed")} onClick={(e) => { e.stopPropagation(); if(isAdjusted) router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adjData.earningDays}&adjustLeave=${adjData.balanceUsed}&addedLeave=${adjData.balanceAdded}`); }} disabled={!isAdjusted || isProcessing}><Calculator className="w-3 h-3" /> Generate Salary</Button>
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -738,7 +756,8 @@ export default function PayrollPage() {
                   <Table className="min-w-[1000px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="font-bold">Employee Name</TableHead>
+                        <TableHead className="font-bold px-6">Employee Name</TableHead>
+                        <TableHead className="font-bold">Department / Designation</TableHead>
                         <TableHead className="font-bold text-center">Available Balance</TableHead>
                         <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                       </TableRow>
@@ -746,10 +765,18 @@ export default function PayrollPage() {
                     <TableBody>
                       {employees.map(emp => (
                         <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                          <TableCell><div className="flex flex-col"><span className="font-bold uppercase">{emp.name}</span><span className="text-[10px] font-mono text-slate-400">{emp.employeeId}</span></div></TableCell>
+                          <TableCell className="px-6"><div className="flex flex-col"><span className="font-bold uppercase">{emp.name}</span><span className="text-[10px] font-mono text-slate-400">{emp.employeeId}</span></div></TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-600">{emp.department}</span>
+                              <span className="text-[10px] text-muted-foreground uppercase tracking-tight">{emp.designation}</span>
+                            </div>
+                          </TableCell>
                           <TableCell className="text-center font-black text-primary">{emp.advanceLeaveBalance || 0} Days</TableCell>
                           <TableCell className="text-right pr-6">
-                            <Button variant="ghost" size="sm" className="font-bold gap-2" onClick={() => setViewLeaveHistoryEmployee(emp)}><History className="w-4 h-4" /> View History</Button>
+                            <Button variant="ghost" size="sm" className="font-bold gap-2 text-primary hover:bg-primary/5" onClick={() => setViewLeaveHistoryEmployee(emp)}>
+                              <History className="w-4 h-4" /> View History
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -831,6 +858,76 @@ export default function PayrollPage() {
 
               <DialogFooter className="p-6 bg-white border-t flex justify-end shrink-0">
                 <Button variant="ghost" className="h-12 px-12 font-bold text-slate-500 hover:bg-slate-100 rounded-xl" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Advance Leave History Dialog */}
+      <Dialog open={!!viewLeaveHistoryEmployee} onOpenChange={(o) => { if (!o) setViewLeaveHistoryEmployee(null); }}>
+        <DialogContent className="sm:max-w-5xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          {viewLeaveHistoryEmployee && (
+            <div className="flex flex-col max-h-[90vh]">
+              <DialogHeader className="p-8 bg-white border-b shrink-0">
+                 <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-black uppercase text-primary tracking-[0.2em] mb-1">Leave Audit History</span>
+                    <DialogTitle className="text-2xl font-black text-slate-900">{viewLeaveHistoryEmployee.name}</DialogTitle>
+                    <div className="flex items-center gap-3 mt-1">
+                       <Badge variant="outline" className="font-mono text-xs font-black px-2">{viewLeaveHistoryEmployee.employeeId}</Badge>
+                       <span className="text-slate-300">|</span>
+                       <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{viewLeaveHistoryEmployee.department} / {viewLeaveHistoryEmployee.designation}</span>
+                    </div>
+                 </div>
+              </DialogHeader>
+
+              <div className="flex-1 overflow-hidden bg-slate-50/30">
+                <ScrollArea className="h-full w-full custom-blue-scrollbar">
+                  <div className="p-8">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <Table className="min-w-[800px]">
+                        <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                          <TableRow>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-12">Month</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12">Add Leave</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12">Adjust Leave</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12 text-primary bg-primary/5">Remaining Leave</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {leaveHistoryData.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center py-20 text-muted-foreground font-medium italic">No leave adjustments recorded yet.</TableCell>
+                            </TableRow>
+                          ) : (
+                            leaveHistoryData.map((row, idx) => (
+                              <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                <TableCell className="px-6 py-4 font-bold text-slate-700">{row.month}</TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="outline" className={cn("font-black px-3", row.addLeave > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "text-slate-300")}>
+                                    {row.addLeave > 0 ? `+${row.addLeave}` : "0"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="outline" className={cn("font-black px-3", row.adjustLeave > 0 ? "bg-rose-50 text-rose-700 border-rose-200" : "text-slate-300")}>
+                                    {row.adjustLeave > 0 ? `-${row.adjustLeave}` : "0"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-center font-black text-primary bg-primary/5 text-lg">
+                                  {row.remainingLeave} Days
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </ScrollArea>
+              </div>
+
+              <DialogFooter className="p-6 bg-white border-t flex justify-end shrink-0">
+                <Button variant="ghost" className="h-12 px-12 font-bold text-slate-500 hover:bg-slate-100 rounded-xl" onClick={() => setViewLeaveHistoryEmployee(null)}>Close History</Button>
               </DialogFooter>
             </div>
           )}
@@ -946,6 +1043,7 @@ export default function PayrollPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Disburse Salary Dialog */}
       <Dialog open={!!paySalaryRec} onOpenChange={(o) => { if (!o) setPaySalaryRec(null); }}>
         <DialogContent className="sm:max-w-md">
           {paySalaryRec && (
@@ -985,6 +1083,144 @@ export default function PayrollPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Disburse PF Dialog */}
+      <Dialog open={!!payPFRec} onOpenChange={(o) => { if (!o) setPayPFRec(null); }}>
+        <DialogContent className="sm:max-w-md">
+          {payPFRec && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Disburse PF Contribution</DialogTitle>
+                <DialogDescription>Record PF payment for {payPFRec.employeeName} ({payPFRec.month})</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Employee PF (INR)</Label>
+                    <Input type="number" value={pfPaidEmp} onChange={(e) => setPfPaidEmp(parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Employer PF (INR)</Label>
+                    <Input type="number" value={pfPaidEx} onChange={(e) => setPfPaidEx(parseFloat(e.target.value) || 0)} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Date</Label>
+                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ref No (Challan / Trans ID)</Label>
+                  <Input placeholder="Enter reference..." value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPayPFRec(null)}>Cancel</Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 font-bold px-8" onClick={handlePostPFPayment} disabled={isProcessing}>Confirm PF Payment</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Disburse ESIC Dialog */}
+      <Dialog open={!!payESICRec} onOpenChange={(o) => { if (!o) setPayESICRec(null); }}>
+        <DialogContent className="sm:max-w-md">
+          {payESICRec && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Disburse ESIC Contribution</DialogTitle>
+                <DialogDescription>Record ESIC payment for {payESICRec.employeeName} ({payESICRec.month})</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Employee ESIC (INR)</Label>
+                    <Input type="number" value={esicPaidEmp} onChange={(e) => setEsicPaidEmp(parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Employer ESIC (INR)</Label>
+                    <Input type="number" value={esicPaidEx} onChange={(e) => setEsicPaidEx(parseFloat(e.target.value) || 0)} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Date</Label>
+                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ref No (Challan / Trans ID)</Label>
+                  <Input placeholder="Enter reference..." value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPayESICRec(null)}>Cancel</Button>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 font-bold px-8" onClick={handlePostESICPayment} disabled={isProcessing}>Confirm ESIC Payment</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Sub-Adjustment Dialog for Leave Adjustment */}
+      <Dialog open={isSubAdjustmentOpen} onOpenChange={setIsSubAdjustmentOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black flex items-center gap-2"><MinusCircle className="w-5 h-5 text-rose-500" /> Adjust From Advance Leave</DialogTitle>
+            <DialogDescription>How many days would you like to take from the employee's advance balance?</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Available Balance</Label>
+              <div className="h-12 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center px-4 font-black text-emerald-700">{adjustmentState.remainingBalance} Days</div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Adjust Days *</Label>
+              <Input 
+                type="number" 
+                value={subAdjustmentValue} 
+                onChange={(e) => setSubAdjustmentValue(parseFloat(e.target.value) || 0)} 
+                className="h-14 font-black text-xl bg-slate-50 border-slate-200 rounded-xl focus-visible:ring-primary"
+                max={adjustmentState.remainingBalance}
+                min={0}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setIsSubAdjustmentOpen(false)} className="rounded-xl font-bold">Cancel</Button>
+            <Button onClick={handleSaveSubAdjustment} className="bg-primary rounded-xl font-black px-8">Confirm Adjustment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Salary Slip Dialog */}
+      <Dialog open={!!previewSlip} onOpenChange={(o) => { if (!o) setPreviewSlip(null); }}>
+        <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+          <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-primary" />
+              </div>
+              <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Salary Slip Preview</DialogTitle>
+            </div>
+            <div className="flex items-center gap-3 mr-8">
+              <Button 
+                className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
+                onClick={() => handleDownloadAndPrint(previewSlip!)}
+              >
+                <Download className="w-5 h-5" /> Download PDF
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setPreviewSlip(null)}>
+                <X className="h-5 h-5" />
+              </Button>
+            </div>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
+            <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 min-h-[297mm] border-2 border-slate-200 rounded-sm">
+              {previewSlip && <SalarySlipContent payroll={previewSlip} employees={employees} firms={firms} plants={plants} />}
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 
