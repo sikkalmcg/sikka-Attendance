@@ -140,7 +140,8 @@ export default function PayrollPage() {
     remainingBalance: 0,
     earningDays: 0,
     monthWorkingDays: 26,
-    monthHolidays: 4
+    monthHolidays: 4,
+    autoAddedLeave: 1
   });
 
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -360,10 +361,11 @@ export default function PayrollPage() {
       holidayBanked: 0,
       holidayPaid: 0,
       balanceUsed: 0,
-      remainingBalance: emp.advanceLeaveBalance || 0,
+      remainingBalance: (emp.advanceLeaveBalance || 0) + 1, // Rule: Auto add 1 Leave Credit
       earningDays: initialPresent,
       monthWorkingDays: workingDaysCount,
-      monthHolidays: 4
+      monthHolidays: 4,
+      autoAddedLeave: 1
     });
     setAdjustLeaveEmp(emp);
   };
@@ -431,7 +433,7 @@ export default function PayrollPage() {
           adjusted: true, 
           earningDays: adjustmentState.earningDays,
           balanceUsed: adjustmentState.balanceUsed,
-          balanceAdded: adjustmentState.holidayBanked
+          balanceAdded: adjustmentState.holidayBanked + 1 // Rule: holiday banked + 1 auto credit
         } 
       }));
       
@@ -881,7 +883,7 @@ export default function PayrollPage() {
                               </TableCell>
                               <TableCell className="text-center"><Badge variant="outline" className="bg-white text-slate-400 font-bold">{p.month}</Badge></TableCell>
                               <TableCell className="text-right font-bold text-slate-500">{formatCurrency(p.netPayable)}</TableCell>
-                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                              <TableCell className="text-right font-black text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
                               <TableCell className="text-center">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
                                   {p.salaryPaidDate ? format(parseISO(p.salaryPaidDate), 'dd-MMM-yyyy') : "--"}
@@ -1187,6 +1189,15 @@ export default function PayrollPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
+                        {/* Auto Monthly Leave Credit Row */}
+                        <TableRow className="bg-emerald-50/20">
+                          <TableCell className="px-4 py-2 font-bold text-emerald-700 text-xs">Auto Monthly Leave Credit</TableCell>
+                          <TableCell className="text-center font-black text-emerald-600 text-sm">+1</TableCell>
+                          <TableCell className="text-right pr-4">
+                            <Badge className="bg-emerald-100 text-emerald-700 uppercase text-[8px] font-black">Approved</Badge>
+                          </TableCell>
+                        </TableRow>
+
                         <TableRow>
                           <TableCell className="px-4 py-2 font-bold text-slate-700 text-xs">Present on Working Days</TableCell>
                           <TableCell className="text-center font-black text-emerald-600 text-sm">{adjustmentState.present}</TableCell>
