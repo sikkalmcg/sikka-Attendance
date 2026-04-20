@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -86,7 +87,6 @@ import { parseISO, format, isValid } from "date-fns";
 const generatePayrollMonths = () => {
   const options = [];
   const date = new Date();
-  // Start from i = 1 to exclude current month and allow only past 6 months
   for (let i = 1; i <= 6; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
     const mmm = d.toLocaleString('en-US', { month: 'short' });
@@ -165,9 +165,6 @@ export default function PayrollPage() {
     return PAYROLL_MONTHS.includes(selectedMonth);
   }, [selectedMonth]);
 
-  /**
-   * CRITICAL RULE: Only APPROVED attendance counts for payroll.
-   */
   const getAttendanceMetricsForMonth = (empId: string, monthStr: string) => {
     if (!monthStr) return { presents: 0, holidayWork: 0 };
     const [mmm, yy] = monthStr.split('-');
@@ -177,7 +174,7 @@ export default function PayrollPage() {
     
     const monthlyAttendance = attendanceRecords.filter(r => {
       if (r.employeeId !== empId) return false;
-      if (!r.approved) return false; // RULE: Must be approved
+      if (!r.approved) return false;
       const d = parseISO(r.date);
       if (!isValid(d)) return false;
       return d.getMonth() === mIndex && d.getFullYear() === year;
@@ -212,13 +209,15 @@ export default function PayrollPage() {
     });
   }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth, isGenerationAllowed, attendanceRecords]);
 
-  const finalizedSalaries = useMemo(() => {
+  // Logic to separate pending disbursements from paid history
+  const paymentTabLists = useMemo(() => {
     const sorted = [...payrollRecords].sort((a, b) => {
       const dateCompare = (b.slipDate || "").localeCompare(a.slipDate || "");
       if (dateCompare !== 0) return dateCompare;
       return (b.slipNo || "").localeCompare(a.slipNo || "");
     });
-    return sorted.filter(p => {
+
+    const filtered = sorted.filter(p => {
       const emp = employees.find(e => e.employeeId === p.employeeId);
       const search = searchTerm.toLowerCase();
       const matchesSearch = p.employeeName.toLowerCase().includes(search) || p.employeeId.toLowerCase().includes(search) || (p.slipNo || "").toLowerCase().includes(search);
@@ -226,6 +225,24 @@ export default function PayrollPage() {
       const matchesMonth = selectedMonth === "" || p.month === selectedMonth;
       return matchesSearch && matchesFirm && matchesMonth;
     });
+
+    const pending: PayrollRecord[] = [];
+    const paid: PayrollRecord[] = [];
+
+    filtered.forEach(p => {
+      const remainingSalary = p.netPayable - (p.salaryPaidAmount || 0);
+      const remainingPF = (p.pfAmountEmployee + p.pfAmountEmployer) - ((p.pfPaidAmountEmployee || 0) + (p.pfPaidAmountEmployer || 0));
+      const remainingESIC = (p.esicAmountEmployee + p.esicAmountEmployer) - ((p.esicPaidAmountEmployee || 0) + (p.esicPaidAmountEmployer || 0));
+      
+      const isFullyPaid = remainingSalary <= 0 && remainingPF <= 0 && remainingESIC <= 0;
+      if (isFullyPaid) {
+        paid.push(p);
+      } else {
+        pending.push(p);
+      }
+    });
+
+    return { pending, paid };
   }, [payrollRecords, searchTerm, selectedFirmId, employees, selectedMonth]);
 
   const advanceLedgerData = useMemo(() => {
@@ -641,13 +658,13 @@ export default function PayrollPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="payment" className="mt-8 space-y-6">
+          <TabsContent value="payment" className="mt-8 space-y-8">
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="bg-slate-50 border-b p-6">
                 <div className="flex flex-col lg:flex-row items-center gap-4">
                   <div className="relative flex-1 w-full">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    <Input placeholder="Search pending payments..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
                 </div>
               </CardHeader>
@@ -666,10 +683,10 @@ export default function PayrollPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {finalizedSalaries.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No finalized salaries found.</TableCell></TableRow>
+                      {paymentTabLists.pending.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-16 text-muted-foreground font-medium">No pending payments for current filters.</TableCell></TableRow>
                       ) : (
-                        finalizedSalaries.map((p) => {
+                        paymentTabLists.pending.map((p) => {
                           const emp = employees.find(e => e.employeeId === p.employeeId);
                           const remainingSalary = p.netPayable - (p.salaryPaidAmount || 0);
                           const remainingPF = (p.pfAmountEmployee + p.pfAmountEmployer) - ((p.pfPaidAmountEmployee || 0) + (p.pfPaidAmountEmployer || 0));
@@ -727,6 +744,70 @@ export default function PayrollPage() {
                 </ScrollArea>
               </CardContent>
             </Card>
+
+            {/* Paid History Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1">
+                <div className="p-1.5 bg-emerald-100 rounded-lg">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                </div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Paid History</h3>
+              </div>
+              
+              <Card className="border-none shadow-sm overflow-hidden bg-slate-50/30">
+                <CardContent className="p-0">
+                  <ScrollArea className="w-full" tabIndex={0}>
+                    <Table className="min-w-[1300px]">
+                      <TableHeader className="bg-slate-100/50">
+                        <TableRow>
+                          <TableHead className="font-bold">Slip Details</TableHead>
+                          <TableHead className="font-bold">Employee Name / ID</TableHead>
+                          <TableHead className="font-bold">Month</TableHead>
+                          <TableHead className="font-bold text-right">Net Payable</TableHead>
+                          <TableHead className="font-bold text-right">Settled Amount</TableHead>
+                          <TableHead className="font-bold text-center">Settled Date</TableHead>
+                          <TableHead className="text-right font-bold pr-6">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paymentTabLists.paid.length === 0 ? (
+                          <TableRow><TableCell colSpan={7} className="text-center py-10 text-muted-foreground text-xs font-medium">No historical settled records found.</TableCell></TableRow>
+                        ) : (
+                          paymentTabLists.paid.map((p) => (
+                            <TableRow key={p.id} className="hover:bg-white/50 transition-colors opacity-80 hover:opacity-100">
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => handleViewSlip(p)}>{p.slipNo}</span>
+                                  <span className="text-[10px] text-slate-400">{p.slipDate ? format(parseISO(p.slipDate), 'dd-MMM-yyyy') : "--"}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-bold uppercase text-slate-600">{p.employeeName}</span>
+                                  <span className="text-xs font-mono text-slate-400">{p.employeeId}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center"><Badge variant="outline" className="bg-white text-slate-400 font-bold">{p.month}</Badge></TableCell>
+                              <TableCell className="text-right font-bold text-slate-500">{formatCurrency(p.netPayable)}</TableCell>
+                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(p.salaryPaidAmount)}</TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                                  {p.salaryPaidDate ? format(parseISO(p.salaryPaidDate), 'dd-MMM-yyyy') : "--"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right pr-6">
+                                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDownloadAndPrint(p); }}><Printer className="w-4 h-4 text-slate-400" /></Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="advance">
@@ -1338,15 +1419,6 @@ function SlipRow({ label, value }: { label: string, value: any }) {
     <div className="flex justify-between border-b border-slate-200 p-2 px-4 last:border-b-0">
       <span className="font-bold text-[11px] text-slate-500 uppercase">{label}</span>
       <span className="font-black text-xs">{value || "---"}</span>
-    </div>
-  );
-}
-
-function DetailCell({ label, value }: { label: string, value: any }) {
-  return (
-    <div className="flex items-center p-2 bg-white">
-      <span className="text-[9px] font-black uppercase text-slate-400 w-36 shrink-0 tracking-widest whitespace-nowrap">{label}:</span>
-      <span className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none">{value || "---"}</span>
     </div>
   );
 }
