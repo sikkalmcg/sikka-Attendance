@@ -792,7 +792,7 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-7xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewAdvanceEmployee && (
             <div className="flex flex-col max-h-[90vh]">
-              <DialogHeader className="p-8 bg-white border-b shrink-0 flex flex-row items-center justify-between">
+              <DialogHeader className="p-4 bg-white border-b shrink-0 flex flex-row items-center justify-between">
                 <div className="flex gap-4 items-center">
                   <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center border border-emerald-100">
                     <Wallet className="w-7 h-7 text-emerald-600" />
@@ -802,7 +802,7 @@ export default function PayrollPage() {
                       {viewAdvanceEmployee.emp.name}
                     </DialogTitle>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">
-                      {viewAdvanceEmployee.emp.employeeId} • {viewAdvanceEmployee.emp.department}
+                      {viewAdvanceEmployee.emp.employeeId} • {viewAdvanceEmployee.emp.department} / {viewAdvanceEmployee.emp.designation}
                     </p>
                   </div>
                 </div>
@@ -854,8 +854,8 @@ export default function PayrollPage() {
                 </ScrollArea>
               </div>
 
-              <DialogFooter className="p-6 bg-white border-t flex justify-end shrink-0">
-                <Button variant="ghost" className="h-12 px-12 font-bold text-slate-500 hover:bg-slate-100 rounded-xl" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
+              <DialogFooter className="p-1.5 bg-white border-t flex justify-end shrink-0">
+                <Button variant="ghost" className="h-8 px-8 font-bold text-slate-500 hover:bg-slate-100 rounded-xl" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
               </DialogFooter>
             </div>
           )}
@@ -867,7 +867,7 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-5xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewLeaveHistoryEmployee && (
             <div className="flex flex-col max-h-[90vh]">
-              <DialogHeader className="p-8 bg-white border-b shrink-0">
+              <DialogHeader className="p-4 bg-white border-b shrink-0">
                  <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-black uppercase text-primary tracking-[0.2em] mb-1">Leave Audit History</span>
                     <DialogTitle className="text-2xl font-black text-slate-900">{viewLeaveHistoryEmployee.name}</DialogTitle>
@@ -925,8 +925,8 @@ export default function PayrollPage() {
                 </ScrollArea>
               </div>
 
-              <DialogFooter className="p-6 bg-white border-t flex justify-end shrink-0">
-                <Button variant="ghost" className="h-12 px-12 font-bold text-slate-500 hover:bg-slate-100 rounded-xl" onClick={() => setViewLeaveHistoryEmployee(null)}>Close History</Button>
+              <DialogFooter className="p-1.5 bg-white border-t flex justify-end shrink-0">
+                <Button variant="ghost" className="h-8 px-8 font-bold text-slate-500 hover:bg-slate-100 rounded-xl" onClick={() => setViewLeaveHistoryEmployee(null)}>Close History</Button>
               </DialogFooter>
             </div>
           )}
