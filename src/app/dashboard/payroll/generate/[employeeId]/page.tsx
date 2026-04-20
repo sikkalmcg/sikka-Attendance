@@ -39,7 +39,7 @@ export default function GenerateSalaryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
-  const employeeId = params.employeeId as string;
+  const employeeId = params?.employeeId as string;
   const selectedMonth = searchParams.get("month") || "";
   const queryEarningDays = searchParams.get("earningDays");
   const queryAdjustLeave = searchParams.get("adjustLeave");
@@ -87,7 +87,7 @@ export default function GenerateSalaryPage() {
 
   // Auto-generate Slip No
   useEffect(() => {
-    if (payrollRecords.length >= 0) {
+    if (isMounted && payrollRecords.length >= 0) {
       const generateNextSlipNo = () => {
         const silRecords = payrollRecords.filter(p => p.slipNo?.startsWith('SIL'));
         if (silRecords.length === 0) return 'SIL00001';
@@ -102,7 +102,7 @@ export default function GenerateSalaryPage() {
       };
       setSlipNo(generateNextSlipNo());
     }
-  }, [payrollRecords]);
+  }, [payrollRecords, isMounted]);
 
   const advanceBalance = useMemo(() => {
     if (!employee) return 0;
@@ -116,8 +116,10 @@ export default function GenerateSalaryPage() {
 
   // Set default deduction to full advance balance
   useEffect(() => {
-    setAdvanceRecovery(advanceBalance);
-  }, [advanceBalance]);
+    if (isMounted) {
+      setAdvanceRecovery(advanceBalance);
+    }
+  }, [advanceBalance, isMounted]);
 
   const currentSummary = useMemo(() => {
     if (!employee || !selectedMonth) return null;
@@ -214,7 +216,7 @@ export default function GenerateSalaryPage() {
       const esicEmp = Math.round((employee.salary.employeeESIC / totalDays) * earningDays);
       const esicEx = Math.round((employee.salary.employerESIC / totalDays) * earningDays);
 
-      const newPayrollRecord = {
+      const newPayrollRecord: any = {
         employeeId: employee.employeeId,
         employeeName: employee.name,
         month: selectedMonth,
@@ -256,8 +258,8 @@ export default function GenerateSalaryPage() {
     }
   };
 
-  if (!isMounted) return null;
-  if (!employee || !isGenerationAllowed) return null;
+  if (!isMounted) return <div className="p-10 text-center">Initializing Portal...</div>;
+  if (!employee || !isGenerationAllowed) return <div className="p-10 text-center">Unauthorized access or record not found.</div>;
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] -m-6">

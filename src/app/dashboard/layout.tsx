@@ -67,7 +67,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import Cookies from 'js-cookie';
-import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 function HeaderActions() {
   const { notifications, employees, users, updateRecord, deleteRecord, currentUser: contextUser } = useData();
@@ -79,7 +80,11 @@ function HeaderActions() {
   useEffect(() => {
     const session = Cookies.get('sikka_session');
     if (session) {
-      setLocalUser(JSON.parse(session));
+      try {
+        setLocalUser(JSON.parse(session));
+      } catch (e) {
+        console.error("Session parse error", e);
+      }
     }
   }, []);
 
@@ -391,7 +396,9 @@ function SidebarNav() {
   useEffect(() => {
     const session = Cookies.get('sikka_session');
     if (session) {
-      setLocalUser(JSON.parse(session));
+      try {
+        setLocalUser(JSON.parse(session));
+      } catch (e) {}
     }
   }, []);
 
@@ -482,7 +489,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [user, setUser] = useState<any>(null);
-  const db = getFirestore();
+  const db = useFirestore();
 
   useEffect(() => {
     const session = Cookies.get('sikka_session');
@@ -491,54 +498,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    const userData = JSON.parse(session);
-    setUser(userData);
-    
-    // Validate session with backend on start
-    const validateSession = async () => {
-      if (userData.id && userData.role !== 'SUPER_ADMIN') {
-        const col = userData.role === 'EMPLOYEE' ? 'employees' : 'users';
-        const docRef = doc(db, col, userData.id);
-        const docSnap = await getDoc(docRef);
-        
-        // If user is deactivated or deleted, force logout
-        if (!docSnap.exists() || (userData.role === 'EMPLOYEE' && !docSnap.data().active)) {
-          Cookies.remove('sikka_session', { path: '/' });
-          localStorage.removeItem("user");
-          router.push("/login");
+    try {
+      const userData = JSON.parse(session);
+      setUser(userData);
+      
+      const validateSession = async () => {
+        if (userData.id && userData.role !== 'SUPER_ADMIN') {
+          const col = userData.role === 'EMPLOYEE' ? 'employees' : 'users';
+          const docRef = doc(db, col, userData.id);
+          const docSnap = await getDoc(docRef);
+          
+          if (!docSnap.exists() || (userData.role === 'EMPLOYEE' && !docSnap.data().active)) {
+            Cookies.remove('sikka_session', { path: '/' });
+            localStorage.removeItem("user");
+            router.push("/login");
+          }
         }
+      };
+
+      validateSession();
+      
+      const menuPermissions: Record<string, string> = {
+        "/dashboard": "Dashboard",
+        "/dashboard/attendance": "Attendance",
+        "/dashboard/approvals": "Approvals",
+        "/dashboard/employees": "Employees",
+        "/dashboard/payroll": "Payroll",
+        "/dashboard/vouchers": "Vouchers",
+        "/dashboard/holidays": "Holidays",
+        "/dashboard/reports": "Reports",
+        "/dashboard/settings/firms": "Settings",
+        "/dashboard/settings/users": "Users"
+      };
+
+      const requiredPermission = menuPermissions[pathname];
+      const isSuperAdmin = userData.role === 'SUPER_ADMIN';
+      
+      if (isSuperAdmin) {
+        setIsAuthorized(true);
+      } else if (userData.role === 'EMPLOYEE') {
+        const canAccessAttendance = pathname === '/dashboard/attendance';
+        setIsAuthorized(canAccessAttendance);
+        if (!canAccessAttendance) router.push("/dashboard/attendance");
+      } else if (requiredPermission) {
+        const hasPerm = userData.permissions?.includes(requiredPermission) || requiredPermission === "Dashboard";
+        setIsAuthorized(hasPerm);
+      } else {
+        setIsAuthorized(true); 
       }
-    };
-
-    validateSession();
-    
-    const menuPermissions: Record<string, string> = {
-      "/dashboard": "Dashboard",
-      "/dashboard/attendance": "Attendance",
-      "/dashboard/approvals": "Approvals",
-      "/dashboard/employees": "Employees",
-      "/dashboard/payroll": "Payroll",
-      "/dashboard/vouchers": "Vouchers",
-      "/dashboard/holidays": "Holidays",
-      "/dashboard/reports": "Reports",
-      "/dashboard/settings/firms": "Settings",
-      "/dashboard/settings/users": "Users"
-    };
-
-    const requiredPermission = menuPermissions[pathname];
-    const isSuperAdmin = userData.role === 'SUPER_ADMIN';
-    
-    if (isSuperAdmin) {
-      setIsAuthorized(true);
-    } else if (userData.role === 'EMPLOYEE') {
-      const canAccessAttendance = pathname === '/dashboard/attendance';
-      setIsAuthorized(canAccessAttendance);
-      if (!canAccessAttendance) router.push("/dashboard/attendance");
-    } else if (requiredPermission) {
-      const hasPerm = userData.permissions?.includes(requiredPermission) || requiredPermission === "Dashboard";
-      setIsAuthorized(hasPerm);
-    } else {
-      setIsAuthorized(true); 
+    } catch (e) {
+      router.push("/login");
     }
   }, [router, pathname, db]);
 
