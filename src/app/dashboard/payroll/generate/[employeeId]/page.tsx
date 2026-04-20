@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, use } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "navigation";
 import { 
   Card, 
   CardHeader, 
@@ -33,6 +33,7 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { parseISO, isValid } from "date-fns";
 
 export default function GenerateSalaryPage({ params }: { params: Promise<{ employeeId: string }> }) {
   const router = useRouter();
@@ -119,7 +120,7 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
   }, [advanceBalance]);
 
   const currentSummary = useMemo(() => {
-    if (!employee) return null;
+    if (!employee || !selectedMonth) return null;
     
     // If earningDays is provided via query (from Adjust Leave portal), use it
     if (queryEarningDays !== null) {
@@ -132,15 +133,28 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
       };
     }
 
-    // Filter attendance records to only include dates after joining date
-    const records = attendanceRecords.filter(r => 
-      r.employeeId === employee.employeeId && 
-      (!employee.joinDate || r.date >= employee.joinDate)
-    );
+    const [mmm, yy] = selectedMonth.split('-');
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const mIndex = monthNames.indexOf(mmm);
+    const year = 2000 + parseInt(yy);
+
+    // CRITICAL RULE: ONLY APPROVED ATTENDANCE RECORDS FOR THE SELECTED MONTH
+    const records = attendanceRecords.filter(r => {
+      if (r.employeeId !== employee.employeeId) return false;
+      if (r.approved !== true) return false; // RULE: Must be approved
+      
+      const d = parseISO(r.date);
+      if (!isValid(d)) return false;
+      
+      const isCorrectMonth = d.getMonth() === mIndex && d.getFullYear() === year;
+      const isAfterJoin = !employee.joinDate || r.date >= employee.joinDate;
+      
+      return isCorrectMonth && isAfterJoin;
+    });
     
-    const presents = records.filter(r => r.status === 'PRESENT').length;
-    const halfDays = records.filter(r => r.status === 'HALF_DAY').length;
-    const holidays = records.filter(r => r.status === 'HOLIDAY').length;
+    const presents = records.filter(r => ['PRESENT', 'FIELD', 'WFH'].includes(r.status) && r.inPlant !== 'Holiday Work').length;
+    const halfDays = records.filter(r => r.status === 'HALF_DAY' && r.inPlant !== 'Holiday Work').length;
+    const holidayWorkCount = records.filter(r => r.inPlant === 'Holiday Work' || r.status === 'HOLIDAY').length;
     
     const effectiveAttendance = presents + (halfDays * 0.5);
     const totalDaysInMonth = 30;
@@ -149,10 +163,10 @@ export default function GenerateSalaryPage({ params }: { params: Promise<{ emplo
     return {
       attendance: effectiveAttendance,
       absent: Math.max(0, absent),
-      holidayWork: holidays,
+      holidayWork: holidayWorkCount,
       totalDays: totalDaysInMonth
     };
-  }, [employee, attendanceRecords, queryEarningDays]);
+  }, [employee, attendanceRecords, queryEarningDays, selectedMonth]);
 
   const netPayBeforeDeduction = useMemo(() => {
     if (!employee || !currentSummary) return 0;

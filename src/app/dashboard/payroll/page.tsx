@@ -165,6 +165,9 @@ export default function PayrollPage() {
     return PAYROLL_MONTHS.includes(selectedMonth);
   }, [selectedMonth]);
 
+  /**
+   * CRITICAL RULE: Only APPROVED attendance counts for payroll.
+   */
   const getAttendanceMetricsForMonth = (empId: string, monthStr: string) => {
     if (!monthStr) return { presents: 0, holidayWork: 0 };
     const [mmm, yy] = monthStr.split('-');
@@ -174,6 +177,7 @@ export default function PayrollPage() {
     
     const monthlyAttendance = attendanceRecords.filter(r => {
       if (r.employeeId !== empId) return false;
+      if (!r.approved) return false; // RULE: Must be approved
       const d = parseISO(r.date);
       if (!isValid(d)) return false;
       return d.getMonth() === mIndex && d.getFullYear() === year;
@@ -240,7 +244,6 @@ export default function PayrollPage() {
         .sort((a, b) => (a.slipDate || "").localeCompare(b.slipDate || ""));
 
       let remainingRecoveryPool = empPayroll.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
-      let recoveryPoolForBreakdown = remainingRecoveryPool;
       let slipPool = empPayroll.map(p => ({...p, remainingPool: p.advanceRecovery || 0}));
 
       const voucherBreakdown = empVouchers.map(v => {
