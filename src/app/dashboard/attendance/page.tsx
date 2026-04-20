@@ -28,7 +28,8 @@ import {
   X,
   Factory,
   Briefcase,
-  Home
+  Home,
+  Bell
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM } from "@/lib/utils";
 import { 
@@ -69,6 +70,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
 
@@ -663,16 +665,6 @@ export default function AttendancePage() {
           </Alert>
         )}
 
-        {isReminderThresholdMet && (
-          <Alert className="bg-blue-50 border-blue-200 mb-6 border-l-4 animate-in fade-in slide-in-from-top-4 duration-700">
-            <MessageCircle className="h-5 w-5 text-blue-600" />
-            <AlertTitle className="font-black text-blue-900">Attendance Reminder</AlertTitle>
-            <AlertDescription className="text-blue-800 font-bold mt-1 leading-relaxed">
-              क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें। मुझे उम्मीद है आप अपनी कंपनी के नियमों का पालन ज़रूर करेंगे। आपका दिन शुभ हो।
-            </AlertDescription>
-          </Alert>
-        )}
-
         {lockState.isLocked && isAccessAllowed && (
           <Alert className="bg-amber-50 border-amber-200"><Lock className="h-5 w-5 text-amber-600" /><AlertTitle className="font-bold text-amber-800">Check-In Restricted</AlertTitle><AlertDescription className="text-amber-700 font-medium">8-hour cooling period active. Next access at <span className="font-black underline">{lockState.unlockTime}</span>.</AlertDescription></Alert>
         )}
@@ -680,7 +672,39 @@ export default function AttendancePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
           <Card className="shadow-2xl border-none overflow-hidden bg-white">
             <div className="h-1 bg-primary" />
-            <CardHeader className="text-center py-4"><CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800"><ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal</CardTitle></CardHeader>
+            <CardHeader className="text-center py-4 relative">
+              <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
+                <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
+              </CardTitle>
+              {isReminderThresholdMet && (
+                <div className="absolute right-4 top-4">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-rose-50 border border-rose-100 relative hover:bg-rose-100 transition-all">
+                        <Bell className="w-5 h-5 text-rose-500" />
+                        <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-rose-600 rounded-full border-2 border-white animate-pulse" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-6 rounded-2xl shadow-2xl border-rose-100 bg-white" align="end">
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3 border-b border-rose-50 pb-3">
+                          <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
+                            <MessageCircle className="w-6 h-6 text-rose-600" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black uppercase text-rose-400 tracking-widest leading-none mb-1">Attention</p>
+                            <h4 className="text-sm font-black text-rose-900 leading-none">Attendance Reminder</h4>
+                          </div>
+                        </div>
+                        <p className="text-sm font-bold text-rose-800 leading-relaxed italic">
+                          "क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें। मुझे उम्मीद है आप अपनी कंपनी के नियमों का पालन ज़रूर करेंगे। आपका दिन शुभ हो।"
+                        </p>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
+            </CardHeader>
             <CardContent className="space-y-6 px-6 pb-8">
               <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto">
                 {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "MM/dd/yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
