@@ -30,7 +30,8 @@ import {
   Factory,
   Briefcase,
   Home,
-  Bell
+  Bell,
+  ArrowRightCircle
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM } from "@/lib/utils";
 import { 
@@ -845,7 +846,40 @@ export default function AttendancePage() {
                 </TableBody>
               </Table>
             </ScrollArea>
-            {totalPages > 1 && (<CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4"><Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>Previous</Button><span className="text-xs font-black">Page {currentPage} of {totalPages}</span><Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next</Button></CardFooter>)}
+            {totalPages > 1 && (
+              <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold h-9">
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold h-9">
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
+                    <div className="flex gap-1">
+                      <Input 
+                        type="number" 
+                        className="w-14 h-9 text-center font-bold" 
+                        value={currentPage} 
+                        onChange={(e) => {
+                          const p = parseInt(e.target.value);
+                          if (p >= 1 && p <= totalPages) setCurrentPage(p);
+                        }} 
+                      />
+                      <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white">
+                        <ArrowRightCircle className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardFooter>
+            )}
           </Card>
         </div>
 
@@ -1031,4 +1065,3 @@ export default function AttendancePage() {
     </TooltipProvider>
   );
 }
-
