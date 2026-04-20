@@ -167,7 +167,7 @@ export default function ApprovalsPage() {
   const historyAttendanceList = useMemo(() => {
     const search = searchTerm.toLowerCase();
     let list = (attendanceRecords || [])
-      .filter(rec => rec.approved)
+      .filter(rec => rec.approved || !!rec.remark) // Include Rejected Records
       .map(rec => {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         return {
@@ -303,10 +303,16 @@ export default function ApprovalsPage() {
           attendanceType: 'FIELD',
           remark: attendanceRejectReason,
           approved: false,
-          unapprovedOutDuration: 0
+          unapprovedOutDuration: 0,
+          approvedBy: currentUser?.fullName || "HR_ADMIN"
         });
       } else {
-        updateRecord('attendance', selectedAttendance.id, { approved: false, remark: attendanceRejectReason, status: 'ABSENT' });
+        updateRecord('attendance', selectedAttendance.id, { 
+          approved: false, 
+          remark: attendanceRejectReason, 
+          status: 'ABSENT',
+          approvedBy: currentUser?.fullName || "HR_ADMIN"
+        });
       }
       toast({ variant: "destructive", title: "Log Rejected" });
       setIsAttendanceRejectOpen(false);
@@ -645,22 +651,22 @@ export default function ApprovalsPage() {
                                 "text-[9px] font-black uppercase tracking-widest px-3",
                                 rec.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
                                 rec.status === 'ABSENT' ? "bg-rose-50 text-rose-700 border-rose-200" :
-                                (rec.status === 'APPROVED' || rec.status === 'REJECTED') ? "bg-slate-100 text-slate-700" : "bg-white"
+                                (rec.status === 'APPROVED' || rec.status === 'REJECTED' || rec.remark) ? "bg-slate-100 text-slate-700" : "bg-white"
                               )}
                             >
-                              {rec.status}
+                              {rec.remark ? "REJECTED" : rec.status}
                             </Badge>
                           </TableCell>
                           {!isLeaveTypeActive && (
                             <TableCell>
                               <div className="flex flex-col gap-1">
                                 <div className="flex items-center gap-1.5">
-                                  <MapPin className={cn("w-3 h-3 shrink-0", rec.address === 'N/A' ? "text-slate-300" : "text-emerald-500")} />
+                                  <MapPin className={cn("w-3 h-3 shrink-0", rec.address === 'N/A' || !rec.address ? "text-slate-300" : "text-emerald-500")} />
                                   <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.address}>{rec.address || "N/A"}</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                   <MapPin className={cn("w-3 h-3 shrink-0", rec.outTime ? "text-rose-500" : "text-slate-300")} />
-                                  <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.addressOut}>{rec.addressOut || (rec.outTime ? "Location pending" : (rec.isVirtual ? "N/A" : "Shift In-Progress"))}</span>
+                                  <span className="text-[10px] font-bold text-slate-600 truncate max-w-[180px]" title={rec.addressOut}>{rec.addressOut || (rec.status === 'ABSENT' || rec.remark || rec.approved ? "N/A" : "Shift In-Progress")}</span>
                                 </div>
                               </div>
                             </TableCell>

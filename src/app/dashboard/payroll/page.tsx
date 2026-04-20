@@ -275,7 +275,11 @@ export default function PayrollPage() {
   const openAdjustmentDialog = (emp: Employee) => {
     const relevantAttendance = attendanceRecords.filter(r => r.employeeId === emp.employeeId);
     
-    const presentOnWorking = relevantAttendance.filter(r => r.status === 'PRESENT' && r.inPlant !== 'Holiday Work').length;
+    // Corrected Attendance Logic: Include remote and half days
+    const presents = relevantAttendance.filter(r => ['PRESENT', 'FIELD', 'WFH'].includes(r.status) && r.inPlant !== 'Holiday Work').length;
+    const halfDays = relevantAttendance.filter(r => r.status === 'HALF_DAY' && r.inPlant !== 'Holiday Work').length;
+    const presentOnWorking = presents + (halfDays * 0.5);
+
     const holidayPres = relevantAttendance.filter(r => r.inPlant === 'Holiday Work' || r.status === 'HOLIDAY').length; 
     
     const workingDaysCount = 26;
@@ -788,12 +792,12 @@ export default function PayrollPage() {
 
       {/* Advance Salary Detailed View Dialog */}
       <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => { if (!o) setViewAdvanceEmployee(null); }}>
-        <DialogContent className="sm:max-w-6xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+        <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewAdvanceEmployee && (
             <div className="flex flex-col max-h-[90vh]">
               <DialogHeader className="py-1 px-6 bg-white border-b shrink-0 flex flex-row items-center justify-between">
-                <div className="flex gap-3 items-center">
-                  <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center border border-emerald-100">
+                <div className="flex gap-2 items-center">
+                  <div className="w-8 h-8 bg-emerald-50 rounded-xl flex items-center justify-center">
                     <Wallet className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div>
@@ -807,47 +811,45 @@ export default function PayrollPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Outstanding</p>
-                  <Badge className="text-xs px-3 py-0.5 bg-rose-500 hover:bg-rose-600 rounded-lg shadow-sm">
-                    {formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}
-                  </Badge>
+                  <Badge className="text-xs px-2 py-0.5 bg-rose-500 rounded-lg">{formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}</Badge>
                 </div>
               </DialogHeader>
 
               <div className="flex-1 overflow-hidden bg-slate-50/30">
-                <ScrollArea className="h-full w-full custom-blue-scrollbar">
+                <ScrollArea className="h-full w-full custom-blue-scrollbar" tabIndex={0}>
                   <div className="p-4">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <Table className="min-w-[800px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
                             <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Voucher No</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Voucher Date</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Date</TableHead>
                             <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 text-right h-8 whitespace-nowrap">Amount</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Salary Slip</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Salary Month</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Slip No</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Month</TableHead>
                             <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 text-right text-primary h-8 whitespace-nowrap">Adjusted</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 text-right pr-6 text-rose-600 h-8 whitespace-nowrap">Remaining</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 text-right pr-4 text-rose-600 h-8 whitespace-nowrap">Remaining</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {viewAdvanceEmployee.vouchers.map((v: any, idx: number) => (
                             <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="px-2 py-1.5 font-mono font-black text-primary text-[10px] tracking-tight whitespace-nowrap">{v.voucherNo}</TableCell>
-                              <TableCell className="px-2 py-1.5 text-[10px] font-medium text-slate-500 whitespace-nowrap">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="px-2 py-1.5 font-mono font-black text-primary text-[10px] whitespace-nowrap">{v.voucherNo}</TableCell>
+                              <TableCell className="px-2 py-1.5 text-[10px] font-medium text-slate-500 whitespace-nowrap">{v.date ? format(parseISO(v.date), 'dd-MMM-yy') : "--"}</TableCell>
                               <TableCell className="px-2 py-1.5 text-right font-bold text-slate-900 text-xs whitespace-nowrap">{formatCurrency(v.amount)}</TableCell>
                               <TableCell className="px-2 py-1.5 font-mono font-bold text-slate-600 text-[9px] whitespace-nowrap">{v.slipNo}</TableCell>
                               <TableCell className="px-2 py-1.5 whitespace-nowrap">
                                 <Badge variant="outline" className="text-[8px] font-black uppercase bg-slate-50 px-1.5 h-4">{v.slipMonth}</Badge>
                               </TableCell>
                               <TableCell className="px-2 py-1.5 text-right font-black text-primary text-[10px] whitespace-nowrap">{formatCurrency(v.recovered)}</TableCell>
-                              <TableCell className="px-2 py-1.5 text-right pr-6 font-black text-rose-600 text-[10px] whitespace-nowrap">{formatCurrency(v.remaining)}</TableCell>
+                              <TableCell className="px-2 py-1.5 text-right pr-4 font-black text-rose-600 text-[10px] whitespace-nowrap">{formatCurrency(v.remaining)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
                     </div>
                   </div>
-                  <ScrollBar orientation="horizontal" className="h-2.5" />
+                  <ScrollBar orientation="horizontal" className="h-2" />
                 </ScrollArea>
               </div>
 
@@ -864,19 +866,24 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-5xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewLeaveHistoryEmployee && (
             <div className="flex flex-col max-h-[90vh]">
-              <DialogHeader className="py-1 px-6 bg-white border-b shrink-0">
-                 <div className="flex flex-col gap-0">
-                    <span className="text-[8px] font-black uppercase text-primary tracking-[0.2em]">Audit History</span>
-                    <DialogTitle className="text-base font-black text-slate-900 leading-tight">{viewLeaveHistoryEmployee.name}</DialogTitle>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                       <Badge variant="outline" className="font-mono text-[9px] font-black px-1 h-3.5">{viewLeaveHistoryEmployee.employeeId}</Badge>
-                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{viewLeaveHistoryEmployee.department} / {viewLeaveHistoryEmployee.designation}</span>
-                    </div>
-                 </div>
+              <DialogHeader className="py-1 px-6 bg-white border-b shrink-0 flex flex-row items-center justify-between">
+                <div className="flex gap-2 items-center">
+                  <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <History className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-base font-black text-slate-900 leading-tight">
+                      {viewLeaveHistoryEmployee.name}
+                    </DialogTitle>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-0.5">
+                      {viewLeaveHistoryEmployee.employeeId} • {viewLeaveHistoryEmployee.department} / {viewLeaveHistoryEmployee.designation}
+                    </p>
+                  </div>
+                </div>
               </DialogHeader>
 
               <div className="flex-1 overflow-hidden bg-slate-50/30">
-                <ScrollArea className="h-full w-full custom-blue-scrollbar">
+                <ScrollArea className="h-full w-full custom-blue-scrollbar" tabIndex={0}>
                   <div className="p-4">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                       <Table className="min-w-[800px]">
@@ -917,7 +924,7 @@ export default function PayrollPage() {
                       </Table>
                     </div>
                   </div>
-                  <ScrollBar orientation="horizontal" />
+                  <ScrollBar orientation="horizontal" className="h-2" />
                 </ScrollArea>
               </div>
 
