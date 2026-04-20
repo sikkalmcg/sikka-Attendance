@@ -179,8 +179,36 @@ export default function AttendancePage() {
   }, [leaveRequests, effectiveEmployeeId, isMounted]);
 
   const activeRecord = useMemo(() => {
-    return employeeRecords.find(r => !r.outTime);
+    return (employeeRecords || []).find(r => !r.outTime);
   }, [employeeRecords]);
+
+  // Auto-OUT Policy Enforcement (16 Hour Rule)
+  useEffect(() => {
+    if (activeRecord && isMounted && currentTime && isAccessAllowed) {
+      const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
+      const diffMs = currentTime.getTime() - inDateTime.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+
+      if (diffHours >= 16) {
+        const autoOutDateTime = addHours(inDateTime, 16);
+        const autoOutTimeStr = format(autoOutDateTime, "HH:mm");
+        
+        updateRecord('attendance', activeRecord.id, {
+          outTime: autoOutTimeStr,
+          hours: 8, // Organizational Policy: Fixed 8 hours for shifts exceeding 16 hours
+          status: 'PRESENT',
+          autoCheckout: true,
+          addressOut: 'System Auto Check-out (16h Policy Limit)',
+          outPlant: activeRecord.inPlant || "Remote"
+        });
+
+        toast({
+          title: "Security: Auto Check-out",
+          description: `Your shift has been auto-closed at ${autoOutTimeStr} as per the 16:00 Hours policy.`,
+        });
+      }
+    }
+  }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast]);
 
   const lastOutRecord = useMemo(() => {
     return [...employeeRecords]
@@ -489,17 +517,17 @@ export default function AttendancePage() {
     const outDateTime = new Date(`${format(now, "yyyy-MM-dd")}T${time}`);
     const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
+    let isAuto = diffHours >= 16;
     let finalOutTime = time;
     let finalHours = parseFloat(diffHours.toFixed(2));
-    let isAuto = diffHours > 16;
 
     if (isAuto) {
-      const autoOutDate = new Date(inDateTime.getTime() + (8 * 60 * 60 * 1000));
-      finalOutTime = format(autoOutDate, "HH:mm");
+      const autoOutDateTime = addHours(inDateTime, 16);
+      finalOutTime = format(autoOutDateTime, "HH:mm");
       finalHours = 8.0;
     }
 
-    if (activeRecord.unapprovedOutDuration && activeRecord.unapprovedOutDuration > 0) {
+    if (!isAuto && activeRecord.unapprovedOutDuration && activeRecord.unapprovedOutDuration > 0) {
       const deductionHours = activeRecord.unapprovedOutDuration / 60;
       finalHours = Math.max(0, finalHours - deductionHours);
     }
@@ -513,7 +541,8 @@ export default function AttendancePage() {
       lngOut: currentGPS.lng,
       addressOut: detectedAddress,
       outPlant: detectedPlant?.name || "Remote",
-      autoOut: isAuto
+      autoOut: isAuto,
+      autoCheckout: isAuto
     });
 
     setActiveDialog("NONE");
