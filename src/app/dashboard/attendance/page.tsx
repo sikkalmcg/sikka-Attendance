@@ -210,6 +210,51 @@ export default function AttendancePage() {
     }
   }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast]);
 
+  // Attendance Reminder Logic
+  useEffect(() => {
+    if (!isMounted || !isAccessAllowed || !currentTime || !todayStr || !effectiveEmployeeId) return;
+
+    // Condition Check: After 10:30 AM
+    const currentHHMM = format(currentTime, "HH:mm");
+    if (currentHHMM < "10:30") return;
+
+    // Condition Check: Working Day (Not Sun/Holiday)
+    const isSun = isSunday(currentTime);
+    const isHoliday = (holidays || []).some(h => h.date === todayStr);
+    if (isSun || isHoliday) return;
+
+    // Condition Check: No IN marked for today
+    const hasInToday = (employeeRecords || []).some(r => r.date === todayStr && r.inTime);
+    if (hasInToday) return;
+
+    // Condition Check: No approved leave for today
+    const hasApprovedLeave = (myLeaveRequests || []).some(l => {
+      if (l.status !== 'APPROVED') return false;
+      try {
+        const current = parseISO(todayStr);
+        const start = parseISO(l.fromDate);
+        const end = parseISO(l.toDate);
+        return isWithinInterval(current, { start, end });
+      } catch (e) { return false; }
+    });
+    if (hasApprovedLeave) return;
+
+    // Trigger System Notification (Once per day)
+    const storageKey = `sikka_reminder_sent_${effectiveEmployeeId}_${todayStr}`;
+    const wasSent = localStorage.getItem(storageKey);
+    
+    if (!wasSent) {
+      addRecord('notifications', {
+        message: `System Reminder (${effectiveEmployeeName}): क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें। मुझे उम्मीद है आप अपनी कंपनी के नियमों का पालन ज़रूर करेंगे। आपका दिन शुभ हो।`,
+        timestamp: format(currentTime, "yyyy-MM-dd HH:mm:ss"),
+        read: false,
+        type: 'ATTENDANCE_REMINDER',
+        employeeId: effectiveEmployeeId
+      });
+      localStorage.setItem(storageKey, 'true');
+    }
+  }, [isMounted, isAccessAllowed, currentTime, todayStr, effectiveEmployeeId, holidays, employeeRecords, myLeaveRequests, addRecord, effectiveEmployeeName]);
+
   const lastOutRecord = useMemo(() => {
     return [...employeeRecords]
       .filter(r => r.outTime)
@@ -589,6 +634,16 @@ export default function AttendancePage() {
 
   if (!isMounted) return null;
 
+  const isReminderThresholdMet = isMounted && isAccessAllowed && !activeRecord && format(currentTime || new Date(), "HH:mm") >= "10:30" && !isSunday(currentTime || new Date()) && !(holidays || []).some(h => h.date === todayStr) && !(myLeaveRequests || []).some(l => {
+    if (l.status !== 'APPROVED') return false;
+    try {
+      const current = parseISO(todayStr);
+      const start = parseISO(l.fromDate);
+      const end = parseISO(l.toDate);
+      return isWithinInterval(current, { start, end });
+    } catch (e) { return false; }
+  });
+
   return (
     <TooltipProvider>
       <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
@@ -604,6 +659,16 @@ export default function AttendancePage() {
               Your account is currently linked to another mobile device. Multiple device logins are strictly prohibited to prevent proxy attendance. 
               <br/><br/>
               <span className="underline">Action Required:</span> Please use your originally registered device, or Logout and Login again on this device to transfer your official binding.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isReminderThresholdMet && (
+          <Alert className="bg-blue-50 border-blue-200 mb-6 border-l-4 animate-in fade-in slide-in-from-top-4 duration-700">
+            <MessageCircle className="h-5 w-5 text-blue-600" />
+            <AlertTitle className="font-black text-blue-900">Attendance Reminder</AlertTitle>
+            <AlertDescription className="text-blue-800 font-bold mt-1 leading-relaxed">
+              क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें। मुझे उम्मीद है आप अपनी कंपनी के नियमों का पालन ज़रूर करेंगे। आपका दिन शुभ हो।
             </AlertDescription>
           </Alert>
         )}
