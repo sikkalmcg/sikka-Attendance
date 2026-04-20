@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { isSunday, format, parseISO } from "date-fns"
+import { isSunday, format, parseISO, isValid } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -90,7 +90,17 @@ export function checkIfSunday(date: Date | string) {
  */
 export function formatDate(date: Date | string) {
   const d = typeof date === 'string' ? parseISO(date) : date;
+  if (!isValid(d)) return "---";
   return format(d, "MM/dd/yyyy");
+}
+
+/**
+ * Corporate Display Date Format: dd-MMM-yyyy (e.g. 21-Mar-2026)
+ */
+export function formatDisplayDate(date: Date | string) {
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  if (!isValid(d)) return "---";
+  return format(d, "dd-MMM-yyyy");
 }
 
 /**

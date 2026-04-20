@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -38,7 +37,7 @@ import {
   ShieldCheck,
   FileText
 } from "lucide-react";
-import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
+import { formatCurrency, numberToIndianWords, cn, formatDisplayDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
 import { format, parseISO, isBefore, startOfMonth } from "date-fns";
@@ -345,7 +344,7 @@ export default function VouchersPage() {
                                 <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-sm font-medium">{v.date}</TableCell>
+                            <TableCell className="text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
                             <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
                             <TableCell className="text-right pr-6">
                               <div className="flex justify-end gap-2">
@@ -401,7 +400,7 @@ export default function VouchersPage() {
                                 <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-sm font-medium">{v.date}</TableCell>
+                            <TableCell className="text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
                             <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
                             <TableCell className="text-right pr-6">
                               <Button size="sm" className="font-bold px-6 bg-slate-900 shadow-sm" onClick={() => handleOpenPayDialog(v)}>Process Pay</Button>
@@ -469,7 +468,7 @@ export default function VouchersPage() {
                                   <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-slate-500 text-center text-sm font-medium">{v.paidDate || v.date}</TableCell>
+                              <TableCell className="text-slate-500 text-center text-sm font-medium">{formatDisplayDate(v.paidDate || v.date)}</TableCell>
                               <TableCell className="text-right font-black text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end items-center gap-2">
@@ -533,22 +532,23 @@ export default function VouchersPage() {
 
       {/* Voucher Preview Modal - India Compliant Design */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-3xl border-none shadow-2xl">
-          <ScrollArea className="h-full bg-white">
+        <DialogContent className="sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-3xl border-none shadow-2xl flex flex-col">
+          <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0}>
             {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
-            <div className="p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden">
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-slate-400" />
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Document Generated via SikkaTrack Portal</p>
-              </div>
-              <div className="flex gap-3 w-full sm:w-auto">
-                <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-xl font-bold h-11 px-8">Close</Button>
-                <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-xl font-black h-11 px-10 gap-2 shadow-lg shadow-primary/20" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
-                  <Printer className="w-4 h-4" /> Print Voucher
-                </Button>
-              </div>
-            </div>
           </ScrollArea>
+          
+          <div className="p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden shrink-0">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-slate-400" />
+              <p className="text-[10px] font-bold text-slate-400 uppercase">Document Generated via SikkaTrack Portal</p>
+            </div>
+            <div className="flex gap-3 w-full sm:w-auto">
+              <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-xl font-bold h-11 px-8">Close</Button>
+              <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-xl font-black h-11 px-10 gap-2 shadow-lg shadow-primary/20" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
+                <Printer className="w-4 h-4" /> Print Voucher
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -634,11 +634,11 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
           <div className="text-right w-full max-w-[240px]">
             <div className="flex justify-between border-b border-slate-100 py-1">
               <span className="text-[10px] font-black text-slate-400 uppercase">Voucher No</span>
-              <span className="text-sm font-black font-mono">{voucher.voucherNo}</span>
+              <span className="text-sm font-black font-mono text-primary">{voucher.voucherNo}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 py-1">
               <span className="text-[10px] font-black text-slate-400 uppercase">Date</span>
-              <span className="text-sm font-black">{voucher.date}</span>
+              <span className="text-sm font-black">{formatDisplayDate(voucher.date)}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 py-1">
               <span className="text-[10px] font-black text-slate-400 uppercase">Created By</span>
@@ -652,7 +652,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* 3. Employee / Receiver Details */}
+      {/* 3. Employee / Receiver Details Section */}
       <div className="mb-10">
         <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
           <UserIcon className="w-3 h-3" /> Receiver / Employee Information
@@ -745,4 +745,3 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
     </div>
   );
 }
-
