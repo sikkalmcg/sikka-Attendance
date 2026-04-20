@@ -817,30 +817,30 @@ export default function PayrollPage() {
                 <ScrollArea className="h-full w-full custom-blue-scrollbar">
                   <div className="p-4">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                      <Table className="min-w-[1100px]">
+                      <Table className="min-w-[900px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Voucher No</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Voucher Date</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 text-right h-8 whitespace-nowrap">Amount</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Salary Slip</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Salary Month</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 text-right text-primary h-8 whitespace-nowrap">Adjusted</TableHead>
-                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 text-right pr-6 text-rose-600 h-8 whitespace-nowrap">Remaining</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Voucher No</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Voucher Date</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 text-right h-8 whitespace-nowrap">Amount</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Salary Slip</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 h-8 whitespace-nowrap">Salary Month</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 text-right text-primary h-8 whitespace-nowrap">Adjusted</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-2 text-right pr-6 text-rose-600 h-8 whitespace-nowrap">Remaining</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {viewAdvanceEmployee.vouchers.map((v: any, idx: number) => (
                             <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="px-4 py-2 font-mono font-black text-primary text-[10px] tracking-tight whitespace-nowrap">{v.voucherNo}</TableCell>
-                              <TableCell className="px-4 py-2 text-[10px] font-medium text-slate-500 whitespace-nowrap">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
-                              <TableCell className="px-4 py-2 text-right font-bold text-slate-900 text-xs whitespace-nowrap">{formatCurrency(v.amount)}</TableCell>
-                              <TableCell className="px-4 py-2 font-mono font-bold text-slate-600 text-[9px] whitespace-nowrap">{v.slipNo}</TableCell>
-                              <TableCell className="px-4 py-2 whitespace-nowrap">
+                              <TableCell className="px-2 py-1.5 font-mono font-black text-primary text-[10px] tracking-tight whitespace-nowrap">{v.voucherNo}</TableCell>
+                              <TableCell className="px-2 py-1.5 text-[10px] font-medium text-slate-500 whitespace-nowrap">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="px-2 py-1.5 text-right font-bold text-slate-900 text-xs whitespace-nowrap">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="px-2 py-1.5 font-mono font-bold text-slate-600 text-[9px] whitespace-nowrap">{v.slipNo}</TableCell>
+                              <TableCell className="px-2 py-1.5 whitespace-nowrap">
                                 <Badge variant="outline" className="text-[8px] font-black uppercase bg-slate-50 px-1.5 h-4">{v.slipMonth}</Badge>
                               </TableCell>
-                              <TableCell className="px-4 py-2 text-right font-black text-primary text-[10px] whitespace-nowrap">{formatCurrency(v.recovered)}</TableCell>
-                              <TableCell className="px-4 py-2 text-right pr-6 font-black text-rose-600 text-[10px] whitespace-nowrap">{formatCurrency(v.remaining)}</TableCell>
+                              <TableCell className="px-2 py-1.5 text-right font-black text-primary text-[10px] whitespace-nowrap">{formatCurrency(v.recovered)}</TableCell>
+                              <TableCell className="px-2 py-1.5 text-right pr-6 font-black text-rose-600 text-[10px] whitespace-nowrap">{formatCurrency(v.remaining)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
