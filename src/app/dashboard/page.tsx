@@ -62,7 +62,7 @@ export default function DashboardHome() {
     const todayLogs = attendanceRecords.filter(r => r.date === todayStr);
     
     const presentToday = todayLogs.filter(r => PRESENT_STATUSES.includes(r.status));
-    // Strictly filter field/wfh based on actual presence
+    // Strictly filter field/wfh based on actual presence for widgets
     const fieldWorkToday = presentToday.filter(r => r.attendanceType === 'FIELD');
     const wfhToday = presentToday.filter(r => r.attendanceType === 'WFH');
     
