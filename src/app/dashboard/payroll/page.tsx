@@ -1389,7 +1389,7 @@ function SalarySlipContent({ payroll, employees, firms, plants }: any) {
        </div>
 
        <div className="bg-slate-900 text-white p-4 flex justify-between items-center mt-10">
-         <span className="font-black uppercase tracking-[0.2em] text-[10px]">Total Net Payable (Earning Days Included)</span>
+         <span className="font-black uppercase tracking-[0.2em] text-[10px]">Total Net Payable (Earning Days: {payroll.totalEarningDays})</span>
          <span className="text-3xl font-black">{formatCurrency(payroll.netPayable)}</span>
        </div>
        
