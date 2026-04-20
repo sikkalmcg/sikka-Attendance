@@ -461,14 +461,13 @@ export default function PayrollPage() {
   const leaveHistoryData = useMemo(() => {
     if (!viewLeaveHistoryEmployee) return [];
     
-    // Sort payroll records by month correctly
     const relevantPayroll = payrollRecords
       .filter(p => p.employeeId === viewLeaveHistoryEmployee.employeeId && ((p.adjustLeave || 0) > 0 || (p.addedLeave || 0) > 0))
       .sort((a, b) => {
         return a.month.localeCompare(b.month);
       });
 
-    let currentBalance = 0; // Running total calculation
+    let currentBalance = 0; 
     return relevantPayroll.map(p => {
       const [mmm, yy] = p.month.split('-');
       const formattedMonth = `${mmm}-20${yy}`;
@@ -485,7 +484,7 @@ export default function PayrollPage() {
         department: viewLeaveHistoryEmployee.department,
         designation: viewLeaveHistoryEmployee.designation
       };
-    }).reverse(); // Latest at top
+    }).reverse(); 
   }, [viewLeaveHistoryEmployee, payrollRecords]);
 
   if (!isMounted) return null;
@@ -792,23 +791,23 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-7xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewAdvanceEmployee && (
             <div className="flex flex-col max-h-[90vh]">
-              <DialogHeader className="py-2 px-6 bg-white border-b shrink-0 flex flex-row items-center justify-between">
-                <div className="flex gap-4 items-center">
-                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center border border-emerald-100">
-                    <Wallet className="w-5 h-5 text-emerald-600" />
+              <DialogHeader className="py-1 px-6 bg-white border-b shrink-0 flex flex-row items-center justify-between">
+                <div className="flex gap-3 items-center">
+                  <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center border border-emerald-100">
+                    <Wallet className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div>
-                    <DialogTitle className="text-lg font-black text-slate-900 leading-tight">
+                    <DialogTitle className="text-base font-black text-slate-900 leading-tight">
                       {viewAdvanceEmployee.emp.name}
                     </DialogTitle>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-0.5">
                       {viewAdvanceEmployee.emp.employeeId} • {viewAdvanceEmployee.emp.department} / {viewAdvanceEmployee.emp.designation}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Total Outstanding</p>
-                  <Badge className="text-sm px-4 py-0.5 bg-rose-500 hover:bg-rose-600 rounded-lg shadow-md shadow-rose-100">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Outstanding</p>
+                  <Badge className="text-xs px-3 py-0.5 bg-rose-500 hover:bg-rose-600 rounded-lg shadow-sm">
                     {formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}
                   </Badge>
                 </div>
@@ -816,44 +815,44 @@ export default function PayrollPage() {
 
               <div className="flex-1 overflow-hidden bg-slate-50/30">
                 <ScrollArea className="h-full w-full custom-blue-scrollbar">
-                  <div className="p-6">
+                  <div className="p-4">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                      <Table className="min-w-[1600px]">
+                      <Table className="min-w-[1100px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-10 whitespace-nowrap">Voucher No</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-10 whitespace-nowrap">Voucher Date</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right h-10 whitespace-nowrap">Amount</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-10 whitespace-nowrap">Salary Slip</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-10 whitespace-nowrap">Salary Month</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-primary h-10 whitespace-nowrap">Adjust Amount</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8 text-rose-600 h-10 whitespace-nowrap">Remaining Balance</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Voucher No</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Voucher Date</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 text-right h-8 whitespace-nowrap">Amount</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Salary Slip</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Salary Month</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 text-right text-primary h-8 whitespace-nowrap">Adjusted</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 text-right pr-6 text-rose-600 h-8 whitespace-nowrap">Remaining</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {viewAdvanceEmployee.vouchers.map((v: any, idx: number) => (
                             <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="px-6 py-3 font-mono font-black text-primary text-xs tracking-tight whitespace-nowrap">{v.voucherNo}</TableCell>
-                              <TableCell className="text-xs font-medium text-slate-500 whitespace-nowrap">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
-                              <TableCell className="text-right font-bold text-slate-900 whitespace-nowrap">{formatCurrency(v.amount)}</TableCell>
-                              <TableCell className="font-mono font-bold text-slate-600 text-[10px] whitespace-nowrap">{v.slipNo}</TableCell>
-                              <TableCell className="whitespace-nowrap">
-                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-50 px-2 py-0">{v.slipMonth}</Badge>
+                              <TableCell className="px-4 py-2 font-mono font-black text-primary text-[10px] tracking-tight whitespace-nowrap">{v.voucherNo}</TableCell>
+                              <TableCell className="px-4 py-2 text-[10px] font-medium text-slate-500 whitespace-nowrap">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="px-4 py-2 text-right font-bold text-slate-900 text-xs whitespace-nowrap">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="px-4 py-2 font-mono font-bold text-slate-600 text-[9px] whitespace-nowrap">{v.slipNo}</TableCell>
+                              <TableCell className="px-4 py-2 whitespace-nowrap">
+                                <Badge variant="outline" className="text-[8px] font-black uppercase bg-slate-50 px-1.5 h-4">{v.slipMonth}</Badge>
                               </TableCell>
-                              <TableCell className="text-right font-black text-primary whitespace-nowrap">{formatCurrency(v.recovered)}</TableCell>
-                              <TableCell className="text-right pr-8 font-black text-rose-600 whitespace-nowrap">{formatCurrency(v.remaining)}</TableCell>
+                              <TableCell className="px-4 py-2 text-right font-black text-primary text-[10px] whitespace-nowrap">{formatCurrency(v.recovered)}</TableCell>
+                              <TableCell className="px-4 py-2 text-right pr-6 font-black text-rose-600 text-[10px] whitespace-nowrap">{formatCurrency(v.remaining)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
                     </div>
                   </div>
-                  <ScrollBar orientation="horizontal" />
+                  <ScrollBar orientation="horizontal" className="h-2.5" />
                 </ScrollArea>
               </div>
 
-              <DialogFooter className="py-1 px-6 bg-white border-t flex justify-end shrink-0">
-                <Button variant="ghost" className="h-7 px-6 font-bold text-slate-500 hover:bg-slate-100 rounded-lg text-xs" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
+              <DialogFooter className="py-0.5 px-6 bg-white border-t flex justify-end shrink-0">
+                <Button variant="ghost" className="h-6 px-4 font-bold text-slate-400 hover:bg-slate-50 rounded-lg text-[10px]" onClick={() => setViewAdvanceEmployee(null)}>Close</Button>
               </DialogFooter>
             </div>
           )}
@@ -865,51 +864,50 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-5xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewLeaveHistoryEmployee && (
             <div className="flex flex-col max-h-[90vh]">
-              <DialogHeader className="py-2 px-6 bg-white border-b shrink-0">
-                 <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] font-black uppercase text-primary tracking-[0.2em]">Leave Audit History</span>
-                    <DialogTitle className="text-xl font-black text-slate-900 leading-tight">{viewLeaveHistoryEmployee.name}</DialogTitle>
-                    <div className="flex items-center gap-2 mt-0.5">
-                       <Badge variant="outline" className="font-mono text-[10px] font-black px-1.5 h-4">{viewLeaveHistoryEmployee.employeeId}</Badge>
-                       <span className="text-slate-300">|</span>
-                       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{viewLeaveHistoryEmployee.department} / {viewLeaveHistoryEmployee.designation}</span>
+              <DialogHeader className="py-1 px-6 bg-white border-b shrink-0">
+                 <div className="flex flex-col gap-0">
+                    <span className="text-[8px] font-black uppercase text-primary tracking-[0.2em]">Audit History</span>
+                    <DialogTitle className="text-base font-black text-slate-900 leading-tight">{viewLeaveHistoryEmployee.name}</DialogTitle>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                       <Badge variant="outline" className="font-mono text-[9px] font-black px-1 h-3.5">{viewLeaveHistoryEmployee.employeeId}</Badge>
+                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{viewLeaveHistoryEmployee.department} / {viewLeaveHistoryEmployee.designation}</span>
                     </div>
                  </div>
               </DialogHeader>
 
               <div className="flex-1 overflow-hidden bg-slate-50/30">
                 <ScrollArea className="h-full w-full custom-blue-scrollbar">
-                  <div className="p-6">
+                  <div className="p-4">
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                      <Table className="min-w-[900px]">
+                      <Table className="min-w-[800px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-10 whitespace-nowrap">Month</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-10 whitespace-nowrap">Add Leave</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-10 whitespace-nowrap">Adjust Leave</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-10 text-primary bg-primary/5 whitespace-nowrap">Remaining Leave</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8 whitespace-nowrap">Month</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest text-center h-8 whitespace-nowrap">Add Leave</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest text-center h-8 whitespace-nowrap">Adjust Leave</TableHead>
+                            <TableHead className="font-black text-[9px] uppercase tracking-widest text-center h-8 text-primary bg-primary/5 whitespace-nowrap">Remaining Leave</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {leaveHistoryData.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={4} className="text-center py-16 text-muted-foreground font-medium italic">No leave adjustments recorded yet.</TableCell>
+                              <TableCell colSpan={4} className="text-center py-12 text-muted-foreground font-medium italic text-xs">No leave adjustments recorded yet.</TableCell>
                             </TableRow>
                           ) : (
                             leaveHistoryData.map((row, idx) => (
                               <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                <TableCell className="px-6 py-3 font-bold text-slate-700 whitespace-nowrap">{row.month}</TableCell>
+                                <TableCell className="px-4 py-2 font-bold text-slate-700 text-[10px] whitespace-nowrap">{row.month}</TableCell>
                                 <TableCell className="text-center whitespace-nowrap">
-                                  <Badge variant="outline" className={cn("font-black px-3 h-5", row.addLeave > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "text-slate-300")}>
+                                  <Badge variant="outline" className={cn("font-black px-2 h-4 text-[9px]", row.addLeave > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "text-slate-300")}>
                                     {row.addLeave > 0 ? `+${row.addLeave}` : "0"}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-center whitespace-nowrap">
-                                  <Badge variant="outline" className={cn("font-black px-3 h-5", row.adjustLeave > 0 ? "bg-rose-50 text-rose-700 border-rose-200" : "text-slate-300")}>
+                                  <Badge variant="outline" className={cn("font-black px-2 h-4 text-[9px]", row.adjustLeave > 0 ? "bg-rose-50 text-rose-700 border-rose-200" : "text-slate-300")}>
                                     {row.adjustLeave > 0 ? `-${row.adjustLeave}` : "0"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-center font-black text-primary bg-primary/5 text-base whitespace-nowrap">
+                                <TableCell className="text-center font-black text-primary bg-primary/5 text-sm whitespace-nowrap">
                                   {row.remainingLeave} Days
                                 </TableCell>
                               </TableRow>
@@ -923,8 +921,8 @@ export default function PayrollPage() {
                 </ScrollArea>
               </div>
 
-              <DialogFooter className="py-1 px-6 bg-white border-t flex justify-end shrink-0">
-                <Button variant="ghost" className="h-7 px-6 font-bold text-slate-500 hover:bg-slate-100 rounded-lg text-xs" onClick={() => setViewLeaveHistoryEmployee(null)}>Close History</Button>
+              <DialogFooter className="py-0.5 px-6 bg-white border-t flex justify-end shrink-0">
+                <Button variant="ghost" className="h-6 px-4 font-bold text-slate-400 hover:bg-slate-50 rounded-lg text-[10px]" onClick={() => setViewLeaveHistoryEmployee(null)}>Close</Button>
               </DialogFooter>
             </div>
           )}
@@ -936,77 +934,77 @@ export default function PayrollPage() {
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {adjustLeaveEmp && (
             <div className="flex flex-col max-h-[90vh]">
-              <DialogHeader className="p-3 px-6 bg-white border-b shrink-0 flex flex-row items-center justify-between">
-                <div className="flex gap-3 items-center">
-                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                    <User className="w-5 h-5 text-primary" />
+              <DialogHeader className="py-1 px-6 bg-white border-b shrink-0 flex flex-row items-center justify-between">
+                <div className="flex gap-2 items-center">
+                  <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <User className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <DialogTitle className="text-lg font-black text-slate-900 leading-tight">
+                    <DialogTitle className="text-base font-black text-slate-900 leading-tight">
                       {adjustLeaveEmp.name}
                     </DialogTitle>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-0.5">
                       {adjustLeaveEmp.employeeId} • {adjustLeaveEmp.department} / {adjustLeaveEmp.designation}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Remaining Advance Leave</p>
-                  <Badge className="text-sm px-3 py-0.5 bg-emerald-500 hover:bg-emerald-600 rounded-lg">{adjustmentState.remainingBalance} Days</Badge>
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Remaining Balance</p>
+                  <Badge className="text-xs px-2 py-0.5 bg-emerald-500 hover:bg-emerald-600 rounded-lg">{adjustmentState.remainingBalance} Days</Badge>
                 </div>
               </DialogHeader>
 
               <div className="grid grid-cols-3 gap-0 border-b bg-slate-50/50 shrink-0">
-                <div className="py-2 px-6 border-r border-slate-200/60 text-center">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Salary Month</p>
-                  <p className="text-sm font-black text-slate-700">{selectedMonth}</p>
+                <div className="py-1.5 px-6 border-r border-slate-200/60 text-center">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Salary Month</p>
+                  <p className="text-xs font-black text-slate-700">{selectedMonth}</p>
                 </div>
-                <div className="py-2 px-6 border-r border-slate-200/60 text-center">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Working Days</p>
-                  <p className="text-sm font-black text-slate-700">{adjustmentState.monthWorkingDays} Days</p>
+                <div className="py-1.5 px-6 border-r border-slate-200/60 text-center">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Working Days</p>
+                  <p className="text-xs font-black text-slate-700">{adjustmentState.monthWorkingDays} Days</p>
                 </div>
-                <div className="py-2 px-6 text-center">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Holidays</p>
-                  <p className="text-sm font-black text-slate-700">{adjustmentState.monthHolidays} Days</p>
+                <div className="py-1.5 px-6 text-center">
+                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Holidays</p>
+                  <p className="text-xs font-black text-slate-700">{adjustmentState.monthHolidays} Days</p>
                 </div>
               </div>
 
-              <div className="flex-1 p-6 overflow-y-auto bg-slate-50/30">
-                <div className="space-y-6">
+              <div className="flex-1 p-4 overflow-y-auto bg-slate-50/30">
+                <div className="space-y-4">
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <Table>
                       <TableHeader className="bg-slate-50">
                         <TableRow>
-                          <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-10">Metric</TableHead>
-                          <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-10">Days</TableHead>
-                          <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-6 h-10">Action</TableHead>
+                          <TableHead className="font-black text-[9px] uppercase tracking-widest px-4 h-8">Metric</TableHead>
+                          <TableHead className="font-black text-[9px] uppercase tracking-widest text-center h-8">Days</TableHead>
+                          <TableHead className="font-black text-[9px] uppercase tracking-widest text-right pr-4 h-8">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         <TableRow>
-                          <TableCell className="px-6 py-3 font-bold text-slate-700">Present on Working Days</TableCell>
-                          <TableCell className="text-center font-black text-emerald-600 text-base">{adjustmentState.present}</TableCell>
-                          <TableCell className="text-right pr-6">
+                          <TableCell className="px-4 py-2 font-bold text-slate-700 text-xs">Present on Working Days</TableCell>
+                          <TableCell className="text-center font-black text-emerald-600 text-sm">{adjustmentState.present}</TableCell>
+                          <TableCell className="text-right pr-4">
                             {adjustmentState.present < adjustmentState.monthWorkingDays && (
-                              <Button variant="outline" size="sm" className="font-bold text-[10px] gap-1.5 h-8 px-3 rounded-lg" onClick={handleOpenSubAdjustment}>
-                                <PlusCircle className="w-3.5 h-3.5 text-primary" /> Adjust Leave
+                              <Button variant="outline" size="sm" className="font-bold text-[9px] gap-1 h-7 px-2 rounded-lg" onClick={handleOpenSubAdjustment}>
+                                <PlusCircle className="w-3 h-3 text-primary" /> Adjust Leave
                               </Button>
                             )}
                           </TableCell>
                         </TableRow>
                         <TableRow>
-                          <TableCell className="px-6 py-3 font-bold text-slate-700">Total Absent</TableCell>
-                          <TableCell className="text-center font-black text-rose-500 text-base">{adjustmentState.absent}</TableCell>
-                          <TableCell className="text-right pr-6">---</TableCell>
+                          <TableCell className="px-4 py-2 font-bold text-slate-700 text-xs">Total Absent</TableCell>
+                          <TableCell className="text-center font-black text-rose-500 text-sm">{adjustmentState.absent}</TableCell>
+                          <TableCell className="text-right pr-4">---</TableCell>
                         </TableRow>
                         {adjustmentState.holidayWork > 0 && (
                           <TableRow className="bg-amber-50/30">
-                            <TableCell className="px-6 py-3 font-bold text-amber-700">Present on Holidays (Holiday Work)</TableCell>
-                            <TableCell className="text-center font-black text-amber-600 text-base">{adjustmentState.holidayWork}</TableCell>
-                            <TableCell className="text-right pr-6">
-                              <div className="flex justify-end gap-2">
-                                <Button variant="secondary" size="sm" className="font-bold text-[9px] uppercase bg-white border border-slate-200 h-7 px-2" onClick={handleBankHolidayWork}>Add in Adv. Leave</Button>
-                                <Button variant="secondary" size="sm" className="font-bold text-[9px] uppercase bg-amber-500 hover:bg-amber-600 text-white h-7 px-2" onClick={handlePayHolidayWork}>Pay Holiday Work</Button>
+                            <TableCell className="px-4 py-2 font-bold text-amber-700 text-xs">Present on Holidays</TableCell>
+                            <TableCell className="text-center font-black text-amber-600 text-sm">{adjustmentState.holidayWork}</TableCell>
+                            <TableCell className="text-right pr-4">
+                              <div className="flex justify-end gap-1.5">
+                                <Button variant="secondary" size="sm" className="font-bold text-[8px] uppercase bg-white border border-slate-200 h-6 px-1.5" onClick={handleBankHolidayWork}>Add in Adv. Leave</Button>
+                                <Button variant="secondary" size="sm" className="font-bold text-[8px] uppercase bg-amber-500 hover:bg-amber-600 text-white h-6 px-1.5" onClick={handlePayHolidayWork}>Pay Holiday Work</Button>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -1015,23 +1013,23 @@ export default function PayrollPage() {
                     </Table>
                   </div>
 
-                  <div className="p-4 bg-slate-900 rounded-xl flex items-center justify-between shadow-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">
-                        <Calculator className="w-5 h-5 text-emerald-400" />
+                  <div className="p-3 bg-slate-900 rounded-xl flex items-center justify-between shadow-md">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                        <Calculator className="w-4 h-4 text-emerald-400" />
                       </div>
                       <div>
-                        <p className="text-[9px] font-black text-emerald-400/60 uppercase tracking-widest leading-none mb-1">Total Earning Days</p>
-                        <h3 className="text-2xl font-black text-white leading-none">{adjustmentState.earningDays}</h3>
+                        <p className="text-[8px] font-black text-emerald-400/60 uppercase tracking-widest leading-none mb-0.5">Total Earning Days</p>
+                        <h3 className="text-xl font-black text-white leading-none">{adjustmentState.earningDays}</h3>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="p-2 px-6 bg-white border-t flex justify-end gap-3 shrink-0">
-                <Button variant="ghost" className="h-10 px-8 font-bold text-rose-500 hover:bg-rose-50 rounded-lg text-sm" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
-                <Button className="h-10 px-12 bg-primary hover:bg-primary/90 font-black rounded-lg shadow-md shadow-primary/20 text-base" onClick={handlePostAdjustment} disabled={isProcessing}>
+              <div className="p-1 px-6 bg-white border-t flex justify-end gap-2 shrink-0">
+                <Button variant="ghost" className="h-8 px-6 font-bold text-rose-500 hover:bg-rose-50 rounded-lg text-xs" onClick={() => setAdjustLeaveEmp(null)}>Cancel</Button>
+                <Button className="h-8 px-10 bg-primary hover:bg-primary/90 font-black rounded-lg shadow-sm text-xs" onClick={handlePostAdjustment} disabled={isProcessing}>
                   {isProcessing ? "Finalizing..." : "Post Adjustment"}
                 </Button>
               </div>
