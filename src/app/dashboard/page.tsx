@@ -24,7 +24,7 @@ import {
   ChartLegendContent,
   type ChartConfig
 } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import { useData } from "@/context/data-context";
 import {
   Dialog,
@@ -170,7 +170,7 @@ export default function DashboardHome() {
           .map(r => r.employeeId)
       );
       
-      const absentCount = assignedToPlant.filter(e => !presentGloballyIds.has(e.employeeId)).length;
+      const absentCount = Math.max(0, assignedToPlant.filter(e => !presentGloballyIds.has(e.employeeId)).length);
 
       return {
         name: plant.name,
@@ -238,7 +238,7 @@ export default function DashboardHome() {
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <ChartContainer config={chartConfig} className="h-[300px] w-full mt-4">
+            <ChartContainer config={chartConfig} className="h-[340px] w-full mt-4">
               <BarChart data={chartData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
@@ -251,10 +251,11 @@ export default function DashboardHome() {
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend content={<ChartLegendContent />} verticalAlign="top" align="right" />
-                <Bar dataKey="office" stackId="a" fill="var(--color-office)" radius={[0, 0, 0, 0]} barSize={32} />
-                <Bar dataKey="field" stackId="a" fill="var(--color-field)" radius={[0, 0, 0, 0]} barSize={32} />
-                <Bar dataKey="wfh" stackId="a" fill="var(--color-wfh)" radius={[4, 4, 0, 0]} barSize={32} />
-                <Bar dataKey="absent" fill="var(--color-absent)" radius={[4, 4, 0, 0]} barSize={32} />
+                {/* Unified stack: total height equals total employees per plant */}
+                <Bar dataKey="office" stackId="attendance" fill="var(--color-office)" radius={[0, 0, 0, 0]} barSize={40} />
+                <Bar dataKey="field" stackId="attendance" fill="var(--color-field)" radius={[0, 0, 0, 0]} barSize={40} />
+                <Bar dataKey="wfh" stackId="attendance" fill="var(--color-wfh)" radius={[0, 0, 0, 0]} barSize={40} />
+                <Bar dataKey="absent" stackId="attendance" fill="var(--color-absent)" radius={[4, 4, 0, 0]} barSize={40} />
               </BarChart>
             </ChartContainer>
           </CardContent>
