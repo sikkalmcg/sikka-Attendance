@@ -346,7 +346,7 @@ export default function PayrollPage() {
       ...prev,
       present: prev.present + finalVal,
       earningDays: prev.present + finalVal,
-      absent: Math.max(0, prev.monthWorkingDays - (prev.present + finalVal)),
+      absent: Math.max(0, prev.monthWorkingDays - (prev.present + prev.holidayWork)),
       balanceUsed: prev.balanceUsed + finalVal,
       remainingBalance: prev.remainingBalance - finalVal
     }));
@@ -465,8 +465,6 @@ export default function PayrollPage() {
     const relevantPayroll = payrollRecords
       .filter(p => p.employeeId === viewLeaveHistoryEmployee.employeeId && ((p.adjustLeave || 0) > 0 || (p.addedLeave || 0) > 0))
       .sort((a, b) => {
-        // Simple string comparison for MMM-YY is not reliable, but usually works for standard list
-        // Better to parse if possible, but here we just sort for the history view
         return a.month.localeCompare(b.month);
       });
 
@@ -791,7 +789,7 @@ export default function PayrollPage() {
 
       {/* Advance Salary Detailed View Dialog */}
       <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => { if (!o) setViewAdvanceEmployee(null); }}>
-        <DialogContent className="sm:max-w-6xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+        <DialogContent className="sm:max-w-7xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
           {viewAdvanceEmployee && (
             <div className="flex flex-col max-h-[90vh]">
               <DialogHeader className="p-8 bg-white border-b shrink-0 flex flex-row items-center justify-between">
@@ -820,39 +818,39 @@ export default function PayrollPage() {
                 <ScrollArea className="h-full w-full custom-blue-scrollbar">
                   <div className="p-8">
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                      <Table className="min-w-[1200px]">
+                      <Table className="min-w-[1400px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-12">Employee Name</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Voucher No</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Voucher Date</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right h-12">Amount</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Salary Slip</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Salary Month</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-primary h-12">Adjust Amount</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-6 text-rose-600 h-12">Remaining Balance</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-12 whitespace-nowrap">Employee Name</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12 whitespace-nowrap">Voucher No</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12 whitespace-nowrap">Voucher Date</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right h-12 whitespace-nowrap">Amount</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12 whitespace-nowrap">Salary Slip</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12 whitespace-nowrap">Salary Month</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-primary h-12 whitespace-nowrap">Adjust Amount</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8 text-rose-600 h-12 whitespace-nowrap">Remaining Amount</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {viewAdvanceEmployee.vouchers.map((v: any, idx: number) => (
                             <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="px-6 py-4 font-bold text-slate-700 uppercase text-xs">{viewAdvanceEmployee.emp.name}</TableCell>
-                              <TableCell className="font-mono font-black text-primary text-xs tracking-tight">{v.voucherNo}</TableCell>
-                              <TableCell className="text-xs font-medium text-slate-500">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
-                              <TableCell className="text-right font-bold text-slate-900">{formatCurrency(v.amount)}</TableCell>
-                              <TableCell className="font-mono font-bold text-slate-600 text-[10px]">{v.slipNo}</TableCell>
-                              <TableCell>
+                              <TableCell className="px-6 py-4 font-bold text-slate-700 uppercase text-xs whitespace-nowrap">{viewAdvanceEmployee.emp.name}</TableCell>
+                              <TableCell className="font-mono font-black text-primary text-xs tracking-tight whitespace-nowrap">{v.voucherNo}</TableCell>
+                              <TableCell className="text-xs font-medium text-slate-500 whitespace-nowrap">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="text-right font-bold text-slate-900 whitespace-nowrap">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="font-mono font-bold text-slate-600 text-[10px] whitespace-nowrap">{v.slipNo}</TableCell>
+                              <TableCell className="whitespace-nowrap">
                                 <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-50 px-2 py-0">{v.slipMonth}</Badge>
                               </TableCell>
-                              <TableCell className="text-right font-black text-primary">{formatCurrency(v.recovered)}</TableCell>
-                              <TableCell className="text-right pr-6 font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
+                              <TableCell className="text-right font-black text-primary whitespace-nowrap">{formatCurrency(v.recovered)}</TableCell>
+                              <TableCell className="text-right pr-8 font-black text-rose-600 whitespace-nowrap">{formatCurrency(v.remaining)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
                     </div>
                   </div>
-                  <ScrollBar orientation="horizontal" className="bg-slate-100" />
+                  <ScrollBar orientation="horizontal" className="bg-slate-100 h-3" />
                 </ScrollArea>
               </div>
 
@@ -885,13 +883,13 @@ export default function PayrollPage() {
                 <ScrollArea className="h-full w-full custom-blue-scrollbar">
                   <div className="p-8">
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                      <Table className="min-w-[800px]">
+                      <Table className="min-w-[900px]">
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                           <TableRow>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-12">Month</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12">Add Leave</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12">Adjust Leave</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12 text-primary bg-primary/5">Remaining Leave</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-12 whitespace-nowrap">Month</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12 whitespace-nowrap">Add Leave</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12 whitespace-nowrap">Adjust Leave</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-center h-12 text-primary bg-primary/5 whitespace-nowrap">Remaining Leave</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -902,18 +900,18 @@ export default function PayrollPage() {
                           ) : (
                             leaveHistoryData.map((row, idx) => (
                               <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                <TableCell className="px-6 py-4 font-bold text-slate-700">{row.month}</TableCell>
-                                <TableCell className="text-center">
+                                <TableCell className="px-6 py-4 font-bold text-slate-700 whitespace-nowrap">{row.month}</TableCell>
+                                <TableCell className="text-center whitespace-nowrap">
                                   <Badge variant="outline" className={cn("font-black px-3", row.addLeave > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "text-slate-300")}>
                                     {row.addLeave > 0 ? `+${row.addLeave}` : "0"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-center">
+                                <TableCell className="text-center whitespace-nowrap">
                                   <Badge variant="outline" className={cn("font-black px-3", row.adjustLeave > 0 ? "bg-rose-50 text-rose-700 border-rose-200" : "text-slate-300")}>
                                     {row.adjustLeave > 0 ? `-${row.adjustLeave}` : "0"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-center font-black text-primary bg-primary/5 text-lg">
+                                <TableCell className="text-center font-black text-primary bg-primary/5 text-lg whitespace-nowrap">
                                   {row.remainingLeave} Days
                                 </TableCell>
                               </TableRow>
@@ -923,6 +921,7 @@ export default function PayrollPage() {
                       </Table>
                     </div>
                   </div>
+                  <ScrollBar orientation="horizontal" className="h-3" />
                 </ScrollArea>
               </div>
 
