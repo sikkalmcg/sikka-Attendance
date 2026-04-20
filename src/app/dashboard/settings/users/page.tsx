@@ -25,7 +25,8 @@ import {
   SearchIcon,
   Globe,
   Users,
-  Factory
+  Factory,
+  UserCheck
 } from "lucide-react";
 import { 
   Dialog, 
@@ -79,7 +80,7 @@ export default function UserManagementPage() {
 
   // Modal States
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+  const [isStatusAlertOpen, setIsStatusAlertOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userToAction, setUserToAction] = useState<User | null>(null);
@@ -187,7 +188,7 @@ export default function UserManagementPage() {
         role: (formData.role as Role) || "HR",
         permissions: formData.permissions || ["Dashboard"],
         plantIds: formData.plantIds || [],
-        status: "Active"
+        status: formData.status || "Active"
       };
 
       if (editingUser) {
@@ -199,6 +200,23 @@ export default function UserManagementPage() {
       }
       setIsUserModalOpen(false);
       setIsResetPasswordOpen(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleStatusToggle = () => {
+    if (!userToAction || isProcessing) return;
+    
+    setIsProcessing(true);
+    try {
+      const newStatus = userToAction.status === 'Active' ? 'Inactive' : 'Active';
+      updateRecord('users', userToAction.id, { status: newStatus });
+      toast({ 
+        title: newStatus === 'Active' ? "User Activated" : "User Deactivated", 
+        description: `${userToAction.fullName} account is now ${newStatus.toLowerCase()}.` 
+      });
+      setIsStatusAlertOpen(false);
     } finally {
       setIsProcessing(false);
     }
@@ -281,6 +299,7 @@ export default function UserManagementPage() {
                   <TableHead className="font-bold">Full Name</TableHead>
                   <TableHead className="font-bold">Username</TableHead>
                   <TableHead className="font-bold">Role</TableHead>
+                  <TableHead className="font-bold text-center">Status</TableHead>
                   <TableHead className="font-bold">Permissions</TableHead>
                   <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                 </TableRow>
@@ -291,8 +310,13 @@ export default function UserManagementPage() {
                     <TableCell className="font-bold">{user.fullName}</TableCell>
                     <TableCell className="font-mono text-primary text-xs tracking-tight">{user.username}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px] uppercase font-black bg-white border-slate-200">
+                      <Badge variant="outline" className="text-[10px] uppercase font-black bg-white border-slate-200 mx-auto block w-fit">
                         {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={cn("text-[9px] font-black uppercase py-0", user.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>
+                        {user.status || 'Active'}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -342,14 +366,17 @@ export default function UserManagementPage() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
-                              onClick={() => { setUserToAction(user); setIsDeleteAlertOpen(true); }}
+                              className={cn(
+                                "h-8 w-8",
+                                user.status === 'Inactive' ? "text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50" : "text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                              )}
+                              onClick={() => { setUserToAction(user); setIsStatusAlertOpen(true); }}
                               disabled={isProcessing || user.role === 'SUPER_ADMIN'}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              {user.status === 'Inactive' ? <UserCheck className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Deactivate User</TooltipContent>
+                          <TooltipContent>{user.status === 'Inactive' ? 'Activate User' : 'Deactivate User'}</TooltipContent>
                         </Tooltip>
                       </div>
                     </TableCell>
@@ -588,7 +615,7 @@ export default function UserManagementPage() {
                             <TableCell className="text-xs font-mono text-primary">{u.username}</TableCell>
                             <TableCell><Badge variant="outline" className="text-[8px] font-black uppercase py-0">{u.role}</Badge></TableCell>
                             <TableCell className="text-right">
-                              <Badge className={cn("text-[8px] font-black uppercase py-0", u.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>{u.status}</Badge>
+                              <Badge className={cn("text-[8px] font-black uppercase py-0", u.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>{u.status || 'Active'}</Badge>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -641,15 +668,25 @@ export default function UserManagementPage() {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialog open={isStatusAlertOpen} onOpenChange={setIsStatusAlertOpen}>
           <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
             <AlertDialogHeader>
-              <div className="mx-auto w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-                <AlertTriangle className="w-8 h-8 text-rose-500" />
+              <div className={cn(
+                "mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4",
+                userToAction?.status === 'Inactive' ? "bg-emerald-50" : "bg-rose-50"
+              )}>
+                {userToAction?.status === 'Inactive' ? (
+                  <UserCheck className="w-8 h-8 text-emerald-500" />
+                ) : (
+                  <AlertTriangle className="w-8 h-8 text-rose-500" />
+                )}
               </div>
-              <AlertDialogTitle className="text-center text-2xl font-black">Confirm User Deactivation</AlertDialogTitle>
+              <AlertDialogTitle className="text-center text-2xl font-black">
+                Confirm User {userToAction?.status === 'Inactive' ? 'Activation' : 'Deactivation'}
+              </AlertDialogTitle>
               <AlertDialogDescription className="text-center text-slate-500 font-medium pt-2">
-                Are you sure you want to remove <strong>{userToAction?.fullName}</strong>? They will lose all access to assigned pages immediately.
+                Are you sure you want to <strong>{userToAction?.status === 'Inactive' ? 'activate' : 'deactivate'}</strong> <strong>{userToAction?.fullName}</strong>? 
+                {userToAction?.status === 'Active' && " They will lose all access to assigned pages immediately."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="sm:justify-center gap-3 pt-8 pb-4">
@@ -657,21 +694,17 @@ export default function UserManagementPage() {
               <AlertDialogAction 
                 onClick={(e) => {
                   e.preventDefault();
-                  if (userToAction && !isProcessing) {
-                    setIsProcessing(true);
-                    try {
-                      deleteRecord('users', userToAction.id);
-                      toast({ title: "User Deactivated" });
-                      setIsDeleteAlertOpen(false);
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }
+                  handleStatusToggle();
                 }} 
                 disabled={isProcessing}
-                className="bg-rose-600 hover:bg-rose-700 rounded-xl font-black h-12 px-8 shadow-lg shadow-rose-100"
+                className={cn(
+                  "rounded-xl font-black h-12 px-8 shadow-lg",
+                  userToAction?.status === 'Inactive' 
+                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" 
+                    : "bg-rose-600 hover:bg-rose-700 shadow-rose-100"
+                )}
               >
-                {isProcessing ? "Processing..." : "Confirm Deactivation"}
+                {isProcessing ? "Processing..." : `Confirm ${userToAction?.status === 'Inactive' ? 'Activate' : 'Deactivate'}`}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
