@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,8 @@ import {
   History,
   ArrowRightCircle,
   Filter,
-  CheckCircle2
+  CheckCircle2,
+  Briefcase
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -83,7 +84,7 @@ const generateVoucherMonths = () => {
 const VOUCHER_MONTHS = generateVoucherMonths();
 
 export default function VouchersPage() {
-  const { employees, firms, plants, vouchers, payrollRecords, addRecord, updateRecord, deleteRecord } = useData();
+  const { employees, firms, vouchers, addRecord, updateRecord } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("create");
   const [searchTerm, setSearchTerm] = useState("");
@@ -137,7 +138,11 @@ export default function VouchersPage() {
 
   const filteredPendingVouchers = useMemo(() => {
     const search = searchTerm.toLowerCase();
-    return (vouchers || []).filter(v => v.status === 'PENDING' && v.date >= PROJECT_START_DATE_STR && (v.voucherNo.toLowerCase().includes(search) || employees.find(e => e.id === v.employeeId)?.name.toLowerCase().includes(search))).reverse();
+    return (vouchers || []).filter(v => 
+      v.status === 'PENDING' && 
+      v.date >= PROJECT_START_DATE_STR && 
+      (v.voucherNo.toLowerCase().includes(search) || employees.find(e => e.id === v.employeeId)?.name.toLowerCase().includes(search))
+    ).reverse();
   }, [vouchers, searchTerm, employees]);
 
   const voucherRecoveryLedger = useMemo(() => {
@@ -241,12 +246,12 @@ export default function VouchersPage() {
       toast({ variant: "destructive", title: "No Data", description: "No paid vouchers in selected range." });
       return;
     }
-    const headers = ["Voucher No", "Employee Name", "Date", "Purpose", "Amount", "Status", "Payment Mode", "Reference"];
+    const headers = ["Voucher No", "Employee Name", "Department", "Designation", "Date", "Purpose", "Amount", "Status", "Payment Mode", "Reference"];
     const rows = [
       headers.join(","),
       ...data.map(v => {
         const emp = employees.find(e => e.id === v.employeeId);
-        return [`"${v.voucherNo}"`, `"${emp?.name || ''}"`, `"${v.date}"`, `"${v.purpose}"`, v.amount, `"${v.status}"`, `"${v.paymentMode || ''}"`, `"${v.paymentReference || ''}"`].join(",");
+        return [`"${v.voucherNo}"`, `"${emp?.name || ''}"`, `"${emp?.department || ''}"`, `"${emp?.designation || ''}"`, `"${v.date}"`, `"${v.purpose}"`, v.amount, `"${v.status}"`, `"${v.paymentMode || ''}"`, `"${v.paymentReference || ''}"`].join(",");
       })
     ];
     const blob = new Blob([rows.join("\n")], { type: 'text/csv;charset=utf-8;' });
@@ -261,7 +266,10 @@ export default function VouchersPage() {
   return (
     <TooltipProvider>
       <div className="space-y-6 print:hidden">
-        <div><h1 className="text-2xl font-bold">Advance Voucher System</h1><p className="text-muted-foreground">Manage employee advance payments (Since April-2026).</p></div>
+        <div>
+          <h1 className="text-2xl font-bold">Advance Voucher System</h1>
+          <p className="text-muted-foreground">Manage employee advance payments and authorized disbursements.</p>
+        </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-xl grid-cols-3 mb-8 bg-slate-100 p-1 rounded-xl h-12">
             <TabsTrigger value="create" className="font-semibold">Create Voucher</TabsTrigger>
@@ -270,17 +278,62 @@ export default function VouchersPage() {
           </TabsList>
           
           <TabsContent value="create">
-            <Card className="max-w-4xl mx-auto shadow-xl border-none">
-              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between"><CardTitle>Generate New Voucher</CardTitle></CardHeader>
-              <form onSubmit={handleCreateVoucher}><CardContent className="p-8 space-y-8"><div className="grid grid-cols-1 sm:grid-cols-2 gap-8"><div className="space-y-2"><Label className="font-bold">Voucher Number</Label><Input value={voucherNo} disabled className="h-12 font-bold" /></div><div className="space-y-2"><Label className="font-bold">Date *</Label><Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-12" min={PROJECT_START_DATE_STR} /></div><div className="space-y-2"><Label className="font-bold">Select Employee *</Label><Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}><SelectTrigger className="h-12"><SelectValue placeholder="Select Employee" /></SelectTrigger><SelectContent>{employees.map(emp => <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label className="font-bold">Amount (INR) *</Label><Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-12" /></div></div><div className="space-y-2"><Label className="font-bold">Purpose *</Label><Input value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-12" /></div></CardContent><CardFooter className="bg-slate-50 border-t flex justify-end p-6"><Button className="px-12 h-12 font-bold" type="submit">Create Voucher</Button></CardFooter></form>
+            <Card className="max-w-4xl mx-auto shadow-xl border-none overflow-hidden">
+              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between">
+                <CardTitle>Generate New Voucher</CardTitle>
+                <Badge variant="outline" className="font-black bg-white">{voucherNo}</Badge>
+              </CardHeader>
+              <form onSubmit={handleCreateVoucher}>
+                <CardContent className="p-8 space-y-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    <div className="space-y-2">
+                      <Label className="font-bold">Voucher Number</Label>
+                      <Input value={voucherNo} disabled className="h-12 font-bold bg-slate-50" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Date *</Label>
+                      <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-12" min={PROJECT_START_DATE_STR} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Select Employee *</Label>
+                      <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Select Employee" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees.map(emp => (
+                            <SelectItem key={emp.id} value={emp.id}>
+                              {emp.name} ({emp.employeeId})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Amount (INR) *</Label>
+                      <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-12" placeholder="Enter amount" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold">Purpose *</Label>
+                    <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-12" placeholder="Specify reason for advance..." />
+                  </div>
+                </CardContent>
+                <CardFooter className="bg-slate-50 border-t flex justify-end p-6">
+                  <Button className="px-12 h-12 font-bold shadow-lg shadow-primary/20" type="submit">Send for Approval</Button>
+                </CardFooter>
+              </form>
             </Card>
           </TabsContent>
 
           <TabsContent value="approve">
-            <Card className="shadow-sm overflow-hidden">
-              <CardHeader className="bg-slate-50 p-6 flex flex-row items-center justify-between">
-                <CardTitle>Pending Approvals ({filteredPendingVouchers.length})</CardTitle>
-                <div className="relative w-64"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search pending..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+            <Card className="shadow-sm border-slate-200 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 p-6 flex flex-row items-center justify-between border-b">
+                <CardTitle className="text-lg">Pending Approvals ({filteredPendingVouchers.length})</CardTitle>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search pending..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -288,6 +341,7 @@ export default function VouchersPage() {
                     <TableRow>
                       <TableHead className="font-bold">Voucher No</TableHead>
                       <TableHead className="font-bold">Name</TableHead>
+                      <TableHead className="font-bold">Dept / Desig</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold text-right">Amount</TableHead>
                       <TableHead className="font-bold text-right pr-6">Actions</TableHead>
@@ -295,22 +349,31 @@ export default function VouchersPage() {
                   </TableHeader>
                   <TableBody>
                     {paginatedPending.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No pending vouchers found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-medium">No pending vouchers found.</TableCell></TableRow>
                     ) : (
-                      paginatedPending.map(v => (
-                        <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-mono font-bold text-primary cursor-pointer" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold uppercase">{employees.find(e => e.id === v.employeeId)?.name}</TableCell>
-                          <TableCell>{v.date}</TableCell>
-                          <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-2">
-                              <Button size="sm" variant="outline" className="text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => setVoucherToReject(v.id)}>Reject</Button>
-                              <Button size="sm" className="bg-emerald-600 h-8" onClick={() => updateRecord('vouchers', v.id, { status: 'APPROVED' })}>Approve</Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      paginatedPending.map(v => {
+                        const emp = employees.find(e => e.id === v.employeeId);
+                        return (
+                          <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
+                            <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                            <TableCell className="font-bold uppercase text-slate-700">{emp?.name}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-600">{emp?.department}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm font-medium">{v.date}</TableCell>
+                            <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="outline" className="text-rose-600 border-rose-200 hover:bg-rose-50 font-bold" onClick={() => setVoucherToReject(v.id)}>Reject</Button>
+                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold h-8 px-6 shadow-sm" onClick={() => updateRecord('vouchers', v.id, { status: 'APPROVED' })}>Approve</Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -320,10 +383,13 @@ export default function VouchersPage() {
           </TabsContent>
 
           <TabsContent value="payment" className="space-y-12">
-            <Card className="shadow-sm overflow-hidden">
-              <CardHeader className="bg-slate-50 p-6 flex flex-row items-center justify-between">
-                <CardTitle>Ready for Payment ({paymentTabLists.pending.length})</CardTitle>
-                <div className="relative w-64"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search payable..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+            <Card className="shadow-sm border-slate-200 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 p-6 flex flex-row items-center justify-between border-b">
+                <CardTitle className="text-lg">Ready for Payment ({paymentTabLists.pending.length})</CardTitle>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search payable..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
@@ -331,6 +397,7 @@ export default function VouchersPage() {
                     <TableRow>
                       <TableHead className="font-bold">Voucher No</TableHead>
                       <TableHead className="font-bold">Name</TableHead>
+                      <TableHead className="font-bold">Dept / Desig</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold text-right">Amount</TableHead>
                       <TableHead className="font-bold text-right pr-6">Actions</TableHead>
@@ -338,17 +405,28 @@ export default function VouchersPage() {
                   </TableHeader>
                   <TableBody>
                     {paginatedPayable.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No approved vouchers awaiting payment.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No approved vouchers awaiting payment.</TableCell></TableRow>
                     ) : (
-                      paginatedPayable.map(v => (
-                        <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-mono font-bold text-primary cursor-pointer" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
-                          <TableCell className="font-bold uppercase">{employees.find(e => e.id === v.employeeId)?.name}</TableCell>
-                          <TableCell>{v.date}</TableCell>
-                          <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
-                          <TableCell className="text-right pr-6"><Button size="sm" onClick={() => handleOpenPayDialog(v)}>Process Pay</Button></TableCell>
-                        </TableRow>
-                      ))
+                      paginatedPayable.map(v => {
+                        const emp = employees.find(e => e.id === v.employeeId);
+                        return (
+                          <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
+                            <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                            <TableCell className="font-bold uppercase text-slate-700">{emp?.name}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-600">{emp?.department}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm font-medium">{v.date}</TableCell>
+                            <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Button size="sm" className="font-bold px-6 bg-slate-900 shadow-sm" onClick={() => handleOpenPayDialog(v)}>Process Pay</Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -358,21 +436,26 @@ export default function VouchersPage() {
 
             <div className="space-y-4">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-sm font-black uppercase text-slate-700 flex items-center gap-2"><History className="w-4 h-4" /> Paid Vouchers (History)</h3>
+                <h3 className="text-sm font-black uppercase text-slate-700 flex items-center gap-2"><History className="w-4 h-4 text-primary" /> Paid Vouchers (History)</h3>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
                     <Filter className="w-3 h-3 text-slate-400" />
                     <Select value={paidFromMonth} onValueChange={(v) => {setPaidFromMonth(v); if (paidToMonth < v) setPaidToMonth(v);}}>
-                      <SelectTrigger className="h-7 w-24 border-none p-0 text-[10px] font-bold"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 w-24 border-none p-0 text-[10px] font-bold focus:ring-0"><SelectValue /></SelectTrigger>
                       <SelectContent>{VOUCHER_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
-                    <span className="text-[10px] text-slate-300">TO</span>
+                    <span className="text-[10px] text-slate-300 font-bold">TO</span>
                     <Select value={paidToMonth} onValueChange={(v) => {if (v >= paidFromMonth) setPaidToMonth(v);}}>
-                      <SelectTrigger className="h-7 w-24 border-none p-0 text-[10px] font-bold"><SelectValue /></SelectTrigger>
-                      <SelectContent>{VOUCHER_MONTHS.filter(m => m >= paidFromMonth).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                      <SelectTrigger className="h-7 w-24 border-none p-0 text-[10px] font-bold focus:ring-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>{VOUCHER_MONTHS.filter(m => {
+                        const mOrder = [...VOUCHER_MONTHS].reverse();
+                        return mOrder.indexOf(m) >= mOrder.indexOf(paidFromMonth);
+                      }).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold" onClick={handleExportPaid}><FileSpreadsheet className="w-4 h-4 mr-2" /> Export Excel</Button>
+                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold gap-2" onClick={handleExportPaid}>
+                    <FileSpreadsheet className="w-4 h-4" /> Export Excel
+                  </Button>
                 </div>
               </div>
               <Card className="border-none shadow-sm overflow-hidden bg-slate-50/30">
@@ -382,24 +465,39 @@ export default function VouchersPage() {
                       <TableRow>
                         <TableHead className="font-bold">Voucher No</TableHead>
                         <TableHead className="font-bold">Name</TableHead>
-                        <TableHead className="font-bold">Settled Date</TableHead>
+                        <TableHead className="font-bold">Dept / Desig</TableHead>
+                        <TableHead className="font-bold text-center">Settled Date</TableHead>
                         <TableHead className="font-bold text-right">Amount</TableHead>
                         <TableHead className="font-bold text-right pr-6">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedPaid.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground italic">No historical records in this range.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">No historical records in this range.</TableCell></TableRow>
                       ) : (
-                        paginatedPaid.map(v => (
-                          <TableRow key={v.id} className="hover:bg-white/50">
-                            <TableCell className="font-mono font-bold text-slate-600 cursor-pointer" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
-                            <TableCell className="font-bold uppercase text-slate-600">{employees.find(e => e.id === v.employeeId)?.name}</TableCell>
-                            <TableCell className="text-slate-500">{v.paidDate || v.date}</TableCell>
-                            <TableCell className="text-right font-black text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                            <TableCell className="text-right pr-6"><Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 uppercase text-[9px] font-black tracking-widest">Settle-Paid</Badge></TableCell>
-                          </TableRow>
-                        ))
+                        paginatedPaid.map(v => {
+                          const emp = employees.find(e => e.id === v.employeeId);
+                          return (
+                            <TableRow key={v.id} className="hover:bg-white/50 transition-colors">
+                              <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-bold uppercase text-slate-600">{emp?.name}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-xs font-medium text-slate-500">{emp?.department}</span>
+                                  <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-slate-500 text-center text-sm font-medium">{v.paidDate || v.date}</TableCell>
+                              <TableCell className="text-right font-black text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="text-right pr-6">
+                                <div className="flex justify-end items-center gap-2">
+                                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none uppercase text-[9px] font-black tracking-widest px-3">Settle-Paid</Badge>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => handleDownloadAndPrint(v)}><Printer className="w-3.5 h-3.5" /></Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>
@@ -413,90 +511,199 @@ export default function VouchersPage() {
 
       {/* Pay Dialog */}
       <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary" /> Process Voucher Payment</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 font-black text-xl"><CreditCard className="w-5 h-5 text-primary" /> Process Disbursement</DialogTitle>
+            <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">Final Payment Settlement</p>
           </DialogHeader>
           <div className="p-8 space-y-6">
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-4">
-              <div><p className="text-[10px] font-black text-slate-400 uppercase">Voucher ID</p><p className="text-sm font-bold">{voucherToPay?.voucherNo}</p></div>
-              <div><p className="text-[10px] font-black text-slate-400 uppercase">Amount Due</p><p className="text-sm font-black text-rose-600">{formatCurrency(voucherToPay?.amount || 0)}</p></div>
+            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 grid grid-cols-2 gap-4 shadow-inner">
+              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Voucher ID</p><p className="text-sm font-black text-slate-700">{voucherToPay?.voucherNo}</p></div>
+              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter text-right">Amount Due</p><p className="text-sm font-black text-rose-600 text-right">{formatCurrency(voucherToPay?.amount || 0)}</p></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Pay Mode</Label><Select value={payMode} onValueChange={(v: any) => setPayMode(v)}><SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="BANKING">Banking Transfer</SelectItem><SelectItem value="CASH">Petty Cash</SelectItem></SelectContent></Select></div>
-              <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Pay Date</Label><Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="h-12 font-bold" min={PROJECT_START_DATE_STR} /></div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Pay Mode</Label>
+                <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
+                  <SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BANKING">Banking Transfer</SelectItem>
+                    <SelectItem value="CASH">Petty Cash</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Pay Date</Label>
+                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="h-12 font-bold" min={PROJECT_START_DATE_STR} />
+              </div>
             </div>
-            <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Reference No / ID</Label><Input placeholder="Txn ID or Chq No" value={payRef} onChange={(e) => setPayRef(e.target.value)} className="h-12 font-bold" /></div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-500">Reference No / Txn ID</Label>
+              <Input placeholder="Enter Banking Txn ID or Chq No" value={payRef} onChange={(e) => setPayRef(e.target.value)} className="h-12 font-bold" />
+            </div>
           </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t gap-3"><Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="rounded-xl font-bold">Cancel</Button><Button onClick={handlePostPay} disabled={isProcessing} className="bg-primary rounded-xl font-black px-10 shadow-lg shadow-primary/20">Finalize Payment</Button></DialogFooter>
+          <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
+            <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="flex-1 h-12 rounded-xl font-bold">Cancel</Button>
+            <Button onClick={handlePostPay} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-black h-12 shadow-xl shadow-primary/20">Confirm Payment</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Voucher Preview Modal */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] p-0 overflow-hidden rounded-2xl">
-          <ScrollArea className="h-full">
-            <div className="p-10 bg-white space-y-8">
-              <div className="flex justify-between items-start border-b-2 border-slate-100 pb-6">
-                <div><h3 className="text-xl font-black text-primary">Sikka Voucher</h3><p className="text-xs text-muted-foreground mt-1">Official Payment Authorization</p></div>
-                <Badge variant="outline" className="px-4 py-1 font-black text-lg">{previewVoucher?.status}</Badge>
+        <DialogContent className="sm:max-w-3xl max-h-[95vh] p-0 overflow-hidden rounded-3xl border-none shadow-2xl">
+          <ScrollArea className="h-full bg-slate-50/50">
+            <div className="p-12 space-y-10 bg-white">
+              <div className="flex justify-between items-start border-b-2 border-slate-100 pb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center">
+                    <Briefcase className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Sikka Authorization</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Official Advance Voucher</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                   <Badge variant="outline" className={cn("px-5 py-1.5 font-black text-xs uppercase tracking-widest", 
+                     previewVoucher?.status === 'PAID' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
+                   )}>
+                     {previewVoucher?.status}
+                   </Badge>
+                   <p className="text-[10px] font-mono font-bold text-slate-400">{previewVoucher?.voucherNo}</p>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-y-6 text-sm">
-                <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Voucher Number</p><p className="font-bold">{previewVoucher?.voucherNo}</p></div>
-                <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Authorization Date</p><p className="font-bold">{previewVoucher?.date}</p></div>
-                <div className="col-span-2 border-y py-4 border-slate-50"><p className="text-[10px] font-black text-slate-400 uppercase mb-2">Employee Details</p><div className="flex items-center gap-3"><div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center"><UserIcon className="w-5 h-5 text-slate-400" /></div><div><p className="font-black uppercase">{employees.find(e => e.id === previewVoucher?.employeeId)?.name}</p><p className="text-[10px] text-muted-foreground font-mono">{employees.find(e => e.id === previewVoucher?.employeeId)?.employeeId}</p></div></div></div>
-                <div className="col-span-2"><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Stated Purpose</p><p className="font-medium italic text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">"{previewVoucher?.purpose}"</p></div>
-              </div>
-              <div className="bg-slate-900 text-white p-6 rounded-3xl flex justify-between items-center shadow-xl">
-                <div><p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Amount Authorized</p><p className="text-sm font-bold text-primary mt-1">{numberToIndianWords(previewVoucher?.amount || 0)}</p></div>
-                <p className="text-3xl font-black">{formatCurrency(previewVoucher?.amount || 0)}</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Employee Identity</p>
+                    <div className="flex items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
+                        <UserIcon className="w-6 h-6 text-slate-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-black text-slate-900 uppercase truncate text-sm">{employees.find(e => e.id === previewVoucher?.employeeId)?.name}</p>
+                        <p className="text-[10px] text-primary font-black uppercase tracking-tighter mt-0.5">ID: {employees.find(e => e.id === previewVoucher?.employeeId)?.employeeId}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                       <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Department</p>
+                       <p className="text-xs font-bold text-slate-700">{employees.find(e => e.id === previewVoucher?.employeeId)?.department}</p>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                       <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Designation</p>
+                       <p className="text-xs font-bold text-slate-700">{employees.find(e => e.id === previewVoucher?.employeeId)?.designation}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="bg-slate-900 text-white p-6 rounded-3xl space-y-4 shadow-xl shadow-slate-200">
+                    <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total Advance</span>
+                      <span className="text-2xl font-black text-primary">{formatCurrency(previewVoucher?.amount || 0)}</span>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black uppercase tracking-widest opacity-40">Amount in Words</p>
+                      <p className="text-xs font-bold italic leading-tight text-white/80">{numberToIndianWords(previewVoucher?.amount || 0)}</p>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Authorization Date</p>
+                    <p className="text-sm font-bold text-slate-700">{previewVoucher?.date}</p>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Stated Purpose / Remarks</p>
+                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 min-h-[100px]">
+                    <p className="text-sm font-medium italic text-slate-600 leading-relaxed">"{previewVoucher?.purpose}"</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="p-6 bg-slate-50 border-t flex justify-end gap-3"><Button variant="ghost" onClick={() => setIsPreviewOpen(false)}>Close Preview</Button><Button className="bg-primary px-8 gap-2 font-bold" onClick={() => handleDownloadAndPrint(previewVoucher!)}><Printer className="w-4 h-4" /> Print Document</Button></div>
+            <div className="p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-slate-400" />
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Document Generated via SikkaTrack Portal</p>
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-xl font-bold h-11 px-8">Close</Button>
+                <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-xl font-black h-11 px-10 gap-2 shadow-lg shadow-primary/20" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
+                  <Printer className="w-4 h-4" /> Print Document
+                </Button>
+              </div>
+            </div>
           </ScrollArea>
         </DialogContent>
       </Dialog>
 
       {/* Reject Alert */}
       <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2"><AlertTriangle className="text-rose-500" /> Confirm Rejection</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to decline this advance request? This action will move the voucher to cancelled status.</AlertDialogDescription>
+            <div className="mx-auto w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-rose-500" />
+            </div>
+            <AlertDialogTitle className="text-center text-2xl font-black">Confirm Rejection</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 font-medium">
+              Are you sure you want to decline this advance request? This action will move the voucher to <strong>CANCELLED</strong> status and inform the applicant.
+            </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Keep Pending</AlertDialogCancel><AlertDialogAction className="bg-rose-600 hover:bg-rose-700" onClick={() => {updateRecord('vouchers', voucherToReject!, {status: 'CANCELLED'}); setVoucherToReject(null); toast({title: "Voucher Cancelled"});}}>Confirm Reject</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
+            <AlertDialogCancel className="rounded-xl font-bold px-8 h-12">Keep Pending</AlertDialogCancel>
+            <AlertDialogAction className="bg-rose-600 hover:bg-rose-700 rounded-xl font-black px-10 h-12 shadow-lg shadow-rose-100" onClick={() => {updateRecord('vouchers', voucherToReject!, {status: 'CANCELLED'}); setVoucherToReject(null); toast({title: "Voucher Cancelled"});}}>Confirm Reject</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Print Portal */}
       {isMounted && printVoucher && createPortal(
-        <div className="print-only p-10 bg-white font-calibri">
-          <div className="text-center border-b-2 border-slate-900 pb-4 mb-8">
-            <h1 className="text-2xl font-black uppercase tracking-tight">SIKKA INDUSTRIES & LOGISTICS</h1>
-            <h2 className="text-lg font-black mt-2 underline">ADVANCE PAYMENT VOUCHER</h2>
+        <div className="print-only p-12 bg-white font-calibri text-slate-900">
+          <div className="text-center border-b-4 border-slate-900 pb-6 mb-10">
+            <h1 className="text-3xl font-black uppercase tracking-tight">SIKKA INDUSTRIES & LOGISTICS</h1>
+            <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-[0.3em]">Authorized Corporate Node</p>
+            <h2 className="text-xl font-black mt-4 underline decoration-2 underline-offset-8 uppercase">Advance Payment Voucher</h2>
           </div>
-          <div className="grid grid-cols-2 gap-10 text-sm mb-10">
-            <div className="space-y-4">
-              <div className="flex justify-between border-b pb-2"><span className="font-bold">Voucher No:</span> <span className="font-mono">{printVoucher.voucherNo}</span></div>
-              <div className="flex justify-between border-b pb-2"><span className="font-bold">Date:</span> <span>{printVoucher.date}</span></div>
+
+          <div className="grid grid-cols-2 gap-x-20 text-sm mb-12">
+            <div className="space-y-6">
+              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Voucher No:</span> <span className="font-mono font-black">{printVoucher.voucherNo}</span></div>
+              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Issued Date:</span> <span className="font-black">{printVoucher.date}</span></div>
+              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Authorization:</span> <span className="font-black uppercase">{printVoucher.status}</span></div>
             </div>
-            <div className="space-y-4">
-              <div className="flex justify-between border-b pb-2"><span className="font-bold">Name:</span> <span className="uppercase">{employees.find(e => e.id === printVoucher.employeeId)?.name}</span></div>
-              <div className="flex justify-between border-b pb-2"><span className="font-bold">Emp ID:</span> <span className="font-mono">{employees.find(e => e.id === printVoucher.employeeId)?.employeeId}</span></div>
+            <div className="space-y-6">
+              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Employee Name:</span> <span className="font-black uppercase">{employees.find(e => e.id === printVoucher.employeeId)?.name}</span></div>
+              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Employee ID:</span> <span className="font-mono font-black">{employees.find(e => e.id === printVoucher.employeeId)?.employeeId}</span></div>
+              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Department:</span> <span className="font-black uppercase">{employees.find(e => e.id === printVoucher.employeeId)?.department}</span></div>
+              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Designation:</span> <span className="font-black uppercase">{employees.find(e => e.id === printVoucher.employeeId)?.designation}</span></div>
             </div>
           </div>
-          <div className="border-2 border-slate-900 p-6 mb-10 bg-slate-50">
-            <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Purpose of Advance</p>
-            <p className="text-lg font-bold italic">"{printVoucher.purpose}"</p>
+
+          <div className="border-4 border-slate-900 p-8 mb-12 bg-slate-50 rounded-lg">
+            <p className="text-[10px] font-black uppercase text-slate-500 mb-3 tracking-widest">Purpose of Advance disbursement</p>
+            <p className="text-xl font-bold italic leading-relaxed">"{printVoucher.purpose}"</p>
           </div>
-          <div className="flex justify-between items-center bg-slate-900 text-white p-6 rounded-sm mb-6">
-            <span className="font-black uppercase tracking-widest text-xs">Total Amount (In Words: {numberToIndianWords(printVoucher.amount)})</span>
-            <span className="text-3xl font-black">{formatCurrency(printVoucher.amount)}</span>
+
+          <div className="flex justify-between items-center bg-slate-900 text-white p-10 rounded-sm mb-10">
+            <div className="space-y-2">
+              <span className="font-black uppercase tracking-[0.2em] text-[10px] opacity-60">Total Amount Authorized</span>
+              <p className="text-sm font-bold italic text-primary">{numberToIndianWords(printVoucher.amount)}</p>
+            </div>
+            <span className="text-5xl font-black">{formatCurrency(printVoucher.amount)}</span>
           </div>
-          <div className="mt-20 grid grid-cols-3 gap-10 text-center">
-            <div className="pt-4 border-t-2 border-slate-900"><p className="text-[10px] font-black uppercase">Recipient Signature</p></div>
-            <div className="pt-4 border-t-2 border-slate-900"><p className="text-[10px] font-black uppercase">Prepared By</p></div>
-            <div className="pt-4 border-t-2 border-slate-900"><p className="text-[10px] font-black uppercase">Authorized Signatory</p></div>
+
+          <div className="mt-40 grid grid-cols-3 gap-16 text-center">
+            <div className="pt-6 border-t-4 border-slate-900"><p className="text-[10px] font-black uppercase tracking-widest mb-1">Recipient</p><p className="text-[9px] font-bold text-slate-400 italic">Employee Signature</p></div>
+            <div className="pt-6 border-t-4 border-slate-900"><p className="text-[10px] font-black uppercase tracking-widest mb-1">Accounts Dept</p><p className="text-[9px] font-bold text-slate-400 italic">Verified By</p></div>
+            <div className="pt-6 border-t-4 border-slate-900"><p className="text-[10px] font-black uppercase tracking-widest mb-1">Executive Mgmt</p><p className="text-[9px] font-bold text-slate-400 italic">Authorized Signatory</p></div>
+          </div>
+
+          <div className="mt-20 text-center opacity-30">
+            <p className="text-[8px] font-bold uppercase tracking-[0.5em]">Digitally Verified • SikkaTrack HRMS Enterprise</p>
           </div>
         </div>,
         document.body
@@ -504,3 +711,4 @@ export default function VouchersPage() {
     </TooltipProvider>
   );
 }
+
