@@ -207,18 +207,58 @@ export default function PayrollPage() {
       const empVouchers = paidVouchers
         .filter(v => v.employeeId === empId)
         .sort((a, b) => a.date.localeCompare(b.date));
-      const totalRecovery = payrollRecords
+      
+      const empPayroll = payrollRecords
         .filter(p => p.employeeId === employee.employeeId)
-        .reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
-      let remainingRecoveryPool = totalRecovery;
+        .sort((a, b) => (a.slipDate || "").localeCompare(b.slipDate || ""));
+
+      let remainingRecoveryPool = empPayroll.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+      let recoveryPoolForBreakdown = remainingRecoveryPool;
+      let slipPool = empPayroll.map(p => ({...p, remainingPool: p.advanceRecovery || 0}));
+
       const voucherBreakdown = empVouchers.map(v => {
-        const recoveryForThis = Math.min(v.amount, remainingRecoveryPool);
-        remainingRecoveryPool -= recoveryForThis;
-        return { ...v, recovered: recoveryForThis, remaining: v.amount - recoveryForThis };
+        let recoveredForThisVoucher = 0;
+        let lastSlipNo = "--";
+        let lastSlipDate = "--";
+        let lastSlipMonth = "--";
+        let remToRecover = v.amount;
+
+        for (let slip of slipPool) {
+          if (remToRecover <= 0) break;
+          if (slip.remainingPool > 0) {
+            const take = Math.min(remToRecover, slip.remainingPool);
+            slip.remainingPool -= take;
+            remToRecover -= take;
+            recoveredForThisVoucher += take;
+            lastSlipNo = slip.slipNo || "--";
+            lastSlipDate = slip.slipDate || "--";
+            lastSlipMonth = slip.month || "--";
+          }
+        }
+
+        return { 
+          ...v, 
+          recovered: recoveredForThisVoucher, 
+          remaining: v.amount - recoveredForThisVoucher,
+          slipNo: lastSlipNo,
+          slipDate: lastSlipDate,
+          slipMonth: lastSlipMonth
+        };
       });
+
       const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
-      return { id: employee.id, emp: employee, totalAdvAmount: totalAdv, totalRecoveryAmount: totalRecovery, totalRemainingAmount: Math.max(0, totalAdv - totalRecovery), vouchers: voucherBreakdown };
+      const totalRecovery = empPayroll.reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+
+      return { 
+        id: employee.id, 
+        emp: employee, 
+        totalAdvAmount: totalAdv, 
+        totalRecoveryAmount: totalRecovery, 
+        totalRemainingAmount: Math.max(0, totalAdv - totalRecovery), 
+        vouchers: voucherBreakdown 
+      };
     }).filter(Boolean).sort((a, b) => (b!.id || "").localeCompare(a!.id || ""));
+    
     return (ledger as any[]).filter(item => {
       const search = searchTerm.toLowerCase();
       return (item.emp.name.toLowerCase().includes(search) || item.emp.employeeId.toLowerCase().includes(search));
@@ -721,6 +761,81 @@ export default function PayrollPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Advance Salary Detailed View Dialog */}
+      <Dialog open={!!viewAdvanceEmployee} onOpenChange={(o) => { if (!o) setViewAdvanceEmployee(null); }}>
+        <DialogContent className="sm:max-w-6xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+          {viewAdvanceEmployee && (
+            <div className="flex flex-col max-h-[90vh]">
+              <DialogHeader className="p-8 bg-white border-b shrink-0 flex flex-row items-center justify-between">
+                <div className="flex gap-4 items-center">
+                  <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center border border-emerald-100">
+                    <Wallet className="w-7 h-7 text-emerald-600" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-2xl font-black text-slate-900 leading-none">
+                      {viewAdvanceEmployee.emp.name}
+                    </DialogTitle>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">
+                      {viewAdvanceEmployee.emp.employeeId} • {viewAdvanceEmployee.emp.department}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Total Outstanding</p>
+                  <Badge className="text-lg px-6 py-1 bg-rose-500 hover:bg-rose-600 rounded-xl shadow-lg shadow-rose-100">
+                    {formatCurrency(viewAdvanceEmployee.totalRemainingAmount)}
+                  </Badge>
+                </div>
+              </DialogHeader>
+
+              <div className="flex-1 overflow-hidden bg-slate-50/30">
+                <ScrollArea className="h-full w-full custom-blue-scrollbar">
+                  <div className="p-8">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <Table className="min-w-[1200px]">
+                        <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                          <TableRow>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 h-12">Employee Name</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Voucher No</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Voucher Date</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right h-12">Amount</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Salary Slip</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest h-12">Salary Month</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right text-primary h-12">Adjust Amount</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-6 text-rose-600 h-12">Remaining Balance</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {viewAdvanceEmployee.vouchers.map((v: any, idx: number) => (
+                            <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                              <TableCell className="px-6 py-4 font-bold text-slate-700 uppercase text-xs">{viewAdvanceEmployee.emp.name}</TableCell>
+                              <TableCell className="font-mono font-black text-primary text-xs tracking-tight">{v.voucherNo}</TableCell>
+                              <TableCell className="text-xs font-medium text-slate-500">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="text-right font-bold text-slate-900">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="font-mono font-bold text-slate-600 text-[10px]">{v.slipNo}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-50 px-2 py-0">{v.slipMonth}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-black text-primary">{formatCurrency(v.recovered)}</TableCell>
+                              <TableCell className="text-right pr-6 font-black text-rose-600">{formatCurrency(v.remaining)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                  <ScrollBar orientation="horizontal" className="bg-slate-100" />
+                </ScrollArea>
+              </div>
+
+              <DialogFooter className="p-6 bg-white border-t flex justify-end shrink-0">
+                <Button variant="ghost" className="h-12 px-12 font-bold text-slate-500 hover:bg-slate-100 rounded-xl" onClick={() => setViewAdvanceEmployee(null)}>Close Ledger</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Adjust Leave Dialog */}
       <Dialog open={!!adjustLeaveEmp} onOpenChange={(o) => { if (!o) setAdjustLeaveEmp(null); }}>
