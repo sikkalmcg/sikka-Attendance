@@ -29,7 +29,10 @@ import {
   ChevronRight,
   FileSpreadsheet,
   X,
-  History
+  History,
+  ArrowRightCircle,
+  Filter,
+  CheckCircle2
 } from "lucide-react";
 import { 
   Tooltip,
@@ -40,7 +43,7 @@ import {
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isBefore, startOfMonth } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +64,24 @@ import {
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const PROJECT_START_DATE_STR = "2026-04-01";
+const PROJECT_START_DATE = new Date(2026, 3, 1);
+
+const generateVoucherMonths = () => {
+  const options = [];
+  const date = new Date();
+  
+  for (let i = 0; i < 120; i++) {
+    const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+    if (isBefore(d, startOfMonth(PROJECT_START_DATE))) break;
+    
+    const mmm = d.toLocaleString('en-US', { month: 'short' });
+    const yy = d.getFullYear().toString().slice(-2);
+    options.push(`${mmm}-${yy}`);
+  }
+  return options;
+};
+
+const VOUCHER_MONTHS = generateVoucherMonths();
 
 export default function VouchersPage() {
   const { employees, firms, plants, vouchers, payrollRecords, addRecord, updateRecord, deleteRecord } = useData();
@@ -75,8 +96,12 @@ export default function VouchersPage() {
   const { toast } = useToast();
 
   const [pendingPage, setPendingPage] = useState(1);
-  const [paymentPage, setPaymentPage] = useState(1);
-  const rowsPerPage = 15;
+  const [payablePage, setPayablePage] = useState(1);
+  const [paidPage, setPaidPage] = useState(1);
+  const rowsPerPage = 10;
+
+  const [paidFromMonth, setPaidFromMonth] = useState("");
+  const [paidToMonth, setPaidToMonth] = useState("");
 
   const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
   const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
@@ -97,6 +122,10 @@ export default function VouchersPage() {
     setVoucherDate(today < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : today);
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
+    
+    const initialMonth = VOUCHER_MONTHS[0] || "";
+    setPaidFromMonth(initialMonth);
+    setPaidToMonth(initialMonth);
   }, []);
 
   const voucherNo = useMemo(() => {
@@ -135,23 +164,17 @@ export default function VouchersPage() {
       }).reverse();
   }, [vouchers, searchTerm, employees]);
 
-  const vouchersWithRecovery = useMemo(() => {
+  const voucherRecoveryLedger = useMemo(() => {
     if (!isMounted) return [];
     
-    const vouchersByEmp: Record<string, any[]> = {};
-    [...vouchers]
-      .filter(v => v.date >= PROJECT_START_DATE_STR)
-      .sort((a,b) => a.date.localeCompare(b.date)).forEach(v => {
-        if (v.status === 'PAID') {
-          if (!vouchersByEmp[v.employeeId]) vouchersByEmp[v.employeeId] = [];
-          vouchersByEmp[v.employeeId].push(v);
-        }
-      });
-
     const recoveryMap: Record<string, any> = {};
+    const empIds = Array.from(new Set(vouchers.map(v => v.employeeId)));
 
-    Object.keys(vouchersByEmp).forEach(empId => {
-      const empVouchers = vouchersByEmp[empId];
+    empIds.forEach(empId => {
+      const empVouchers = [...vouchers]
+        .filter(v => v.employeeId === empId && v.status === 'PAID')
+        .sort((a,b) => a.date.localeCompare(b.date));
+      
       const empObj = employees.find(e => e.id === empId);
       const empPayroll = payrollRecords
         .filter(p => p.employeeId === empObj?.employeeId)
@@ -194,17 +217,41 @@ export default function VouchersPage() {
       .map(v => ({
         ...v,
         recovery: recoveryMap[v.id] || { recovered: 0, remaining: v.amount, slipNo: "--", slipDate: "--", slipMonth: "--" }
-      }))
-      .filter(v => {
-        const emp = employees.find(e => e.id === v.employeeId);
-        const search = searchTerm.toLowerCase();
-        return (
-          v.voucherNo.toLowerCase().includes(search) ||
-          (emp?.name || "").toLowerCase().includes(search) ||
-          (emp?.employeeId || "").toLowerCase().includes(search)
-        );
-      }).reverse();
-  }, [vouchers, payrollRecords, employees, searchTerm, isMounted]);
+      }));
+  }, [vouchers, payrollRecords, employees, isMounted]);
+
+  const paymentTabLists = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    
+    const allRelevant = voucherRecoveryLedger.filter(v => {
+      const emp = employees.find(e => e.id === v.employeeId);
+      return (
+        v.voucherNo.toLowerCase().includes(search) ||
+        (emp?.name || "").toLowerCase().includes(search) ||
+        (emp?.employeeId || "").toLowerCase().includes(search)
+      );
+    }).reverse();
+
+    const pending = allRelevant.filter(v => v.status === 'APPROVED');
+    
+    // Paid History Filtering
+    const monthOrder = [...VOUCHER_MONTHS].reverse();
+    const fromIdx = monthOrder.indexOf(paidFromMonth);
+    const toIdx = monthOrder.indexOf(paidToMonth);
+
+    const paid = allRelevant.filter(v => {
+      if (v.status !== 'PAID') return false;
+      const d = parseISO(v.date);
+      const mmm = d.toLocaleString('en-US', { month: 'short' });
+      const yy = d.getFullYear().toString().slice(-2);
+      const voucherMonth = `${mmm}-${yy}`;
+      const vIdx = monthOrder.indexOf(voucherMonth);
+      
+      return fromIdx !== -1 && toIdx !== -1 && vIdx >= fromIdx && vIdx <= toIdx;
+    });
+
+    return { pending, paid };
+  }, [voucherRecoveryLedger, searchTerm, employees, paidFromMonth, paidToMonth]);
 
   const paginatedPending = useMemo(() => {
     const start = (pendingPage - 1) * rowsPerPage;
@@ -212,12 +259,18 @@ export default function VouchersPage() {
   }, [filteredPendingVouchers, pendingPage]);
 
   const paginatedPayable = useMemo(() => {
-    const start = (paymentPage - 1) * rowsPerPage;
-    return vouchersWithRecovery.slice(start, start + rowsPerPage);
-  }, [vouchersWithRecovery, paymentPage]);
+    const start = (payablePage - 1) * rowsPerPage;
+    return paymentTabLists.pending.slice(start, start + rowsPerPage);
+  }, [paymentTabLists.pending, payablePage]);
+
+  const paginatedPaid = useMemo(() => {
+    const start = (paidPage - 1) * rowsPerPage;
+    return paymentTabLists.paid.slice(start, start + rowsPerPage);
+  }, [paymentTabLists.paid, paidPage]);
 
   const totalPendingPages = Math.ceil(filteredPendingVouchers.length / rowsPerPage);
-  const totalPaymentPages = Math.ceil(vouchersWithRecovery.length / rowsPerPage);
+  const totalPayablePages = Math.ceil(paymentTabLists.pending.length / rowsPerPage);
+  const totalPaidPages = Math.ceil(paymentTabLists.paid.length / rowsPerPage);
 
   const handleCreateVoucher = (e: React.FormEvent) => {
     e.preventDefault();
@@ -315,7 +368,7 @@ export default function VouchersPage() {
     const originalTitle = document.title;
     document.title = v.voucherNo || "Voucher_Slip";
     setPrintVoucher(v);
-    toast({ title: "One-Click Download", description: "Generating document for PDF export..." });
+    toast({ title: "Document Ready", description: "Preparing Voucher for A4 Print..." });
     
     setTimeout(() => {
       window.focus();
@@ -325,36 +378,27 @@ export default function VouchersPage() {
     }, 500);
   };
 
-  const handleExportVouchersExcel = () => {
-    if (vouchersWithRecovery.length === 0) {
-      toast({ variant: "destructive", title: "No Data", description: "No records to export in the current selection." });
+  const handleExportPaidExcel = () => {
+    const data = paymentTabLists.paid;
+    if (data.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No paid records for selected range." });
       return;
     }
 
     const headers = [
-      "Voucher No", "Employee Name", "Employee ID", "Voucher Date", "Amount",
-      "Recovery Amount", "Remaining Balance", "Recovery Slip No", "Recovery Slip Date", "Recovery Month",
-      "Status", "Payment Mode", "Ref No"
+      "Voucher No", "Employee Name", "Employee ID", "Date", "Amount",
+      "Recovery Amt", "Balance", "Recovery Slip", "Slip Date", "Slip Month",
+      "Payment Mode", "Reference"
     ];
 
     const csvRows = [
       headers.join(","),
-      ...vouchersWithRecovery.map(v => {
+      ...data.map(v => {
         const emp = employees.find(e => e.id === v.employeeId);
         return [
-          `"${v.voucherNo}"`,
-          `"${emp?.name || ''}"`,
-          `"${emp?.employeeId || ''}"`,
-          `"${v.date || ''}"`,
-          `"${v.amount}"`,
-          `"${v.recovery.recovered}"`,
-          `"${v.recovery.remaining}"`,
-          `"${v.recovery.slipNo}"`,
-          `"${v.recovery.slipDate}"`,
-          `"${v.recovery.slipMonth}"`,
-          `"${v.status}"`,
-          `"${v.paymentMode || ''}"`,
-          `"${v.paymentReference || ''}"`
+          `"${v.voucherNo}"`, `"${emp?.name}"`, `"${emp?.employeeId}"`, `"${v.date}"`, v.amount,
+          v.recovery.recovered, v.recovery.remaining, `"${v.recovery.slipNo}"`, `"${v.recovery.slipDate}"`, `"${v.recovery.slipMonth}"`,
+          `"${v.paymentMode || ''}"`, `"${v.paymentReference || ''}"`
         ].join(",");
       })
     ];
@@ -363,12 +407,11 @@ export default function VouchersPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Voucher_Audit_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `Paid_Vouchers_${paidFromMonth}_to_${paidToMonth}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    toast({ title: "Export Success", description: "The voucher audit report has been exported." });
+    toast({ title: "Export Success" });
   };
 
   if (!isMounted) return null;
@@ -449,81 +492,46 @@ export default function VouchersPage() {
                     <div className="p-2 bg-amber-50 rounded-lg"><FileCheck className="w-5 h-5 text-amber-600" /></div>
                     <CardTitle className="text-lg">Pending Approvals</CardTitle>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-80">
-                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPendingPage(1); }} />
-                    </div>
+                  <div className="relative w-80">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPendingPage(1); }} />
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
                       <TableHead className="font-bold">Voucher No</TableHead>
                       <TableHead className="font-bold">Employee Name</TableHead>
                       <TableHead className="font-bold">Dept / Designation</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold">Amount</TableHead>
-                      <TableHead className="font-bold text-primary">Created By</TableHead>
                       <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedPending.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending vouchers (Project Start: April-2026).</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No pending requests found.</TableCell></TableRow>
                     ) : (
                       paginatedPending.map((v) => {
                         const emp = employees.find(e => e.id === v.employeeId);
                         return (
                           <TableRow key={v.id} className="hover:bg-slate-50/50">
-                            <TableCell>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</span>
-                                </TooltipTrigger>
-                                <TooltipContent>Preview Voucher</TooltipContent>
-                              </Tooltip>
-                            </TableCell>
+                            <TableCell className="font-mono font-bold text-primary">{v.voucherNo}</TableCell>
                             <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="text-sm font-bold leading-tight">{emp?.department || "--"}</span>
-                                <span className="text-[10px] text-muted-foreground">{emp?.designation || "--"}</span>
+                                <span className="text-sm font-bold text-slate-600">{emp?.department || "--"}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation || "--"}</span>
                               </div>
                             </TableCell>
                             <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
                             <TableCell className="font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
-                            <TableCell className="text-xs font-bold text-primary">{v.createdByName}</TableCell>
                             <TableCell className="text-right pr-6">
                               <div className="flex justify-end gap-2">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button size="sm" variant="outline" className="h-8 text-xs font-bold px-3 gap-1.5" onClick={() => handleDownloadPDF(v)}>
-                                      <Download className="w-3 h-3" /> Download
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Quick Download (PDF)</TooltipContent>
-                                </Tooltip>
-
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleApproveVoucher(v)}>
-                                      <CheckCircle className="w-3 h-3 mr-1.5" /> Approve
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Approve Advance Request</TooltipContent>
-                                </Tooltip>
-
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 text-xs font-bold px-3" onClick={() => setVoucherToReject(v.id)}>
-                                      <XCircle className="w-3 h-3 mr-1.5" /> Reject
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Cancel Request</TooltipContent>
-                                </Tooltip>
+                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 font-bold" onClick={() => handleApproveVoucher(v)}>Approve</Button>
+                                <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 h-8 font-bold" onClick={() => setVoucherToReject(v.id)}>Reject</Button>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -535,109 +543,58 @@ export default function VouchersPage() {
               </CardContent>
               {totalPendingPages > 1 && (
                 <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                  <div className="text-xs font-bold text-muted-foreground">Showing {((pendingPage - 1) * rowsPerPage) + 1} - {Math.min(pendingPage * rowsPerPage, filteredPendingVouchers.length)} of {filteredPendingVouchers.length}</div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled={pendingPage === 1} onClick={() => setPendingPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
-                    <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {pendingPage} of {totalPendingPages}</div>
-                    <Button variant="outline" size="sm" disabled={pendingPage === totalPendingPages} onClick={() => setPendingPage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                    <Button variant="outline" size="sm" disabled={pendingPage === 1} onClick={() => setPendingPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /> Previous</Button>
+                    <Button variant="outline" size="sm" disabled={pendingPage === totalPendingPages} onClick={() => setPendingPage(p => p + 1)}>Next <ChevronRight className="w-4 h-4" /></Button>
                   </div>
+                  <span className="text-xs font-bold text-muted-foreground">Page {pendingPage} of {totalPendingPages}</span>
                 </CardFooter>
               )}
             </Card>
           </TabsContent>
 
-          <TabsContent value="payment">
+          <TabsContent value="payment" className="space-y-12">
             <Card className="shadow-sm border-slate-200 overflow-hidden">
               <CardHeader className="bg-slate-50/50 border-b p-6">
-                <div className="flex flex-col lg:flex-row items-center gap-4">
-                  <div className="relative flex-1 w-full">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="Search by Slip No, Name or ID..." 
-                      className="pl-10 h-10 bg-white"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg"><CreditCard className="w-5 h-5 text-primary" /></div>
+                    <CardTitle className="text-lg">Ready for Payment (Approved)</CardTitle>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    className="gap-2 font-bold h-10 bg-white border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all w-full lg:w-auto"
-                    onClick={handleExportVouchersExcel}
-                  >
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    Export Excel
-                  </Button>
+                  <div className="relative w-80">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPayablePage(1); }} />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="w-full">
-                  <Table className="min-w-[1800px]">
+                  <Table className="min-w-[1300px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-bold">Voucher No</TableHead>
                         <TableHead className="font-bold">Employee Name</TableHead>
-                        <TableHead className="font-bold">Voucher Date</TableHead>
-                        <TableHead className="font-bold text-right">Voucher Amt</TableHead>
-                        <TableHead className="font-bold text-right text-primary">Recovery Amt</TableHead>
-                        <TableHead className="font-bold text-right text-rose-600">Remaining Bal</TableHead>
-                        <TableHead className="font-bold">Recovery Slip No</TableHead>
-                        <TableHead className="font-bold">Recovery Date</TableHead>
-                        <TableHead className="font-bold">Recovery Month</TableHead>
-                        <TableHead className="font-bold text-center">Status</TableHead>
+                        <TableHead className="font-bold">Date</TableHead>
+                        <TableHead className="font-bold text-right">Amount</TableHead>
                         <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {paginatedPayable.length === 0 ? (
-                        <TableRow><TableCell colSpan={11} className="text-center py-12 text-muted-foreground">No vouchers found in ledger.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground font-medium">No approved vouchers pending payment.</TableCell></TableRow>
                       ) : (
                         paginatedPayable.map((v) => {
                           const emp = employees.find(e => e.id === v.employeeId);
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50">
-                              <TableCell>
-                                <span className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</span>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-col">
-                                  <span className="font-bold uppercase">{emp?.name || "..."}</span>
-                                  <span className="text-[10px] font-mono text-slate-400">{emp?.employeeId}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-xs font-medium">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
-                              <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
-                              <TableCell className="text-right font-black text-primary">{formatCurrency(v.recovery.recovered)}</TableCell>
-                              <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.recovery.remaining)}</TableCell>
-                              <TableCell>
-                                <span className="text-[10px] font-mono font-black text-slate-600">{v.recovery.slipNo}</span>
-                              </TableCell>
-                              <TableCell className="text-[10px] font-medium text-slate-500">
-                                {v.recovery.slipDate !== "--" ? format(parseISO(v.recovery.slipDate), 'dd-MMM-yyyy') : "--"}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-slate-50">{v.recovery.slipMonth}</Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge variant={v.status === "PAID" ? "default" : "secondary"} className={cn(v.status === "PAID" ? "bg-emerald-600" : "bg-blue-500 text-white border-none text-[10px] font-bold")}>
-                                  {v.status}
-                                </Badge>
-                              </TableCell>
+                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-bold uppercase">{emp?.name || "..."}</TableCell>
+                              <TableCell className="text-sm">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                              <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end gap-2">
-                                  {v.status === "APPROVED" ? (
-                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-bold px-4" onClick={() => handleOpenPayDialog(v)}>
-                                      Pay
-                                    </Button>
-                                  ) : (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button size="sm" variant="ghost" className="h-8 w-8 rounded-full" onClick={() => handleDownloadPDF(v)}>
-                                          <Download className="w-4 h-4 text-slate-400" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Download Voucher</TooltipContent>
-                                    </Tooltip>
-                                  )}
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 font-bold" onClick={() => handleOpenPayDialog(v)}>Process Pay</Button>
+                                  <Button size="sm" variant="outline" className="h-8 font-bold gap-1.5" onClick={() => handleDownloadPDF(v)}><Download className="w-3.5 h-3.5" /> PDF</Button>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -649,17 +606,141 @@ export default function VouchersPage() {
                   <ScrollBar orientation="horizontal" />
                 </ScrollArea>
               </CardContent>
-              {totalPaymentPages > 1 && (
+              {totalPayablePages > 1 && (
                 <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-                  <div className="text-xs font-bold text-muted-foreground">Showing {((paymentPage - 1) * rowsPerPage) + 1} - {Math.min(paymentPage * rowsPerPage, vouchersWithRecovery.length)} of {vouchersWithRecovery.length}</div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" disabled={paymentPage === 1} onClick={() => setPaymentPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
-                    <div className="text-xs font-black px-4 bg-white h-8 flex items-center rounded-lg border">Page {paymentPage} of {totalPaymentPages}</div>
-                    <Button variant="outline" size="sm" disabled={paymentPage === totalPaymentPages} onClick={() => setPaymentPage(p => p + 1)}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                    <Button variant="outline" size="sm" disabled={payablePage === 1} onClick={() => setPayablePage(p => p - 1)}><ChevronLeft className="w-4 h-4" /> Previous</Button>
+                    <Button variant="outline" size="sm" disabled={payablePage === totalPayablePages} onClick={() => setPayablePage(p => p + 1)}>Next <ChevronRight className="w-4 h-4" /></Button>
                   </div>
+                  <span className="text-xs font-bold text-muted-foreground">Page {payablePage} of {totalPayablePages}</span>
                 </CardFooter>
               )}
             </Card>
+
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-1">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-emerald-100 rounded-lg">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Paid Vouchers (History)</h3>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
+                    <Label className="text-[9px] font-black uppercase text-slate-400">FROM</Label>
+                    <Select value={paidFromMonth} onValueChange={(val) => {
+                      setPaidFromMonth(val);
+                      const monthOrder = [...VOUCHER_MONTHS].reverse();
+                      if (monthOrder.indexOf(paidToMonth) < monthOrder.indexOf(val)) setPaidToMonth(val);
+                    }}>
+                      <SelectTrigger className="h-7 w-24 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0 shadow-none"><SelectValue /></SelectTrigger>
+                      <SelectContent>{VOUCHER_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <div className="w-px h-4 bg-slate-200 mx-1" />
+                    <Label className="text-[9px] font-black uppercase text-slate-400">TO</Label>
+                    <Select value={paidToMonth} onValueChange={(val) => {
+                      const monthOrder = [...VOUCHER_MONTHS].reverse();
+                      if (monthOrder.indexOf(val) < monthOrder.indexOf(paidFromMonth)) {
+                        toast({ variant: "destructive", title: "Range Error", description: "To Month cannot be earlier than From Month." });
+                        return;
+                      }
+                      setPaidToMonth(val);
+                    }}>
+                      <SelectTrigger className="h-7 w-24 border-none bg-transparent text-[10px] font-bold p-0 focus:ring-0 shadow-none"><SelectValue /></SelectTrigger>
+                      <SelectContent>{VOUCHER_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={handleExportPaidExcel}>
+                    <FileSpreadsheet className="w-4 h-4" /> Export Excel
+                  </Button>
+                </div>
+              </div>
+
+              <Card className="border-none shadow-sm overflow-hidden bg-slate-50/30">
+                <CardContent className="p-0">
+                  <ScrollArea className="w-full">
+                    <Table className="min-w-[1800px]">
+                      <TableHeader className="bg-slate-100/50">
+                        <TableRow>
+                          <TableHead className="font-bold">Voucher No</TableHead>
+                          <TableHead className="font-bold">Employee Name</TableHead>
+                          <TableHead className="font-bold">Voucher Date</TableHead>
+                          <TableHead className="font-bold text-right">Amount</TableHead>
+                          <TableHead className="font-bold text-right text-primary">Recovered</TableHead>
+                          <TableHead className="font-bold text-right text-rose-600">Remaining</TableHead>
+                          <TableHead className="font-bold">Recovery Slip</TableHead>
+                          <TableHead className="font-bold">Payment Mode</TableHead>
+                          <TableHead className="font-bold">Reference</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedPaid.length === 0 ? (
+                          <TableRow><TableCell colSpan={9} className="text-center py-16 text-muted-foreground italic">No settled vouchers for the selected range.</TableCell></TableRow>
+                        ) : (
+                          paginatedPaid.map((v) => {
+                            const emp = employees.find(e => e.id === v.employeeId);
+                            return (
+                              <TableRow key={v.id} className="hover:bg-white/50 transition-colors opacity-90 hover:opacity-100">
+                                <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => { setPreviewVoucher(v); setIsPreviewOpen(true); }}>{v.voucherNo}</TableCell>
+                                <TableCell className="font-bold uppercase text-slate-600">{emp?.name}</TableCell>
+                                <TableCell className="text-xs">{v.date ? format(parseISO(v.date), 'dd-MMM-yyyy') : "--"}</TableCell>
+                                <TableCell className="text-right font-bold">{formatCurrency(v.amount)}</TableCell>
+                                <TableCell className="text-right font-black text-primary">{formatCurrency(v.recovery.recovered)}</TableCell>
+                                <TableCell className="text-right font-black text-rose-600">{formatCurrency(v.recovery.remaining)}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col">
+                                    <span className="text-[10px] font-mono font-black text-slate-500">{v.recovery.slipNo}</span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{v.recovery.slipMonth}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell><Badge variant="outline" className="text-[10px] font-bold uppercase">{v.paymentMode || "---"}</Badge></TableCell>
+                                <TableCell className="font-mono text-[10px] text-slate-400">{v.paymentReference || "---"}</TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
+                </CardContent>
+                {totalPaidPages > 1 && (
+                  <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" disabled={paidPage === 1} onClick={() => setPaidPage(p => p - 1)} className="font-bold h-9">
+                        <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                      </Button>
+                      <Button variant="outline" size="sm" disabled={paidPage === totalPaidPages} onClick={() => setPaidPage(p => p + 1)} className="font-bold h-9">
+                        Next <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                        Page {paidPage} of {totalPaidPages}
+                      </span>
+                      <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
+                        <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
+                        <div className="flex gap-1">
+                          <Input 
+                            type="number" 
+                            className="w-14 h-9 text-center font-bold" 
+                            value={paidPage} 
+                            onChange={(e) => {
+                              const p = parseInt(e.target.value);
+                              if (p >= 1 && p <= totalPaidPages) setPaidPage(p);
+                            }} 
+                          />
+                          <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white">
+                            <ArrowRightCircle className="w-4 h-4" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardFooter>
+                )}
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -690,36 +771,22 @@ export default function VouchersPage() {
                 </div>
               </div>
             </DialogHeader>
-            <div className="py-4 space-y-0 divide-y divide-slate-100">
+            <div className="py-4 divide-y divide-slate-100">
               <div className="grid grid-cols-2">
                 <div className="p-6 space-y-2 border-r border-slate-100">
                   <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Paid Amount (INR)</Label>
-                  <Input 
-                    type="number" 
-                    value={payAmount} 
-                    onChange={(e) => setPayAmount(e.target.value)} 
-                    className="h-12 bg-white border-slate-200 font-black text-lg text-emerald-600 focus-visible:ring-emerald-500" 
-                  />
+                  <Input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="h-12 bg-white border-slate-200 font-black text-lg text-emerald-600" />
                 </div>
                 <div className="p-6 space-y-2">
                   <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Date</Label>
-                  <Input 
-                    type="date" 
-                    value={payDate} 
-                    onChange={(e) => setPayDate(e.target.value)} 
-                    className="h-12 bg-white border-slate-200 font-bold" 
-                    min={PROJECT_START_DATE_STR}
-                  />
+                  <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="h-12 bg-white border-slate-200 font-bold" min={PROJECT_START_DATE_STR} />
                 </div>
               </div>
-
               <div className="grid grid-cols-2">
                 <div className="p-6 space-y-2 border-r border-slate-100">
                   <Label className="font-black text-[10px] uppercase text-slate-500 tracking-wider">Payment Mode</Label>
                   <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
-                    <SelectTrigger className="h-12 bg-white border-slate-200 font-bold">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-12 bg-white border-slate-200 font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="CASH">Cash</SelectItem>
                       <SelectItem value="BANKING">Banking</SelectItem>
@@ -727,30 +794,14 @@ export default function VouchersPage() {
                   </Select>
                 </div>
                 <div className="p-6 space-y-2">
-                  <Label className={cn(
-                    "font-black text-[10px] uppercase text-slate-500 tracking-wider transition-opacity",
-                    payMode !== 'BANKING' && "opacity-30"
-                  )}>
-                    Reference Number
-                  </Label>
-                  <Input 
-                    placeholder={payMode === 'BANKING' ? "UTR / Trans ID" : "N/A"}
-                    disabled={payMode !== 'BANKING'}
-                    value={payRef} 
-                    onChange={(e) => setPayRef(e.target.value)} 
-                    className="h-12 bg-white border-slate-200 font-bold disabled:bg-slate-100 disabled:text-slate-400" 
-                  />
+                  <Label className={cn("font-black text-[10px] uppercase text-slate-500 tracking-wider", payMode !== 'BANKING' && "opacity-30")}>Reference Number</Label>
+                  <Input placeholder={payMode === 'BANKING' ? "UTR / Trans ID" : "N/A"} disabled={payMode !== 'BANKING'} value={payRef} onChange={(e) => setPayRef(e.target.value)} className="h-12 bg-white border-slate-200 font-bold" />
                 </div>
               </div>
             </div>
             <DialogFooter className="gap-2 border-t pt-4">
               <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="rounded-xl font-bold h-11">Cancel</Button>
-              <Button 
-                onClick={handleConfirmPayment} 
-                className="h-11 px-8 bg-emerald-600 hover:bg-emerald-700 font-black rounded-xl shadow-lg shadow-emerald-100"
-              >
-                Confirm & Mark Paid
-              </Button>
+              <Button onClick={handleConfirmPayment} className="h-11 px-8 bg-emerald-600 hover:bg-emerald-700 font-black rounded-xl">Confirm & Mark Paid</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -759,24 +810,14 @@ export default function VouchersPage() {
           <DialogContent className="sm:max-w-5xl h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
             <DialogHeader className="p-6 border-b bg-white flex flex-row items-center justify-between shrink-0 z-10">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Eye className="w-5 h-5 text-primary" />
-                </div>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Eye className="w-5 h-5 text-primary" /></div>
                 <DialogTitle className="text-xl font-black text-slate-900 tracking-tight">Voucher Preview</DialogTitle>
               </div>
               <div className="flex items-center gap-3 mr-8">
-                <Button 
-                  className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl shadow-lg shadow-primary/20" 
-                  onClick={() => handleDownloadPDF(previewVoucher!)}
-                >
-                  <Download className="w-5 h-5" /> Download PDF
-                </Button>
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setIsPreviewOpen(false)}>
-                  <X className="h-5 h-5" />
-                </Button>
+                <Button className="bg-primary hover:bg-primary/90 font-black gap-2 px-8 h-12 rounded-xl" onClick={() => handleDownloadPDF(previewVoucher!)}><Download className="w-5 h-5" /> Download PDF</Button>
+                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 hover:bg-slate-100" onClick={() => setIsPreviewOpen(false)}><X className="h-5 h-5" /></Button>
               </div>
             </DialogHeader>
-            
             <ScrollArea className="flex-1 bg-slate-50/50 p-4 sm:p-10 custom-blue-scrollbar">
               <div className="max-w-[210mm] mx-auto bg-white shadow-2xl p-8 min-h-[297mm] border-4 border-slate-900 rounded-sm">
                 {previewVoucher && <AdvanceVoucherContent voucher={previewVoucher} employees={employees} firms={firms} plants={plants} />}
@@ -837,7 +878,6 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
               <span className="font-black text-slate-900 text-base leading-none whitespace-nowrap">{formattedDate}</span>
             </div>
           </div>
-          
           <div className="space-y-1 pt-2 border-t border-slate-100">
             <div className="flex justify-end gap-3 text-[9px] items-baseline">
               <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">CREATED BY:</span>
@@ -867,9 +907,7 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
         </div>
         <div className="p-2 bg-slate-50 flex items-start gap-6 border-b-2 border-slate-900">
           <span className="font-black uppercase text-[9px] w-40 shrink-0 text-slate-500 pt-1 tracking-widest">Amount in Words:</span>
-          <span className="text-base font-bold italic underline decoration-slate-300 underline-offset-4 leading-relaxed">
-            {numberToIndianWords(voucher.amount)}
-          </span>
+          <span className="text-base font-bold italic underline decoration-slate-300 underline-offset-4 leading-relaxed">{numberToIndianWords(voucher.amount)}</span>
         </div>
         <div className="p-2 flex items-start gap-6 bg-white border-b-2 border-slate-900">
           <span className="font-black uppercase text-[9px] w-40 shrink-0 text-slate-500 pt-1 tracking-widest">Purpose:</span>
@@ -888,23 +926,14 @@ function AdvanceVoucherContent({ voucher, employees, firms, plants }: any) {
       </div>
 
       <div className="p-5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl italic text-[11px] text-center leading-relaxed text-slate-600 mt-4">
-        "I hereby acknowledge receipt of the aforementioned advance amount and expressly agree and undertake that the same shall be duly recovered and/or adjusted against my future salary, wages, or any other dues payable to me, in accordance with the applicable policies, rules, and regulations of the organization. I further confirm that this authorization is given voluntarily and shall be binding upon me."
+        "I hereby acknowledge receipt of the aforementioned advance amount and expressly agree and undertake that the same shall be duly recovered and/or adjusted against my future salary, wages, or any other dues payable to me, in accordance with the applicable policies, rules, and regulations of the organization."
       </div>
 
       <div className="flex justify-between items-end pt-16 px-10">
-        <div className="text-center space-y-2">
-          <div className="w-64 border-b-2 border-slate-900" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Receiver Signature</p>
-        </div>
-        <div className="text-center space-y-2">
-          <div className="w-64 border-b-2 border-slate-900" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Authorized Signatory</p>
-        </div>
+        <div className="text-center space-y-2"><div className="w-64 border-b-2 border-slate-900" /><p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Receiver Signature</p></div>
+        <div className="text-center space-y-2"><div className="w-64 border-b-2 border-slate-900" /><p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Authorized Signatory</p></div>
       </div>
-      
-      <div className="pt-8 text-center">
-        <p className="text-[8px] font-black uppercase tracking-[0.5em] text-slate-300 italic">© Sikka Industries & Logistics – Internal Secure Document</p>
-      </div>
+      <div className="pt-8 text-center"><p className="text-[8px] font-black uppercase tracking-[0.5em] text-slate-300 italic">© Sikka Industries & Logistics – Internal Secure Document</p></div>
     </div>
   );
 }
