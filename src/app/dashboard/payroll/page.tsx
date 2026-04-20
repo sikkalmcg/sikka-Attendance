@@ -1381,6 +1381,7 @@ function SalarySlipContent({ payroll, employees, firms, plants }: any) {
            <SlipRow label="HRA" value={formatCurrency(emp?.salary?.hra || 0)} />
            <SlipRow label="Incentive" value={formatCurrency(payroll.incentiveAmt || 0)} />
            <SlipRow label="Holiday Work" value={formatCurrency(payroll.holidayWorkAmt || 0)} />
+           <SlipRow label="Earning Days" value={payroll.totalEarningDays} />
          </div>
          <div>
            <SlipRow label="Advance Recovery" value={formatCurrency(payroll.advanceRecovery || 0)} />
