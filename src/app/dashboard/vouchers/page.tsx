@@ -235,11 +235,13 @@ export default function VouchersPage() {
   };
 
   const handleDownloadAndPrint = (v: Voucher) => {
+    if (!v) return;
     setPrintVoucher(v);
+    // Increased timeout for robust render capture
     setTimeout(() => {
       window.print();
       setPrintVoucher(null);
-    }, 500);
+    }, 800);
   };
 
   if (!isMounted) return null;
@@ -249,7 +251,7 @@ export default function VouchersPage() {
       <div className="space-y-6 print:hidden">
         <div>
           <h1 className="text-2xl font-bold">Advance Voucher System</h1>
-          <p className="text-muted-foreground">Manage employee advance payments and authorized disbursements.</p>
+          <p className="text-muted-foreground">Manage employee advance payments (Since April-2026).</p>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-xl grid-cols-3 mb-8 bg-slate-100 p-1 rounded-xl h-12">
@@ -530,11 +532,14 @@ export default function VouchersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Voucher Preview Modal - India Compliant Design */}
+      {/* Voucher Preview Modal */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-3xl border-none shadow-2xl flex flex-col">
           <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0}>
-            {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
+            <div className="p-0">
+              {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
+            </div>
+            <ScrollBar orientation="vertical" className="w-2.5 opacity-100" />
           </ScrollArea>
           
           <div className="p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden shrink-0">
@@ -561,7 +566,7 @@ export default function VouchersPage() {
             </div>
             <AlertDialogTitle className="text-center text-2xl font-black">Confirm Rejection</AlertDialogTitle>
             <AlertDialogDescription className="text-center text-slate-500 font-medium">
-              Are you sure you want to decline this advance request? This action will move the voucher to <strong>CANCELLED</strong> status and inform the applicant.
+              Are you sure you want to decline this advance request? This action will move the voucher to <strong>CANCELLED</strong> status.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
@@ -594,15 +599,12 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
       "font-calibri text-slate-900 bg-white",
       isPrintMode ? "p-0" : "p-12"
     )}>
-      {/* 1. Top Center Title Section */}
       <div className="text-center mb-8">
         <h1 className="text-4xl font-black uppercase tracking-[0.25em] border-b-4 border-slate-900 inline-block pb-1">Voucher</h1>
         <p className="text-sm font-bold text-slate-500 mt-2 uppercase tracking-widest">Payment Voucher / Advance Disbursement</p>
       </div>
 
-      {/* 2. Header Section */}
       <div className="grid grid-cols-2 gap-10 border-b-2 border-slate-200 pb-8 mb-8">
-        {/* Left Side: Firm Details */}
         <div className="space-y-4">
           <div className="flex items-center gap-4">
             {firm?.logo ? (
@@ -613,7 +615,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
               </div>
             )}
             <div>
-              <h2 className="text-xl font-black uppercase leading-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+              <h2 className="text-xl font-black uppercase leading-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h2>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter max-w-[280px]">{firm?.registeredAddress}</p>
             </div>
           </div>
@@ -629,7 +631,6 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
           </div>
         </div>
 
-        {/* Right Side: Voucher Metadata */}
         <div className="flex flex-col justify-end items-end space-y-3">
           <div className="text-right w-full max-w-[240px]">
             <div className="flex justify-between border-b border-slate-100 py-1">
@@ -642,7 +643,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
             </div>
             <div className="flex justify-between border-b border-slate-100 py-1">
               <span className="text-[10px] font-black text-slate-400 uppercase">Created By</span>
-              <span className="text-xs font-bold uppercase">{voucher.createdByName || "System"}</span>
+              <span className="text-xs font-bold uppercase">{voucher.createdByName || "Admin"}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 py-1">
               <span className="text-[10px] font-black text-slate-400 uppercase">Approved By</span>
@@ -652,7 +653,6 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* 3. Employee / Receiver Details Section */}
       <div className="mb-10">
         <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
           <UserIcon className="w-3 h-3" /> Receiver / Employee Information
@@ -675,14 +675,8 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
             <span className="text-sm font-black uppercase truncate">{emp?.designation || "---"}</span>
           </div>
         </div>
-        {emp?.aadhaar && (
-           <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 text-right tracking-widest italic">
-             Identity Verified via Aadhaar: **** **** {emp.aadhaar.slice(-4)}
-           </p>
-        )}
       </div>
 
-      {/* 4. Transaction Details */}
       <div className="space-y-8 mb-16">
         <div>
           <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Amount Authorized</h3>
@@ -710,7 +704,6 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* 5. Footer Section: Signatures */}
       <div className="grid grid-cols-2 gap-20 px-10 mb-16">
         <div className="text-center pt-10 border-t-2 border-dashed border-slate-300 space-y-2">
           <p className="text-xs font-black uppercase tracking-widest text-slate-800">Receiver's Signature</p>
@@ -722,21 +715,17 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* 6. Legal Note (India Context) */}
       <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
         <div className="flex gap-4 items-start">
           <ShieldCheck className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
           <p className="text-[9px] leading-relaxed text-slate-500 font-medium text-justify">
             <strong>COMPLIANCE NOTE:</strong> This voucher is issued for internal accounting purposes and complies with applicable provisions of the 
             <strong> Income Tax Act, 1961</strong> and <strong>Goods and Services Tax Act, 2017</strong>. All transactions recorded herein are subject 
-            to periodic audit and management verification. Any fraudulent claims or unauthorized use of this document will result in strict disciplinary 
-            and legal action. Aadhaar details, if recorded for verification, are handled in accordance with applicable data protection and privacy 
-            regulations of the Government of India.
+            to periodic audit and verification. Aadhaar details, if recorded, are handled in accordance with applicable data protection regulations.
           </p>
         </div>
       </div>
 
-      {/* 7. Footer Metadata */}
       <div className="mt-8 flex justify-between items-center text-[8px] font-black uppercase text-slate-300 tracking-[0.3em]">
         <span>Digitally Authenticated</span>
         <span>SikkaTrack HRMS Enterprise Node</span>

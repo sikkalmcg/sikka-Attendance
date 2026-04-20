@@ -39,28 +39,6 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217 91% 60%;
   }
-
-  .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217 91% 60%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-  }
 }
 
 @layer base {
@@ -74,42 +52,39 @@
     @apply font-headline;
   }
 
-  /* Calibri Typography Override for Payroll Slips */
   .font-calibri {
     font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', 'Arial', sans-serif;
   }
 
-  /* Global Scrollbar Styles - Blue Theme */
+  /* Global Scrollbar Styles - Always Visible and Blue */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
+    display: block !important;
   }
   ::-webkit-scrollbar-track {
     @apply bg-slate-100;
   }
   ::-webkit-scrollbar-thumb {
     @apply bg-primary rounded-full hover:bg-primary/80 transition-colors border-2 border-slate-100;
+    display: block !important;
   }
 
   /* Specialized scrollbar for popups/previews */
   .custom-blue-scrollbar [data-radix-scroll-area-thumb] {
     @apply bg-primary opacity-100 transition-colors !important;
     visibility: visible !important;
+    display: block !important;
   }
   
   .custom-blue-scrollbar [data-radix-scroll-area-scrollbar] {
     @apply bg-slate-100/80 opacity-100 border-slate-200 !important;
     visibility: visible !important;
+    display: flex !important;
   }
 
-  /* Vertical Specific */
   .custom-blue-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="vertical"] {
     @apply w-[10px] border-l !important;
-  }
-
-  /* Horizontal Specific */
-  .custom-blue-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="horizontal"] {
-    @apply h-[10px] border-t !important;
   }
 }
 
@@ -120,10 +95,9 @@
 }
 
 @media print {
-  /* Reset for printing */
   html, body {
-    height: 297mm !important;
-    overflow: hidden !important;
+    height: auto !important;
+    overflow: visible !important;
     background: white !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -132,18 +106,16 @@
     print-color-adjust: exact !important;
   }
 
-  /* Hide EVERYTHING except the direct-child print portal */
-  body > *:not(.print-only) {
+  /* Hide EVERYTHING including the Next.js root and portals */
+  body > * {
     display: none !important;
   }
 
-  /* Force print-only to be visible and occupy exactly one A4 page */
+  /* Force ONLY the print portal to be visible */
   body > .print-only {
     display: block !important;
     visibility: visible !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    position: relative !important;
     width: 210mm !important;
     height: 297mm !important;
     background: white !important;
