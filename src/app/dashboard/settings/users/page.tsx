@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -26,7 +25,8 @@ import {
   X,
   SearchIcon,
   Globe,
-  Users
+  Users,
+  Factory
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -67,14 +67,16 @@ const INITIAL_USER_STATE: Partial<User> = {
   password: "",
   role: "HR",
   permissions: ["Dashboard"],
+  plantIds: [], // Default to no plants
   status: "Active"
 };
 
 export default function UserManagementPage() {
-  const { users, addRecord, updateRecord, deleteRecord } = useData();
+  const { users, plants, addRecord, updateRecord, deleteRecord } = useData();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [permissionSearch, setPermissionSearch] = useState("");
+  const [plantSearch, setPlantSearch] = useState("");
   const [isMounted, setIsMounted] = useState(false);
 
   // Modal States
@@ -103,6 +105,10 @@ export default function UserManagementPage() {
   const filteredPermissions = useMemo(() => {
     return APP_PERMISSIONS.filter(p => p.toLowerCase().includes(permissionSearch.toLowerCase()));
   }, [permissionSearch]);
+
+  const filteredPlants = useMemo(() => {
+    return (plants || []).filter(p => p.name.toLowerCase().includes(plantSearch.toLowerCase()));
+  }, [plants, plantSearch]);
 
   const passwordStrength = useMemo(() => {
     const p = formData.password || "";
@@ -182,6 +188,7 @@ export default function UserManagementPage() {
         username: formData.username!,
         role: (formData.role as Role) || "HR",
         permissions: formData.permissions || ["Dashboard"],
+        plantIds: formData.plantIds || [],
         status: "Active"
       };
 
@@ -226,12 +233,24 @@ export default function UserManagementPage() {
     setFormData(p => ({ ...p, permissions: updated }));
   };
 
+  const togglePlantAccess = (plantId: string) => {
+    const current = formData.plantIds || [];
+    const updated = current.includes(plantId)
+      ? current.filter(id => id !== plantId)
+      : [...current, plantId];
+    setFormData(p => ({ ...p, plantIds: updated }));
+  };
+
   const selectAllPermissions = () => {
     setFormData(p => ({ ...p, permissions: ["Dashboard", ...APP_PERMISSIONS] }));
   };
 
   const clearAllPermissions = () => {
     setFormData(p => ({ ...p, permissions: ["Dashboard"] }));
+  };
+
+  const selectAllPlants = () => {
+    setFormData(p => ({ ...p, plantIds: (plants || []).map(pl => pl.id) }));
   };
 
   if (!isMounted) return null;
@@ -311,16 +330,16 @@ export default function UserManagementPage() {
 
       <Dialog open={isUserModalOpen} onOpenChange={(o) => { if (!o) setIsUserModalOpen(false); }}>
         <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
-          <DialogHeader className="p-8 pb-4 shrink-0 border-b bg-white z-10">
+          <DialogHeader className="p-3.5 shrink-0 border-b bg-white z-10">
             <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <DialogTitle className="text-2xl font-black flex items-center gap-3 text-slate-900">
-                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                    <ShieldCheck className="w-6 h-6 text-primary" />
+              <div className="space-y-0.5">
+                <DialogTitle className="text-xl font-black flex items-center gap-2.5 text-slate-900 leading-tight">
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
                   </div>
                   {editingUser ? `Edit Access: ${editingUser.fullName}` : "Create New Managed User"}
                 </DialogTitle>
-                <DialogDescription className="text-slate-500 font-medium">Define identity and assign modular page permissions.</DialogDescription>
+                <DialogDescription className="text-[11px] text-slate-500 font-medium ml-10.5">Define identity and assign modular page permissions.</DialogDescription>
               </div>
             </div>
           </DialogHeader>
@@ -388,6 +407,68 @@ export default function UserManagementPage() {
                   </div>
                 </div>
               )}
+
+              {/* Assign Plant Access Section */}
+              <div className="space-y-6 pt-8 border-t border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900 flex items-center gap-2">
+                      <Factory className="w-4 h-4 text-primary" /> Assign Plant Access
+                    </h3>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Restrict user to single or multiple logistics plants.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest rounded-lg" onClick={selectAllPlants} disabled={isProcessing}>Select All</Button>
+                    <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 rounded-lg" onClick={() => setFormData(p => ({...p, plantIds: []}))} disabled={isProcessing}>Clear</Button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <SearchIcon className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                  <Input 
+                    placeholder="Search plants by name..." 
+                    className="pl-12 h-14 bg-white border-slate-200 rounded-xl text-base shadow-sm focus-visible:ring-primary"
+                    value={plantSearch}
+                    onChange={(e) => setPlantSearch(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredPlants.map(plant => {
+                    const isSelected = formData.plantIds?.includes(plant.id);
+                    return (
+                      <div 
+                        key={plant.id}
+                        onClick={() => !isProcessing && togglePlantAccess(plant.id)}
+                        className={cn(
+                          "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
+                          isSelected 
+                            ? "bg-primary/5 border-primary shadow-sm" 
+                            : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
+                        )}
+                      >
+                        <Checkbox 
+                          id={`plant-${plant.id}`}
+                          checked={isSelected}
+                          onCheckedChange={() => togglePlantAccess(plant.id)}
+                          disabled={isProcessing}
+                          className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
+                        />
+                        <div className="flex-1">
+                          <Label 
+                            htmlFor={`plant-${plant.id}`} 
+                            className="text-sm font-bold text-slate-700 cursor-pointer block"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePlantAccess(plant.id); }}
+                          >
+                            {plant.name}
+                          </Label>
+                          <p className="text-[10px] text-muted-foreground uppercase font-medium">Authorized Node</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="space-y-6 pt-8 border-t border-slate-200">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -487,13 +568,13 @@ export default function UserManagementPage() {
             </div>
           </ScrollArea>
 
-          <DialogFooter className="p-8 bg-slate-50 border-t shrink-0 z-10">
-            <div className="flex justify-end gap-4 w-full">
-              <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-xl font-bold h-14 px-10 text-slate-500 hover:bg-slate-200">Cancel</Button>
+          <DialogFooter className="p-3.5 bg-slate-50 border-t shrink-0 z-10">
+            <div className="flex justify-end gap-3 w-full">
+              <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-lg font-bold h-11 px-8 text-slate-500 hover:bg-slate-200">Cancel</Button>
               <Button 
                 onClick={handleSaveUser} 
                 disabled={isProcessing}
-                className="bg-primary hover:bg-primary/90 rounded-xl font-black h-14 px-16 shadow-xl shadow-primary/30 text-lg"
+                className="bg-primary hover:bg-primary/90 rounded-lg font-black h-11 px-12 shadow-lg shadow-primary/20 text-sm"
               >
                 {isProcessing ? "Processing..." : editingUser ? "Save Changes" : "Create Secure User"}
               </Button>

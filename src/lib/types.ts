@@ -7,6 +7,7 @@ export interface User {
   role: Role;
   password?: string;
   permissions: string[];
+  plantIds?: string[]; // Added for granular plant-level access
   status: 'Active' | 'Inactive';
   avatar?: string;
 }
