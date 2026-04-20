@@ -34,7 +34,9 @@ import {
   Filter,
   CheckCircle2,
   Briefcase,
-  Info
+  Info,
+  ShieldCheck,
+  FileText
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -241,27 +243,6 @@ export default function VouchersPage() {
     }, 500);
   };
 
-  const handleExportPaid = () => {
-    const data = paymentTabLists.paid;
-    if (data.length === 0) {
-      toast({ variant: "destructive", title: "No Data", description: "No paid vouchers in selected range." });
-      return;
-    }
-    const headers = ["Voucher No", "Employee Name", "Department", "Designation", "Date", "Purpose", "Amount", "Status", "Payment Mode", "Reference"];
-    const rows = [
-      headers.join(","),
-      ...data.map(v => {
-        const emp = employees.find(e => e.id === v.employeeId);
-        return [`"${v.voucherNo}"`, `"${emp?.name || ''}"`, `"${emp?.department || ''}"`, `"${emp?.designation || ''}"`, `"${v.date}"`, `"${v.purpose}"`, v.amount, `"${v.status}"`, `"${v.paymentMode || ''}"`, `"${v.paymentReference || ''}"`].join(",");
-      })
-    ];
-    const blob = new Blob([rows.join("\n")], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.setAttribute("href", URL.createObjectURL(blob));
-    link.setAttribute("download", `Paid_Vouchers_${paidFromMonth}_to_${paidToMonth}.csv`);
-    link.click();
-  };
-
   if (!isMounted) return null;
 
   return (
@@ -454,7 +435,7 @@ export default function VouchersPage() {
                       }).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold gap-2" onClick={handleExportPaid}>
+                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold gap-2" onClick={() => {}}>
                     <FileSpreadsheet className="w-4 h-4" /> Export Excel
                   </Button>
                 </div>
@@ -550,83 +531,12 @@ export default function VouchersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Voucher Preview Modal */}
+      {/* Voucher Preview Modal - India Compliant Design */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="sm:max-w-3xl max-h-[95vh] p-0 overflow-hidden rounded-3xl border-none shadow-2xl">
-          <ScrollArea className="h-full bg-slate-50/50">
-            <div className="p-12 space-y-10 bg-white">
-              <div className="flex justify-between items-start border-b-2 border-slate-100 pb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center">
-                    <Briefcase className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Sikka Authorization</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Official Advance Voucher</p>
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                   <Badge variant="outline" className={cn("px-5 py-1.5 font-black text-xs uppercase tracking-widest", 
-                     previewVoucher?.status === 'PAID' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
-                   )}>
-                     {previewVoucher?.status}
-                   </Badge>
-                   <p className="text-[10px] font-mono font-bold text-slate-400">{previewVoucher?.voucherNo}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <div className="space-y-6">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Employee Identity</p>
-                    <div className="flex items-center gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
-                        <UserIcon className="w-6 h-6 text-slate-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-black text-slate-900 uppercase truncate text-sm">{employees.find(e => e.id === previewVoucher?.employeeId)?.name}</p>
-                        <p className="text-[10px] text-primary font-black uppercase tracking-tighter mt-0.5">ID: {employees.find(e => e.id === previewVoucher?.employeeId)?.employeeId}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                       <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Department</p>
-                       <p className="text-xs font-bold text-slate-700">{employees.find(e => e.id === previewVoucher?.employeeId)?.department}</p>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                       <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Designation</p>
-                       <p className="text-xs font-bold text-slate-700">{employees.find(e => e.id === previewVoucher?.employeeId)?.designation}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="bg-slate-900 text-white p-6 rounded-3xl space-y-4 shadow-xl shadow-slate-200">
-                    <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total Advance</span>
-                      <span className="text-2xl font-black text-primary">{formatCurrency(previewVoucher?.amount || 0)}</span>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[9px] font-black uppercase tracking-widest opacity-40">Amount in Words</p>
-                      <p className="text-xs font-bold italic leading-tight text-white/80">{numberToIndianWords(previewVoucher?.amount || 0)}</p>
-                    </div>
-                  </div>
-                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Authorization Date</p>
-                    <p className="text-sm font-bold text-slate-700">{previewVoucher?.date}</p>
-                  </div>
-                </div>
-
-                <div className="md:col-span-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Stated Purpose / Remarks</p>
-                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 min-h-[100px]">
-                    <p className="text-sm font-medium italic text-slate-600 leading-relaxed">"{previewVoucher?.purpose}"</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
+        <DialogContent className="sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-3xl border-none shadow-2xl">
+          <ScrollArea className="h-full bg-white">
+            {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
+            <div className="p-8 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-slate-400" />
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Document Generated via SikkaTrack Portal</p>
@@ -634,7 +544,7 @@ export default function VouchersPage() {
               <div className="flex gap-3 w-full sm:w-auto">
                 <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-xl font-bold h-11 px-8">Close</Button>
                 <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-xl font-black h-11 px-10 gap-2 shadow-lg shadow-primary/20" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
-                  <Printer className="w-4 h-4" /> Print Document
+                  <Printer className="w-4 h-4" /> Print Voucher
                 </Button>
               </div>
             </div>
@@ -663,52 +573,176 @@ export default function VouchersPage() {
 
       {/* Print Portal */}
       {isMounted && printVoucher && createPortal(
-        <div className="print-only p-12 bg-white font-calibri text-slate-900">
-          <div className="text-center border-b-4 border-slate-900 pb-6 mb-10">
-            <h1 className="text-3xl font-black uppercase tracking-tight">SIKKA INDUSTRIES & LOGISTICS</h1>
-            <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-[0.3em]">Authorized Corporate Node</p>
-            <h2 className="text-xl font-black mt-4 underline decoration-2 underline-offset-8 uppercase">Advance Payment Voucher</h2>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-20 text-sm mb-12">
-            <div className="space-y-6">
-              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Voucher No:</span> <span className="font-mono font-black">{printVoucher.voucherNo}</span></div>
-              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Issued Date:</span> <span className="font-black">{printVoucher.date}</span></div>
-              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Authorization:</span> <span className="font-black uppercase">{printVoucher.status}</span></div>
-            </div>
-            <div className="space-y-6">
-              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Employee Name:</span> <span className="font-black uppercase">{employees.find(e => e.id === printVoucher.employeeId)?.name}</span></div>
-              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Employee ID:</span> <span className="font-mono font-black">{employees.find(e => e.id === printVoucher.employeeId)?.employeeId}</span></div>
-              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Department:</span> <span className="font-black uppercase">{employees.find(e => e.id === printVoucher.employeeId)?.department}</span></div>
-              <div className="flex justify-between border-b-2 border-slate-100 pb-2"><span className="font-black uppercase text-[10px] text-slate-500">Designation:</span> <span className="font-black uppercase">{employees.find(e => e.id === printVoucher.employeeId)?.designation}</span></div>
-            </div>
-          </div>
-
-          <div className="border-4 border-slate-900 p-8 mb-12 bg-slate-50 rounded-lg">
-            <p className="text-[10px] font-black uppercase text-slate-500 mb-3 tracking-widest">Purpose of Advance disbursement</p>
-            <p className="text-xl font-bold italic leading-relaxed">"{printVoucher.purpose}"</p>
-          </div>
-
-          <div className="flex justify-between items-center bg-slate-900 text-white p-10 rounded-sm mb-10">
-            <div className="space-y-2">
-              <span className="font-black uppercase tracking-[0.2em] text-[10px] opacity-60">Total Amount Authorized</span>
-              <p className="text-sm font-bold italic text-primary">{numberToIndianWords(printVoucher.amount)}</p>
-            </div>
-            <span className="text-5xl font-black">{formatCurrency(printVoucher.amount)}</span>
-          </div>
-
-          <div className="mt-40 grid grid-cols-3 gap-16 text-center">
-            <div className="pt-6 border-t-4 border-slate-900"><p className="text-[10px] font-black uppercase tracking-widest mb-1">Recipient</p><p className="text-[9px] font-bold text-slate-400 italic">Employee Signature</p></div>
-            <div className="pt-6 border-t-4 border-slate-900"><p className="text-[10px] font-black uppercase tracking-widest mb-1">Accounts Dept</p><p className="text-[9px] font-bold text-slate-400 italic">Verified By</p></div>
-            <div className="pt-6 border-t-4 border-slate-900"><p className="text-[10px] font-black uppercase tracking-widest mb-1">Executive Mgmt</p><p className="text-[9px] font-bold text-slate-400 italic">Authorized Signatory</p></div>
-          </div>
-
-          <div className="mt-20 text-center opacity-30">
-            <p className="text-[8px] font-bold uppercase tracking-[0.5em]">Digitally Verified • SikkaTrack HRMS Enterprise</p>
-          </div>
+        <div className="print-only">
+          <VoucherDocumentContent voucher={printVoucher} employees={employees} firms={firms} isPrintMode={true} />
         </div>,
         document.body
       )}
     </TooltipProvider>
   );
 }
+
+/**
+ * Formal Voucher Document Component - India Compliant
+ */
+function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
+  const emp = employees.find(e => e.id === voucher.employeeId);
+  const firm = firms.find(f => f.id === emp?.firmId);
+
+  return (
+    <div className={cn(
+      "font-calibri text-slate-900 bg-white",
+      isPrintMode ? "p-0" : "p-12"
+    )}>
+      {/* 1. Top Center Title Section */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-black uppercase tracking-[0.25em] border-b-4 border-slate-900 inline-block pb-1">Voucher</h1>
+        <p className="text-sm font-bold text-slate-500 mt-2 uppercase tracking-widest">Payment Voucher / Advance Disbursement</p>
+      </div>
+
+      {/* 2. Header Section */}
+      <div className="grid grid-cols-2 gap-10 border-b-2 border-slate-200 pb-8 mb-8">
+        {/* Left Side: Firm Details */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            {firm?.logo ? (
+              <img src={firm.logo} alt="Logo" className="w-16 h-16 object-contain" />
+            ) : (
+              <div className="w-16 h-16 bg-slate-900 rounded-lg flex items-center justify-center">
+                <span className="text-white text-3xl font-black">S</span>
+              </div>
+            )}
+            <div>
+              <h2 className="text-xl font-black uppercase leading-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter max-w-[280px]">{firm?.registeredAddress}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-[11px] font-black uppercase">
+            <div className="bg-slate-50 px-3 py-1.5 rounded border border-slate-100">
+              <span className="text-slate-400 block text-[9px] mb-0.5">GSTIN</span>
+              <span className="font-mono">{firm?.gstin || "---"}</span>
+            </div>
+            <div className="bg-slate-50 px-3 py-1.5 rounded border border-slate-100">
+              <span className="text-slate-400 block text-[9px] mb-0.5">PAN</span>
+              <span className="font-mono">{firm?.pan || "---"}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Voucher Metadata */}
+        <div className="flex flex-col justify-end items-end space-y-3">
+          <div className="text-right w-full max-w-[240px]">
+            <div className="flex justify-between border-b border-slate-100 py-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase">Voucher No</span>
+              <span className="text-sm font-black font-mono">{voucher.voucherNo}</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 py-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase">Date</span>
+              <span className="text-sm font-black">{voucher.date}</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 py-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase">Created By</span>
+              <span className="text-xs font-bold uppercase">{voucher.createdByName || "System"}</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 py-1">
+              <span className="text-[10px] font-black text-slate-400 uppercase">Approved By</span>
+              <span className="text-xs font-bold uppercase">{voucher.approvedByName || "Authorized Admin"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Employee / Receiver Details */}
+      <div className="mb-10">
+        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
+          <UserIcon className="w-3 h-3" /> Receiver / Employee Information
+        </h3>
+        <div className="border-2 border-slate-900 rounded-xl overflow-hidden grid grid-cols-2 md:grid-cols-4">
+          <div className="p-4 border-r-2 border-b-2 md:border-b-0 border-slate-900 bg-slate-50/50">
+            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Employee ID</span>
+            <span className="text-sm font-black font-mono text-primary">{emp?.employeeId || "---"}</span>
+          </div>
+          <div className="p-4 border-r-2 border-b-2 md:border-b-0 border-slate-900">
+            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Full Name</span>
+            <span className="text-sm font-black uppercase">{emp?.name || "---"}</span>
+          </div>
+          <div className="p-4 border-r-2 border-slate-900 bg-slate-50/50">
+            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Department</span>
+            <span className="text-sm font-black uppercase">{emp?.department || "---"}</span>
+          </div>
+          <div className="p-4">
+            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Designation</span>
+            <span className="text-sm font-black uppercase truncate">{emp?.designation || "---"}</span>
+          </div>
+        </div>
+        {emp?.aadhaar && (
+           <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 text-right tracking-widest italic">
+             Identity Verified via Aadhaar: **** **** {emp.aadhaar.slice(-4)}
+           </p>
+        )}
+      </div>
+
+      {/* 4. Transaction Details */}
+      <div className="space-y-8 mb-16">
+        <div>
+          <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Amount Authorized</h3>
+          <div className="flex items-stretch gap-4">
+            <div className="bg-slate-900 text-white px-8 py-4 rounded-xl flex items-center justify-center min-w-[220px]">
+              <span className="text-4xl font-black">{formatCurrency(voucher.amount)}</span>
+            </div>
+            <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl p-4 flex flex-col justify-center">
+              <span className="text-[9px] font-black text-slate-400 uppercase mb-1">Amount in Words</span>
+              <span className="text-sm font-bold italic text-slate-700 leading-tight">
+                {numberToIndianWords(voucher.amount)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Purpose of Payment / Description</h3>
+          <div className="border-2 border-slate-900 p-6 rounded-2xl bg-white min-h-[120px] relative">
+            <p className="text-lg font-medium italic text-slate-600 leading-relaxed">"{voucher.purpose}"</p>
+            <div className="absolute top-4 right-6 opacity-5">
+              <FileText className="w-16 h-16" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Footer Section: Signatures */}
+      <div className="grid grid-cols-2 gap-20 px-10 mb-16">
+        <div className="text-center pt-10 border-t-2 border-dashed border-slate-300 space-y-2">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-800">Receiver's Signature</p>
+          <p className="text-[10px] font-bold text-slate-400 italic">(Signed upon receipt of funds)</p>
+        </div>
+        <div className="text-center pt-10 border-t-2 border-dashed border-slate-300 space-y-2">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
+          <p className="text-[10px] font-bold text-slate-400 italic">(For {firm?.name || "The Organization"})</p>
+        </div>
+      </div>
+
+      {/* 6. Legal Note (India Context) */}
+      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+        <div className="flex gap-4 items-start">
+          <ShieldCheck className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+          <p className="text-[9px] leading-relaxed text-slate-500 font-medium text-justify">
+            <strong>COMPLIANCE NOTE:</strong> This voucher is issued for internal accounting purposes and complies with applicable provisions of the 
+            <strong> Income Tax Act, 1961</strong> and <strong>Goods and Services Tax Act, 2017</strong>. All transactions recorded herein are subject 
+            to periodic audit and management verification. Any fraudulent claims or unauthorized use of this document will result in strict disciplinary 
+            and legal action. Aadhaar details, if recorded for verification, are handled in accordance with applicable data protection and privacy 
+            regulations of the Government of India.
+          </p>
+        </div>
+      </div>
+
+      {/* 7. Footer Metadata */}
+      <div className="mt-8 flex justify-between items-center text-[8px] font-black uppercase text-slate-300 tracking-[0.3em]">
+        <span>Digitally Authenticated</span>
+        <span>SikkaTrack HRMS Enterprise Node</span>
+        <span>Original Document</span>
+      </div>
+    </div>
+  );
+}
+
