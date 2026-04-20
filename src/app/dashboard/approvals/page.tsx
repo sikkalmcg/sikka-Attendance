@@ -414,7 +414,7 @@ export default function ApprovalsPage() {
     }
 
     const headers = historyType === 'attendance' 
-      ? ["Employee Name", "Employee ID", "Dept", "Desig", "Date", "In Time", "Out Time", "Out Hour", "Hours", "Type", "Status", "In Address", "Out Address", "Action By"]
+      ? ["Employee Name", "Employee ID", "Dept", "Desig", "Date", "In Time", "Out Time", "In Plant", "Out Plant", "Out Hour", "Hours", "Type", "Status", "In Address", "Out Address", "Action By"]
       : ["Employee Name", "Employee ID", "Dept", "Desig", "From Date", "To Date", "Days", "Status", "Purpose", "Action By"];
 
     const csvRows = [
@@ -422,7 +422,7 @@ export default function ApprovalsPage() {
       ...list.map(rec => {
         if (historyType === 'attendance') {
           return [
-            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.dept}"`, `"${rec.desig}"`, `"${formatDate(rec.date)}"`, `"${rec.inTime || ''}"`, `"${rec.outTime || ''}"`, `"${formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}"`, rec.hours, `"${rec.attendanceType}"`, `"${rec.status}"`, `"${rec.address || ''}"`, `"${rec.addressOut || ''}"`, `"${rec.approvedBy || ''}"`
+            `"${rec.employeeName}"`, `"${rec.employeeId}"`, `"${rec.dept}"`, `"${rec.desig}"`, `"${formatDate(rec.date)}"`, `"${rec.inTime || ''}"`, `"${rec.outTime || ''}"`, `"${rec.inPlant || ''}"`, `"${rec.outPlant || ''}"`, `"${formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}"`, rec.hours, `"${rec.attendanceType}"`, `"${rec.status}"`, `"${rec.address || ''}"`, `"${rec.addressOut || ''}"`, `"${rec.approvedBy || ''}"`
           ].join(",");
         } else {
           return [
@@ -539,7 +539,7 @@ export default function ApprovalsPage() {
           <Card className="border-slate-200 shadow-sm overflow-hidden">
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1400px]">
+                <Table className="min-w-[1600px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
@@ -551,7 +551,11 @@ export default function ApprovalsPage() {
                         {viewMode === 'pending' || (viewMode === 'history' && historyType === 'attendance') ? 'OUT Date Time' : 'To Date'}
                       </TableHead>
                       {((viewMode === 'pending' && pendingType === 'attendance') || (viewMode === 'history' && historyType === 'attendance')) && (
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Out Hour</TableHead>
+                        <>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN Plant</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Plant</TableHead>
+                          <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Out Hour</TableHead>
+                        </>
                       )}
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">
                         {currentData.items[0]?.days !== undefined ? 'Days' : 'Working Hour'}
@@ -564,7 +568,7 @@ export default function ApprovalsPage() {
                   </TableHeader>
                   <TableBody>
                     {currentData.items.length === 0 ? (
-                      <TableRow><TableCell colSpan={12} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={14} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
                     ) : (
                       currentData.items.map((rec: any) => (
                         <TableRow key={rec.id} className={cn("hover:bg-slate-50/50 transition-colors", rec.isVirtual && "bg-rose-50/30")}>
@@ -593,11 +597,19 @@ export default function ApprovalsPage() {
                             </div>
                           </TableCell>
                           {((viewMode === 'pending' && pendingType === 'attendance') || (viewMode === 'history' && historyType === 'attendance')) && (
-                            <TableCell className="text-center">
-                              <span className="text-xs font-mono font-bold text-rose-600">
-                                {formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}
-                              </span>
-                            </TableCell>
+                            <>
+                              <TableCell>
+                                <span className="text-xs font-bold text-slate-600">{rec.inPlant || "--"}</span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-xs font-bold text-slate-600">{rec.outPlant || "--"}</span>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <span className="text-xs font-mono font-bold text-rose-600">
+                                  {formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}
+                                </span>
+                              </TableCell>
+                            </>
                           )}
                           <TableCell className="text-center">
                             <Badge variant="outline" className={cn("font-black text-xs px-3", rec.days === undefined ? getWorkingHoursColor(rec.hours) : "bg-slate-100 text-slate-700")}>
