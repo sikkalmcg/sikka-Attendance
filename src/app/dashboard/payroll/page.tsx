@@ -143,7 +143,7 @@ export default function PayrollPage() {
     earningDays: 0,
     monthWorkingDays: 26,
     monthHolidays: 4,
-    autoAddedLeave: 1
+    autoAddedLeave: 0
   });
 
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -238,7 +238,6 @@ export default function PayrollPage() {
     const pending: PayrollRecord[] = [];
     const paid: PayrollRecord[] = [];
 
-    // Order months for range filtering (Oldest to Newest)
     const monthOrder = [...PAYROLL_MONTHS_10Y].reverse(); 
     const fromIdx = monthOrder.indexOf(historyFromMonth);
     const toIdx = monthOrder.indexOf(historyToMonth);
@@ -251,13 +250,11 @@ export default function PayrollPage() {
       const isFullyPaid = remainingSalary <= 0 && remainingPF <= 0 && remainingESIC <= 0;
       
       if (isFullyPaid) {
-        // Filter by history range
         const pMonthIdx = monthOrder.indexOf(p.month);
         if (fromIdx !== -1 && toIdx !== -1 && pMonthIdx >= fromIdx && pMonthIdx <= toIdx) {
           paid.push(p);
         }
       } else {
-        // Filter pending by global month selector
         if (selectedMonth === "" || p.month === selectedMonth) {
           pending.push(p);
         }
@@ -363,11 +360,11 @@ export default function PayrollPage() {
       holidayBanked: 0,
       holidayPaid: 0,
       balanceUsed: 0,
-      remainingBalance: (emp.advanceLeaveBalance || 0) + 1, // Rule: Auto add 1 Leave Credit
+      remainingBalance: (emp.advanceLeaveBalance || 0), // Removed +1 as per rule
       earningDays: initialPresent,
       monthWorkingDays: workingDaysCount,
       monthHolidays: 4,
-      autoAddedLeave: 1
+      autoAddedLeave: 0
     });
     setAdjustLeaveEmp(emp);
   };
@@ -435,7 +432,7 @@ export default function PayrollPage() {
           adjusted: true, 
           earningDays: adjustmentState.earningDays,
           balanceUsed: adjustmentState.balanceUsed,
-          balanceAdded: adjustmentState.holidayBanked + 1 // Rule: holiday banked + 1 auto credit
+          balanceAdded: adjustmentState.holidayBanked 
         } 
       }));
       
@@ -443,6 +440,27 @@ export default function PayrollPage() {
       setAdjustLeaveEmp(null);
     } finally { 
       setIsProcessing(false); 
+    }
+  };
+
+  const handleApplyMonthlyCredits = () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      employees.forEach(emp => {
+        const currentBalance = emp.advanceLeaveBalance || 0;
+        updateRecord('employees', emp.id, { advanceLeaveBalance: currentBalance + 1 });
+      });
+      
+      addRecord('notifications', {
+        message: `System Wide Action: +1 Monthly Approved Leave credit applied to all staff.`,
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+        read: false
+      });
+
+      toast({ title: "Credits Applied", description: "All employees have received +1 Approved Leave credit." });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -531,7 +549,6 @@ export default function PayrollPage() {
       return;
     }
 
-    // Double check chronological range
     const monthOrder = [...PAYROLL_MONTHS_10Y].reverse();
     if (monthOrder.indexOf(historyToMonth) < monthOrder.indexOf(historyFromMonth)) {
       toast({ variant: "destructive", title: "Range Error", description: "To Month cannot be earlier than From Month." });
@@ -671,14 +688,13 @@ export default function PayrollPage() {
                           <TableHead className="font-bold">Aadhaar No</TableHead>
                           <TableHead className="font-bold">Dept / Designation</TableHead>
                           <TableHead className="font-bold">Month</TableHead>
-                          <TableHead className="font-bold text-center">Working on Holiday</TableHead>
                           <TableHead className="font-bold text-right">Monthly CTC</TableHead>
                           <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {pendingGenerationEmployees.length === 0 ? (
-                          <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground">No pending generation for {selectedMonth}.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No pending generation for {selectedMonth}.</TableCell></TableRow>
                         ) : (
                           pendingGenerationEmployees.map((emp: any) => {
                             const adjData = adjustedEmployees[emp.id];
@@ -707,11 +723,6 @@ export default function PayrollPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell><Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge></TableCell>
-                                <TableCell className="text-center">
-                                  <Badge variant="outline" className={cn("font-black px-2.5 h-6", (emp.metrics?.holidayWork || 0) > 0 ? "bg-amber-50 text-amber-700 border-amber-200" : "text-slate-300")}>
-                                    {emp.metrics?.holidayWork || 0}
-                                  </Badge>
-                                </TableCell>
                                 <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(emp.salary.monthlyCTC)}</TableCell>
                                 <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
@@ -826,7 +837,6 @@ export default function PayrollPage() {
               </CardContent>
             </Card>
 
-            {/* Paid History Section */}
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-1">
                 <div className="flex items-center gap-2">
@@ -841,7 +851,6 @@ export default function PayrollPage() {
                     <Label className="text-[9px] font-black uppercase text-slate-400">From</Label>
                     <Select value={historyFromMonth} onValueChange={(val) => {
                       setHistoryFromMonth(val);
-                      // Auto-correct To Month if it becomes earlier than From Month
                       const monthOrder = [...PAYROLL_MONTHS_10Y].reverse();
                       if (monthOrder.indexOf(historyToMonth) < monthOrder.indexOf(val)) {
                         setHistoryToMonth(val);
@@ -983,6 +992,18 @@ export default function PayrollPage() {
 
           <TabsContent value="leave">
             <Card className="border-none shadow-sm overflow-hidden">
+              <CardHeader className="bg-slate-50 border-b p-6 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg"><CheckCircle2 className="w-5 h-5 text-primary" /></div>
+                  <div>
+                    <CardTitle className="text-lg font-bold">Advance Leave Portal</CardTitle>
+                    <CardDescription>Monitor leave balances and process monthly organizational credits.</CardDescription>
+                  </div>
+                </div>
+                <Button className="font-black gap-2 bg-primary" onClick={handleApplyMonthlyCredits} disabled={isProcessing}>
+                  <PlusCircle className="w-4 h-4" /> Process Monthly Credits (+1)
+                </Button>
+              </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="w-full" tabIndex={0}>
                   <Table className="min-w-[1000px]">
@@ -1219,15 +1240,6 @@ export default function PayrollPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {/* Auto Monthly Leave Credit Row */}
-                        <TableRow className="bg-emerald-50/20">
-                          <TableCell className="px-4 py-2 font-bold text-emerald-700 text-xs">Auto Monthly Leave Credit</TableCell>
-                          <TableCell className="text-center font-black text-emerald-600 text-sm">+1</TableCell>
-                          <TableCell className="text-right pr-4">
-                            <Badge className="bg-emerald-100 text-emerald-700 uppercase text-[8px] font-black">Approved</Badge>
-                          </TableCell>
-                        </TableRow>
-
                         <TableRow>
                           <TableCell className="px-4 py-2 font-bold text-slate-700 text-xs">Present on Working Days</TableCell>
                           <TableCell className="text-center font-black text-emerald-600 text-sm">{adjustmentState.present}</TableCell>
