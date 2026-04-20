@@ -81,7 +81,7 @@ import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm } from "@/lib/types";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { parseISO, format } from "date-fns";
+import { parseISO, format, isValid } from "date-fns";
 
 const generatePayrollMonths = () => {
   const options = [];
@@ -165,6 +165,30 @@ export default function PayrollPage() {
     return PAYROLL_MONTHS.includes(selectedMonth);
   }, [selectedMonth]);
 
+  const getAttendanceMetricsForMonth = (empId: string, monthStr: string) => {
+    if (!monthStr) return { presents: 0, holidayWork: 0 };
+    const [mmm, yy] = monthStr.split('-');
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const mIndex = monthNames.indexOf(mmm);
+    const year = 2000 + parseInt(yy);
+    
+    const monthlyAttendance = attendanceRecords.filter(r => {
+      if (r.employeeId !== empId) return false;
+      const d = parseISO(r.date);
+      if (!isValid(d)) return false;
+      return d.getMonth() === mIndex && d.getFullYear() === year;
+    });
+
+    const holidayWork = monthlyAttendance.filter(r => r.inPlant === 'Holiday Work' || r.status === 'HOLIDAY').length;
+    const presents = monthlyAttendance.filter(r => ['PRESENT', 'FIELD', 'WFH'].includes(r.status) && r.inPlant !== 'Holiday Work').length;
+    const halfDays = monthlyAttendance.filter(r => r.status === 'HALF_DAY' && r.inPlant !== 'Holiday Work').length;
+
+    return {
+      presents: presents + (halfDays * 0.5),
+      holidayWork
+    };
+  };
+
   const pendingGenerationEmployees = useMemo(() => {
     if (!isGenerationAllowed) return [];
     const sorted = [...(employees || [])].sort((a, b) => (b.id || "").localeCompare(a.id || ""));
@@ -178,8 +202,11 @@ export default function PayrollPage() {
       const matchesFirm = selectedFirmId === "all" || emp.firmId === selectedFirmId;
       const alreadyGenerated = payrollRecords.some(p => p.employeeId === emp.employeeId && p.month === selectedMonth);
       return matchesSearch && matchesFirm && !alreadyGenerated;
+    }).map(emp => {
+      const metrics = getAttendanceMetricsForMonth(emp.employeeId, selectedMonth);
+      return { ...emp, metrics };
     });
-  }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth, isGenerationAllowed]);
+  }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth, isGenerationAllowed, attendanceRecords]);
 
   const finalizedSalaries = useMemo(() => {
     const sorted = [...payrollRecords].sort((a, b) => {
@@ -273,17 +300,11 @@ export default function PayrollPage() {
   const totalAdvancePages = Math.ceil(advanceLedgerData.length / rowsPerPageAdvance);
 
   const openAdjustmentDialog = (emp: Employee) => {
-    const relevantAttendance = attendanceRecords.filter(r => r.employeeId === emp.employeeId);
-    
-    const presents = relevantAttendance.filter(r => ['PRESENT', 'FIELD', 'WFH'].includes(r.status) && r.inPlant !== 'Holiday Work').length;
-    const halfDays = relevantAttendance.filter(r => r.status === 'HALF_DAY' && r.inPlant !== 'Holiday Work').length;
-    const presentOnWorking = presents + (halfDays * 0.5);
-
-    const holidayPres = relevantAttendance.filter(r => r.inPlant === 'Holiday Work' || r.status === 'HOLIDAY').length; 
+    const metrics = getAttendanceMetricsForMonth(emp.employeeId, selectedMonth);
     
     const workingDaysCount = 26;
-    let initialPresent = presentOnWorking;
-    let initialHolidayWork = holidayPres;
+    let initialPresent = metrics.presents;
+    let initialHolidayWork = metrics.holidayWork;
     let initialAbsent = Math.max(0, workingDaysCount - initialPresent);
 
     if (initialPresent < workingDaysCount && initialHolidayWork > 0) {
@@ -548,7 +569,7 @@ export default function PayrollPage() {
                   </div>
                 ) : (
                   <ScrollArea className="w-full" tabIndex={0}>
-                    <Table className="min-w-[1200px]">
+                    <Table className="min-w-[1300px]">
                       <TableHeader className="bg-slate-50">
                         <TableRow>
                           <TableHead className="font-bold">Firm / Unit</TableHead>
@@ -556,15 +577,16 @@ export default function PayrollPage() {
                           <TableHead className="font-bold">Aadhaar No</TableHead>
                           <TableHead className="font-bold">Dept / Designation</TableHead>
                           <TableHead className="font-bold">Month</TableHead>
+                          <TableHead className="font-bold text-center">Working on Holiday</TableHead>
                           <TableHead className="font-bold text-right">Monthly CTC</TableHead>
                           <TableHead className="text-right font-bold pr-6">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {pendingGenerationEmployees.length === 0 ? (
-                          <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No pending generation for {selectedMonth}.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground">No pending generation for {selectedMonth}.</TableCell></TableRow>
                         ) : (
-                          pendingGenerationEmployees.map((emp) => {
+                          pendingGenerationEmployees.map((emp: any) => {
                             const adjData = adjustedEmployees[emp.id];
                             const isAdjusted = adjData?.adjusted;
                             const firm = firms.find(f => f.id === emp.firmId);
@@ -591,6 +613,11 @@ export default function PayrollPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell><Badge variant="outline" className="font-bold bg-white">{selectedMonth}</Badge></TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="outline" className={cn("font-black px-2.5 h-6", (emp.metrics?.holidayWork || 0) > 0 ? "bg-amber-50 text-amber-700 border-amber-200" : "text-slate-300")}>
+                                    {emp.metrics?.holidayWork || 0}
+                                  </Badge>
+                                </TableCell>
                                 <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(emp.salary.monthlyCTC)}</TableCell>
                                 <TableCell className="text-right pr-6">
                                   <div className="flex justify-end gap-2">
@@ -998,23 +1025,26 @@ export default function PayrollPage() {
                             )}
                           </TableCell>
                         </TableRow>
+                        
+                        <TableRow className={cn(adjustmentState.holidayWork > 0 ? "bg-amber-50/30" : "")}>
+                          <TableCell className={cn("px-4 py-2 font-bold text-xs", adjustmentState.holidayWork > 0 ? "text-amber-700" : "text-slate-700")}>Working on Holiday</TableCell>
+                          <TableCell className={cn("text-center font-black text-sm", adjustmentState.holidayWork > 0 ? "text-amber-600" : "text-slate-400")}>{adjustmentState.holidayWork}</TableCell>
+                          <TableCell className="text-right pr-4">
+                            {adjustmentState.holidayWork > 0 && (
+                              <div className="flex justify-end gap-1.5">
+                                <Button variant="secondary" size="sm" className="font-bold text-[8px] uppercase bg-white border border-slate-200 h-6 px-1.5" onClick={handleBankHolidayWork}>Add in Adv. Leave</Button>
+                                <Button variant="secondary" size="sm" className="font-bold text-[8px] uppercase bg-amber-500 hover:bg-amber-600 text-white h-6 px-1.5" onClick={handlePayHolidayWork}>Pay Holiday Work</Button>
+                              </div>
+                            )}
+                            {adjustmentState.holidayWork <= 0 && "---"}
+                          </TableCell>
+                        </TableRow>
+
                         <TableRow>
                           <TableCell className="px-4 py-2 font-bold text-slate-700 text-xs">Total Absent</TableCell>
                           <TableCell className="text-center font-black text-rose-500 text-sm">{adjustmentState.absent}</TableCell>
                           <TableCell className="text-right pr-4">---</TableCell>
                         </TableRow>
-                        {adjustmentState.holidayWork > 0 && (
-                          <TableRow className="bg-amber-50/30">
-                            <TableCell className="px-4 py-2 font-bold text-amber-700 text-xs">Present on Holidays</TableCell>
-                            <TableCell className="text-center font-black text-amber-600 text-sm">{adjustmentState.holidayWork}</TableCell>
-                            <TableCell className="text-right pr-4">
-                              <div className="flex justify-end gap-1.5">
-                                <Button variant="secondary" size="sm" className="font-bold text-[8px] uppercase bg-white border border-slate-200 h-6 px-1.5" onClick={handleBankHolidayWork}>Add in Adv. Leave</Button>
-                                <Button variant="secondary" size="sm" className="font-bold text-[8px] uppercase bg-amber-500 hover:bg-amber-600 text-white h-6 px-1.5" onClick={handlePayHolidayWork}>Pay Holiday Work</Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
                       </TableBody>
                     </Table>
                   </div>
