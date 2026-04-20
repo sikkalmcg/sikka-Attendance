@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -62,10 +63,11 @@ import {
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
-import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays, isValid } from "date-fns";
+import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays, isValid, isBefore } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
+const PROJECT_START_DATE_STR = "2026-04-01";
 
 export default function ApprovalsPage() {
   const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord, currentUser } = useData();
@@ -102,8 +104,10 @@ export default function ApprovalsPage() {
   useEffect(() => {
     setIsMounted(true);
     const today = new Date();
+    const floorDate = parseISO(PROJECT_START_DATE_STR);
     const thirtyDaysAgo = subDays(today, 30);
-    setFromDate(format(thirtyDaysAgo, "yyyy-MM-dd"));
+    
+    setFromDate(format(isBefore(thirtyDaysAgo, floorDate) ? floorDate : thirtyDaysAgo, "yyyy-MM-dd"));
     setToDate(format(today, "yyyy-MM-dd"));
   }, []);
 
@@ -117,7 +121,7 @@ export default function ApprovalsPage() {
     const todayStr = format(new Date(), "yyyy-MM-dd");
 
     const actualPending = (attendanceRecords || [])
-      .filter(rec => !rec.approved && !rec.remark)
+      .filter(rec => !rec.approved && !rec.remark && rec.date >= PROJECT_START_DATE_STR)
       .map(rec => {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         return {
@@ -128,28 +132,30 @@ export default function ApprovalsPage() {
       });
 
     const missingRecords: any[] = [];
-    (employees || []).filter(e => e.active).forEach(emp => {
-      const hasRecord = (attendanceRecords || []).some(r => r.employeeId === emp.employeeId && r.date === todayStr);
-      if (!hasRecord) {
-        missingRecords.push({
-          id: `virtual-absent-${emp.employeeId}-${todayStr}`,
-          employeeId: emp.employeeId,
-          employeeName: emp.name,
-          date: todayStr,
-          inTime: null,
-          outTime: null,
-          hours: 0,
-          status: 'ABSENT',
-          attendanceType: 'ABSENT',
-          address: 'N/A',
-          approved: false,
-          dept: emp.department,
-          desig: emp.designation,
-          isVirtual: true,
-          unapprovedOutDuration: 0
-        });
-      }
-    });
+    if (todayStr >= PROJECT_START_DATE_STR) {
+      (employees || []).filter(e => e.active).forEach(emp => {
+        const hasRecord = (attendanceRecords || []).some(r => r.employeeId === emp.employeeId && r.date === todayStr);
+        if (!hasRecord) {
+          missingRecords.push({
+            id: `virtual-absent-${emp.employeeId}-${todayStr}`,
+            employeeId: emp.employeeId,
+            employeeName: emp.name,
+            date: todayStr,
+            inTime: null,
+            outTime: null,
+            hours: 0,
+            status: 'ABSENT',
+            attendanceType: 'ABSENT',
+            address: 'N/A',
+            approved: false,
+            dept: emp.department,
+            desig: emp.designation,
+            isVirtual: true,
+            unapprovedOutDuration: 0
+          });
+        }
+      });
+    }
 
     return [...actualPending, ...missingRecords]
       .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
@@ -159,7 +165,7 @@ export default function ApprovalsPage() {
   const pendingLeavesList = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return (leaveRequests || [])
-      .filter(l => l.status === 'UNDER_PROCESS')
+      .filter(l => l.status === 'UNDER_PROCESS' && l.fromDate >= PROJECT_START_DATE_STR)
       .filter(l => (l.employeeName || "").toLowerCase().includes(search) || (l.employeeId || "").toLowerCase().includes(search))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [leaveRequests, searchTerm]);
@@ -167,7 +173,7 @@ export default function ApprovalsPage() {
   const historyAttendanceList = useMemo(() => {
     const search = searchTerm.toLowerCase();
     let list = (attendanceRecords || [])
-      .filter(rec => rec.approved || !!rec.remark) // Include Rejected Records
+      .filter(rec => (rec.approved || !!rec.remark) && rec.date >= PROJECT_START_DATE_STR)
       .map(rec => {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         return {
@@ -187,7 +193,7 @@ export default function ApprovalsPage() {
   const historyLeavesList = useMemo(() => {
     const search = searchTerm.toLowerCase();
     let list = (leaveRequests || [])
-      .filter(l => l.status !== 'UNDER_PROCESS')
+      .filter(l => l.status !== 'UNDER_PROCESS' && l.fromDate >= PROJECT_START_DATE_STR)
       .filter(l => (l.employeeName || "").toLowerCase().includes(search) || (l.employeeId || "").toLowerCase().includes(search));
 
     if (fromDate) list = list.filter(l => l.fromDate >= fromDate);
@@ -245,6 +251,13 @@ export default function ApprovalsPage() {
 
   const handlePostAttendanceEdit = () => {
     if (!selectedAttendance || isProcessing) return;
+    
+    // RESTRICTION: No manual edits before project start
+    if (attendanceEditData.date < PROJECT_START_DATE_STR) {
+      toast({ variant: "destructive", title: "Invalid Date", description: `Cannot record data before ${PROJECT_START_DATE_STR}.` });
+      return;
+    }
+
     setIsProcessing(true);
     try {
       let finalHours = 0;
@@ -408,8 +421,10 @@ export default function ApprovalsPage() {
 
   const resetFilters = () => {
     const today = new Date();
+    const floorDate = parseISO(PROJECT_START_DATE_STR);
     const thirtyDaysAgo = subDays(today, 30);
-    setFromDate(format(thirtyDaysAgo, "yyyy-MM-dd"));
+    
+    setFromDate(format(isBefore(thirtyDaysAgo, floorDate) ? floorDate : thirtyDaysAgo, "yyyy-MM-dd"));
     setToDate(format(today, "yyyy-MM-dd"));
     setSearchTerm("");
   };
@@ -461,7 +476,7 @@ export default function ApprovalsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Organizational Approvals</h1>
-          <p className="text-muted-foreground text-sm">Verify live attendance logs and manage employee leave cycles.</p>
+          <p className="text-muted-foreground text-sm">Verify logs and manage employee leaves (Since April-2026).</p>
         </div>
       </div>
 
@@ -513,6 +528,7 @@ export default function ApprovalsPage() {
                   <Input 
                     type="date" 
                     value={fromDate} 
+                    min={PROJECT_START_DATE_STR}
                     max={toDate || undefined}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -528,7 +544,7 @@ export default function ApprovalsPage() {
                   <Input 
                     type="date" 
                     value={toDate} 
-                    min={fromDate || undefined}
+                    min={fromDate || PROJECT_START_DATE_STR}
                     onChange={(e) => {
                       const val = e.target.value;
                       if (fromDate && val < fromDate) {
@@ -775,7 +791,7 @@ export default function ApprovalsPage() {
           <div className="p-8 space-y-6">
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Attendance Date</Label>
-              <Input type="date" value={attendanceEditData.date} onChange={(e) => setAttendanceEditData(p => ({...p, date: e.target.value}))} className="h-12 bg-slate-50 font-bold" />
+              <Input type="date" value={attendanceEditData.date} onChange={(e) => setAttendanceEditData(p => ({...p, date: e.target.value}))} className="h-12 bg-slate-50 font-bold" min={PROJECT_START_DATE_STR} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -840,11 +856,11 @@ export default function ApprovalsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-slate-500">From Date</Label>
-                <Input type="date" value={leaveEditDates.from} onChange={(e) => setLeaveEditDates(p => ({...p, from: e.target.value}))} className="h-12 bg-slate-50 font-bold" />
+                <Input type="date" value={leaveEditDates.from} onChange={(e) => setLeaveEditDates(p => ({...p, from: e.target.value}))} className="h-12 bg-slate-50 font-bold" min={PROJECT_START_DATE_STR} />
               </div>
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-slate-500">To Date</Label>
-                <Input type="date" value={leaveEditDates.to} onChange={(e) => setLeaveEditDates(p => ({...p, to: e.target.value}))} className="h-12 bg-slate-50 font-bold" />
+                <Input type="date" value={leaveEditDates.to} onChange={(e) => setLeaveEditDates(p => ({...p, to: e.target.value}))} className="h-12 bg-slate-50 font-bold" min={PROJECT_START_DATE_STR} />
               </div>
             </div>
             <p className="text-sm font-medium italic text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">"{selectedLeave?.purpose}"</p>

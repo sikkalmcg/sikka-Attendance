@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -45,12 +46,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { format, subDays, isWithinInterval, parseISO } from "date-fns";
+import { format, subDays, isWithinInterval, parseISO, isAfter } from "date-fns";
 import { useData } from "@/context/data-context";
 import { formatCurrency, cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 type ReportType = "ATTENDANCE" | "PAYROLL";
+const PROJECT_START_DATE_STR = "2026-04-01";
 
 export default function ReportsPage() {
   const { employees, attendanceRecords, payrollRecords, plants, firms } = useData();
@@ -70,7 +72,10 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const end = new Date();
-    const start = subDays(end, 90);
+    const floor = parseISO(PROJECT_START_DATE_STR);
+    const ninetyDaysAgo = subDays(end, 90);
+    const start = isAfter(ninetyDaysAgo, floor) ? ninetyDaysAgo : floor;
+    
     setFromDate(format(start, "yyyy-MM-dd"));
     setToDate(format(end, "yyyy-MM-dd"));
     if (firms && firms.length > 0) {
@@ -100,6 +105,8 @@ export default function ReportsPage() {
       return attendanceRecords
         .filter(rec => {
           if (!rec.date) return false;
+          if (rec.date < PROJECT_START_DATE_STR) return false;
+          
           const recDate = parseISO(rec.date);
           const emp = employees.find(e => e.employeeId === rec.employeeId);
           if (emp?.joinDate && rec.date < emp.joinDate) return false;
@@ -134,6 +141,8 @@ export default function ReportsPage() {
       return payrollRecords
         .filter(pay => {
           const slipDate = pay.slipDate ? parseISO(pay.slipDate) : null;
+          if (pay.month < "Apr-26") return false; // Basic format check
+          
           const emp = employees.find(e => e.employeeId === pay.employeeId);
           const firmMatch = emp && selectedFirmIds.includes(emp.firmId);
           const dateMatch = slipDate && isWithinInterval(slipDate, { start, end });
@@ -177,7 +186,7 @@ export default function ReportsPage() {
     }
     const data = processReportData(typeOverride);
     if (data.length === 0) {
-      toast({ variant: "destructive", title: "No Data", description: "No records found for the selected filters." });
+      toast({ variant: "destructive", title: "No Data", description: "No records found for the selected filters (Project Start: April-2026)." });
       return;
     }
 
@@ -231,7 +240,7 @@ export default function ReportsPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Analytics & Reports</h1>
-            <p className="text-muted-foreground">Strategic workforce insights and compliance summaries.</p>
+            <p className="text-muted-foreground">Strategic workforce insights and compliance summaries (Since April-2026).</p>
           </div>
           {viewData && (
             <Button variant="outline" className="gap-2 font-bold" onClick={() => setViewData(null)}>
@@ -291,7 +300,7 @@ export default function ReportsPage() {
                     </TableHeader>
                     <TableBody>
                       {paginatedData.map((row, idx) => (
-                        <TableRow key={idx} className="hover:bg-slate-50/50">
+                        <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
                           {Object.entries(row).map(([key, val], i) => (
                             <TableCell key={i} className="px-6 py-4 text-xs font-medium text-slate-600">
                               {key === 'hours' ? (
@@ -347,7 +356,7 @@ export default function ReportsPage() {
                 <Filter className="w-6 h-6 text-primary" />
                 Generate {activeReport === "ATTENDANCE" ? "Attendance" : "Payroll"} Report
               </DialogTitle>
-              <DialogDescription>Select specific filters to compile your data export based on Firms.</DialogDescription>
+              <DialogDescription>Select specific filters (Project Start: April-2026).</DialogDescription>
             </DialogHeader>
             
             <div className="space-y-8 py-6">
@@ -357,6 +366,7 @@ export default function ReportsPage() {
                   <Input 
                     type="date" 
                     value={fromDate} 
+                    min={PROJECT_START_DATE_STR}
                     max={toDate || undefined}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -374,7 +384,7 @@ export default function ReportsPage() {
                   <Input 
                     type="date" 
                     value={toDate} 
-                    min={fromDate || undefined}
+                    min={fromDate || PROJECT_START_DATE_STR}
                     onChange={(e) => {
                       const val = e.target.value;
                       if (fromDate && val < fromDate) {

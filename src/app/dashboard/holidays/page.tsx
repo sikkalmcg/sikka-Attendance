@@ -29,7 +29,9 @@ import {
   isSunday, 
   parseISO, 
   isSameDay,
-  isSameMonth
+  isSameMonth,
+  isBefore,
+  startOfMonth
 } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Holiday } from "@/lib/types";
@@ -60,11 +62,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+const PROJECT_START_DATE = new Date(2026, 3, 1); // April 1, 2026
+
 export default function HolidaysPage() {
   const { toast } = useToast();
   const { plants, holidays, addRecord, updateRecord, deleteRecord, setRecord } = useData();
   
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date() < PROJECT_START_DATE ? PROJECT_START_DATE : new Date());
   const [isMounted, setIsMounted] = useState(false);
   
   // Dialog State
@@ -93,11 +97,10 @@ export default function HolidaysPage() {
     const allPlantIds = plants.map(p => p.id);
     
     days
-      .filter(d => isSunday(d))
+      .filter(d => isSunday(d) && !isBefore(d, PROJECT_START_DATE))
       .forEach(d => {
         const dateStr = format(d, "yyyy-MM-dd");
         const id = `sun-${dateStr}`;
-        // Only trigger if not already existing to minimize feedback loop
         if (!holidays.some(h => h.date === dateStr)) {
           setRecord('holidays', id, {
             id,
@@ -112,6 +115,12 @@ export default function HolidaysPage() {
   }, [plants.length, currentMonth.getFullYear(), holidays.length, isMounted]);
 
   const handleDayClick = (date: Date) => {
+    // RESTRICTION: No holidays before project start
+    if (isBefore(date, PROJECT_START_DATE)) {
+      toast({ variant: "destructive", title: "Access Denied", description: "Project boundary is April-2026." });
+      return;
+    }
+
     if (isSunday(date)) {
       toast({ title: "Weekly Off", description: "Sundays are automatically marked as Weekly Off." });
       return;
@@ -207,7 +216,7 @@ export default function HolidaysPage() {
             </div>
             <div>
               <h1 className="text-3xl font-black text-slate-900 tracking-tight">Holiday Calendar {format(currentMonth, 'yyyy')}</h1>
-              <p className="text-muted-foreground">Manage organizational weekly offs and custom festival schedules.</p>
+              <p className="text-muted-foreground">Manage organization schedule (April-2026 onwards).</p>
             </div>
           </div>
         </div>
@@ -221,17 +230,25 @@ export default function HolidaysPage() {
                     mode="single"
                     onDayClick={handleDayClick}
                     month={currentMonth}
-                    onMonthChange={setCurrentMonth}
+                    onMonthChange={(m) => {
+                      if (!isBefore(startOfMonth(m), startOfMonth(PROJECT_START_DATE))) {
+                        setCurrentMonth(m);
+                      } else {
+                        setCurrentMonth(PROJECT_START_DATE);
+                      }
+                    }}
                     className="rounded-3xl border-2 border-slate-100 p-8 bg-white shadow-xl w-full"
                     modifiers={{
                       sunday: (date) => isSunday(date),
                       holiday: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && !h.auto),
-                      autoWeekly: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && h.auto)
+                      autoWeekly: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && h.auto),
+                      restricted: (date) => isBefore(date, PROJECT_START_DATE)
                     }}
                     modifiersClassNames={{
                       sunday: "text-rose-500 font-black",
                       holiday: "bg-primary text-white hover:bg-primary/90 rounded-2xl font-bold",
-                      autoWeekly: "bg-slate-50 text-slate-400 cursor-help rounded-xl"
+                      autoWeekly: "bg-slate-50 text-slate-400 cursor-help rounded-xl",
+                      restricted: "opacity-20 pointer-events-none grayscale"
                     }}
                   />
                 </div>
@@ -314,16 +331,6 @@ export default function HolidaysPage() {
                     </div>
                   </div>
                 </ScrollArea>
-                
-                {!isSameMonth(currentMonth, new Date()) && (
-                  <Button 
-                    variant="ghost" 
-                    className="mt-10 w-full text-primary font-black gap-2 hover:bg-primary/5 h-12 rounded-2xl"
-                    onClick={() => setCurrentMonth(new Date())}
-                  >
-                    Go to Current Month <ChevronRight className="w-4 h-4" />
-                  </Button>
-                )}
               </div>
             </div>
           </CardContent>

@@ -83,14 +83,21 @@ import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm } from "@/lib/types";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { parseISO, format, isValid } from "date-fns";
+import { parseISO, format, isValid, isBefore } from "date-fns";
+
+const PROJECT_START_DATE = new Date(2026, 3, 1); // April 1, 2026
 
 const generatePayrollMonths = (count = 120, includeCurrent = true) => {
   const options = [];
   const date = new Date();
   const startOffset = includeCurrent ? 0 : 1;
+  
   for (let i = startOffset; i < count + startOffset; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+    
+    // RESTRICTION: No records before April-2026
+    if (isBefore(d, PROJECT_START_DATE)) break;
+    
     const mmm = d.toLocaleString('en-US', { month: 'short' });
     const yy = d.getFullYear().toString().slice(-2);
     options.push(`${mmm}-${yy}`);
@@ -160,7 +167,7 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    const prevMonth = PAYROLL_MONTHS_6M_GEN[0];
+    const prevMonth = PAYROLL_MONTHS_6M_GEN[0] || PAYROLL_MONTHS_10Y[0] || "";
     setSelectedMonth(prevMonth);
     setHistoryFromMonth(prevMonth);
     setHistoryToMonth(prevMonth);
@@ -188,6 +195,10 @@ export default function PayrollPage() {
       if (!r.approved) return false;
       const d = parseISO(r.date);
       if (!isValid(d)) return false;
+      
+      // RESTRICTION: Double check boundary in code
+      if (isBefore(d, PROJECT_START_DATE)) return false;
+      
       return d.getMonth() === mIndex && d.getFullYear() === year;
     });
 
@@ -674,7 +685,7 @@ export default function PayrollPage() {
                     <div className="space-y-1">
                       <h3 className="text-lg font-black text-slate-900 tracking-tight">Generation Restricted</h3>
                       <p className="text-sm text-slate-500 font-medium max-w-sm">
-                        For security and compliance, you can only generate salaries for the past six months, excluding the current month.
+                        For security and compliance, you can only generate salaries for the past six months (from April-2026), excluding the current month.
                       </p>
                     </div>
                   </div>
@@ -904,7 +915,7 @@ export default function PayrollPage() {
                       </TableHeader>
                       <TableBody>
                         {paymentTabLists.paid.length === 0 ? (
-                          <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-xs font-medium">No historical settled records found for selected range.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-xs font-medium">No historical settled records found for selected range (Project Start: April-2026).</TableCell></TableRow>
                         ) : (
                           paymentTabLists.paid.map((p) => (
                             <TableRow key={p.id} className="hover:bg-white/50 transition-colors opacity-80 hover:opacity-100">
@@ -1316,7 +1327,7 @@ export default function PayrollPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Payment Date</Label>
-                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} min="2026-04-01" />
                 </div>
                 <div className="space-y-2">
                   <Label>Mode</Label>
@@ -1365,7 +1376,7 @@ export default function PayrollPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Payment Date</Label>
-                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} min="2026-04-01" />
                 </div>
                 <div className="space-y-2">
                   <Label>Ref No (Challan / Trans ID)</Label>
@@ -1403,7 +1414,7 @@ export default function PayrollPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Payment Date</Label>
-                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} min="2026-04-01" />
                 </div>
                 <div className="space-y-2">
                   <Label>Ref No (Challan / Trans ID)</Label>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -73,6 +74,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
+const PROJECT_START_DATE_STR = "2026-04-01";
 
 const getISTTime = () => {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -168,7 +170,7 @@ export default function AttendancePage() {
 
   const employeeRecords = useMemo(() => {
     if (!effectiveEmployeeId) return [];
-    return (attendanceRecords || []).filter(r => r.employeeId === effectiveEmployeeId);
+    return (attendanceRecords || []).filter(r => r.employeeId === effectiveEmployeeId && r.date >= PROJECT_START_DATE_STR);
   }, [attendanceRecords, effectiveEmployeeId]);
 
   const myLeaveRequests = useMemo(() => {
@@ -178,6 +180,7 @@ export default function AttendancePage() {
     return (leaveRequests || [])
       .filter(l => {
         if (l.employeeId !== effectiveEmployeeId) return false;
+        if (l.fromDate < PROJECT_START_DATE_STR) return false;
         const cleanupDate = addDays(parseISO(l.toDate), 7);
         if (isAfter(now, cleanupDate)) return false;
         return true;
@@ -201,6 +204,9 @@ export default function AttendancePage() {
   const showReminderIcon = useMemo(() => {
     if (!isMounted || !isAccessAllowed || activeRecord || !currentTime || !todayStr) return false;
     
+    // RESTRICTION: No reminders before project start
+    if (todayStr < PROJECT_START_DATE_STR) return false;
+
     const currentHHMM = format(currentTime, "HH:mm");
     if (currentHHMM < "10:30") return false;
 
@@ -340,9 +346,10 @@ export default function AttendancePage() {
       return;
     }
     const today = format(getISTTime(), "yyyy-MM-dd");
+    const startConstraint = today < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : today;
     setLeaveType("DAYS");
-    setLeaveFrom(today);
-    setLeaveTo(today);
+    setLeaveFrom(startConstraint);
+    setLeaveTo(startConstraint);
     setReachTime("");
     setLeavePurpose("");
     setActiveDialog("LEAVE");
@@ -356,14 +363,15 @@ export default function AttendancePage() {
 
     const istNow = getISTTime();
     const today = format(istNow, "yyyy-MM-dd");
+    const floorDate = PROJECT_START_DATE_STR;
     
     if (leaveType === "DAYS") {
       if (!leaveFrom || !leaveTo || !leavePurpose.trim()) {
         toast({ variant: "destructive", title: "Missing Fields", description: "Please provide dates and purpose." });
         return;
       }
-      if (leaveFrom < today) {
-        toast({ variant: "destructive", title: "Invalid Date", description: "Leave from date cannot be in the past." });
+      if (leaveFrom < today && leaveFrom < floorDate) {
+        toast({ variant: "destructive", title: "Invalid Date", description: `Leave must be from ${floorDate} onwards.` });
         return;
       }
       if (leaveTo < leaveFrom) {
@@ -459,14 +467,25 @@ export default function AttendancePage() {
 
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
+    
+    // RESTRICTION: Application floor is April-2026
+    const floorDate = parseISO(PROJECT_START_DATE_STR);
+
     if (isAdminRole) {
       const limitDate = subDays(new Date(), 45);
+      const effectiveLimit = isAfter(limitDate, floorDate) ? limitDate : floorDate;
+      
       return (attendanceRecords || [])
         .filter(r => {
           try {
+            const d = parseISO(r.date);
+            if (!isValid(d)) return false;
+            if (isBefore(d, floorDate)) return false;
+            
             const emp = employees.find(e => e.employeeId === r.employeeId);
             if (emp?.joinDate && r.date < emp.joinDate) return false;
-            return new Date(r.date) >= limitDate;
+            
+            return d >= effectiveLimit;
           } catch (e) { return false; }
         })
         .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
@@ -474,10 +493,11 @@ export default function AttendancePage() {
 
     const today = startOfDay(new Date());
     const fortyFiveDaysAgo = subDays(today, 45);
-    let historyStartDate = fortyFiveDaysAgo;
+    let historyStartDate = isAfter(fortyFiveDaysAgo, floorDate) ? fortyFiveDaysAgo : floorDate;
+    
     if (registeredEmployee?.joinDate) {
       const joinDate = parseISO(registeredEmployee.joinDate);
-      if (isValid(joinDate) && isAfter(joinDate, fortyFiveDaysAgo)) historyStartDate = joinDate;
+      if (isValid(joinDate) && isAfter(joinDate, historyStartDate)) historyStartDate = joinDate;
     }
 
     const dateRange = eachDayOfInterval({ start: historyStartDate, end: today });
@@ -517,6 +537,13 @@ export default function AttendancePage() {
       toast({ variant: "destructive", title: "Access Denied", description: "You must use your registered device and start date must be active." });
       return;
     }
+
+    // RESTRICTION: No checking in before project start
+    if (todayStr < PROJECT_START_DATE_STR) {
+      toast({ variant: "destructive", title: "System Offline", description: `Service starts from ${PROJECT_START_DATE_STR}.` });
+      return;
+    }
+
     if (registeredEmployee?.joinDate && todayStr < registeredEmployee.joinDate) {
       toast({ variant: "destructive", title: "Action Blocked", description: `Allowed from ${format(parseISO(registeredEmployee.joinDate), 'dd MMM yyyy')}.` });
       return;
@@ -737,7 +764,7 @@ export default function AttendancePage() {
             <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4"><CardTitle className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Leave Requests</CardTitle><Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={handleCreateLeaveRequest} disabled={!isAccessAllowed}><Plus className="w-3 h-3" /> Create Request</Button></CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[240px]">
-                {myLeaveRequests.length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground font-medium">No active leave records.</div>) : (
+                {myLeaveRequests.length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground font-medium">No active leave records from April-2026.</div>) : (
                   <div className="divide-y divide-slate-100">{myLeaveRequests.map((l) => (
                     <div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors">
                       <div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'MM/dd')} - {format(parseISO(l.toDate), 'MM/dd')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div>
@@ -751,7 +778,7 @@ export default function AttendancePage() {
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700"><History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}</h3>
+          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700"><History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight (Since April-2026)' : 'My Attendance History (Since April-2026)'}</h3>
           <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
             <ScrollArea className="w-full">
               <Table className="min-w-[1000px]">
@@ -767,7 +794,7 @@ export default function AttendancePage() {
                   {isSuperAdmin && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
                 </TableRow></TableHeader>
                 <TableBody>
-                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No records.</TableCell></TableRow>) : (
+                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">No records from project start.</TableCell></TableRow>) : (
                     paginatedHistory.map((h: any) => (
                       <TableRow key={h.id} className="hover:bg-slate-50/50">
                         <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
@@ -889,7 +916,7 @@ export default function AttendancePage() {
                     <Input 
                       type="date" 
                       value={leaveFrom} 
-                      min={todayStr} 
+                      min={PROJECT_START_DATE_STR} 
                       max={leaveTo || undefined}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -907,7 +934,7 @@ export default function AttendancePage() {
                     <Input 
                       type="date" 
                       value={leaveTo} 
-                      min={leaveFrom || todayStr} 
+                      min={leaveFrom || PROJECT_START_DATE_STR} 
                       onChange={(e) => {
                         const val = e.target.value;
                         if (leaveFrom && val < leaveFrom) {

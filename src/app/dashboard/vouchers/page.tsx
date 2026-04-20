@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -59,6 +60,8 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
+const PROJECT_START_DATE_STR = "2026-04-01";
+
 export default function VouchersPage() {
   const { employees, firms, plants, vouchers, payrollRecords, addRecord, updateRecord, deleteRecord } = useData();
   const [isMounted, setIsMounted] = useState(false);
@@ -90,7 +93,8 @@ export default function VouchersPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    setVoucherDate(new Date().toISOString().split('T')[0]);
+    const today = new Date().toISOString().split('T')[0];
+    setVoucherDate(today < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : today);
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
@@ -118,27 +122,31 @@ export default function VouchersPage() {
   }, [voucherDate, vouchers]);
 
   const filteredPendingVouchers = useMemo(() => {
-    return (vouchers || []).filter(v => v.status === 'PENDING').filter(v => {
-      const emp = employees.find(e => e.id === v.employeeId);
-      const search = searchTerm.toLowerCase();
-      return (
-        v.voucherNo.toLowerCase().includes(search) ||
-        (emp?.name || "").toLowerCase().includes(search) ||
-        (emp?.employeeId || "").toLowerCase().includes(search)
-      );
-    }).reverse();
+    return (vouchers || [])
+      .filter(v => v.status === 'PENDING' && v.date >= PROJECT_START_DATE_STR)
+      .filter(v => {
+        const emp = employees.find(e => e.id === v.employeeId);
+        const search = searchTerm.toLowerCase();
+        return (
+          v.voucherNo.toLowerCase().includes(search) ||
+          (emp?.name || "").toLowerCase().includes(search) ||
+          (emp?.employeeId || "").toLowerCase().includes(search)
+        );
+      }).reverse();
   }, [vouchers, searchTerm, employees]);
 
   const vouchersWithRecovery = useMemo(() => {
     if (!isMounted) return [];
     
     const vouchersByEmp: Record<string, any[]> = {};
-    [...vouchers].sort((a,b) => a.date.localeCompare(b.date)).forEach(v => {
-      if (v.status === 'PAID') {
-        if (!vouchersByEmp[v.employeeId]) vouchersByEmp[v.employeeId] = [];
-        vouchersByEmp[v.employeeId].push(v);
-      }
-    });
+    [...vouchers]
+      .filter(v => v.date >= PROJECT_START_DATE_STR)
+      .sort((a,b) => a.date.localeCompare(b.date)).forEach(v => {
+        if (v.status === 'PAID') {
+          if (!vouchersByEmp[v.employeeId]) vouchersByEmp[v.employeeId] = [];
+          vouchersByEmp[v.employeeId].push(v);
+        }
+      });
 
     const recoveryMap: Record<string, any> = {};
 
@@ -182,7 +190,7 @@ export default function VouchersPage() {
     });
 
     return (vouchers || [])
-      .filter(v => v.status === 'APPROVED' || v.status === 'PAID')
+      .filter(v => (v.status === 'APPROVED' || v.status === 'PAID') && v.date >= PROJECT_START_DATE_STR)
       .map(v => ({
         ...v,
         recovery: recoveryMap[v.id] || { recovered: 0, remaining: v.amount, slipNo: "--", slipDate: "--", slipMonth: "--" }
@@ -217,6 +225,12 @@ export default function VouchersPage() {
       toast({ variant: "destructive", title: "Missing Fields", description: "Mandatory fields required." });
       return;
     }
+    
+    if (voucherDate < PROJECT_START_DATE_STR) {
+      toast({ variant: "destructive", title: "Invalid Date", description: `Project boundary is ${PROJECT_START_DATE_STR}.` });
+      return;
+    }
+
     const emp = employees.find(e => e.id === selectedEmployeeId);
     const newVoucher = {
       voucherNo: voucherNo, 
@@ -364,7 +378,7 @@ export default function VouchersPage() {
       <div className="space-y-6 print:hidden">
         <div>
           <h1 className="text-2xl font-bold">Advance Voucher System</h1>
-          <p className="text-muted-foreground">Manage employee advance payments, approvals, and recovery ledger.</p>
+          <p className="text-muted-foreground">Manage employee advance payments (Since April-2026).</p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -396,7 +410,7 @@ export default function VouchersPage() {
                     </div>
                     <div className="space-y-2">
                       <Label className="font-bold">Date *</Label>
-                      <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-12 bg-white" required />
+                      <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-12 bg-white" min={PROJECT_START_DATE_STR} required />
                     </div>
                     <div className="space-y-2">
                       <Label className="font-bold">Select Employee *</Label>
@@ -458,7 +472,7 @@ export default function VouchersPage() {
                   </TableHeader>
                   <TableBody>
                     {paginatedPending.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending vouchers.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No pending vouchers (Project Start: April-2026).</TableCell></TableRow>
                     ) : (
                       paginatedPending.map((v) => {
                         const emp = employees.find(e => e.id === v.employeeId);
@@ -694,6 +708,7 @@ export default function VouchersPage() {
                     value={payDate} 
                     onChange={(e) => setPayDate(e.target.value)} 
                     className="h-12 bg-white border-slate-200 font-bold" 
+                    min={PROJECT_START_DATE_STR}
                   />
                 </div>
               </div>
