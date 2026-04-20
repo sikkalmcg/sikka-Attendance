@@ -562,7 +562,8 @@ export default function ApprovalsPage() {
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">
                         {currentData.items[0]?.days !== undefined ? 'Days' : 'Working Hour'}
                       </TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type/Status</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
                       {currentData.items[0]?.address !== undefined && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">GPS Audit</TableHead>}
                       {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Action By</TableHead>}
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
@@ -570,7 +571,7 @@ export default function ApprovalsPage() {
                   </TableHeader>
                   <TableBody>
                     {currentData.items.length === 0 ? (
-                      <TableRow><TableCell colSpan={14} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={15} className="text-center py-20 text-muted-foreground font-medium">No records found matching current filters.</TableCell></TableRow>
                     ) : (
                       currentData.items.map((rec: any) => (
                         <TableRow key={rec.id} className={cn("hover:bg-slate-50/50 transition-colors", rec.isVirtual && "bg-rose-50/30")}>
@@ -619,15 +620,20 @@ export default function ApprovalsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center">
+                            <Badge variant="outline" className="font-black text-[9px] uppercase tracking-widest border-slate-200 px-3">
+                              {rec.attendanceType || "--"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-center">
                             <Badge 
-                              variant="outline" 
                               className={cn(
-                                "font-black text-[9px] uppercase tracking-widest border-slate-200 px-3",
-                                (rec.status === 'APPROVED' || rec.approved) ? "bg-emerald-50 text-emerald-700" :
-                                rec.status === 'REJECTED' ? "bg-rose-50 text-rose-700" : "bg-white"
+                                "text-[9px] font-black uppercase tracking-widest px-3",
+                                rec.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                rec.status === 'ABSENT' ? "bg-rose-50 text-rose-700 border-rose-200" :
+                                (rec.status === 'APPROVED' || rec.status === 'REJECTED') ? "bg-slate-100 text-slate-700" : "bg-white"
                               )}
                             >
-                              {rec.attendanceType || rec.status}
+                              {rec.status}
                             </Badge>
                           </TableCell>
                           {rec.address !== undefined && (
@@ -783,7 +789,7 @@ export default function ApprovalsPage() {
               </div>
               <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase">OUT Time</p>
-                <p className="text-xs font-bold">{selectedAttendance?.date} {selectedAttendance?.outTime || "--:--"}</p>
+                <p className="text-xs font-bold">{selectedAttendance?.date} {selectedAttendance?.inTime ? selectedAttendance.outTime || "--:--" : "--:--"}</p>
               </div>
               <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase">Working Hours</p>
