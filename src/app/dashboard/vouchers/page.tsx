@@ -541,43 +541,30 @@ export default function VouchersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Voucher Preview Modal - UPDATED WITH STICKY HEADER/FOOTER */}
+      {/* Unified Voucher Preview Modal - REVERTED TO SIMPLE SCROLL */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-2xl sm:rounded-3xl border-none shadow-2xl flex flex-col">
-          {/* Sticky Header Section */}
-          <div className="bg-white border-b shrink-0 z-20 print:hidden overflow-x-auto">
-             <div className="min-w-[800px] sm:min-w-0">
-               {previewVoucher && <VoucherHeader voucher={previewVoucher} employees={employees} firms={firms} />}
-             </div>
-          </div>
-
           <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0} role="region" aria-label="Voucher Preview Content">
             <div className="p-0 overflow-x-auto">
               <div className="min-w-[800px] sm:min-w-0">
-                {previewVoucher && <VoucherBody voucher={previewVoucher} employees={employees} />}
+                {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
               </div>
             </div>
             <ScrollBar orientation="vertical" className="w-2.5 opacity-100 block" />
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
           
-          {/* Sticky Footer Section */}
-          <div className="bg-white border-t shrink-0 z-20 print:hidden overflow-x-auto">
-             <div className="min-w-[800px] sm:min-w-0">
-               <VoucherFooterPreview />
-             </div>
-             <div className="p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden shrink-0">
-                <div className="flex items-center gap-2 pl-4 hidden sm:flex">
-                  <Info className="w-4 h-4 text-slate-400" />
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">A4 Corporate Standard - Press Up/Down to Scroll</span>
-                </div>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-lg font-bold h-9 px-6 text-[10px] sm:text-xs">Close</Button>
-                  <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-lg font-black h-9 px-8 gap-2 shadow-sm text-[10px] sm:text-xs" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
-                    <Printer className="w-3.5 h-3.5" /> Print Voucher
-                  </Button>
-                </div>
-              </div>
+          <div className="p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden shrink-0">
+            <div className="flex items-center gap-2 pl-4 hidden sm:flex">
+              <Info className="w-4 h-4 text-slate-400" />
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">A4 Corporate Standard - Press Up/Down to Scroll</span>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-lg font-bold h-9 px-6 text-[10px] sm:text-xs">Close</Button>
+              <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-lg font-black h-9 px-8 gap-2 shadow-sm text-[10px] sm:text-xs" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
+                <Printer className="w-3.5 h-3.5" /> Print Voucher
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -612,58 +599,62 @@ export default function VouchersPage() {
   );
 }
 
-function VoucherHeader({ voucher, employees, firms }: { voucher: Voucher, employees: any[], firms: any[] }) {
+function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
   const emp = employees.find(e => e.id === voucher.employeeId);
   const firm = firms.find(f => f.id === emp?.firmId);
   return (
-    <div className="p-6 sm:p-12 pb-0">
-      <div className="relative mb-10 sm:mb-12 pt-2">
-        <div className="absolute left-0 top-0">
-          {firm?.logo ? (
-            <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
-          ) : (
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
-              <span className="text-white text-xl sm:text-2xl font-black">S</span>
-            </div>
-          )}
-        </div>
-        <div className="text-center">
-          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-          <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
-        </div>
+    <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto", isPrintMode ? "p-4" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
+      {/* Centered Titles */}
+      <div className="text-center mb-10">
+        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+        <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
       </div>
-      <div className="grid grid-cols-2 gap-8 mb-6 items-start">
-        <div className="space-y-4">
+
+      {/* Top Header Row with Logo and Metadata */}
+      <div className="flex justify-between items-start mb-8">
+        <div className="flex gap-6 items-start">
+          <div className="shrink-0 pt-1">
+            {firm?.logo ? (
+              <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
+            ) : (
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
+                <span className="text-white text-xl sm:text-2xl font-black">S</span>
+              </div>
+            )}
+          </div>
           <div className="space-y-1">
             <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
             <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
-          </div>
-          <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase border-t pt-3">
-            <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
-            <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
+            <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase pt-2">
+              <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
+              <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
+            </div>
           </div>
         </div>
+
         <div className="flex flex-col items-end pt-0">
           <div className="w-full max-w-[280px] space-y-2">
-            <div className="flex justify-between border-b border-slate-100 pb-1.5">
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
               <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
               <span className="text-xs sm:text-sm font-black font-mono text-primary">{voucher.voucherNo}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 pb-1.5">
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
               <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span>
               <span className="text-xs sm:text-sm font-black">{formatDate(voucher.date)}</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
+              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.createdByName || "System Admin"}</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
+              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function VoucherBody({ voucher, employees }: { voucher: Voucher, employees: any[] }) {
-  const emp = employees.find(e => e.id === voucher.employeeId);
-  return (
-    <div className="px-6 sm:p-12 pt-0">
+      {/* Employee / Receiver Information Table */}
       <div className="mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee / Receiver Information</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
@@ -685,6 +676,8 @@ function VoucherBody({ voucher, employees }: { voucher: Voucher, employees: any[
           </table>
         </div>
       </div>
+
+      {/* Transaction Summary Table */}
       <div className="mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><CreditCard className="w-3 h-3" /> Transaction Summary</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
@@ -706,54 +699,48 @@ function VoucherBody({ voucher, employees }: { voucher: Voucher, employees: any[
           </table>
         </div>
       </div>
-      <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl mb-6">
-        <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
-        <div className="space-y-4 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify">
-          <p>The above-mentioned amount is being paid as an advance against the employee’s future salary and shall be adjusted/deducted from the upcoming salary payments, as per company policy or mutual agreement.</p>
-          <p className="font-bold text-slate-900 underline">The employee hereby agrees and acknowledges that:</p>
-          <ul className="list-disc pl-6 space-y-2">
-            <li>The advance amount will be recovered from salary in full or in installments.</li>
-            <li>In case of resignation, termination, or separation from the company, the outstanding advance shall be recoverable from final settlement dues.</li>
-            <li>The company reserves the right to deduct the balance amount from any payable dues.</li>
-          </ul>
-          <p className="pt-2 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes.</p>
+
+      {/* Declaration Section */}
+      <div className="mb-10 sm:mb-12 space-y-6">
+        <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl">
+          <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
+          <div className="space-y-4 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify">
+            <p>The above-mentioned amount is being paid as an advance against the employee’s future salary and shall be adjusted/deducted from the upcoming salary payments, as per company policy or mutual agreement.</p>
+            <p className="font-bold text-slate-900 underline">The employee hereby agrees and acknowledges that:</p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>The advance amount will be recovered from salary in full or in installments.</li>
+              <li>In case of resignation, termination, or separation from the company, the outstanding advance (if any) shall be recoverable from final settlement dues.</li>
+              <li>The company reserves the right to deduct the balance amount from any payable dues.</li>
+            </ul>
+            <p className="pt-2 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes.</p>
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function VoucherFooterPreview() {
-  return (
-    <div className="px-6 sm:px-12 pt-6 border-t bg-white">
-      <div className="grid grid-cols-3 gap-10 items-end pb-8">
-        <div className="text-center space-y-3"><div className="h-10 border-b border-slate-400 border-dashed" /><p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p></div>
-        <div className="text-center space-y-3"><div className="h-10 border-b border-slate-400 border-dashed" /><p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p></div>
-        <div className="text-center space-y-3"><div className="h-10 border-b border-slate-400 border-dashed" /><p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p></div>
+      {/* Footer Signatures */}
+      <div className="mt-auto grid grid-cols-3 gap-10 items-end pb-8">
+        <div className="text-center space-y-3">
+          <div className="h-14 border-b border-slate-400 border-dashed" />
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>
+        </div>
+        <div className="text-center space-y-3">
+          <div className="h-14 border-b border-slate-400 border-dashed" />
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
+        </div>
+        <div className="text-center space-y-3">
+          <div className="h-14 border-b border-slate-400 border-dashed" />
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
+        </div>
       </div>
-    </div>
-  );
-}
 
-function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
-  const emp = employees.find(e => e.id === voucher.employeeId);
-  const firm = firms.find(f => f.id === emp?.firmId);
-  return (
-    <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto", isPrintMode ? "p-4" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
-      <div className="relative mb-10 sm:mb-12 pt-2">
-        <div className="absolute left-0 top-0">{firm?.logo ? (<img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />) : (<div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center"><span className="text-white text-xl sm:text-2xl font-black">S</span></div>)}</div>
-        <div className="text-center"><h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1><p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p></div>
+      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-6">
+        <p className="text-[7px] sm:text-[8px] font-medium text-slate-500 text-center leading-relaxed">This voucher is issued for internal accounting purposes and complies with applicable provisions of the Income Tax Act, 1961 and Goods and Services Tax Act, 2017. All transactions are subject to audit and verification.</p>
       </div>
-      <div className="grid grid-cols-2 gap-8 mb-10 items-start">
-        <div className="space-y-4"><div className="space-y-1"><h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2><p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p></div><div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase border-t pt-3"><div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div><div><span className="text-slate-400 text-[7px] sm:text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div></div></div>
-        <div className="flex flex-col items-end pt-0"><div className="w-full max-w-[280px] space-y-2"><div className="flex justify-between border-b border-slate-100 pb-1.5"><span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span><span className="text-xs sm:text-sm font-black font-mono text-primary">{voucher.voucherNo}</span></div><div className="flex justify-between border-b border-slate-100 pb-1.5"><span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span><span className="text-xs sm:text-sm font-black">{formatDate(voucher.date)}</span></div><div className="flex justify-between border-b border-slate-100 pb-1.5"><span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span><span className="text-[10px] sm:text-xs font-bold uppercase">{voucher.createdByName || "System Admin"}</span></div><div className="flex justify-between border-b border-slate-100 pb-1.5"><span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span><span className="text-[10px] sm:text-xs font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span></div></div></div>
+      <div className="flex justify-between items-center text-[7px] sm:text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4 mt-4">
+        <span>SikkaTrack HRMS Enterprise Node</span>
+        <span className="hidden sm:block">Corporate Original Document</span>
+        <span>Digitally Authenticated</span>
       </div>
-      <div className="mb-10"><h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee / Receiver Information</h3><div className="border border-slate-900 rounded-lg overflow-hidden"><table className="w-full text-left text-xs sm:text-sm border-collapse"><tbody><tr><th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[20%] uppercase text-[8px] sm:text-[9px] font-black">Employee ID</th><td className="p-3 sm:p-4 border-r border-b border-slate-900 font-black font-mono text-primary w-[30%]">{emp?.employeeId || "---"}</td><th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[20%] uppercase text-[8px] sm:text-[9px] font-black">Full Name</th><td className="p-3 sm:p-4 border-b border-slate-900 font-black uppercase w-[30%]">{emp?.name || "---"}</td></tr><tr><th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Dept / Desig</th><td className="p-3 sm:p-4 border-r border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td><th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Aadhaar Number</th><td className="p-3 sm:p-4 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td></tr></tbody></table></div></div>
-      <div className="mb-10"><h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><CreditCard className="w-3 h-3" /> Transaction Summary</h3><div className="border border-slate-900 rounded-lg overflow-hidden"><table className="w-full text-left text-xs sm:text-sm border-collapse"><tbody><tr><th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[25%] uppercase text-[8px] sm:text-[9px] font-black">Amount (₹)</th><td className="p-3 sm:p-4 border-b border-slate-900"><div className="bg-slate-900 text-white px-6 py-2 rounded-md inline-block text-xl sm:text-2xl font-black">{formatCurrency(voucher.amount)}</div></td></tr><tr><th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">In Words</th><td className="p-3 sm:p-4 border-b border-slate-900 font-bold italic text-slate-700 text-[10px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td></tr><tr><th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Purpose</th><td className="p-3 sm:p-4 font-black uppercase tracking-widest text-primary text-[10px] sm:text-sm">Advance Salary</td></tr></tbody></table></div></div>
-      <div className="mb-10 sm:mb-12 space-y-6"><div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl"><h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4><div className="space-y-4 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify"><p>The above-mentioned amount is being paid as an advance against the employee’s future salary and shall be adjusted/deducted from the upcoming salary payments, as per company policy or mutual agreement.</p><p className="font-bold text-slate-900 underline">The employee hereby agrees and acknowledges that:</p><ul className="list-disc pl-6 space-y-2"><li>The advance amount will be recovered from salary in full or in installments.</li><li>In case of resignation, termination, or separation from the company, the outstanding advance (if any) shall be recoverable from final settlement dues.</li><li>The company reserves the right to deduct the balance amount from any payable dues.</li></ul><p className="pt-2 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes.</p></div></div></div>
-      <div className="mt-auto grid grid-cols-3 gap-10 items-end pb-8"><div className="text-center space-y-3"><div className="h-20 border-b border-slate-400 border-dashed" /><p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p></div><div className="text-center space-y-3"><div className="h-20 border-b border-slate-400 border-dashed" /><p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p></div><div className="text-center space-y-3"><div className="h-20 border-b border-slate-400 border-dashed" /><p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p></div></div>
-      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-6"><p className="text-[7px] sm:text-[8px] font-medium text-slate-500 text-center leading-relaxed">This voucher is issued for internal accounting purposes and complies with applicable provisions of the Income Tax Act, 1961 and Goods and Services Tax Act, 2017. All transactions are subject to audit and verification. Aadhaar details, if collected, are handled in accordance with applicable data protection and privacy regulations.</p></div>
-      <div className="flex justify-between items-center text-[7px] sm:text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4 mt-4"><span>SikkaTrack HRMS Enterprise Node</span><span className="hidden sm:block">Corporate Original Document</span><span>Digitally Authenticated</span></div>
     </div>
   );
 }
