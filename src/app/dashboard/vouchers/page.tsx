@@ -596,8 +596,8 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
     )}>
       {/* Title Section */}
       <div className="text-center mb-10">
-        <h1 className="text-4xl font-black uppercase tracking-[0.25em] border-b-4 border-slate-900 inline-block pb-1">Payment Voucher</h1>
-        <p className="text-xs font-bold text-slate-500 mt-2 uppercase tracking-[0.4em]">Corporate Advance Disbursement</p>
+        <h1 className="text-2xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+        <p className="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
       </div>
 
       {/* Header Section */}
@@ -605,20 +605,20 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         <div className="space-y-4">
           <div className="flex flex-col gap-3">
             {firm?.logo ? (
-              <img src={firm.logo} alt="Logo" className="w-20 h-20 object-contain" />
+              <img src={firm.logo} alt="Logo" className="w-16 h-16 object-contain" />
             ) : (
-              <div className="w-16 h-16 bg-slate-900 rounded-xl flex items-center justify-center">
-                <span className="text-white text-3xl font-black">S</span>
+              <div className="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center">
+                <span className="text-white text-xl font-black">S</span>
               </div>
             )}
             <div className="space-y-1">
-              <h2 className="text-2xl font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
-              <p className="text-[10px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
+              <h2 className="text-lg font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+              <p className="text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
             </div>
           </div>
-          <div className="flex gap-6 text-[11px] font-black uppercase border-t pt-3">
-            <div><span className="text-slate-400 text-[9px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
-            <div><span className="text-slate-400 text-[9px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
+          <div className="flex gap-6 text-[10px] font-black uppercase border-t pt-3">
+            <div><span className="text-slate-400 text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
+            <div><span className="text-slate-400 text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
           </div>
         </div>
 
