@@ -107,11 +107,15 @@ export default function ReportsPage() {
     const end = parseISO(toDate);
 
     if (type === "ATTENDANCE") {
+      // DATA FETCHING SYNC: Fetch only from "History" (Approved or with Remark)
       return attendanceRecords
         .filter(r => {
           const d = parseISO(r.date);
           const emp = employees.find(e => e.employeeId === r.employeeId);
+          const isHistoryRecord = (r.approved === true || !!r.remark);
+          
           return r.date >= PROJECT_START_DATE_STR && 
+                 isHistoryRecord &&
                  isWithinInterval(d, { start, end }) && 
                  (emp ? selectedFirmIds.includes(emp.firmId) : true);
         })
@@ -133,7 +137,7 @@ export default function ReportsPage() {
             "Out Hour": formatMinutesToHHMM(r.unapprovedOutDuration || 0),
             "Working Hour": formatHoursToHHMM(r.hours),
             "Attendance Type": r.attendanceType,
-            "Status": r.status
+            "Status": r.remark ? "REJECTED" : r.status
           };
         });
     }
@@ -199,7 +203,7 @@ export default function ReportsPage() {
                 </div>
                 <div>
                   <CardTitle className="text-xl font-black">{viewType} View</CardTitle>
-                  <CardDescription className="text-slate-400 font-medium">Verified Records for the selected range</CardDescription>
+                  <CardDescription className="text-slate-400 font-medium">Verified History Records (Approved/Remarked)</CardDescription>
                 </div>
               </div>
               <Button onClick={() => handleExport(viewType!)} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-8 font-black gap-2">
@@ -225,6 +229,7 @@ export default function ReportsPage() {
                           <TableCell key={i} className="px-6 py-4 text-xs font-bold text-slate-700 border-r border-slate-100 last:border-0">
                             {val === "PRESENT" ? <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 text-[9px] font-black">PRESENT</Badge> :
                              val === "ABSENT" ? <Badge className="bg-rose-50 text-rose-700 border-rose-100 text-[9px] font-black">ABSENT</Badge> :
+                             val === "REJECTED" ? <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-[9px] font-black">REJECTED</Badge> :
                              val}
                           </TableCell>
                         ))}
