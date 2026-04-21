@@ -541,7 +541,7 @@ export default function VouchersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Unified Voucher Preview Modal - REVERTED TO SIMPLE SCROLL */}
+      {/* Unified Voucher Preview Modal */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-2xl sm:rounded-3xl border-none shadow-2xl flex flex-col">
           <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0} role="region" aria-label="Voucher Preview Content">
@@ -685,7 +685,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
             <tbody>
               <tr>
                 <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[25%] uppercase text-[8px] sm:text-[9px] font-black">Amount (₹)</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900"><div className="bg-slate-900 text-white px-6 py-2 rounded-md inline-block text-xl sm:text-2xl font-black">{formatCurrency(voucher.amount)}</div></td>
+                <td className="p-3 sm:p-4 border-b border-slate-900"><div className="text-xl sm:text-2xl font-black text-slate-900 py-1">{formatCurrency(voucher.amount)}</div></td>
               </tr>
               <tr>
                 <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">In Words</th>
