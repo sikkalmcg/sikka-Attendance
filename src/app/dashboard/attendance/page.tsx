@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -130,6 +129,15 @@ export default function AttendancePage() {
 
   const { toast } = useToast();
 
+  // Helper for device notifications
+  const triggerNotification = useCallback((title: string, body: string) => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "granted") {
+        new Notification(title, { body, icon: "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG" });
+      }
+    }
+  }, []);
+
   useEffect(() => {
     setIsMounted(true);
     const savedUser = localStorage.getItem("user");
@@ -137,6 +145,14 @@ export default function AttendancePage() {
     
     setCurrentTime(getISTTime());
     const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
+
+    // Request notification permission
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    }
+
     return () => clearInterval(timer);
   }, []);
 
@@ -168,7 +184,6 @@ export default function AttendancePage() {
     const isEmployee = currentUser?.role === 'EMPLOYEE';
     const hasEmployeeRecord = !!registeredEmployee && registeredEmployee.active;
     
-    // Strict Device Binding Enforcement
     const isBoundDevice = !registeredEmployee?.deviceId || registeredEmployee.deviceId === currentDevice;
     
     return isEmployee && hasEmployeeRecord && isBoundDevice;
@@ -206,7 +221,6 @@ export default function AttendancePage() {
     return (employeeRecords || []).find(r => !r.outTime);
   }, [employeeRecords]);
 
-  // Load reminder read state
   useEffect(() => {
     if (isMounted && effectiveEmployeeId && todayStr) {
       const stored = localStorage.getItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`);
@@ -214,11 +228,8 @@ export default function AttendancePage() {
     }
   }, [isMounted, effectiveEmployeeId, todayStr]);
 
-  // Reminder Logic Rule Definition
   const showReminderIcon = useMemo(() => {
     if (!isMounted || !isAccessAllowed || activeRecord || !currentTime || !todayStr) return false;
-    
-    // RESTRICTION: No reminders before project start
     if (todayStr < PROJECT_START_DATE_STR) return false;
 
     const currentHHMM = format(currentTime, "HH:mm");
@@ -242,7 +253,6 @@ export default function AttendancePage() {
     });
     if (hasApprovedLeave) return false;
 
-    // Rule: Auto remove after 30 minutes of viewing
     if (reminderReadAt) {
       const diffMins = (currentTime.getTime() - reminderReadAt) / (1000 * 60);
       if (diffMins >= 30) return false;
@@ -251,18 +261,15 @@ export default function AttendancePage() {
     return true;
   }, [isMounted, isAccessAllowed, activeRecord, currentTime, todayStr, holidays, employeeRecords, myLeaveRequests, reminderReadAt]);
 
-  // Rule: Auto-display popup on device header if criteria met and not read
   useEffect(() => {
     if (showReminderIcon && !reminderReadAt && !hasAutoOpened) {
       setIsReminderPopoverOpen(true);
       setHasAutoOpened(true);
       
-      // Mark as read immediately when popup displays
       const now = Date.now();
       setReminderReadAt(now);
       localStorage.setItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`, now.toString());
       
-      // Also log to notifications collection
       addRecord('notifications', {
         message: `Reminder Displayed: ${effectiveEmployeeName} has not checked in by 10:30 AM.`,
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
@@ -273,7 +280,6 @@ export default function AttendancePage() {
     }
   }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord]);
 
-  // Auto-OUT Policy Enforcement (16 Hour Rule)
   useEffect(() => {
     if (activeRecord && isMounted && currentTime && isAccessAllowed) {
       const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
@@ -286,12 +292,16 @@ export default function AttendancePage() {
         
         updateRecord('attendance', activeRecord.id, {
           outTime: autoOutTimeStr,
-          hours: 8, // Organizational Policy: Fixed 8 hours for shifts exceeding 16 hours
+          hours: 8,
           status: 'PRESENT',
           autoCheckout: true,
           addressOut: 'System Auto Check-out (16h Policy Limit)',
           outPlant: activeRecord.inPlant || "Remote"
         });
+
+        const notifyMsg = `${effectiveEmployeeName} – Auto OUT at ${autoOutTimeStr}. Policy: 16h Limit.`;
+        addRecord('notifications', { message: notifyMsg, timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), read: false });
+        triggerNotification("Security Auto Check-out", notifyMsg);
 
         toast({
           title: "Security: Auto Check-out",
@@ -299,7 +309,7 @@ export default function AttendancePage() {
         });
       }
     }
-  }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast]);
+  }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast, effectiveEmployeeName, addRecord, triggerNotification]);
 
   const lastOutRecord = useMemo(() => {
     return [...employeeRecords]
@@ -482,7 +492,6 @@ export default function AttendancePage() {
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
     
-    // RESTRICTION: Application floor is April-2026
     const floorDate = parseISO(PROJECT_START_DATE_STR);
     const istNow = getISTTime();
     const todayStrLocal = format(istNow, "yyyy-MM-dd");
@@ -508,7 +517,6 @@ export default function AttendancePage() {
           } catch (e) { return false; }
         });
 
-      // For Oversight: Include "Virtual Absents" for Today so the table isn't empty when no logs exist
       const virtualTodayRecords: any[] = [];
       if (todayStrLocal >= PROJECT_START_DATE_STR) {
         employees.filter(e => e.active).forEach(emp => {
@@ -560,7 +568,6 @@ export default function AttendancePage() {
       }).filter(Boolean).flat().reverse();
     }
 
-    // Apply Column Filters
     return baseList.filter((h: any) => {
       if (!h) return false;
       const nameMatch = h.employeeName?.toLowerCase().includes(columnFilters.name.toLowerCase());
@@ -605,7 +612,6 @@ export default function AttendancePage() {
       return;
     }
 
-    // RESTRICTION: No checking in before project start
     if (todayStr < PROJECT_START_DATE_STR) {
       toast({ variant: "destructive", title: "System Offline", description: `Service starts from ${PROJECT_START_DATE_STR}.` });
       return;
@@ -649,14 +655,14 @@ export default function AttendancePage() {
   const handleConfirmCheckIn = () => {
     if (!currentUser || !currentGPS || !isAccessAllowed || lockState.isLocked) return;
     const now = getISTTime();
-    const time = format(now, "HH:mm");
+    const time = format(now, "hh:mm a");
     const today = format(now, "yyyy-MM-dd");
 
     const newRecord: Partial<AttendanceRecord> = {
       employeeId: effectiveEmployeeId,
       employeeName: effectiveEmployeeName,
       date: today,
-      inTime: time,
+      inTime: format(now, "HH:mm"),
       outTime: null,
       hours: 0,
       status: 'PRESENT',
@@ -670,23 +676,34 @@ export default function AttendancePage() {
     };
 
     addRecord('attendance', newRecord);
+    
+    // Notification Logic
+    const notifyMsg = `${effectiveEmployeeName} – Mark IN at ${time}`;
+    addRecord('notifications', {
+      message: notifyMsg,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'ATTENDANCE_IN',
+      employeeId: effectiveEmployeeId
+    });
+    triggerNotification("Attendance Marked", notifyMsg);
+
     setActiveDialog("NONE");
     toast({ title: "Check-In Success", description: "Attendance logged successfully." });
-    
-    // Explicitly ensure reminder is removed immediately on IN
     setIsReminderPopoverOpen(false);
   };
 
   const handleConfirmCheckOut = () => {
     if (!activeRecord || !currentGPS || !isAccessAllowed) return;
     const now = getISTTime();
-    const time = format(now, "HH:mm");
+    const timeHHMM = format(now, "HH:mm");
+    const timeDisplay = format(now, "hh:mm a");
     const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
-    const outDateTime = new Date(`${format(now, "yyyy-MM-dd")}T${time}`);
+    const outDateTime = new Date(`${format(now, "yyyy-MM-dd")}T${timeHHMM}`);
     const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
     let isAuto = diffHours >= 16;
-    let finalOutTime = time;
+    let finalOutTime = timeHHMM;
     let finalHours = parseFloat(diffHours.toFixed(2));
 
     if (isAuto) {
@@ -712,6 +729,18 @@ export default function AttendancePage() {
       autoOut: isAuto,
       autoCheckout: isAuto
     });
+
+    // Notification Logic
+    const workingHoursStr = formatHoursToHHMM(finalHours);
+    const notifyMsg = `${effectiveEmployeeName} – Mark OUT at ${timeDisplay}. Working Hours: ${workingHoursStr} Hrs`;
+    addRecord('notifications', {
+      message: notifyMsg,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'ATTENDANCE_OUT',
+      employeeId: effectiveEmployeeId
+    });
+    triggerNotification("Attendance Marked", notifyMsg);
 
     setActiveDialog("NONE");
     toast({ title: "Check-Out Success", description: `Shift ended at ${finalOutTime}.` });
