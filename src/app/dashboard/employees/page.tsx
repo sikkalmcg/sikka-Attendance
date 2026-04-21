@@ -125,6 +125,29 @@ export default function EmployeesPage() {
     setIsMounted(true);
   }, []);
 
+  // AUTO-GENERATION LOGIC FOR EMPLOYEE ID
+  useEffect(() => {
+    if (view === 'form' && !editEmployee && isMounted) {
+      const generateNextId = () => {
+        const silPrefix = "SIL";
+        // Extract numbers from IDs following the SIL00000 format
+        const numericIds = employees
+          .filter(e => e.employeeId?.startsWith(silPrefix))
+          .map(e => {
+            const numPart = e.employeeId.replace(silPrefix, "");
+            return parseInt(numPart);
+          })
+          .filter(n => !isNaN(n));
+
+        const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
+        const nextId = (maxId + 1).toString().padStart(5, '0');
+        return `${silPrefix}${nextId}`;
+      };
+
+      setFormData(prev => ({ ...prev, employeeId: generateNextId() }));
+    }
+  }, [view, editEmployee, employees, isMounted]);
+
   const filtered = useMemo(() => {
     const sorted = [...(employees || [])].sort((a, b) => {
       const nameA = (a.firstName + " " + a.lastName).toLowerCase();
@@ -199,6 +222,12 @@ export default function EmployeesPage() {
     const aadhaarExists = employees.find(e => e.aadhaar === aadhaar && e.id !== editEmployee?.id);
     if (aadhaarExists) {
       toast({ variant: "destructive", title: "Duplicate Aadhaar", description: "This Aadhaar number is already registered." });
+      return false;
+    }
+
+    const idExists = employees.find(e => e.employeeId === employeeId && e.id !== editEmployee?.id);
+    if (idExists) {
+      toast({ variant: "destructive", title: "Duplicate ID", description: "This Employee ID is already assigned to another staff member." });
       return false;
     }
 
@@ -278,7 +307,7 @@ export default function EmployeesPage() {
               </div>
             </div>
             {formData.employeeId && (
-              <Badge className="bg-primary/20 text-primary border-none px-4 py-1.5 font-black text-xs">{formData.employeeId}</Badge>
+              <Badge className="bg-primary/20 text-primary border-none px-4 py-1.5 font-black text-xs tracking-widest">{formData.employeeId}</Badge>
             )}
           </div>
 
@@ -292,7 +321,12 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">Employee ID *</Label>
-                    <Input value={formData.employeeId || ""} onChange={(e) => setFormData(p => ({...p, employeeId: e.target.value.toUpperCase()}))} className="h-12 bg-slate-50 font-bold border-slate-200" placeholder="Auto / Manual" />
+                    <Input 
+                      value={formData.employeeId || ""} 
+                      onChange={(e) => setFormData(p => ({...p, employeeId: e.target.value.toUpperCase()}))} 
+                      className="h-12 bg-slate-50 font-black border-primary/20 focus-visible:ring-primary text-primary" 
+                      placeholder="Generating..." 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">First Name *</Label>
@@ -494,7 +528,7 @@ export default function EmployeesPage() {
                   <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No records found matching your search.</TableCell></TableRow>
                 ) : (
                   paginatedEmployees.map((emp) => (
-                    <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                    <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                       <TableCell className="px-6">
                         <div className="flex flex-col">
                           <span className="font-bold uppercase text-xs sm:text-sm">{emp.firstName} {emp.lastName}</span>
