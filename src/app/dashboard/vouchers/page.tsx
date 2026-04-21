@@ -250,38 +250,41 @@ export default function VouchersPage() {
           <p className="text-muted-foreground">Manage employee advance payments (Since April-2026).</p>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-xl grid-cols-3 mb-8 bg-slate-100 p-1 rounded-xl h-12">
-            <TabsTrigger value="create" className="font-semibold">Create Voucher</TabsTrigger>
-            <TabsTrigger value="approve" className="font-semibold">Approve Voucher</TabsTrigger>
-            <TabsTrigger value="payment" className="font-semibold">Voucher Payments</TabsTrigger>
-          </TabsList>
+          <ScrollArea className="w-full">
+            <TabsList className="flex w-full sm:inline-flex sm:grid sm:grid-cols-3 mb-8 bg-slate-100 p-1 rounded-xl h-12 min-w-[360px]">
+              <TabsTrigger value="create" className="flex-1 sm:flex-none font-semibold">Create Voucher</TabsTrigger>
+              <TabsTrigger value="approve" className="flex-1 sm:flex-none font-semibold">Approve Voucher</TabsTrigger>
+              <TabsTrigger value="payment" className="flex-1 sm:flex-none font-semibold">Voucher Payments</TabsTrigger>
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
           
           <TabsContent value="create">
-            <Card className="max-w-4xl mx-auto shadow-xl border-none overflow-hidden">
-              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between">
-                <CardTitle>Generate New Voucher</CardTitle>
-                <Badge variant="outline" className="font-black bg-white">{voucherNo}</Badge>
+            <Card className="w-full sm:max-w-4xl mx-auto shadow-xl border-none overflow-hidden">
+              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">Generate New Voucher</CardTitle>
+                <Badge variant="outline" className="font-black bg-white text-[10px] sm:text-xs">{voucherNo}</Badge>
               </CardHeader>
               <form onSubmit={handleCreateVoucher}>
-                <CardContent className="p-8 space-y-8">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                <CardContent className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                     <div className="space-y-2">
-                      <Label className="font-bold">Voucher Number</Label>
-                      <Input value={voucherNo} disabled className="h-12 font-bold bg-slate-50" />
+                      <Label className="font-bold text-xs">Voucher Number</Label>
+                      <Input value={voucherNo} disabled className="h-11 sm:h-12 font-bold bg-slate-50 text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="font-bold">Date *</Label>
-                      <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-12" min={PROJECT_START_DATE_STR} />
+                      <Label className="font-bold text-xs">Date *</Label>
+                      <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-11 sm:h-12 text-sm" min={PROJECT_START_DATE_STR} />
                     </div>
                     <div className="space-y-2">
-                      <Label className="font-bold">Select Employee *</Label>
+                      <Label className="font-bold text-xs">Select Employee *</Label>
                       <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                        <SelectTrigger className="h-12">
+                        <SelectTrigger className="h-11 sm:h-12 text-sm">
                           <SelectValue placeholder="Select Employee" />
                         </SelectTrigger>
                         <SelectContent>
                           {employees.map(emp => (
-                            <SelectItem key={emp.id} value={emp.id}>
+                            <SelectItem key={emp.id} value={emp.id} className="text-sm">
                               {emp.name} ({emp.employeeId})
                             </SelectItem>
                           ))}
@@ -289,17 +292,17 @@ export default function VouchersPage() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label className="font-bold">Amount (INR) *</Label>
-                      <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-12" placeholder="Enter amount" />
+                      <Label className="font-bold text-xs">Amount (INR) *</Label>
+                      <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-11 sm:h-12 text-sm" placeholder="Enter amount" />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="font-bold">Purpose *</Label>
-                    <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-12" placeholder="Specify reason for advance..." />
+                    <Label className="font-bold text-xs">Purpose *</Label>
+                    <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-11 sm:h-12 text-sm" placeholder="Specify reason for advance..." />
                   </div>
                 </CardContent>
-                <CardFooter className="bg-slate-50 border-t flex justify-end p-6">
-                  <Button className="px-12 h-12 font-bold shadow-lg shadow-primary/20" type="submit">Send for Approval</Button>
+                <CardFooter className="bg-slate-50 border-t flex justify-end p-4 sm:p-6">
+                  <Button className="w-full sm:w-auto sm:px-12 h-11 sm:h-12 font-bold shadow-lg shadow-primary/20" type="submit">Send for Approval</Button>
                 </CardFooter>
               </form>
             </Card>
@@ -307,171 +310,48 @@ export default function VouchersPage() {
 
           <TabsContent value="approve">
             <Card className="shadow-sm border-slate-200 overflow-hidden">
-              <CardHeader className="bg-slate-50/50 p-6 flex flex-row items-center justify-between border-b">
-                <CardTitle className="text-lg">Pending Approvals ({filteredPendingVouchers.length})</CardTitle>
-                <div className="relative w-64">
+              <CardHeader className="bg-slate-50/50 p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between border-b gap-4">
+                <CardTitle className="text-sm sm:text-lg">Pending Approvals ({filteredPendingVouchers.length})</CardTitle>
+                <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search pending..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  <Input placeholder="Search pending..." className="pl-10 h-10 bg-white text-xs sm:text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Voucher No</TableHead>
-                      <TableHead className="font-bold">Name</TableHead>
-                      <TableHead className="font-bold text-center">Dept / Desig</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                      <TableHead className="font-bold text-right">Amount</TableHead>
-                      <TableHead className="font-bold text-right pr-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedPending.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-medium">No pending vouchers found.</TableCell></TableRow>
-                    ) : (
-                      paginatedPending.map(v => {
-                        const emp = employees.find(e => e.id === v.employeeId);
-                        return (
-                          <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
-                            <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
-                            <TableCell className="font-bold uppercase text-slate-700">{emp?.name}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col text-center">
-                                <span className="text-xs font-bold text-slate-600">{emp?.department}</span>
-                                <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
-                            <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
-                            <TableCell className="text-right pr-6">
-                              <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline" className="text-rose-600 border-rose-200 hover:bg-rose-50 font-bold" onClick={() => setVoucherToReject(v.id)}>Reject</Button>
-                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold h-8 px-6 shadow-sm" onClick={() => updateRecord('vouchers', v.id, { status: 'APPROVED' })}>Approve</Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-              {totalPagesPending > 1 && <StandardPaginationFooter current={pendingPage} total={totalPagesPending} onPageChange={setPendingPage} />}
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="payment" className="space-y-12">
-            <Card className="shadow-sm border-slate-200 overflow-hidden">
-              <CardHeader className="bg-slate-50/50 p-6 flex flex-row items-center justify-between border-b">
-                <CardTitle className="text-lg">Ready for Payment ({paymentTabLists.pending.length})</CardTitle>
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search payable..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Voucher No</TableHead>
-                      <TableHead className="font-bold">Name</TableHead>
-                      <TableHead className="font-bold text-center">Dept / Desig</TableHead>
-                      <TableHead className="font-bold">Date</TableHead>
-                      <TableHead className="font-bold text-right">Amount</TableHead>
-                      <TableHead className="font-bold text-right pr-6">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedPayable.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No approved vouchers awaiting payment.</TableCell></TableRow>
-                    ) : (
-                      paginatedPayable.map(v => {
-                        const emp = employees.find(e => e.id === v.employeeId);
-                        return (
-                          <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
-                            <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
-                            <TableCell className="font-bold uppercase text-slate-700">{emp?.name}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col text-center">
-                                <span className="text-xs font-bold text-slate-600">{emp?.department}</span>
-                                <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
-                            <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
-                            <TableCell className="text-right pr-6">
-                              <Button size="sm" className="font-bold px-6 bg-slate-900 shadow-sm" onClick={() => handleOpenPayDialog(v)}>Process Pay</Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-              {totalPagesPayable > 1 && <StandardPaginationFooter current={payablePage} total={totalPagesPayable} onPageChange={setPayablePage} />}
-            </Card>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-sm font-black uppercase text-slate-700 flex items-center gap-2"><History className="w-4 h-4 text-primary" /> Paid Vouchers (History)</h3>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-xl shadow-sm">
-                    <Filter className="w-3 h-3 text-slate-400" />
-                    <Select value={paidFromMonth} onValueChange={(v) => {setPaidFromMonth(v); if (paidToMonth < v) setPaidToMonth(v);}}>
-                      <SelectTrigger className="h-7 w-24 border-none p-0 text-[10px] font-bold focus:ring-0"><SelectValue /></SelectTrigger>
-                      <SelectContent>{VOUCHER_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <span className="text-[10px] text-slate-300 font-bold">TO</span>
-                    <Select value={paidToMonth} onValueChange={(v) => {if (v >= paidFromMonth) setPaidToMonth(v);}}>
-                      <SelectTrigger className="h-7 w-24 border-none p-0 text-[10px] font-bold focus:ring-0"><SelectValue /></SelectTrigger>
-                      <SelectContent>{VOUCHER_MONTHS.filter(m => {
-                        const mOrder = [...VOUCHER_MONTHS].reverse();
-                        return mOrder.indexOf(m) >= mOrder.indexOf(paidFromMonth);
-                      }).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold gap-2" onClick={() => {}}>
-                    <FileSpreadsheet className="w-4 h-4" /> Export Excel
-                  </Button>
-                </div>
-              </div>
-              <Card className="border-none shadow-sm overflow-hidden bg-slate-50/30">
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-100/50">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[800px]">
+                    <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-bold">Voucher No</TableHead>
                         <TableHead className="font-bold">Name</TableHead>
                         <TableHead className="font-bold text-center">Dept / Desig</TableHead>
-                        <TableHead className="font-bold text-center">Settled Date</TableHead>
+                        <TableHead className="font-bold">Date</TableHead>
                         <TableHead className="font-bold text-right">Amount</TableHead>
-                        <TableHead className="font-bold text-right pr-6">Status</TableHead>
+                        <TableHead className="font-bold text-right pr-6">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedPaid.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">No historical records in this range.</TableCell></TableRow>
+                      {paginatedPending.length === 0 ? (
+                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-medium">No pending vouchers found.</TableCell></TableRow>
                       ) : (
-                        paginatedPaid.map(v => {
+                        paginatedPending.map(v => {
                           const emp = employees.find(e => e.id === v.employeeId);
                           return (
-                            <TableRow key={v.id} className="hover:bg-white/50 transition-colors">
-                              <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
-                              <TableCell className="font-bold uppercase text-slate-600">{emp?.name}</TableCell>
+                            <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
+                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col text-center">
-                                  <span className="text-xs font-medium text-slate-500">{emp?.department}</span>
-                                  <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
+                                  <span className="text-[10px] font-bold text-slate-600">{emp?.department}</span>
+                                  <span className="text-[8px] text-muted-foreground uppercase">{emp?.designation}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-slate-500 text-center text-sm font-medium">{formatDisplayDate(v.paidDate || v.date)}</TableCell>
-                              <TableCell className="text-right font-black text-emerald-600">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="text-xs sm:text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
+                              <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(v.amount)}</TableCell>
                               <TableCell className="text-right pr-6">
-                                <div className="flex justify-end items-center gap-2">
-                                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none uppercase text-[9px] font-black tracking-widest px-3">Settle-Paid</Badge>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => handleDownloadAndPrint(v)}><Printer className="w-3.5 h-3.5" /></Button>
+                                <div className="flex justify-end gap-2">
+                                  <Button size="sm" variant="outline" className="text-rose-600 border-rose-200 hover:bg-rose-50 font-bold h-8 text-[10px] sm:text-xs" onClick={() => setVoucherToReject(v.id)}>Reject</Button>
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold h-8 px-4 sm:px-6 shadow-sm text-[10px] sm:text-xs" onClick={() => updateRecord('vouchers', v.id, { status: 'APPROVED' })}>Approve</Button>
                                 </div>
                               </TableCell>
                             </TableRow>
@@ -480,6 +360,138 @@ export default function VouchersPage() {
                       )}
                     </TableBody>
                   </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+              {totalPagesPending > 1 && <StandardPaginationFooter current={pendingPage} total={totalPagesPending} onPageChange={setPendingPage} />}
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="payment" className="space-y-12">
+            <Card className="shadow-sm border-slate-200 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between border-b gap-4">
+                <CardTitle className="text-sm sm:text-lg">Ready for Payment ({paymentTabLists.pending.length})</CardTitle>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search payable..." className="pl-10 h-10 bg-white text-xs sm:text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[800px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold">Voucher No</TableHead>
+                        <TableHead className="font-bold">Name</TableHead>
+                        <TableHead className="font-bold text-center">Dept / Desig</TableHead>
+                        <TableHead className="font-bold">Date</TableHead>
+                        <TableHead className="font-bold text-right">Amount</TableHead>
+                        <TableHead className="font-bold text-right pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedPayable.length === 0 ? (
+                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No approved vouchers awaiting payment.</TableCell></TableRow>
+                      ) : (
+                        paginatedPayable.map(v => {
+                          const emp = employees.find(e => e.id === v.employeeId);
+                          return (
+                            <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
+                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
+                              <TableCell>
+                                <div className="flex flex-col text-center">
+                                  <span className="text-[10px] font-bold text-slate-600">{emp?.department}</span>
+                                  <span className="text-[8px] text-muted-foreground uppercase">{emp?.designation}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs sm:text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
+                              <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(v.amount)}</TableCell>
+                              <TableCell className="text-right pr-6">
+                                <Button size="sm" className="font-bold px-4 sm:px-6 bg-slate-900 shadow-sm h-8 text-[10px] sm:text-xs" onClick={() => handleOpenPayDialog(v)}>Process Pay</Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+              {totalPagesPayable > 1 && <StandardPaginationFooter current={payablePage} total={totalPagesPayable} onPageChange={setPayablePage} />}
+            </Card>
+
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between px-1 gap-4">
+                <h3 className="text-sm font-black uppercase text-slate-700 flex items-center gap-2 self-start"><History className="w-4 h-4 text-primary" /> Paid Vouchers (History)</h3>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                  <div className="flex items-center gap-2 bg-white border border-slate-200 px-2 sm:px-3 py-1 rounded-xl shadow-sm overflow-hidden flex-1 sm:flex-none">
+                    <Filter className="w-3 h-3 text-slate-400 shrink-0" />
+                    <Select value={paidFromMonth} onValueChange={(v) => {setPaidFromMonth(v); if (paidToMonth < v) setPaidToMonth(v);}}>
+                      <SelectTrigger className="h-7 w-20 sm:w-24 border-none p-0 text-[10px] font-bold focus:ring-0 shrink-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>{VOUCHER_MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <span className="text-[8px] sm:text-[10px] text-slate-300 font-bold shrink-0">TO</span>
+                    <Select value={paidToMonth} onValueChange={(v) => {if (v >= paidFromMonth) setPaidToMonth(v);}}>
+                      <SelectTrigger className="h-7 w-20 sm:w-24 border-none p-0 text-[10px] font-bold focus:ring-0 shrink-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>{VOUCHER_MONTHS.filter(m => {
+                        const mOrder = [...VOUCHER_MONTHS].reverse();
+                        return mOrder.indexOf(m) >= mOrder.indexOf(paidFromMonth);
+                      }).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold gap-2 text-[10px] sm:text-xs flex-1 sm:flex-none" onClick={() => {}}>
+                    <FileSpreadsheet className="w-4 h-4" /> Export
+                  </Button>
+                </div>
+              </div>
+              <Card className="border-none shadow-sm overflow-hidden bg-slate-50/30">
+                <CardContent className="p-0">
+                  <ScrollArea className="w-full">
+                    <Table className="min-w-[800px]">
+                      <TableHeader className="bg-slate-100/50">
+                        <TableRow>
+                          <TableHead className="font-bold">Voucher No</TableHead>
+                          <TableHead className="font-bold">Name</TableHead>
+                          <TableHead className="font-bold text-center">Dept / Desig</TableHead>
+                          <TableHead className="font-bold text-center">Settled Date</TableHead>
+                          <TableHead className="font-bold text-right">Amount</TableHead>
+                          <TableHead className="font-bold text-right pr-6">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedPaid.length === 0 ? (
+                          <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground italic">No historical records in this range.</TableCell></TableRow>
+                        ) : (
+                          paginatedPaid.map(v => {
+                            const emp = employees.find(e => e.id === v.employeeId);
+                            return (
+                              <TableRow key={v.id} className="hover:bg-white/50 transition-colors">
+                                <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                                <TableCell className="font-bold uppercase text-slate-600 text-xs sm:text-sm">{emp?.name}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col text-center">
+                                    <span className="text-[10px] font-medium text-slate-500">{emp?.department}</span>
+                                    <span className="text-[8px] text-muted-foreground uppercase">{emp?.designation}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-slate-500 text-center text-xs sm:text-sm font-medium">{formatDisplayDate(v.paidDate || v.date)}</TableCell>
+                                <TableCell className="text-right font-black text-emerald-600 text-xs sm:text-sm">{formatCurrency(v.amount)}</TableCell>
+                                <TableCell className="text-right pr-6">
+                                  <div className="flex justify-end items-center gap-2">
+                                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none uppercase text-[8px] sm:text-[9px] font-black tracking-widest px-2 sm:px-3">Settle-Paid</Badge>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => handleDownloadAndPrint(v)}><Printer className="w-3.5 h-3.5" /></Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                  </ScrollArea>
                 </CardContent>
                 {totalPagesPaid > 1 && <StandardPaginationFooter current={paidPage} total={totalPagesPaid} onPageChange={setPaidPage} />}
               </Card>
@@ -488,64 +500,68 @@ export default function VouchersPage() {
         </Tabs>
       </div>
 
-      {/* Pay Dialog */}
+      {/* Pay Dialog - Responsive */}
       <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2 font-black text-xl"><CreditCard className="w-5 h-5 text-primary" /> Process Disbursement</DialogTitle>
-            <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">Final Payment Settlement</p>
+        <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="p-4 sm:p-6 bg-slate-900 text-white shrink-0">
+            <DialogTitle className="flex items-center gap-2 font-black text-lg sm:text-xl"><CreditCard className="w-5 h-5 text-primary" /> Process Disbursement</DialogTitle>
+            <p className="text-[9px] sm:text-[10px] text-primary font-black uppercase tracking-widest mt-1">Final Payment Settlement</p>
           </DialogHeader>
-          <div className="p-8 space-y-6">
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 grid grid-cols-2 gap-4 shadow-inner">
-              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Voucher ID</p><p className="text-sm font-black text-slate-700">{voucherToPay?.voucherNo}</p></div>
-              <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter text-right">Amount Due</p><p className="text-sm font-black text-rose-600 text-right">{formatCurrency(voucherToPay?.amount || 0)}</p></div>
+          <div className="p-6 sm:p-8 space-y-6">
+            <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-100 grid grid-cols-2 gap-4 shadow-inner">
+              <div><p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">Voucher ID</p><p className="text-xs sm:text-sm font-black text-slate-700">{voucherToPay?.voucherNo}</p></div>
+              <div><p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter text-right">Amount Due</p><p className="text-xs sm:text-sm font-black text-rose-600 text-right">{formatCurrency(voucherToPay?.amount || 0)}</p></div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500">Pay Mode</Label>
+                <Label className="text-[9px] sm:text-[10px] font-black uppercase text-slate-500">Pay Mode</Label>
                 <Select value={payMode} onValueChange={(v: any) => setPayMode(v)}>
-                  <SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-11 sm:h-12 font-bold text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="BANKING">Banking Transfer</SelectItem>
-                    <SelectItem value="CASH">Petty Cash</SelectItem>
+                    <SelectItem value="BANKING" className="text-sm">Banking Transfer</SelectItem>
+                    <SelectItem value="CASH" className="text-sm">Petty Cash</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500">Pay Date</Label>
-                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="h-12 font-bold" min={PROJECT_START_DATE_STR} />
+                <Label className="text-[9px] sm:text-[10px] font-black uppercase text-slate-500">Pay Date</Label>
+                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="h-11 sm:h-12 font-bold text-sm" min={PROJECT_START_DATE_STR} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-500">Reference No / Txn ID</Label>
-              <Input placeholder="Enter Banking Txn ID or Chq No" value={payRef} onChange={(e) => setPayRef(e.target.value)} className="h-12 font-bold" />
+              <Label className="text-[9px] sm:text-[10px] font-black uppercase text-slate-500">Reference No / Txn ID</Label>
+              <Input placeholder="Enter Banking Txn ID or Chq No" value={payRef} onChange={(e) => setPayRef(e.target.value)} className="h-11 sm:h-12 font-bold text-sm" />
             </div>
           </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
-            <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="flex-1 h-12 rounded-xl font-bold">Cancel</Button>
-            <Button onClick={handlePostPay} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-black h-12 shadow-xl shadow-primary/20">Confirm Payment</Button>
+          <DialogFooter className="p-4 sm:p-6 bg-slate-50 border-t gap-3 flex-row">
+            <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="flex-1 h-11 sm:h-12 rounded-xl font-bold text-xs sm:text-sm">Cancel</Button>
+            <Button onClick={handlePostPay} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 rounded-xl font-black h-11 sm:h-12 shadow-xl text-xs sm:text-sm">Confirm Pay</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Voucher Preview Modal */}
+      {/* Voucher Preview Modal - RESPONSIVE PREVIEW */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-3xl border-none shadow-2xl flex flex-col">
+        <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-2xl sm:rounded-3xl border-none shadow-2xl flex flex-col">
           <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0}>
-            <div className="p-0">
-              {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
+            <div className="p-0 overflow-x-auto">
+              <div className="min-w-[800px] sm:min-w-0">
+                {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
+              </div>
             </div>
             <ScrollBar orientation="vertical" className="w-2.5 opacity-100 block" />
+            <ScrollBar orientation="horizontal" />
           </ScrollArea>
           
-          <div className="p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden shrink-0">
-            <div className="flex items-center gap-2 pl-4">
+          <div className="p-2 sm:p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden shrink-0">
+            <div className="flex items-center gap-2 pl-2 sm:pl-4 hidden sm:flex">
               <Info className="w-4 h-4 text-slate-400" />
+              <span className="text-[9px] font-bold text-slate-400 uppercase">A4 Corporate Standard</span>
             </div>
-            <div className="flex gap-3 w-full sm:w-auto">
-              <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-lg font-bold h-9 px-6 text-xs">Close</Button>
-              <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-lg font-black h-9 px-8 gap-2 shadow-sm text-xs" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
-                <Printer className="w-3.5 h-3.5" /> Print Voucher
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-lg font-bold h-9 px-6 text-[10px] sm:text-xs">Close</Button>
+              <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-lg font-black h-9 px-8 gap-2 shadow-sm text-[10px] sm:text-xs" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
+                <Printer className="w-3.5 h-3.5" /> Print
               </Button>
             </div>
           </div>
@@ -554,19 +570,19 @@ export default function VouchersPage() {
 
       {/* Reject Alert */}
       <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
-        <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
+        <AlertDialogContent className="w-[90vw] sm:max-w-md rounded-2xl border-none shadow-2xl">
           <AlertDialogHeader>
-            <div className="mx-auto w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-              <AlertTriangle className="w-8 h-8 text-rose-500" />
+            <div className="mx-auto w-12 sm:w-16 h-12 sm:h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 sm:w-8 h-6 sm:h-8 text-rose-500" />
             </div>
-            <AlertDialogTitle className="text-center text-2xl font-black">Confirm Rejection</AlertDialogTitle>
-            <AlertDialogDescription className="text-center text-slate-500 font-medium">
+            <AlertDialogTitle className="text-center text-xl sm:text-2xl font-black">Confirm Rejection</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-slate-500 font-medium text-xs sm:text-sm">
               Are you sure you want to decline this advance request? This action will move the voucher to <strong>CANCELLED</strong> status.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center gap-3 pt-6">
-            <AlertDialogCancel className="rounded-xl font-bold px-8 h-12">Keep Pending</AlertDialogCancel>
-            <AlertDialogAction className="bg-rose-600 hover:bg-rose-700 rounded-xl font-black px-10 h-12 shadow-lg shadow-rose-100" onClick={() => {updateRecord('vouchers', voucherToReject!, {status: 'CANCELLED'}); setVoucherToReject(null); toast({title: "Voucher Cancelled"});}}>Confirm Reject</AlertDialogAction>
+          <AlertDialogFooter className="sm:justify-center gap-3 pt-6 flex-row">
+            <AlertDialogCancel className="flex-1 rounded-xl font-bold px-4 h-11 sm:h-12 text-xs sm:text-sm">Back</AlertDialogCancel>
+            <AlertDialogAction className="flex-1 bg-rose-600 hover:bg-rose-700 rounded-xl font-black px-4 h-11 sm:h-12 shadow-lg text-xs sm:text-sm" onClick={() => {updateRecord('vouchers', voucherToReject!, {status: 'CANCELLED'}); setVoucherToReject(null); toast({title: "Voucher Cancelled"});}}>Confirm</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -583,7 +599,7 @@ export default function VouchersPage() {
 }
 
 /**
- * Redesigned Professional A4-Standard Voucher Document Component
+ * Professional A4-Standard Voucher Document Component
  */
 function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
   const emp = employees.find(e => e.id === voucher.employeeId);
@@ -591,109 +607,113 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
 
   return (
     <div className={cn(
-      "font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col",
-      isPrintMode ? "p-4" : "p-12"
+      "font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto",
+      isPrintMode ? "p-4" : "p-6 sm:p-12",
+      !isPrintMode && "max-w-4xl"
     )}>
       {/* Title Section */}
-      <div className="text-center mb-10">
-        <h1 className="text-2xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-        <p className="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
+      <div className="text-center mb-6 sm:mb-10">
+        <h1 className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+        <p className="text-[8px] sm:text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
       </div>
 
       {/* Header Section */}
-      <div className="grid grid-cols-2 gap-8 mb-10 items-start">
+      <div className="grid grid-cols-2 gap-4 sm:gap-8 mb-8 sm:mb-10 items-start">
         <div className="space-y-4">
           <div className="flex flex-col gap-3">
             {firm?.logo ? (
-              <img src={firm.logo} alt="Logo" className="w-16 h-16 object-contain" />
+              <img src={firm.logo} alt="Logo" className="w-12 h-12 sm:w-16 sm:h-16 object-contain" />
             ) : (
-              <div className="w-12 h-12 bg-slate-900 rounded-lg flex items-center justify-center">
-                <span className="text-white text-xl font-black">S</span>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-900 rounded-lg flex items-center justify-center">
+                <span className="text-white text-lg sm:text-xl font-black">S</span>
               </div>
             )}
             <div className="space-y-1">
-              <h2 className="text-lg font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
-              <p className="text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
+              <h2 className="text-base sm:text-lg font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+              <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
             </div>
           </div>
-          <div className="flex gap-6 text-[10px] font-black uppercase border-t pt-3">
-            <div><span className="text-slate-400 text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
-            <div><span className="text-slate-400 text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
+          <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase border-t pt-3">
+            <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
+            <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
           </div>
         </div>
 
         <div className="flex flex-col items-end pt-2">
-          <div className="w-full max-w-[280px] space-y-2.5">
+          <div className="w-full max-w-[280px] space-y-2">
             <div className="flex justify-between border-b border-slate-100 pb-1.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
-              <span className="text-sm font-black font-mono text-primary">{voucher.voucherNo}</span>
+              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
+              <span className="text-xs sm:text-sm font-black font-mono text-primary">{voucher.voucherNo}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 pb-1.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span>
-              <span className="text-sm font-black">{formatDisplayDate(voucher.date)}</span>
+              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span>
+              <span className="text-xs sm:text-sm font-black">{formatDisplayDate(voucher.date)}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 pb-1.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
-              <span className="text-xs font-bold uppercase">{voucher.createdByName || "System Admin"}</span>
+              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
+              <span className="text-[10px] sm:text-xs font-bold uppercase">{voucher.createdByName || "System Admin"}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 pb-1.5">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
-              <span className="text-xs font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
+              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
+              <span className="text-[10px] sm:text-xs font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Employee Details Table */}
-      <div className="mb-10">
-        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
+      <div className="mb-8 sm:mb-10">
+        <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
           <UserIcon className="w-3 h-3" /> Employee / Receiver Information
         </h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
-          <table className="w-full text-left text-sm border-collapse">
+          <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[10px] font-black">Employee ID</th>
-                <td className="p-4 border-b border-slate-900 font-black font-mono text-primary">{emp?.employeeId || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/3 sm:w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Employee ID</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900 font-black font-mono text-primary">{emp?.employeeId || "---"}</td>
               </tr>
               <tr>
-                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Full Name</th>
-                <td className="p-4 border-b border-slate-900 font-black uppercase">{emp?.name || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Full Name</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900 font-black uppercase">{emp?.name || "---"}</td>
               </tr>
               <tr>
-                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Dept / Designation</th>
-                <td className="p-4 border-b border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Dept / Desig</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
               </tr>
               <tr>
-                <th className="p-4 border-r border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Aadhaar Number</th>
-                <td className="p-4 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Aadhaar Number</th>
+                <td className="p-3 sm:p-4 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
               </tr>
             </tbody>
           </table>
         </div>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-4 flex items-center gap-2">
+          <ShieldCheck className="w-3 h-3 text-emerald-500" /> Identity Verified via Official Records
+        </p>
       </div>
 
       {/* Payment Details Table */}
-      <div className="mb-10">
-        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
-          <CreditCard className="w-3 h-3" /> Transaction & Payment Summary
+      <div className="mb-8 sm:mb-10">
+        <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
+          <CreditCard className="w-3 h-3" /> Transaction Summary
         </h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
-          <table className="w-full text-left text-sm border-collapse">
+          <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[10px] font-black">Amount (₹)</th>
-                <td className="p-4 border-b border-slate-900">
-                   <div className="bg-slate-900 text-white px-6 py-2 rounded-md inline-block text-2xl font-black">{formatCurrency(voucher.amount)}</div>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/3 sm:w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Amount (₹)</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900">
+                   <div className="bg-slate-900 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-md inline-block text-lg sm:text-2xl font-black">{formatCurrency(voucher.amount)}</div>
                 </td>
               </tr>
               <tr>
-                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Amount in Words</th>
-                <td className="p-4 border-b border-slate-900 font-bold italic text-slate-700">{numberToIndianWords(voucher.amount)}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">In Words</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900 font-bold italic text-slate-700 text-[11px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td>
               </tr>
               <tr>
-                <th className="p-4 border-r border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Purpose</th>
-                <td className="p-4 font-black uppercase tracking-widest text-primary">Advance Salary</td>
+                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Purpose</th>
+                <td className="p-3 sm:p-4 font-black uppercase tracking-widest text-primary text-[11px] sm:text-sm">Advance Salary</td>
               </tr>
             </tbody>
           </table>
@@ -701,44 +721,44 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
       </div>
 
       {/* Declaration Section */}
-      <div className="mb-12 space-y-6">
-        <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl">
-          <h4 className="text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
-          <div className="space-y-4 text-xs font-medium leading-relaxed text-slate-600 text-justify">
+      <div className="mb-8 sm:mb-12 space-y-6">
+        <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl">
+          <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
+          <div className="space-y-4 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify">
             <p>
               The above-mentioned amount is being paid as an advance against the employee’s future salary and shall be adjusted/deducted from the upcoming salary payments, as per company policy or mutual agreement.
             </p>
             <p className="font-bold text-slate-900 underline">The employee hereby agrees and acknowledges that:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>The advance amount will be recovered from salary in full or in installments.</li>
-              <li>In case of resignation, termination, or separation from the company, the outstanding advance (if any) shall be recoverable from final settlement dues.</li>
+              <li>In case of resignation, termination, or separation from the company, the outstanding advance shall be recoverable from final settlement dues.</li>
               <li>The company reserves the right to deduct the balance amount from any payable dues.</li>
             </ul>
-            <p className="pt-2 italic text-[10px] font-bold">This voucher is issued for record and accounting purposes only.</p>
+            <p className="pt-2 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes only.</p>
           </div>
         </div>
       </div>
 
       {/* Footer Section */}
-      <div className="mt-auto grid grid-cols-3 gap-10 items-end pb-10">
+      <div className="mt-auto grid grid-cols-3 gap-4 sm:gap-10 items-end pb-6 sm:pb-10">
         <div className="text-center space-y-3">
-          <div className="h-20 border-b border-slate-400 border-dashed" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>
+          <div className="h-14 sm:h-20 border-b border-slate-400 border-dashed" />
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>
         </div>
         <div className="text-center space-y-3">
-          <div className="h-20 border-b border-slate-400 border-dashed" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
+          <div className="h-14 sm:h-20 border-b border-slate-400 border-dashed" />
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
         </div>
         <div className="text-center space-y-3">
-          <div className="h-20 border-b border-slate-400 border-dashed" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
+          <div className="h-14 sm:h-20 border-b border-slate-400 border-dashed" />
+          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
         </div>
       </div>
 
       {/* Micro Footer */}
-      <div className="flex justify-between items-center text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4">
+      <div className="flex justify-between items-center text-[7px] sm:text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4">
         <span>SikkaTrack HRMS Enterprise Node</span>
-        <span>Corporate Original Document</span>
+        <span className="hidden sm:block">Corporate Original Document</span>
         <span>Digitally Authenticated</span>
       </div>
     </div>

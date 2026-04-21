@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -62,7 +61,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, SalaryStructure } from "@/lib/types";
@@ -423,30 +422,30 @@ export default function EmployeesPage() {
           <h1 className="text-2xl font-bold">Employee Directory</h1>
           <p className="text-muted-foreground">Manage workforce profiles and statutory payroll compliance.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <Button 
             variant="outline"
-            className="font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            className="flex-1 sm:flex-none font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50"
             onClick={handleExportExcel}
             disabled={isProcessing}
           >
-            <FileSpreadsheet className="w-4 h-4 mr-2" /> Export Excel
+            <FileSpreadsheet className="w-4 h-4 mr-2" /> Export
           </Button>
           <Button 
-            className="font-bold shadow-lg shadow-primary/20 bg-primary" 
+            className="flex-1 sm:flex-none font-bold shadow-lg shadow-primary/20 bg-primary" 
             onClick={() => {
               setFormData({ ...INITIAL_FORM_DATA });
               setIsRegistrationOpen(true);
             }}
             disabled={isProcessing}
           >
-            <UserPlus className="w-4 h-4 mr-2" /> Add Employee
+            <UserPlus className="w-4 h-4 mr-2" /> Add Staff
           </Button>
         </div>
       </div>
 
       <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+        <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -458,8 +457,8 @@ export default function EmployeesPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <TooltipProvider>
-            <Table>
+          <ScrollArea className="w-full">
+            <Table className="min-w-[1000px]">
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead className="font-bold">Employee Name / ID</TableHead>
@@ -481,26 +480,26 @@ export default function EmployeesPage() {
                     <TableRow key={emp.id} className="hover:bg-slate-50/50">
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="font-bold uppercase">{emp.name}</span>
-                          <span className="text-xs font-mono text-primary">{emp.employeeId}</span>
+                          <span className="font-bold uppercase text-xs sm:text-sm">{emp.name}</span>
+                          <span className="text-[10px] font-mono text-primary">{emp.employeeId}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium">{emp.department}</span>
-                          <span className="text-xs text-muted-foreground">{emp.designation}</span>
+                          <span className="text-xs sm:text-sm font-medium">{emp.department}</span>
+                          <span className="text-[10px] text-muted-foreground">{emp.designation}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">{emp.joinDate}</TableCell>
-                      <TableCell className="text-right font-bold text-emerald-600">
+                      <TableCell className="text-xs sm:text-sm">{emp.joinDate}</TableCell>
+                      <TableCell className="text-right font-bold text-emerald-600 text-xs sm:text-sm">
                         {formatCurrency(emp.salary?.monthlyCTC || 0)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge 
                           variant="outline" 
                           className={cn(
-                            "px-2 py-0.5 text-[10px] uppercase font-black",
+                            "px-2 py-0.5 text-[9px] sm:text-[10px] uppercase font-black",
                             emp.active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
                           )}
                         >
@@ -509,59 +508,61 @@ export default function EmployeesPage() {
                       </TableCell>
                       <TableCell className="text-right pr-6">
                         <div className="flex justify-end items-center gap-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-slate-500 hover:text-primary"
-                                onClick={() => { 
-                                  setEditEmployee(emp); 
-                                  setFormData({ ...emp }); 
-                                  setIsRegistrationOpen(true); 
-                                }}
-                                disabled={isProcessing}
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Edit Profile</TooltipContent>
-                          </Tooltip>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-slate-500 hover:text-primary"
+                                  onClick={() => { 
+                                    setEditEmployee(emp); 
+                                    setFormData({ ...emp }); 
+                                    setIsRegistrationOpen(true); 
+                                  }}
+                                  disabled={isProcessing}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Edit Profile</TooltipContent>
+                            </Tooltip>
 
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
-                                onClick={() => { 
-                                  setSalaryRevision(emp); 
-                                  setRevisionData({ ...emp.salary }); 
-                                }}
-                                disabled={isProcessing}
-                              >
-                                <TrendingUp className="w-4 h-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Increase Salary</TooltipContent>
-                          </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
+                                  onClick={() => { 
+                                    setSalaryRevision(emp); 
+                                    setRevisionData({ ...emp.salary }); 
+                                  }}
+                                  disabled={isProcessing}
+                                >
+                                  <TrendingUp className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Increase Salary</TooltipContent>
+                            </Tooltip>
 
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-slate-500 hover:text-primary"
-                                onClick={() => { 
-                                  setViewHistoryEmployee(emp); 
-                                }}
-                                disabled={isProcessing}
-                              >
-                                <History className="w-4 h-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>View Salary Record</TooltipContent>
-                          </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-slate-500 hover:text-primary"
+                                  onClick={() => { 
+                                    setViewHistoryEmployee(emp); 
+                                  }}
+                                  disabled={isProcessing}
+                                >
+                                  <History className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>View Salary Record</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -569,69 +570,70 @@ export default function EmployeesPage() {
                 )}
               </TableBody>
             </Table>
-          </TooltipProvider>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
         </CardContent>
         {totalPages > 1 && <StandardPaginationFooter current={currentPage} total={totalPages} onPageChange={setCurrentPage} />}
       </Card>
 
       {/* Employee Registration Modal */}
       <Dialog open={isRegistrationOpen} onOpenChange={(o) => !o && handleCloseRegistration()}>
-        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+        <DialogContent className="w-[95vw] sm:max-w-5xl max-h-[95vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
           <DialogHeader className="p-3 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="text-xl font-black flex items-center gap-2">
-              <UserPlus className="w-6 h-6 text-primary" /> {editEmployee ? 'Edit Staff Profile' : 'Staff Onboarding'}
+            <DialogTitle className="text-lg sm:text-xl font-black flex items-center gap-2">
+              <UserPlus className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> {editEmployee ? 'Edit Staff Profile' : 'Staff Onboarding'}
             </DialogTitle>
-            <DialogDescription className="text-slate-400 font-bold">Comprehensive identity and statutory records.</DialogDescription>
+            <DialogDescription className="text-slate-400 font-bold text-[10px] sm:text-xs">Identity and statutory records.</DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 p-8 bg-slate-50/50">
-            <div className="space-y-10 pb-20">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <ScrollArea className="flex-1 bg-slate-50/50 custom-blue-scrollbar" tabIndex={0}>
+            <div className="p-4 sm:p-8 space-y-8 sm:space-y-10 pb-20">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
                 <div className="lg:col-span-2 space-y-8">
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><UserIcon className="w-3 h-3" /> Basic Credentials</h3>
+                    <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><UserIcon className="w-3 h-3" /> Basic Credentials</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Full Name *</Label><Input value={formData.name || ""} onChange={(e) => setFormData(p => ({...p, name: e.target.value.toUpperCase()}))} className="h-11 bg-white font-bold" /></div>
-                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Father's Name</Label><Input value={formData.fatherName || ""} onChange={(e) => setFormData(p => ({...p, fatherName: e.target.value.toUpperCase()}))} className="h-11 bg-white font-bold" /></div>
-                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">12-Digit Aadhaar *</Label><Input value={formData.aadhaar || ""} onChange={(e) => setFormData(p => ({...p, aadhaar: e.target.value}))} className="h-11 bg-white font-mono" maxLength={14} /></div>
-                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">PAN Number</Label><Input value={formData.pan || ""} onChange={(e) => setFormData(p => ({...p, pan: e.target.value.toUpperCase()}))} className="h-11 bg-white font-mono uppercase" maxLength={10} /></div>
+                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Full Name *</Label><Input value={formData.name || ""} onChange={(e) => setFormData(p => ({...p, name: e.target.value.toUpperCase()}))} className="h-11 bg-white font-bold text-sm" /></div>
+                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Father's Name</Label><Input value={formData.fatherName || ""} onChange={(e) => setFormData(p => ({...p, fatherName: e.target.value.toUpperCase()}))} className="h-11 bg-white font-bold text-sm" /></div>
+                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">12-Digit Aadhaar *</Label><Input value={formData.aadhaar || ""} onChange={(e) => setFormData(p => ({...p, aadhaar: e.target.value}))} className="h-11 bg-white font-mono text-sm" maxLength={14} /></div>
+                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">PAN Number</Label><Input value={formData.pan || ""} onChange={(e) => setFormData(p => ({...p, pan: e.target.value.toUpperCase()}))} className="h-11 bg-white font-mono uppercase text-sm" maxLength={10} /></div>
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Clock className="w-3 h-3" /> Professional Assignment</h3>
+                    <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Clock className="w-3 h-3" /> Professional Assignment</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Department</Label>
                         <Select value={formData.department} onValueChange={(v) => setFormData(p => ({...p, department: v, designation: ''}))}>
-                          <SelectTrigger className="h-11 bg-white font-bold"><SelectValue placeholder="Select Dept" /></SelectTrigger>
+                          <SelectTrigger className="h-11 bg-white font-bold text-sm"><SelectValue placeholder="Select Dept" /></SelectTrigger>
                           <SelectContent>{DEPARTMENTS.map(d => <SelectItem key={d} value={d} className="font-bold">{d}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Designation</Label>
                         <Select value={formData.designation} onValueChange={(v) => setFormData(p => ({...p, designation: v}))}>
-                          <SelectTrigger className="h-11 bg-white font-bold"><SelectValue placeholder="Select Desig" /></SelectTrigger>
+                          <SelectTrigger className="h-11 bg-white font-bold text-sm"><SelectValue placeholder="Select Desig" /></SelectTrigger>
                           <SelectContent>{(DESIGNATIONS[formData.department!] || []).map(d => <SelectItem key={d} value={d} className="font-bold">{d}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Mobile No (Login Pass)</Label><Input value={formData.mobile || ""} onChange={(e) => setFormData(p => ({...p, mobile: e.target.value}))} className="h-11 bg-white font-bold" /></div>
-                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Join Date</Label><Input type="date" value={formData.joinDate || ""} onChange={(e) => setFormData(p => ({...p, joinDate: e.target.value}))} className="h-11 bg-white font-bold" /></div>
+                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Mobile (Password)</Label><Input value={formData.mobile || ""} onChange={(e) => setFormData(p => ({...p, mobile: e.target.value}))} className="h-11 bg-white font-bold text-sm" /></div>
+                      <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Join Date</Label><Input type="date" value={formData.joinDate || ""} onChange={(e) => setFormData(p => ({...p, joinDate: e.target.value}))} className="h-11 bg-white font-bold text-sm" /></div>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-8 bg-slate-100/50 p-6 rounded-2xl border border-slate-200">
+                <div className="space-y-6 bg-slate-100/50 p-4 sm:p-6 rounded-2xl border border-slate-200">
                   <div className="space-y-4">
-                    <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Building2 className="w-3 h-3" /> Firm & Unit Mapping</h3>
+                    <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2"><Building2 className="w-3 h-3" /> Firm & Unit Mapping</h3>
                     <div className="space-y-4">
                       <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Employer Firm *</Label>
                         <Select value={formData.firmId} onValueChange={(v) => setFormData(p => ({...p, firmId: v, unitIds: []}))}>
-                          <SelectTrigger className="h-11 bg-white font-bold"><SelectValue placeholder="Select Firm" /></SelectTrigger>
+                          <SelectTrigger className="h-11 bg-white font-bold text-sm"><SelectValue placeholder="Select Firm" /></SelectTrigger>
                           <SelectContent>{firms.map(f => <SelectItem key={f.id} value={f.id} className="font-bold">{f.name}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Authorized Units *</Label>
-                        <div className="bg-white border rounded-xl p-4 space-y-3 max-h-48 overflow-y-auto">
-                          {availableUnits.length === 0 ? <p className="text-[10px] text-slate-400 font-bold italic text-center">Select firm first</p> : 
+                        <div className="bg-white border rounded-xl p-4 space-y-3 max-h-48 overflow-y-auto custom-blue-scrollbar">
+                          {availableUnits.length === 0 ? <p className="text-[9px] text-slate-400 font-bold italic text-center">Select firm first</p> : 
                             availableUnits.map(u => (
                               <div key={u.id} className="flex items-center space-x-3">
                                 <Checkbox id={`u-${u.id}`} checked={(formData.unitIds || []).includes(u.id)} onCheckedChange={() => toggleUnit(u.id)} />
@@ -644,198 +646,200 @@ export default function EmployeesPage() {
                     </div>
                   </div>
                   <div className="pt-4 border-t border-slate-200">
-                    <div className="flex items-center justify-between"><Label className="font-black text-xs text-slate-600">Employee Status</Label><Switch checked={formData.active} onCheckedChange={(v) => setFormData(p => ({...p, active: v}))} /></div>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-2">{formData.active ? "Account is live & active" : "Account access revoked"}</p>
+                    <div className="flex items-center justify-between"><Label className="font-black text-[10px] sm:text-xs text-slate-600">Employee Status</Label><Switch checked={formData.active} onCheckedChange={(v) => setFormData(p => ({...p, active: v}))} /></div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-10 border-t border-slate-200 space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-black uppercase text-slate-900 flex items-center gap-2"><Banknote className="w-5 h-5 text-emerald-600" /> Salary Configuration</h3>
+              <div className="pt-8 sm:pt-10 border-t border-slate-200 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h3 className="text-xs sm:text-sm font-black uppercase text-slate-900 flex items-center gap-2"><Banknote className="w-5 h-5 text-emerald-600" /> Salary Configuration</h3>
                   <div className="flex items-center gap-3 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
-                    <Label className="text-xs font-black text-emerald-700 uppercase">Gov. Statutory Compliance</Label>
+                    <Label className="text-[10px] font-black text-emerald-700 uppercase">Compliance</Label>
                     <Switch checked={formData.isGovComplianceEnabled} onCheckedChange={(v) => { setFormData(p => ({...p, isGovComplianceEnabled: v})); updateFormSalary('basic', formData.salary?.basic || 0); }} />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Basic Salary (Monthly)</Label><Input type="number" value={formData.salary?.basic || ""} onChange={(e) => updateFormSalary('basic', parseFloat(e.target.value) || 0)} className="h-12 text-lg font-black" /></div>
-                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">HRA (50% Auto)</Label><Input type="number" value={formData.salary?.hra || ""} onChange={(e) => updateFormSalary('hra', parseFloat(e.target.value) || 0)} className="h-12 text-lg font-black" /></div>
-                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Special Allowances</Label><Input type="number" value={formData.salary?.allowance || ""} onChange={(e) => updateFormSalary('allowance', parseFloat(e.target.value) || 0)} className="h-12 text-lg font-black" /></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+                  <div className="p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[9px] font-black uppercase text-slate-400 mb-2 block">Basic Salary</Label><Input type="number" value={formData.salary?.basic || ""} onChange={(e) => updateFormSalary('basic', parseFloat(e.target.value) || 0)} className="h-10 sm:h-12 text-base sm:text-lg font-black" /></div>
+                  <div className="p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[9px] font-black uppercase text-slate-400 mb-2 block">HRA (50% Auto)</Label><Input type="number" value={formData.salary?.hra || ""} onChange={(e) => updateFormSalary('hra', parseFloat(e.target.value) || 0)} className="h-10 sm:h-12 text-base sm:text-lg font-black" /></div>
+                  <div className="p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[9px] font-black uppercase text-slate-400 mb-2 block">Allowances</Label><Input type="number" value={formData.salary?.allowance || ""} onChange={(e) => updateFormSalary('allowance', parseFloat(e.target.value) || 0)} className="h-10 sm:h-12 text-base sm:text-lg font-black" /></div>
                 </div>
 
-                <div className="p-5 bg-blue-50 border border-blue-100 rounded-2xl shadow-sm flex justify-between items-center">
+                <div className="p-4 sm:p-5 bg-blue-50 border border-blue-100 rounded-2xl flex justify-between items-center">
                   <div className="space-y-0.5">
-                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Monthly Net Pay</p>
-                    <p className="text-[9px] text-blue-500 font-bold">(Basic + HRA + Allowances)</p>
+                    <p className="text-[9px] font-black uppercase text-blue-400 tracking-widest">Monthly Net Pay</p>
+                    <p className="text-[8px] text-blue-500 font-bold">(Basic+HRA+Allow.)</p>
                   </div>
-                  <h4 className="text-3xl font-black text-blue-700">{formatCurrency(formData.salary?.grossSalary || 0)}</h4>
+                  <h4 className="text-xl sm:text-3xl font-black text-blue-700">{formatCurrency(formData.salary?.grossSalary || 0)}</h4>
                 </div>
 
                 {formData.isGovComplianceEnabled && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-slate-100/50 rounded-2xl border border-slate-200">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-100/50 rounded-2xl border border-slate-200">
                       <StatutoryInput label="EPF Rate (Emp %)" value={formData.salary?.pfRateEmp || 12} onChange={(v) => updateFormSalary('pfRateEmp', v)} />
                       <StatutoryInput label="ESIC Rate (Emp %)" value={formData.salary?.esicRateEmp || 0.75} onChange={(v) => updateFormSalary('esicRateEmp', v)} />
                       <StatutoryInput label="PF Rate (Ex %)" value={formData.salary?.pfRateEx || 13} onChange={(v) => updateFormSalary('pfRateEx', v)} />
                       <StatutoryInput label="ESIC Rate (Ex %)" value={formData.salary?.esicRateEx || 3.25} onChange={(v) => updateFormSalary('esicRateEx', v)} />
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <AmountDisplay label="Employee PF Amount" value={formData.salary?.employeePF || 0} />
-                      <AmountDisplay label="Employer PF Amount" value={formData.salary?.employerPF || 0} />
-                      <AmountDisplay label="Employee ESIC Amount" value={formData.salary?.employeeESIC || 0} />
-                      <AmountDisplay label="Employer ESIC Amount" value={formData.salary?.employerESIC || 0} />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <AmountDisplay label="Emp. PF" value={formData.salary?.employeePF || 0} />
+                      <AmountDisplay label="Ex. PF" value={formData.salary?.employerPF || 0} />
+                      <AmountDisplay label="Emp. ESIC" value={formData.salary?.employeeESIC || 0} />
+                      <AmountDisplay label="Ex. ESIC" value={formData.salary?.employerESIC || 0} />
                     </div>
                   </div>
                 )}
 
-                <div className="p-6 bg-slate-900 text-white rounded-2xl shadow-xl flex justify-between items-center border-b-4 border-emerald-500">
+                <div className="p-4 sm:p-6 bg-slate-900 text-white rounded-2xl shadow-xl flex justify-between items-center border-b-4 border-emerald-500 mt-6">
                   <div className="space-y-0.5">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Monthly Cost to Company (CTC)</p>
-                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Includes Gross + Employer Statutory Contributions</p>
+                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Monthly CTC</p>
+                    <p className="text-[8px] text-slate-500 font-bold uppercase hidden sm:block">Incl. Employer Contributions</p>
                   </div>
-                  <h4 className="text-4xl font-black text-emerald-400 tracking-tighter">{formatCurrency(formData.salary?.monthlyCTC || 0)}</h4>
+                  <h4 className="text-2xl sm:text-4xl font-black text-emerald-400 tracking-tighter">{formatCurrency(formData.salary?.monthlyCTC || 0)}</h4>
                 </div>
               </div>
             </div>
           </ScrollArea>
           
           <DialogFooter className="p-3 bg-slate-50 border-t gap-3 shrink-0">
-            <Button variant="ghost" onClick={handleCloseRegistration} className="rounded-xl font-bold h-10 px-8">Cancel</Button>
-            <Button className="bg-primary hover:bg-primary/90 rounded-xl font-black h-10 px-12 shadow-lg shadow-primary/20" onClick={handleRegistrationPost} disabled={isProcessing}>{isProcessing ? "Processing..." : (editEmployee ? "Update Profile" : "Register Employee")}</Button>
+            <Button variant="ghost" onClick={handleCloseRegistration} className="rounded-xl font-bold h-10 px-4 sm:px-8 text-xs">Cancel</Button>
+            <Button className="bg-primary hover:bg-primary/90 rounded-xl font-black h-10 px-6 sm:px-12 shadow-lg text-xs" onClick={handleRegistrationPost} disabled={isProcessing}>{isProcessing ? "Wait..." : (editEmployee ? "Update" : "Onboard Staff")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Salary Increment Modal - UPDATED TO TABLE FORMAT */}
+      {/* Salary Increment Modal - RESPONSIVE TABLE FORMAT */}
       <Dialog open={!!salaryRevision} onOpenChange={(o) => !o && setSalaryRevision(null)}>
-        <DialogContent className="sm:max-w-lg rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-6 bg-white border-b shrink-0">
-            <DialogTitle className="text-xl font-black flex items-center gap-2 text-slate-900">
-              <TrendingUp className="w-6 h-6 text-emerald-600" /> Salary Increment
+        <DialogContent className="w-[95vw] sm:max-w-lg rounded-2xl p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="p-4 sm:p-6 bg-white border-b shrink-0">
+            <DialogTitle className="text-lg sm:text-xl font-black flex items-center gap-2 text-slate-900">
+              <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" /> Salary Increment
             </DialogTitle>
             <div className="mt-4 space-y-1">
-              <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Posting revision for</p>
-              <h4 className="text-lg font-black text-primary uppercase leading-tight">{salaryRevision?.name}</h4>
-              <p className="text-[10px] font-bold text-slate-400 uppercase">{salaryRevision?.employeeId} • {salaryRevision?.department} / {salaryRevision?.designation}</p>
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">POSTING REVISION FOR</p>
+              <h4 className="text-base sm:text-lg font-black text-primary uppercase leading-tight">{salaryRevision?.name}</h4>
+              <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">{salaryRevision?.employeeId} • {salaryRevision?.department} / {salaryRevision?.designation}</p>
             </div>
           </DialogHeader>
 
-          <div className="p-8 space-y-8 bg-slate-50/50">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Effective Month</Label>
-              <Select value={effectiveMonth} onValueChange={setEffectiveMonth}>
-                <SelectTrigger className="h-12 bg-white border-slate-200 font-black shadow-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTH_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-slate-500 py-3">Salary Component</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-slate-500 text-right py-3">Monthly Amount (₹)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="bg-white">
-                  <TableRow className="hover:bg-slate-50/50">
-                    <TableCell className="font-bold text-slate-700 py-4">Basic Salary</TableCell>
-                    <TableCell className="py-2">
-                      <Input 
-                        type="number" 
-                        value={revisionData.basic} 
-                        onChange={(e) => {
-                          const b = parseFloat(e.target.value) || 0;
-                          const newHra = Math.round(b * 0.5);
-                          setRevisionData(calculateSalaryMetrics(b, newHra, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
-                        }} 
-                        className="h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-base" 
-                      />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow className="hover:bg-slate-50/50">
-                    <TableCell className="font-bold text-slate-700 py-4">HRA (50% Auto)</TableCell>
-                    <TableCell className="py-2">
-                      <Input 
-                        type="number" 
-                        value={revisionData.hra} 
-                        onChange={(e) => {
-                          const h = parseFloat(e.target.value) || 0;
-                          setRevisionData(calculateSalaryMetrics(revisionData.basic, h, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
-                        }} 
-                        className="h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-base" 
-                      />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow className="hover:bg-slate-50/50">
-                    <TableCell className="font-bold text-slate-700 py-4">Other Allowance</TableCell>
-                    <TableCell className="py-2">
-                      <Input 
-                        type="number" 
-                        value={revisionData.allowance} 
-                        onChange={(e) => {
-                          const a = parseFloat(e.target.value) || 0;
-                          setRevisionData(calculateSalaryMetrics(revisionData.basic, revisionData.hra, a, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
-                        }} 
-                        className="h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-base" 
-                      />
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="bg-slate-900 p-6 rounded-2xl text-white flex justify-between items-center shadow-xl border-b-4 border-emerald-500">
-              <div className="space-y-0.5">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">New Monthly CTC</p>
-                <h4 className="text-3xl font-black text-emerald-400 tracking-tighter">{formatCurrency(revisionData.monthlyCTC)}</h4>
+          <ScrollArea className="flex-1 bg-slate-50/50 custom-blue-scrollbar" tabIndex={0}>
+            <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+              <div className="space-y-2">
+                <Label className="text-[9px] sm:text-[10px] font-black uppercase text-slate-500 tracking-widest">Effective Month</Label>
+                <Select value={effectiveMonth} onValueChange={setEffectiveMonth}>
+                  <SelectTrigger className="h-11 sm:h-12 bg-white border-slate-200 font-black shadow-sm text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTH_OPTIONS.map(m => <SelectItem key={m} value={m} className="text-sm font-bold">{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Hike %</p>
-                <h4 className="text-2xl font-black text-white">+ {((revisionData.monthlyCTC - (salaryRevision?.salary.monthlyCTC || 0)) / (salaryRevision?.salary.monthlyCTC || 1) * 100).toFixed(1)}%</h4>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-black text-[9px] uppercase tracking-widest text-slate-500 py-3">Component</TableHead>
+                      <TableHead className="font-black text-[9px] uppercase tracking-widest text-slate-500 text-right py-3">Amount (₹)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow className="hover:bg-slate-50/50">
+                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">Basic Salary</TableCell>
+                      <TableCell className="py-2">
+                        <Input 
+                          type="number" 
+                          value={revisionData.basic} 
+                          onChange={(e) => {
+                            const b = parseFloat(e.target.value) || 0;
+                            const newHra = Math.round(b * 0.5);
+                            setRevisionData(calculateSalaryMetrics(b, newHra, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                          }} 
+                          className="h-9 sm:h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-sm sm:text-base" 
+                        />
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="hover:bg-slate-50/50">
+                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">HRA (50% Auto)</TableCell>
+                      <TableCell className="py-2">
+                        <Input 
+                          type="number" 
+                          value={revisionData.hra} 
+                          onChange={(e) => {
+                            const h = parseFloat(e.target.value) || 0;
+                            setRevisionData(calculateSalaryMetrics(revisionData.basic, h, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                          }} 
+                          className="h-9 sm:h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-sm sm:text-base" 
+                        />
+                      </TableCell>
+                    </TableRow>
+                    <TableRow className="hover:bg-slate-50/50">
+                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">Other Allowance</TableCell>
+                      <TableCell className="py-2">
+                        <Input 
+                          type="number" 
+                          value={revisionData.allowance} 
+                          onChange={(e) => {
+                            const a = parseFloat(e.target.value) || 0;
+                            setRevisionData(calculateSalaryMetrics(revisionData.basic, revisionData.hra, a, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                          }} 
+                          className="h-9 sm:h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-sm sm:text-base" 
+                        />
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="bg-slate-900 p-4 sm:p-6 rounded-2xl text-white flex justify-between items-center shadow-xl border-b-4 border-emerald-500">
+                <div className="space-y-0.5">
+                  <p className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">New Monthly CTC</p>
+                  <h4 className="text-xl sm:text-3xl font-black text-emerald-400 tracking-tighter">{formatCurrency(revisionData.monthlyCTC)}</h4>
+                </div>
+                <div className="text-right">
+                  <p className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Hike %</p>
+                  <h4 className="text-lg sm:text-2xl font-black text-white">+ {((revisionData.monthlyCTC - (salaryRevision?.salary.monthlyCTC || 0)) / (salaryRevision?.salary.monthlyCTC || 1) * 100).toFixed(1)}%</h4>
+                </div>
               </div>
             </div>
-          </div>
+            <ScrollBar orientation="vertical" />
+          </ScrollArea>
 
-          <DialogFooter className="p-4 bg-white border-t gap-3 shrink-0">
-            <Button variant="ghost" onClick={() => setSalaryRevision(null)} className="rounded-xl font-bold h-11 px-8">Cancel</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-black h-11 px-12 shadow-lg shadow-emerald-100" onClick={handlePostSalaryRevision} disabled={isProcessing}>Post Revision</Button>
+          <DialogFooter className="p-3 sm:p-4 bg-white border-t gap-3 shrink-0">
+            <Button variant="ghost" onClick={() => setSalaryRevision(null)} className="rounded-xl font-bold h-10 sm:h-11 px-6 sm:px-8 text-xs">Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-black h-10 sm:h-11 px-8 sm:px-12 shadow-lg text-xs" onClick={handlePostSalaryRevision} disabled={isProcessing}>Post Revision</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Salary Progression Modal */}
+      {/* Salary Progression Modal - RESPONSIVE TABLE */}
       <Dialog open={!!viewHistoryEmployee} onOpenChange={(o) => !o && setViewHistoryEmployee(null)}>
-        <DialogContent className="sm:max-w-3xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="text-xl font-black flex items-center gap-2">
-              <History className="w-6 h-6 text-primary" /> Salary Progression
+        <DialogContent className="w-[95vw] sm:max-w-3xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl flex flex-col max-h-[90vh]">
+          <DialogHeader className="p-4 sm:p-6 bg-slate-900 text-white shrink-0">
+            <DialogTitle className="text-lg sm:text-xl font-black flex items-center gap-2">
+              <History className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /> Salary Progression
             </DialogTitle>
             <div className="mt-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div className="space-y-1">
-                <h4 className="text-lg font-black text-primary uppercase leading-tight">{viewHistoryEmployee?.name}</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{viewHistoryEmployee?.employeeId} • {viewHistoryEmployee?.department} / {viewHistoryEmployee?.designation}</p>
+                <h4 className="text-base sm:text-lg font-black text-primary uppercase leading-tight">{viewHistoryEmployee?.name}</h4>
+                <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">{viewHistoryEmployee?.employeeId} • {viewHistoryEmployee?.department} / {viewHistoryEmployee?.designation}</p>
               </div>
-              <Badge className="bg-primary/20 text-primary border-none font-black text-[10px] uppercase px-3 py-1">Career Ledger</Badge>
+              <Badge className="bg-primary/20 text-primary border-none font-black text-[9px] uppercase px-3 py-1 w-fit">Career Ledger</Badge>
             </div>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh] bg-white">
-            <div className="p-0">
+          <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0}>
+            <div className="min-w-[600px]">
               <Table>
                 <TableHeader className="bg-slate-50 sticky top-0 z-10 border-b">
                   <TableRow>
-                    <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 py-4">From Month</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase tracking-widest py-4">To Month</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-right py-4">Monthly CTC (₹)</TableHead>
-                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8 py-4">Increase (%)</TableHead>
+                    <TableHead className="font-black text-[9px] uppercase tracking-widest px-6 py-4">From Month</TableHead>
+                    <TableHead className="font-black text-[9px] uppercase tracking-widest py-4">To Month</TableHead>
+                    <TableHead className="font-black text-[9px] uppercase tracking-widest text-right py-4">Monthly CTC (₹)</TableHead>
+                    <TableHead className="font-black text-[9px] uppercase tracking-widest text-right pr-8 py-4">Increase (%)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -844,23 +848,23 @@ export default function EmployeesPage() {
                     const hike = nextEntry ? (((entry.monthlyCTC - nextEntry.monthlyCTC) / nextEntry.monthlyCTC) * 100).toFixed(1) : "0.0";
                     return (
                       <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
-                        <TableCell className="px-6 py-5 font-bold text-slate-700">{entry.fromMonth}</TableCell>
+                        <TableCell className="px-6 py-5 font-bold text-slate-700 text-xs sm:text-sm">{entry.fromMonth}</TableCell>
                         <TableCell className="py-5">
-                          <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-tighter px-3", entry.toMonth === 'Present' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500")}>
+                          <Badge variant="outline" className={cn("text-[8px] sm:text-[9px] font-black uppercase tracking-tighter px-3", entry.toMonth === 'Present' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500")}>
                             {entry.toMonth}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right py-5">
-                          <span className="font-black text-slate-900">{formatCurrency(entry.monthlyCTC)}</span>
+                          <span className="font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(entry.monthlyCTC)}</span>
                         </TableCell>
                         <TableCell className="text-right pr-8 py-5">
                           {nextEntry ? (
-                            <div className="flex items-center justify-end gap-1.5 text-emerald-600 font-black text-xs">
+                            <div className="flex items-center justify-end gap-1.5 text-emerald-600 font-black text-[10px] sm:text-xs">
                               <GrowthIcon className="w-3 h-3" />
                               {hike}%
                             </div>
                           ) : (
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Join Sal.</span>
+                            <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">Join Sal.</span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -869,10 +873,12 @@ export default function EmployeesPage() {
                 </TableBody>
               </Table>
             </div>
+            <ScrollBar orientation="horizontal" />
+            <ScrollBar orientation="vertical" />
           </ScrollArea>
 
-          <div className="p-4 bg-slate-50 border-t flex justify-end shrink-0">
-            <Button variant="ghost" onClick={() => setViewHistoryEmployee(null)} className="font-black text-xs uppercase tracking-widest h-10 px-8 rounded-xl">Close Progression</Button>
+          <div className="p-3 sm:p-4 bg-slate-50 border-t flex justify-end shrink-0">
+            <Button variant="ghost" onClick={() => setViewHistoryEmployee(null)} className="font-black text-[10px] uppercase tracking-widest h-9 px-6 sm:px-8 rounded-xl text-slate-500">Close Ledger</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -882,33 +888,33 @@ export default function EmployeesPage() {
 
 function StatutoryInput({ label, value, onChange }: { label: string, value: number, onChange: (v: number) => void }) {
   return (
-    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-500">{label}</Label><Input type="number" step="0.01" value={value} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} className="h-10 bg-white font-mono font-bold" /></div>
+    <div className="space-y-1.5"><Label className="text-[8px] sm:text-[10px] font-black uppercase text-slate-500">{label}</Label><Input type="number" step="0.01" value={value} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} className="h-9 sm:h-10 bg-white font-mono font-bold text-xs" /></div>
   );
 }
 
 function AmountDisplay({ label, value }: { label: string, value: number }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-      <p className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-tighter">{label}</p>
-      <p className="text-sm font-black text-slate-700">{formatCurrency(value)}</p>
+    <div className="bg-white border border-slate-200 rounded-xl p-2 sm:p-3 shadow-sm">
+      <p className="text-[8px] font-black uppercase text-slate-400 mb-1 tracking-tighter">{label}</p>
+      <p className="text-xs sm:text-sm font-black text-slate-700">{formatCurrency(value)}</p>
     </div>
   );
 }
 
 function StandardPaginationFooter({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) {
   return (
-    <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
+    <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-3 sm:p-4 gap-4">
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)} className="font-bold h-9"><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
-        <Button variant="outline" size="sm" disabled={current === total || total === 0} onClick={() => onPageChange(current + 1)} className="font-bold h-9">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+        <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)} className="font-bold h-8 sm:h-9 text-xs"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
+        <Button variant="outline" size="sm" disabled={current === total || total === 0} onClick={() => onPageChange(current + 1)} className="font-bold h-8 sm:h-9 text-xs">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
       </div>
-      <div className="flex items-center gap-4">
-        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {current} of {total || 1}</span>
+      <div className="flex items-center gap-3 sm:gap-4">
+        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Page {current} of {total || 1}</span>
         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-          <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
+          <Label className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Jump</Label>
           <div className="flex gap-1">
-            <Input type="number" className="w-14 h-9 text-center font-bold" value={current} onChange={(e) => { const p = parseInt(e.target.value); if (p >= 1 && p <= total) onPageChange(p); }} />
-            <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white"><ArrowRightCircle className="w-4 h-4" /></div>
+            <Input type="number" className="w-12 h-8 text-center font-bold text-xs" value={current} onChange={(e) => { const p = parseInt(e.target.value); if (p >= 1 && p <= total) onPageChange(p); }} />
+            <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white"><ArrowRightCircle className="w-3.5 h-3.5" /></div>
           </div>
         </div>
       </div>

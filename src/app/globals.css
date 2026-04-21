@@ -47,6 +47,8 @@
   }
   body {
     @apply bg-background text-foreground font-body;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-headline;
@@ -56,35 +58,52 @@
     font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', 'Arial', sans-serif;
   }
 
-  /* Global Scrollbar Styles - Always Visible and Blue */
+  /* Global Scrollbar Styles - Enhanced for All Devices */
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     display: block !important;
   }
+  
   ::-webkit-scrollbar-track {
     @apply bg-slate-100;
   }
+  
   ::-webkit-scrollbar-thumb {
-    @apply bg-primary rounded-full hover:bg-primary/80 transition-colors border-2 border-slate-100;
+    @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors border-2 border-slate-100;
     display: block !important;
   }
 
-  /* Specialized scrollbar for popups/previews */
+  /* Specialized scrollbar for popups/previews - High Visibility */
   .custom-blue-scrollbar [data-radix-scroll-area-thumb] {
     @apply bg-primary opacity-100 transition-colors !important;
     visibility: visible !important;
     display: block !important;
+    border: 2px solid white;
   }
   
   .custom-blue-scrollbar [data-radix-scroll-area-scrollbar] {
-    @apply bg-slate-100/80 opacity-100 border-slate-200 !important;
+    @apply bg-slate-200/50 opacity-100 border-l border-slate-300 !important;
     visibility: visible !important;
     display: flex !important;
+    width: 10px !important;
   }
 
-  .custom-blue-scrollbar [data-radix-scroll-area-scrollbar][data-orientation="vertical"] {
-    @apply w-[10px] border-l !important;
+  /* Mobile UI Tweaks */
+  @media (max-width: 640px) {
+    .container {
+      @apply px-4;
+    }
+    
+    /* Ensure tables don't break the layout */
+    .overflow-x-auto {
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Adjust dialog spacing for mobile */
+    [role="dialog"] {
+      padding: 0 !important;
+    }
   }
 }
 
