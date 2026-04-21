@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -661,7 +662,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* Employee Details Table */}
+      {/* Employee Details Table - ROW FORMAT (Two columns per row) */}
       <div className="mb-8 sm:mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
           <UserIcon className="w-3 h-3" /> Employee / Receiver Information
@@ -670,20 +671,16 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/3 sm:w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Employee ID</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900 font-black font-mono text-primary">{emp?.employeeId || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Employee ID</th>
+                <td className="p-3 sm:p-4 border-r border-b border-slate-900 font-black font-mono text-primary w-1/4">{emp?.employeeId || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Full Name</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900 font-black uppercase w-1/4">{emp?.name || "---"}</td>
               </tr>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Full Name</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900 font-black uppercase">{emp?.name || "---"}</td>
-              </tr>
-              <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Dept / Desig</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
-              </tr>
-              <tr>
-                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Aadhaar Number</th>
-                <td className="p-3 sm:p-4 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Dept / Desig</th>
+                <td className="p-3 sm:p-4 border-r border-slate-900 font-bold uppercase w-1/4">{emp?.department} / {emp?.designation}</td>
+                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Aadhaar Number</th>
+                <td className="p-3 sm:p-4 font-mono font-bold tracking-widest w-1/4">{emp?.aadhaar || "---"}</td>
               </tr>
             </tbody>
           </table>
@@ -755,8 +752,15 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
+      {/* Legal Footer - Mandatory India Context */}
+      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-6">
+        <p className="text-[7px] sm:text-[8px] font-medium text-slate-500 text-center leading-relaxed">
+          This voucher is issued for internal accounting purposes and complies with applicable provisions of the Income Tax Act, 1961 and Goods and Services Tax Act, 2017. All transactions are subject to audit and verification. Aadhaar details, if collected, are handled in accordance with applicable data protection and privacy regulations.
+        </p>
+      </div>
+
       {/* Micro Footer */}
-      <div className="flex justify-between items-center text-[7px] sm:text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4">
+      <div className="flex justify-between items-center text-[7px] sm:text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4 mt-4">
         <span>SikkaTrack HRMS Enterprise Node</span>
         <span className="hidden sm:block">Corporate Original Document</span>
         <span>Digitally Authenticated</span>
