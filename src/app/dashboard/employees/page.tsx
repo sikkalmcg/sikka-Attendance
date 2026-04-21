@@ -271,9 +271,9 @@ export default function EmployeesPage() {
     try {
       const finalData = {
         ...formData,
-        name: `${formData.firstName} ${formData.lastName}`.trim(),
-        firstName: formData.firstName!.toUpperCase(),
-        lastName: formData.lastName!.toUpperCase(),
+        name: `${formData.firstName || ""} ${formData.lastName || ""}`.trim(),
+        firstName: (formData.firstName || "").toUpperCase(),
+        lastName: (formData.lastName || "").toUpperCase(),
         pan: formData.pan?.toUpperCase() || "",
         ifscCode: formData.ifscCode?.toUpperCase() || "",
       };
