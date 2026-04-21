@@ -529,7 +529,7 @@ export default function EmployeesPage() {
         <CardContent className="p-0">
           <ScrollArea className="w-full">
             <Table className="min-w-[1200px]">
-              <TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold px-6">Name / Employee ID</TableHead><TableHead className="font-bold">Aadhaar (ID)</TableHead><TableHead className="font-bold">Dept / Designation</TableHead><TableHead className="font-bold">Mobile</TableHead><TableHead className="font-bold text-right">Monthly Net Pay</TableHead><TableHead className="font-bold text-center">Status</TableHead><TableHead className="text-right font-bold pr-6">Actions</TableHead></TableRow></TableHeader>
+              <TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold px-6">Name / Employee ID</TableHead><TableHead className="font-bold">Aadhaar (ID)</TableHead><TableHead className="font-bold">Dept / Designation</TableHead><TableHead className="font-bold">Mobile</TableHead><TableHead className="font-bold text-right">Monthly CTC</TableHead><TableHead className="font-bold text-center">Status</TableHead><TableHead className="text-right font-bold pr-6">Actions</TableHead></TableRow></TableHeader>
               <TableBody>
                 {paginatedEmployees.length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No records found matching your search.</TableCell></TableRow>
@@ -545,7 +545,7 @@ export default function EmployeesPage() {
                       <TableCell className="text-xs font-mono font-medium">{emp.aadhaar}</TableCell>
                       <TableCell><div className="flex flex-col"><span className="text-xs font-bold text-slate-700">{emp.department}</span><span className="text-[9px] text-muted-foreground uppercase">{emp.designation}</span></div></TableCell>
                       <TableCell className="text-xs font-bold">{emp.mobile || "---"}</TableCell>
-                      <TableCell className="text-right font-black text-emerald-600 text-xs sm:text-sm">{formatCurrency(emp.salary?.netSalary || 0)}</TableCell>
+                      <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(emp.salary?.monthlyCTC || 0)}</TableCell>
                       <TableCell className="text-center"><Badge variant="outline" className={cn("px-3 py-0.5 text-[9px] uppercase font-black", emp.active ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>{emp.active ? "Active" : "De-active"}</Badge></TableCell>
                       <TableCell className="text-right pr-6">
                         <div className="flex justify-end items-center gap-1">
