@@ -609,8 +609,13 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
       isPrintMode ? "p-4" : "p-6 sm:p-12",
       !isPrintMode && "max-w-4xl"
     )}>
-      {/* Absolute Top-Left Logo placement */}
-      <div className="grid grid-cols-2 gap-8 mb-8 items-start">
+      {/* Absolute Top Center Titles */}
+      <div className="text-center mb-10 sm:mb-12">
+        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+        <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-8 mb-10 items-start">
         <div className="space-y-4">
           <div className="flex flex-col gap-3">
             {firm?.logo ? (
@@ -651,11 +656,6 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="text-center mb-10 sm:mb-12">
-        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-        <p className="text-[9px] sm:text-[11px] font-black text-slate-400 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
       </div>
 
       {/* Row Format Information Grid */}
