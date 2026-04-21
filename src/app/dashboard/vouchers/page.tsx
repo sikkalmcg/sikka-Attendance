@@ -609,26 +609,31 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
       isPrintMode ? "p-4" : "p-6 sm:p-12",
       !isPrintMode && "max-w-4xl"
     )}>
-      {/* Absolute Top Center Titles */}
-      <div className="text-center mb-10 sm:mb-12">
-        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-        <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
+      {/* Top Header Section with Absolute Logo */}
+      <div className="relative mb-10 sm:mb-12 pt-2">
+        {/* Logo in top left corner relative to this header */}
+        <div className="absolute left-0 top-0">
+          {firm?.logo ? (
+            <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
+          ) : (
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
+              <span className="text-white text-xl sm:text-2xl font-black">S</span>
+            </div>
+          )}
+        </div>
+        
+        {/* Absolute Top Center Titles */}
+        <div className="text-center">
+          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+          <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-8 mb-10 items-start">
         <div className="space-y-4">
-          <div className="flex flex-col gap-3">
-            {firm?.logo ? (
-              <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
-            ) : (
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
-                <span className="text-white text-xl sm:text-2xl font-black">S</span>
-              </div>
-            )}
-            <div className="space-y-1">
-              <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
-              <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
-            </div>
+          <div className="space-y-1">
+            <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+            <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
           </div>
           <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase border-t pt-3">
             <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
@@ -636,7 +641,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
           </div>
         </div>
 
-        <div className="flex flex-col items-end pt-2">
+        <div className="flex flex-col items-end pt-0">
           <div className="w-full max-w-[280px] space-y-2">
             <div className="flex justify-between border-b border-slate-100 pb-1.5">
               <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
