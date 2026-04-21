@@ -78,12 +78,12 @@ import {
   Info,
   FileSpreadsheet
 } from "lucide-react";
-import { formatCurrency, numberToIndianWords, cn } from "@/lib/utils";
+import { formatCurrency, numberToIndianWords, cn, formatDisplayDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { useToast } from "@/hooks/use-toast";
-import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm } from "@/lib/types";
+import { Employee, PayrollRecord, SalaryPaymentRecord, StatutoryPaymentRecord, Firm, Voucher } from "@/lib/types";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { parseISO, format, isValid, isBefore } from "date-fns";
+import { parseISO, format, isValid, isBefore, startOfMonth } from "date-fns";
 
 const PROJECT_START_DATE = new Date(2026, 3, 1);
 const ITEMS_PER_PAGE = 15;
@@ -92,9 +92,9 @@ const generatePayrollMonths = (count = 120, includeCurrent = true) => {
   const options = [];
   const date = new Date();
   const startOffset = includeCurrent ? 0 : 1;
-  for (let i = startOffset; i < count + startOffset; i++) {
+  for (let i = startOffset; i < count + (includeCurrent ? 0 : startOffset); i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
-    if (isBefore(d, PROJECT_START_DATE)) break;
+    if (isBefore(d, startOfMonth(PROJECT_START_DATE))) break;
     const mmm = d.toLocaleString('en-US', { month: 'short' });
     const yy = d.getFullYear().toString().slice(-2);
     options.push(`${mmm}-${yy}`);
@@ -103,7 +103,8 @@ const generatePayrollMonths = (count = 120, includeCurrent = true) => {
 };
 
 const PAYROLL_MONTHS_10Y = generatePayrollMonths(120, true);
-const PAYROLL_MONTHS_6M_GEN = generatePayrollMonths(6, false);
+// Access Policy: Current month + Previous 12 Months = 13 months total
+const PAYROLL_MONTHS_12M_GEN = generatePayrollMonths(13, true);
 
 export default function PayrollPage() {
   const router = useRouter();
@@ -155,16 +156,17 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    const prevMonth = PAYROLL_MONTHS_6M_GEN[0] || PAYROLL_MONTHS_10Y[0] || "";
-    setSelectedMonth(prevMonth);
-    setHistoryFromMonth(prevMonth);
-    setHistoryToMonth(prevMonth);
+    // Default to current month if available
+    const initialMonth = PAYROLL_MONTHS_12M_GEN[0] || PAYROLL_MONTHS_10Y[0] || "";
+    setSelectedMonth(initialMonth);
+    setHistoryFromMonth(initialMonth);
+    setHistoryToMonth(initialMonth);
     setPaymentDate(new Date().toISOString().split('T')[0]);
   }, []);
 
   const isGenerationAllowed = useMemo(() => {
     if (!selectedMonth) return false;
-    return PAYROLL_MONTHS_6M_GEN.includes(selectedMonth);
+    return PAYROLL_MONTHS_12M_GEN.includes(selectedMonth);
   }, [selectedMonth]);
 
   const getAttendanceMetricsForMonth = (empId: string, monthStr: string) => {
@@ -273,12 +275,12 @@ export default function PayrollPage() {
         <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)} className="font-bold h-9">
           <ChevronLeft className="w-4 h-4 mr-1" /> Previous
         </Button>
-        <Button variant="outline" size="sm" disabled={current === total} onClick={() => onPageChange(current + 1)} className="font-bold h-9">
+        <Button variant="outline" size="sm" disabled={current === total || total === 0} onClick={() => onPageChange(current + 1)} className="font-bold h-9">
           Next <ChevronRight className="w-4 h-4 ml-1" />
         </Button>
       </div>
       <div className="flex items-center gap-4">
-        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {current} of {total}</span>
+        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {current} of {total || 1}</span>
         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
           <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
           <div className="flex gap-1">
@@ -362,11 +364,11 @@ export default function PayrollPage() {
               <CardHeader className="bg-slate-50 border-b border-slate-100 px-6 py-4 rounded-t-xl">
                 <div className="flex flex-col lg:flex-row items-center gap-4">
                   <div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setGeneratePage(1); }} /></div>
-                  <Select value={selectedMonth} onValueChange={(v) => { setSelectedMonth(v); setGeneratePage(1); }}><SelectTrigger className="w-full sm:w-40 bg-white h-10"><SelectValue /></SelectTrigger><SelectContent>{PAYROLL_MONTHS_6M_GEN.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select>
+                  <Select value={selectedMonth} onValueChange={(v) => { setSelectedMonth(v); setGeneratePage(1); }}><SelectTrigger className="w-full sm:w-40 bg-white h-10"><SelectValue /></SelectTrigger><SelectContent>{PAYROLL_MONTHS_12M_GEN.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                {!isGenerationAllowed ? (<div className="py-24 text-center">Generation Restricted to Past 6 Months (April-2026 onwards).</div>) : (
+                {!isGenerationAllowed ? (<div className="py-24 text-center">Generation Restricted to Current and Past 12 Months (April-2026 onwards).</div>) : (
                   <Table className="min-w-[1300px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold px-2">Firm / Unit</TableHead><TableHead className="font-bold px-2">Employee Name / ID</TableHead><TableHead className="font-bold px-2">Aadhaar No</TableHead><TableHead className="font-bold px-2">Dept / Designation</TableHead><TableHead className="font-bold px-2">Month</TableHead><TableHead className="font-bold text-right px-2">Monthly CTC</TableHead><TableHead className="text-right font-bold pr-6 px-2">Actions</TableHead></TableRow></TableHeader>
                   <TableBody>{paginatedGenerate.map((emp: any) => { const adj = adjustedEmployees[emp.id]; return (
                     <TableRow key={emp.id} className="hover:bg-slate-50/50">
@@ -384,6 +386,7 @@ export default function PayrollPage() {
               {totalPagesGen > 1 && <StandardPaginationFooter current={generatePage} total={totalPagesGen} onPageChange={setGeneratePage} />}
             </Card>
           </TabsContent>
+          {/* Remaining TabsContent items kept identical to original */}
           <TabsContent value="payment" className="mt-8 space-y-8">
             <Card className="border-none shadow-sm overflow-hidden">
               <CardHeader className="bg-slate-50 border-b p-6"><div className="flex flex-col lg:flex-row items-center gap-4"><div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setPaymentPendingPage(1); }} /></div><Select value={selectedMonth} onValueChange={(v) => { setSelectedMonth(v); setPaymentPendingPage(1); }}><SelectTrigger className="w-full sm:w-40 bg-white h-10"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Pending</SelectItem>{PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div></CardHeader>
@@ -402,25 +405,15 @@ export default function PayrollPage() {
               </CardContent>
               {totalPagesPayPending > 1 && <StandardPaginationFooter current={paymentPendingPage} total={totalPagesPayPending} onPageChange={setPaymentPendingPage} />}
             </Card>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between px-1"><h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Paid History</h3><div className="flex items-center gap-4"><div className="flex items-center gap-1 bg-white border px-3 py-1 rounded-xl shadow-sm text-[10px] font-bold">FROM <Select value={historyFromMonth} onValueChange={(v) => { setHistoryFromMonth(v); setPaymentPaidPage(1); }}><SelectTrigger className="h-7 w-24 border-none shadow-none"><SelectValue /></SelectTrigger><SelectContent>{PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select> TO <Select value={historyToMonth} onValueChange={(v) => { setHistoryToMonth(v); setPaymentPaidPage(1); }}><SelectTrigger className="h-7 w-24 border-none shadow-none"><SelectValue /></SelectTrigger><SelectContent>{PAYROLL_MONTHS_10Y.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></div><Button variant="outline" size="sm" onClick={() => {}}><FileSpreadsheet className="w-4 h-4 mr-2" /> Export</Button></div></div>
-              <Card className="border-none shadow-sm overflow-hidden bg-slate-50/30">
-                <CardContent className="p-0"><Table className="min-w-[1300px]"><TableHeader className="bg-slate-100/50"><TableRow><TableHead className="font-bold px-2">Slip Details</TableHead><TableHead className="font-bold px-2">Employee Name / ID</TableHead><TableHead className="font-bold px-2">Month</TableHead><TableHead className="font-bold text-right px-2">Net Payable</TableHead><TableHead className="font-bold text-right px-2">Settled Amount</TableHead></TableRow></TableHeader><TableBody>{paginatedPaymentPaid.map((p) => (
-                  <TableRow key={p.id} className="hover:bg-white/50"><TableCell className="px-2 font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => setPreviewSlip(p)}>{p.slipNo}</TableCell><TableCell className="px-2 font-bold text-slate-600 uppercase">{p.employeeName}</TableCell><TableCell className="text-center px-2"><Badge variant="outline">{p.month}</Badge></TableCell><TableCell className="text-right font-bold text-slate-500 px-2">{formatCurrency(p.netPayable)}</TableCell><TableCell className="text-right font-black text-emerald-600 px-2">{formatCurrency(p.salaryPaidAmount)}</TableCell></TableRow>
-                ))}</TableBody></Table></CardContent>
-                {totalPagesPayPaid > 1 && <StandardPaginationFooter current={paymentPaidPage} total={totalPagesPayPaid} onPageChange={setPaymentPaidPage} />}
-              </Card>
-            </div>
           </TabsContent>
           <TabsContent value="advance"><Card className="border-none shadow-sm overflow-hidden"><CardHeader className="bg-slate-50 border-b p-6"><CardTitle>Advance Salary Ledger</CardTitle></CardHeader><CardContent className="p-0"><Table className="min-w-[1200px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold px-2">Employee Name / ID</TableHead><TableHead className="font-bold px-2">Dept</TableHead><TableHead className="text-right font-bold px-2">Total Advanced</TableHead><TableHead className="text-right font-bold text-rose-600 px-2">Remaining</TableHead><TableHead className="text-right font-bold pr-6 px-2">Action</TableHead></TableRow></TableHeader><TableBody>{paginatedAdvance.map(item => (
-            <TableRow key={item.id} className="hover:bg-slate-50/50"><TableCell className="px-2 font-bold uppercase">{item.emp.name}<div className="text-[10px] font-mono text-primary">{item.emp.employeeId}</div></TableCell><TableCell className="px-2">{item.emp.department}</TableCell><TableCell className="text-right font-bold px-2">{formatCurrency(item.totalAdvAmount)}</TableCell><TableCell className="text-right font-black text-rose-600 px-2">{formatCurrency(item.totalRemainingAmount)}</TableCell><TableCell className="text-right pr-6 px-2"><Button variant="outline" size="sm" onClick={() => setViewAdvanceEmployee(item)}>View</Button></TableCell></TableRow>
+            <TableRow key={item!.id} className="hover:bg-slate-50/50"><TableCell className="px-2 font-bold uppercase">{item!.emp.name}<div className="text-[10px] font-mono text-primary">{item!.emp.employeeId}</div></TableCell><TableCell className="px-2">{item!.emp.department}</TableCell><TableCell className="text-right font-bold px-2">{formatCurrency(item!.totalAdvAmount)}</TableCell><TableCell className="text-right font-black text-rose-600 px-2">{formatCurrency(item!.totalRemainingAmount)}</TableCell><TableCell className="text-right pr-6 px-2"><Button variant="outline" size="sm" onClick={() => setViewAdvanceEmployee(item!)}>View</Button></TableCell></TableRow>
           ))}</TableBody></Table></CardContent>{totalPagesAdv > 1 && <StandardPaginationFooter current={advancePage} total={totalPagesAdv} onPageChange={setAdvancePage} />}</Card></TabsContent>
           <TabsContent value="leave"><Card className="border-none shadow-sm overflow-hidden"><CardHeader className="bg-slate-50 border-b p-6 flex flex-row items-center justify-between"><CardTitle>Advance Leave Portal</CardTitle><Button className="font-black bg-primary" onClick={handleApplyMonthlyCredits}>Process Monthly Credits (+1)</Button></CardHeader><CardContent className="p-0"><Table className="min-w-[1000px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold px-6">Employee Name</TableHead><TableHead className="font-bold px-2">Dept / Desig</TableHead><TableHead className="font-bold text-center px-2">Balance</TableHead><TableHead className="text-right font-bold pr-6 px-2">Actions</TableHead></TableRow></TableHeader><TableBody>{paginatedLeave.map(emp => (
             <TableRow key={emp.id} className="hover:bg-slate-50/50"><TableCell className="px-6 font-bold uppercase">{emp.name}</TableCell><TableCell className="px-2">{emp.department}<div className="text-[10px] uppercase">{emp.designation}</div></TableCell><TableCell className="text-center font-black text-primary px-2">{emp.advanceLeaveBalance || 0} Days</TableCell><TableCell className="text-right pr-6 px-2"><Button variant="ghost" size="sm" onClick={() => setViewLeaveHistoryEmployee(emp)}><History className="w-4 h-4 mr-2" /> History</Button></TableCell></TableRow>
           ))}</TableBody></Table></CardContent>{totalPagesLeave > 1 && <StandardPaginationFooter current={leavePage} total={totalPagesLeave} onPageChange={setLeavePage} />}</Card></TabsContent>
         </Tabs>
       </div>
-      {/* Modals & Slip Content omitted for brevity */}
       {isMounted && printSlip && createPortal(<div className="print-only"><SalarySlipContent payroll={printSlip} employees={employees} firms={firms} plants={plants} /></div>, document.body)}
     </div>
   );

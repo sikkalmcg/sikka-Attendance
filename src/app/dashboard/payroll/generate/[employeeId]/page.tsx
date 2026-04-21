@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -33,7 +34,9 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { parseISO, isValid } from "date-fns";
+import { parseISO, isValid, isBefore, startOfMonth } from "date-fns";
+
+const PROJECT_START_DATE = new Date(2026, 3, 1);
 
 export default function GenerateSalaryPage() {
   const router = useRouter();
@@ -60,14 +63,15 @@ export default function GenerateSalaryPage() {
     setSlipDate(new Date().toISOString().split('T')[0]);
   }, []);
 
-  // Restriction logic: Only allow generation for Past 6 Months (excluding current)
+  // Restriction logic: Only allow generation for Current and Past 12 Months
   const isGenerationAllowed = useMemo(() => {
     if (!selectedMonth) return false;
     const allowedOptions = [];
     const date = new Date();
-    // Rules: Previous 6 months, skip current
-    for (let i = 1; i <= 6; i++) {
+    // Rules: Current month + Previous 12 months = 13 months
+    for (let i = 0; i <= 12; i++) {
       const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+      if (isBefore(d, startOfMonth(PROJECT_START_DATE))) break;
       const mmm = d.toLocaleString('en-US', { month: 'short' });
       const yy = d.getFullYear().toString().slice(-2);
       allowedOptions.push(`${mmm}-${yy}`);
@@ -78,7 +82,7 @@ export default function GenerateSalaryPage() {
   // Security Redirect
   useEffect(() => {
     if (isMounted && !isGenerationAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "Salary generation is restricted to the past six months (excluding current)." });
+      toast({ variant: "destructive", title: "Access Denied", description: "Salary generation is restricted to the current and past 12 months (April-2026 onwards)." });
       router.push("/dashboard/payroll");
     }
   }, [isMounted, isGenerationAllowed, router, toast]);
@@ -316,7 +320,7 @@ export default function GenerateSalaryPage() {
                 />
                 {isDeductionError && (
                   <p className="flex items-center gap-1.5 text-[10px] text-rose-600 font-black uppercase tracking-widest mt-3">
-                    <AlertCircle className="w-3 heart-3" />
+                    <AlertCircle className="w-3 h-3" />
                     Deduction amount cannot be greater than Net Pay ({formatCurrency(netPayBeforeDeduction)})
                   </p>
                 )}
@@ -358,6 +362,15 @@ function StatBox({ label, value, color }: { label: string, value: string | numbe
     <div className="bg-white p-4 rounded-2xl text-center border border-slate-200 shadow-sm">
       <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">{label}</p>
       <div className={cn("text-lg font-black", color)}>{value}</div>
+    </div>
+  );
+}
+
+function StatRow({ label, value }: { label: string, value: string | number }) {
+  return (
+    <div className="flex justify-between items-center py-2 border-b border-slate-100 last:border-0">
+      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</span>
+      <span className="text-sm font-black text-slate-800">{value}</span>
     </div>
   );
 }
