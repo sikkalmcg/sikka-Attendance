@@ -86,15 +86,14 @@ const generateVoucherMonths = () => {
 const VOUCHER_MONTHS = generateVoucherMonths();
 
 export default function VouchersPage() {
-  const { employees, firms, vouchers, addRecord, updateRecord } = useData();
+  const { employees, firms, vouchers, addRecord, updateRecord, currentUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("create");
   const [searchTerm, setSearchTerm] = useState("");
   const [voucherDate, setVoucherDate] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [amount, setAmount] = useState("");
-  const [purpose, setPurpose] = useState("");
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [purpose, setPurpose] = useState("Advance Salary");
   const { toast } = useToast();
 
   const [pendingPage, setPendingPage] = useState(1);
@@ -120,8 +119,6 @@ export default function VouchersPage() {
     setIsMounted(true);
     const today = new Date().toISOString().split('T')[0];
     setVoucherDate(today < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : today);
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) setCurrentUser(JSON.parse(savedUser));
     const initialMonth = VOUCHER_MONTHS[0] || "";
     setPaidFromMonth(initialMonth);
     setPaidToMonth(initialMonth);
@@ -205,7 +202,7 @@ export default function VouchersPage() {
     addRecord('vouchers', newV);
     toast({ title: "Voucher Created", description: "Voucher has been sent for approval." });
     setAmount("");
-    setPurpose("");
+    setPurpose("Advance Salary");
     setActiveTab("approve");
   };
 
@@ -323,7 +320,7 @@ export default function VouchersPage() {
                     <TableRow>
                       <TableHead className="font-bold">Voucher No</TableHead>
                       <TableHead className="font-bold">Name</TableHead>
-                      <TableHead className="font-bold">Dept / Desig</TableHead>
+                      <TableHead className="font-bold text-center">Dept / Desig</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold text-right">Amount</TableHead>
                       <TableHead className="font-bold text-right pr-6">Actions</TableHead>
@@ -340,7 +337,7 @@ export default function VouchersPage() {
                             <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
                             <TableCell className="font-bold uppercase text-slate-700">{emp?.name}</TableCell>
                             <TableCell>
-                              <div className="flex flex-col">
+                              <div className="flex flex-col text-center">
                                 <span className="text-xs font-bold text-slate-600">{emp?.department}</span>
                                 <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
                               </div>
@@ -379,7 +376,7 @@ export default function VouchersPage() {
                     <TableRow>
                       <TableHead className="font-bold">Voucher No</TableHead>
                       <TableHead className="font-bold">Name</TableHead>
-                      <TableHead className="font-bold">Dept / Desig</TableHead>
+                      <TableHead className="font-bold text-center">Dept / Desig</TableHead>
                       <TableHead className="font-bold">Date</TableHead>
                       <TableHead className="font-bold text-right">Amount</TableHead>
                       <TableHead className="font-bold text-right pr-6">Actions</TableHead>
@@ -396,7 +393,7 @@ export default function VouchersPage() {
                             <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
                             <TableCell className="font-bold uppercase text-slate-700">{emp?.name}</TableCell>
                             <TableCell>
-                              <div className="flex flex-col">
+                              <div className="flex flex-col text-center">
                                 <span className="text-xs font-bold text-slate-600">{emp?.department}</span>
                                 <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
                               </div>
@@ -447,7 +444,7 @@ export default function VouchersPage() {
                       <TableRow>
                         <TableHead className="font-bold">Voucher No</TableHead>
                         <TableHead className="font-bold">Name</TableHead>
-                        <TableHead className="font-bold">Dept / Desig</TableHead>
+                        <TableHead className="font-bold text-center">Dept / Desig</TableHead>
                         <TableHead className="font-bold text-center">Settled Date</TableHead>
                         <TableHead className="font-bold text-right">Amount</TableHead>
                         <TableHead className="font-bold text-right pr-6">Status</TableHead>
@@ -464,7 +461,7 @@ export default function VouchersPage() {
                               <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
                               <TableCell className="font-bold uppercase text-slate-600">{emp?.name}</TableCell>
                               <TableCell>
-                                <div className="flex flex-col">
+                                <div className="flex flex-col text-center">
                                   <span className="text-xs font-medium text-slate-500">{emp?.department}</span>
                                   <span className="text-[10px] text-muted-foreground uppercase">{emp?.designation}</span>
                                 </div>
@@ -586,7 +583,7 @@ export default function VouchersPage() {
 }
 
 /**
- * Formal Voucher Document Component - India Compliant
+ * Redesigned Professional A4-Standard Voucher Document Component
  */
 function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
   const emp = employees.find(e => e.id === voucher.employeeId);
@@ -594,144 +591,155 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
 
   return (
     <div className={cn(
-      "font-calibri text-slate-900 bg-white",
-      isPrintMode ? "p-0" : "p-12"
+      "font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col",
+      isPrintMode ? "p-4" : "p-12"
     )}>
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-black uppercase tracking-[0.25em] border-b-4 border-slate-900 inline-block pb-1">Voucher</h1>
-        <p className="text-sm font-bold text-slate-500 mt-2 uppercase tracking-widest">Payment Voucher / Advance Disbursement</p>
+      {/* Title Section */}
+      <div className="text-center mb-10">
+        <h1 className="text-4xl font-black uppercase tracking-[0.25em] border-b-4 border-slate-900 inline-block pb-1">Payment Voucher</h1>
+        <p className="text-xs font-bold text-slate-500 mt-2 uppercase tracking-[0.4em]">Corporate Advance Disbursement</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-10 border-b-2 border-slate-200 pb-8 mb-8">
+      {/* Header Section */}
+      <div className="grid grid-cols-2 gap-8 mb-10 items-start">
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-3">
             {firm?.logo ? (
-              <img src={firm.logo} alt="Logo" className="w-16 h-16 object-contain" />
+              <img src={firm.logo} alt="Logo" className="w-20 h-20 object-contain" />
             ) : (
-              <div className="w-16 h-16 bg-slate-900 rounded-lg flex items-center justify-center">
+              <div className="w-16 h-16 bg-slate-900 rounded-xl flex items-center justify-center">
                 <span className="text-white text-3xl font-black">S</span>
               </div>
             )}
-            <div>
-              <h2 className="text-xl font-black uppercase leading-tight">{firm?.name || "SIKKA INDUSTRIES AND LOGISTICS"}</h2>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter max-w-[280px]">{firm?.registeredAddress}</p>
+            <div className="space-y-1">
+              <h2 className="text-2xl font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+              <p className="text-[10px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 text-[11px] font-black uppercase">
-            <div className="bg-slate-50 px-3 py-1.5 rounded border border-slate-100">
-              <span className="text-slate-400 block text-[9px] mb-0.5">GSTIN</span>
-              <span className="font-mono">{firm?.gstin || "---"}</span>
-            </div>
-            <div className="bg-slate-50 px-3 py-1.5 rounded border border-slate-100">
-              <span className="text-slate-400 block text-[9px] mb-0.5">PAN</span>
-              <span className="font-mono">{firm?.pan || "---"}</span>
-            </div>
+          <div className="flex gap-6 text-[11px] font-black uppercase border-t pt-3">
+            <div><span className="text-slate-400 text-[9px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
+            <div><span className="text-slate-400 text-[9px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
           </div>
         </div>
 
-        <div className="flex flex-col justify-end items-end space-y-3">
-          <div className="text-right w-full max-w-[240px]">
-            <div className="flex justify-between border-b border-slate-100 py-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase">Voucher No</span>
+        <div className="flex flex-col items-end pt-2">
+          <div className="w-full max-w-[280px] space-y-2.5">
+            <div className="flex justify-between border-b border-slate-100 pb-1.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
               <span className="text-sm font-black font-mono text-primary">{voucher.voucherNo}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 py-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase">Date</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span>
               <span className="text-sm font-black">{formatDisplayDate(voucher.date)}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 py-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase">Created By</span>
-              <span className="text-xs font-bold uppercase">{voucher.createdByName || "Admin"}</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
+              <span className="text-xs font-bold uppercase">{voucher.createdByName || "System Admin"}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 py-1">
-              <span className="text-[10px] font-black text-slate-400 uppercase">Approved By</span>
-              <span className="text-xs font-bold uppercase">{voucher.approvedByName || "Authorized Admin"}</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1.5">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
+              <span className="text-xs font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Employee Details Table */}
       <div className="mb-10">
         <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
-          <UserIcon className="w-3 h-3" /> Receiver / Employee Information
+          <UserIcon className="w-3 h-3" /> Employee / Receiver Information
         </h3>
-        <div className="border-2 border-slate-900 rounded-xl overflow-hidden grid grid-cols-2 md:grid-cols-4">
-          <div className="p-4 border-r-2 border-b-2 md:border-b-0 border-slate-900 bg-slate-50/50">
-            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Employee ID</span>
-            <span className="text-sm font-black font-mono text-primary">{emp?.employeeId || "---"}</span>
-          </div>
-          <div className="p-4 border-r-2 border-b-2 md:border-b-0 border-slate-900">
-            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Full Name</span>
-            <span className="text-sm font-black uppercase">{emp?.name || "---"}</span>
-          </div>
-          <div className="p-4 border-r-2 border-slate-900 bg-slate-50/50">
-            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Department</span>
-            <span className="text-sm font-black uppercase">{emp?.department || "---"}</span>
-          </div>
-          <div className="p-4">
-            <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">Designation</span>
-            <span className="text-sm font-black uppercase truncate">{emp?.designation || "---"}</span>
-          </div>
-        </div>
-        <p className="text-[9px] font-bold text-slate-500 mt-2 flex items-center gap-1.5">
-          <ShieldCheck className="w-3 h-3 text-emerald-500" />
-          Identity Verified via Aadhaar: <span className="font-mono text-slate-900">{emp?.aadhaar || "---"}</span>
-        </p>
-      </div>
-
-      <div className="space-y-8 mb-16">
-        <div>
-          <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Amount Authorized</h3>
-          <div className="flex items-stretch gap-4">
-            <div className="bg-slate-900 text-white px-8 py-4 rounded-xl flex items-center justify-center min-w-[220px]">
-              <span className="text-4xl font-black">{formatCurrency(voucher.amount)}</span>
-            </div>
-            <div className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl p-4 flex flex-col justify-center">
-              <span className="text-[9px] font-black text-slate-400 uppercase mb-1">Amount in Words</span>
-              <span className="text-sm font-bold italic text-slate-700 leading-tight">
-                {numberToIndianWords(voucher.amount)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Purpose of Payment / Description</h3>
-          <div className="border-2 border-slate-900 p-6 rounded-2xl bg-white min-h-[120px] relative">
-            <p className="text-lg font-medium italic text-slate-600 leading-relaxed">"{voucher.purpose}"</p>
-            <div className="absolute top-4 right-6 opacity-5">
-              <FileText className="w-16 h-16" />
-            </div>
-          </div>
+        <div className="border border-slate-900 rounded-lg overflow-hidden">
+          <table className="w-full text-left text-sm border-collapse">
+            <tbody>
+              <tr>
+                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[10px] font-black">Employee ID</th>
+                <td className="p-4 border-b border-slate-900 font-black font-mono text-primary">{emp?.employeeId || "---"}</td>
+              </tr>
+              <tr>
+                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Full Name</th>
+                <td className="p-4 border-b border-slate-900 font-black uppercase">{emp?.name || "---"}</td>
+              </tr>
+              <tr>
+                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Dept / Designation</th>
+                <td className="p-4 border-b border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
+              </tr>
+              <tr>
+                <th className="p-4 border-r border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Aadhaar Number</th>
+                <td className="p-4 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-20 px-10 mb-16">
-        <div className="text-center pt-10 border-t-2 border-dashed border-slate-300 space-y-2">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-800">Receiver's Signature</p>
-          <p className="text-[10px] font-bold text-slate-400 italic">(Signed upon receipt of funds)</p>
-        </div>
-        <div className="text-center pt-10 border-t-2 border-dashed border-slate-300 space-y-2">
-          <p className="text-xs font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
-          <p className="text-[10px] font-bold text-slate-400 italic">(For {firm?.name || "The Organization"})</p>
+      {/* Payment Details Table */}
+      <div className="mb-10">
+        <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
+          <CreditCard className="w-3 h-3" /> Transaction & Payment Summary
+        </h3>
+        <div className="border border-slate-900 rounded-lg overflow-hidden">
+          <table className="w-full text-left text-sm border-collapse">
+            <tbody>
+              <tr>
+                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[10px] font-black">Amount (₹)</th>
+                <td className="p-4 border-b border-slate-900">
+                   <div className="bg-slate-900 text-white px-6 py-2 rounded-md inline-block text-2xl font-black">{formatCurrency(voucher.amount)}</div>
+                </td>
+              </tr>
+              <tr>
+                <th className="p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Amount in Words</th>
+                <td className="p-4 border-b border-slate-900 font-bold italic text-slate-700">{numberToIndianWords(voucher.amount)}</td>
+              </tr>
+              <tr>
+                <th className="p-4 border-r border-slate-900 bg-slate-50 uppercase text-[10px] font-black">Purpose</th>
+                <td className="p-4 font-black uppercase tracking-widest text-primary">Advance Salary</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-        <div className="flex gap-4 items-start">
-          <ShieldCheck className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
-          <p className="text-[9px] leading-relaxed text-slate-500 font-medium text-justify">
-            <strong>COMPLIANCE NOTE:</strong> This voucher is issued for internal accounting purposes and complies with applicable provisions of the 
-            <strong> Income Tax Act, 1961</strong> and <strong>Goods and Services Tax Act, 2017</strong>. All transactions recorded herein are subject 
-            to periodic audit and verification. Aadhaar details, if recorded, are handled in accordance with applicable data protection regulations.
-          </p>
+      {/* Declaration Section */}
+      <div className="mb-12 space-y-6">
+        <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl">
+          <h4 className="text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
+          <div className="space-y-4 text-xs font-medium leading-relaxed text-slate-600 text-justify">
+            <p>
+              The above-mentioned amount is being paid as an advance against the employee’s future salary and shall be adjusted/deducted from the upcoming salary payments, as per company policy or mutual agreement.
+            </p>
+            <p className="font-bold text-slate-900 underline">The employee hereby agrees and acknowledges that:</p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>The advance amount will be recovered from salary in full or in installments.</li>
+              <li>In case of resignation, termination, or separation from the company, the outstanding advance (if any) shall be recoverable from final settlement dues.</li>
+              <li>The company reserves the right to deduct the balance amount from any payable dues.</li>
+            </ul>
+            <p className="pt-2 italic text-[10px] font-bold">This voucher is issued for record and accounting purposes only.</p>
+          </div>
         </div>
       </div>
 
-      <div className="mt-8 flex justify-between items-center text-[8px] font-black uppercase text-slate-300 tracking-[0.3em]">
-        <span>Digitally Authenticated</span>
+      {/* Footer Section */}
+      <div className="mt-auto grid grid-cols-3 gap-10 items-end pb-10">
+        <div className="text-center space-y-3">
+          <div className="h-20 border-b border-slate-400 border-dashed" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>
+        </div>
+        <div className="text-center space-y-3">
+          <div className="h-20 border-b border-slate-400 border-dashed" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
+        </div>
+        <div className="text-center space-y-3">
+          <div className="h-20 border-b border-slate-400 border-dashed" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
+        </div>
+      </div>
+
+      {/* Micro Footer */}
+      <div className="flex justify-between items-center text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4">
         <span>SikkaTrack HRMS Enterprise Node</span>
-        <span>Original Document</span>
+        <span>Corporate Original Document</span>
+        <span>Digitally Authenticated</span>
       </div>
     </div>
   );
