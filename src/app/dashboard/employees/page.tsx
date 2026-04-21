@@ -125,23 +125,29 @@ export default function EmployeesPage() {
     setIsMounted(true);
   }, []);
 
-  // AUTO-GENERATION LOGIC FOR EMPLOYEE ID
+  // INTELLIGENT AUTO-ID PREFIX DETECTION
   useEffect(() => {
     if (view === 'form' && !editEmployee && isMounted) {
       const generateNextId = () => {
-        const silPrefix = "SIL";
-        // Extract numbers from IDs following the SIL00000 format
+        // Detect existing prefix (Default to SIL if none found)
+        let prefix = "SIL";
+        if (employees.length > 0) {
+          const lastId = employees[employees.length - 1].employeeId || "";
+          const match = lastId.match(/^([A-Za-z-]+)/);
+          if (match) prefix = match[1];
+        }
+
         const numericIds = employees
-          .filter(e => e.employeeId?.startsWith(silPrefix))
+          .filter(e => e.employeeId?.startsWith(prefix))
           .map(e => {
-            const numPart = e.employeeId.replace(silPrefix, "");
+            const numPart = e.employeeId.replace(prefix, "");
             return parseInt(numPart);
           })
           .filter(n => !isNaN(n));
 
         const maxId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
         const nextId = (maxId + 1).toString().padStart(5, '0');
-        return `${silPrefix}${nextId}`;
+        return `${prefix}${nextId}`;
       };
 
       setFormData(prev => ({ ...prev, employeeId: generateNextId() }));
@@ -149,17 +155,18 @@ export default function EmployeesPage() {
   }, [view, editEmployee, employees, isMounted]);
 
   const filtered = useMemo(() => {
+    // A-Z SEQUENTIAL SORTING
     const sorted = [...(employees || [])].sort((a, b) => {
-      const nameA = (a.firstName + " " + a.lastName).toLowerCase();
-      const nameB = (b.firstName + " " + b.lastName).toLowerCase();
+      const nameA = (a.name || `${a.firstName} ${a.lastName}`).toLowerCase().trim();
+      const nameB = (b.name || `${b.firstName} ${b.lastName}`).toLowerCase().trim();
       return nameA.localeCompare(nameB);
     });
 
     return sorted.filter(emp => {
       const search = searchTerm.toLowerCase();
+      const fullName = (emp.name || `${emp.firstName} ${emp.lastName}`).toLowerCase();
       return (
-        emp.firstName?.toLowerCase().includes(search) || 
-        emp.lastName?.toLowerCase().includes(search) || 
+        fullName.includes(search) || 
         emp.employeeId?.toLowerCase().includes(search) || 
         emp.aadhaar?.includes(search)
       );
@@ -531,8 +538,8 @@ export default function EmployeesPage() {
                     <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                       <TableCell className="px-6">
                         <div className="flex flex-col">
-                          <span className="font-bold uppercase text-xs sm:text-sm">{emp.firstName} {emp.lastName}</span>
-                          <span className="text-[10px] font-mono text-primary font-black">{emp.employeeId}</span>
+                          <span className="font-black text-slate-900 uppercase text-xs sm:text-sm">{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
+                          <span className="text-[10px] font-mono text-primary font-black uppercase tracking-tight">{emp.employeeId}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-xs font-mono font-medium">{emp.aadhaar}</TableCell>
@@ -558,7 +565,7 @@ export default function EmployeesPage() {
         {totalPages > 1 && <StandardPaginationFooter current={currentPage} total={totalPages} onPageChange={setCurrentPage} />}
       </Card>
 
-      {/* Salary Revision Dialog - RESPONSIVE TABLE */}
+      {/* Salary Revision Dialog */}
       <Dialog open={!!salaryRevision} onOpenChange={(o) => !o && setSalaryRevision(null)}>
         <DialogContent className="sm:max-w-xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
