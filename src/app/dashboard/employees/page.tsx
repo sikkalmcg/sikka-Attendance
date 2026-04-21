@@ -709,21 +709,21 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Salary Increment Modal */}
+      {/* Salary Increment Modal - UPDATED TO TABLE FORMAT */}
       <Dialog open={!!salaryRevision} onOpenChange={(o) => !o && setSalaryRevision(null)}>
-        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-lg rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-6 bg-white border-b shrink-0">
             <DialogTitle className="text-xl font-black flex items-center gap-2 text-slate-900">
               <TrendingUp className="w-6 h-6 text-emerald-600" /> Salary Increment
             </DialogTitle>
             <div className="mt-4 space-y-1">
               <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Posting revision for</p>
-              <h4 className="text-lg font-black text-primary uppercase">{salaryRevision?.name}</h4>
+              <h4 className="text-lg font-black text-primary uppercase leading-tight">{salaryRevision?.name}</h4>
               <p className="text-[10px] font-bold text-slate-400 uppercase">{salaryRevision?.employeeId} • {salaryRevision?.department} / {salaryRevision?.designation}</p>
             </div>
           </DialogHeader>
 
-          <div className="p-8 space-y-6 bg-slate-50/50">
+          <div className="p-8 space-y-8 bg-slate-50/50">
             <div className="space-y-2">
               <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Effective Month</Label>
               <Select value={effectiveMonth} onValueChange={setEffectiveMonth}>
@@ -736,45 +736,60 @@ export default function EmployeesPage() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Basic Salary (₹)</Label>
-                <Input 
-                  type="number" 
-                  value={revisionData.basic} 
-                  onChange={(e) => {
-                    const b = parseFloat(e.target.value) || 0;
-                    setRevisionData(calculateSalaryMetrics(b, revisionData.hra, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
-                  }} 
-                  className="h-12 text-lg font-black bg-white shadow-sm" 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">HRA (₹)</Label>
-                  <Input 
-                    type="number" 
-                    value={revisionData.hra} 
-                    onChange={(e) => {
-                      const h = parseFloat(e.target.value) || 0;
-                      setRevisionData(calculateSalaryMetrics(revisionData.basic, h, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
-                    }} 
-                    className="h-12 font-bold bg-white shadow-sm" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Other Allowance (₹)</Label>
-                  <Input 
-                    type="number" 
-                    value={revisionData.allowance} 
-                    onChange={(e) => {
-                      const a = parseFloat(e.target.value) || 0;
-                      setRevisionData(calculateSalaryMetrics(revisionData.basic, revisionData.hra, a, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
-                    }} 
-                    className="h-12 font-bold bg-white shadow-sm" 
-                  />
-                </div>
-              </div>
+            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-slate-500 py-3">Salary Component</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-slate-500 text-right py-3">Monthly Amount (₹)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="bg-white">
+                  <TableRow className="hover:bg-slate-50/50">
+                    <TableCell className="font-bold text-slate-700 py-4">Basic Salary</TableCell>
+                    <TableCell className="py-2">
+                      <Input 
+                        type="number" 
+                        value={revisionData.basic} 
+                        onChange={(e) => {
+                          const b = parseFloat(e.target.value) || 0;
+                          const newHra = Math.round(b * 0.5);
+                          setRevisionData(calculateSalaryMetrics(b, newHra, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                        }} 
+                        className="h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-base" 
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow className="hover:bg-slate-50/50">
+                    <TableCell className="font-bold text-slate-700 py-4">HRA (50% Auto)</TableCell>
+                    <TableCell className="py-2">
+                      <Input 
+                        type="number" 
+                        value={revisionData.hra} 
+                        onChange={(e) => {
+                          const h = parseFloat(e.target.value) || 0;
+                          setRevisionData(calculateSalaryMetrics(revisionData.basic, h, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                        }} 
+                        className="h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-base" 
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow className="hover:bg-slate-50/50">
+                    <TableCell className="font-bold text-slate-700 py-4">Other Allowance</TableCell>
+                    <TableCell className="py-2">
+                      <Input 
+                        type="number" 
+                        value={revisionData.allowance} 
+                        onChange={(e) => {
+                          const a = parseFloat(e.target.value) || 0;
+                          setRevisionData(calculateSalaryMetrics(revisionData.basic, revisionData.hra, a, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                        }} 
+                        className="h-10 text-right font-black border-none focus-visible:ring-0 focus-visible:bg-slate-50 text-base" 
+                      />
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </div>
 
             <div className="bg-slate-900 p-6 rounded-2xl text-white flex justify-between items-center shadow-xl border-b-4 border-emerald-500">
