@@ -709,42 +709,156 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Salary Revision Modal */}
+      {/* Salary Increment Modal */}
       <Dialog open={!!salaryRevision} onOpenChange={(o) => !o && setSalaryRevision(null)}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader><DialogTitle className="text-xl font-black flex items-center gap-2"><TrendingUp className="w-6 h-6 text-emerald-600" /> Salary Increment</DialogTitle><DialogDescription className="font-bold">Posting revision for {salaryRevision?.name}</DialogDescription></DialogHeader>
-          <div className="space-y-6 py-6">
-            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Effective Month</Label>
+        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
+          <DialogHeader className="p-6 bg-white border-b shrink-0">
+            <DialogTitle className="text-xl font-black flex items-center gap-2 text-slate-900">
+              <TrendingUp className="w-6 h-6 text-emerald-600" /> Salary Increment
+            </DialogTitle>
+            <div className="mt-4 space-y-1">
+              <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Posting revision for</p>
+              <h4 className="text-lg font-black text-primary uppercase">{salaryRevision?.name}</h4>
+              <p className="text-[10px] font-bold text-slate-400 uppercase">{salaryRevision?.employeeId} • {salaryRevision?.department} / {salaryRevision?.designation}</p>
+            </div>
+          </DialogHeader>
+
+          <div className="p-8 space-y-6 bg-slate-50/50">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Effective Month</Label>
               <Select value={effectiveMonth} onValueChange={setEffectiveMonth}>
-                <SelectTrigger className="h-12 bg-slate-50 font-black"><SelectValue /></SelectTrigger>
-                <SelectContent>{MONTH_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-12 bg-white border-slate-200 font-black shadow-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">New Basic Salary</Label>
-              <Input type="number" value={revisionData.basic} onChange={(e) => {
-                const b = parseFloat(e.target.value) || 0;
-                setRevisionData(calculateSalaryMetrics(b, Math.round(b*0.5), revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
-              }} className="h-12 text-lg font-black" />
+
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Basic Salary (₹)</Label>
+                <Input 
+                  type="number" 
+                  value={revisionData.basic} 
+                  onChange={(e) => {
+                    const b = parseFloat(e.target.value) || 0;
+                    setRevisionData(calculateSalaryMetrics(b, revisionData.hra, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                  }} 
+                  className="h-12 text-lg font-black bg-white shadow-sm" 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">HRA (₹)</Label>
+                  <Input 
+                    type="number" 
+                    value={revisionData.hra} 
+                    onChange={(e) => {
+                      const h = parseFloat(e.target.value) || 0;
+                      setRevisionData(calculateSalaryMetrics(revisionData.basic, h, revisionData.allowance, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                    }} 
+                    className="h-12 font-bold bg-white shadow-sm" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Other Allowance (₹)</Label>
+                  <Input 
+                    type="number" 
+                    value={revisionData.allowance} 
+                    onChange={(e) => {
+                      const a = parseFloat(e.target.value) || 0;
+                      setRevisionData(calculateSalaryMetrics(revisionData.basic, revisionData.hra, a, salaryRevision?.isGovComplianceEnabled || false, {pfEmp: revisionData.pfRateEmp, esicEmp: revisionData.esicRateEmp, pfEx: revisionData.pfRateEx, esicEx: revisionData.esicRateEx}));
+                    }} 
+                    className="h-12 font-bold bg-white shadow-sm" 
+                  />
+                </div>
+              </div>
             </div>
-            <div className="bg-slate-900 p-6 rounded-2xl text-white flex justify-between items-center"><div className="space-y-0.5"><p className="text-[10px] font-black text-slate-400 uppercase">New Monthly CTC</p><h4 className="text-2xl font-black text-emerald-400">{formatCurrency(revisionData.monthlyCTC)}</h4></div><div className="text-right"><p className="text-[10px] font-black text-slate-400 uppercase">Hike %</p><h4 className="text-xl font-black text-white">+ {((revisionData.monthlyCTC - (salaryRevision?.salary.monthlyCTC || 0)) / (salaryRevision?.salary.monthlyCTC || 1) * 100).toFixed(1)}%</h4></div></div>
+
+            <div className="bg-slate-900 p-6 rounded-2xl text-white flex justify-between items-center shadow-xl border-b-4 border-emerald-500">
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">New Monthly CTC</p>
+                <h4 className="text-3xl font-black text-emerald-400 tracking-tighter">{formatCurrency(revisionData.monthlyCTC)}</h4>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Hike %</p>
+                <h4 className="text-2xl font-black text-white">+ {((revisionData.monthlyCTC - (salaryRevision?.salary.monthlyCTC || 0)) / (salaryRevision?.salary.monthlyCTC || 1) * 100).toFixed(1)}%</h4>
+              </div>
+            </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-0"><Button variant="ghost" onClick={() => setSalaryRevision(null)} className="rounded-xl font-bold">Cancel</Button><Button className="bg-emerald-600 rounded-xl font-black px-8" onClick={handlePostSalaryRevision} disabled={isProcessing}>Post Revision</Button></DialogFooter>
+
+          <DialogFooter className="p-4 bg-white border-t gap-3 shrink-0">
+            <Button variant="ghost" onClick={() => setSalaryRevision(null)} className="rounded-xl font-bold h-11 px-8">Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-black h-11 px-12 shadow-lg shadow-emerald-100" onClick={handlePostSalaryRevision} disabled={isProcessing}>Post Revision</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Salary History Modal */}
+      {/* Salary Progression Modal */}
       <Dialog open={!!viewHistoryEmployee} onOpenChange={(o) => !o && setViewHistoryEmployee(null)}>
-        <DialogContent className="sm:max-w-xl rounded-2xl p-0 overflow-hidden">
-          <DialogHeader className="p-6 bg-slate-900 text-white"><DialogTitle className="text-xl font-black flex items-center gap-2"><History className="w-6 h-6 text-primary" /> Salary Progression</DialogTitle><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{viewHistoryEmployee?.name} ({viewHistoryEmployee?.employeeId})</p></DialogHeader>
-          <ScrollArea className="max-h-[60vh] p-6 bg-slate-50">
-            <div className="space-y-4">{[...(viewHistoryEmployee?.salaryHistory || [])].reverse().map((entry, idx) => (
-              <div key={idx} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-                <div><p className="text-xs font-black text-slate-400 uppercase">{entry.fromMonth} to {entry.toMonth}</p><p className="text-sm font-bold text-slate-700 mt-1">Cost to Organization</p></div>
-                <h4 className="text-lg font-black text-emerald-600">{formatCurrency(entry.monthlyCTC)}</h4>
+        <DialogContent className="sm:max-w-3xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+            <DialogTitle className="text-xl font-black flex items-center gap-2">
+              <History className="w-6 h-6 text-primary" /> Salary Progression
+            </DialogTitle>
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-lg font-black text-primary uppercase leading-tight">{viewHistoryEmployee?.name}</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{viewHistoryEmployee?.employeeId} • {viewHistoryEmployee?.department} / {viewHistoryEmployee?.designation}</p>
               </div>
-            ))}</div>
+              <Badge className="bg-primary/20 text-primary border-none font-black text-[10px] uppercase px-3 py-1">Career Ledger</Badge>
+            </div>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[60vh] bg-white">
+            <div className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50 sticky top-0 z-10 border-b">
+                  <TableRow>
+                    <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 py-4">From Month</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-widest py-4">To Month</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-right py-4">Monthly CTC (₹)</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-widest text-right pr-8 py-4">Increase (%)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {viewHistoryEmployee?.salaryHistory && [...viewHistoryEmployee.salaryHistory].reverse().map((entry, idx, arr) => {
+                    const nextEntry = arr[idx + 1];
+                    const hike = nextEntry ? (((entry.monthlyCTC - nextEntry.monthlyCTC) / nextEntry.monthlyCTC) * 100).toFixed(1) : "0.0";
+                    return (
+                      <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
+                        <TableCell className="px-6 py-5 font-bold text-slate-700">{entry.fromMonth}</TableCell>
+                        <TableCell className="py-5">
+                          <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-tighter px-3", entry.toMonth === 'Present' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-50 text-slate-500")}>
+                            {entry.toMonth}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right py-5">
+                          <span className="font-black text-slate-900">{formatCurrency(entry.monthlyCTC)}</span>
+                        </TableCell>
+                        <TableCell className="text-right pr-8 py-5">
+                          {nextEntry ? (
+                            <div className="flex items-center justify-end gap-1.5 text-emerald-600 font-black text-xs">
+                              <GrowthIcon className="w-3 h-3" />
+                              {hike}%
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Join Sal.</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </ScrollArea>
-          <div className="p-4 bg-white border-t flex justify-end"><Button variant="ghost" onClick={() => setViewHistoryEmployee(null)} className="font-bold">Close Portal</Button></div>
+
+          <div className="p-4 bg-slate-50 border-t flex justify-end shrink-0">
+            <Button variant="ghost" onClick={() => setViewHistoryEmployee(null)} className="font-black text-xs uppercase tracking-widest h-10 px-8 rounded-xl">Close Progression</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
