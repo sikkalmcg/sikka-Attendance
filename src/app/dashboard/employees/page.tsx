@@ -152,10 +152,11 @@ export default function EmployeesPage() {
   const isSuperAdmin = useMemo(() => currentUser?.role === 'SUPER_ADMIN', [currentUser]);
 
   const filtered = useMemo(() => {
+    // REQUIREMENT: added employee should be by A-Z series
     const sorted = [...(employees || [])].sort((a, b) => {
-      const aVal = a.createdAt || a.joinDate || "";
-      const bVal = b.createdAt || b.joinDate || "";
-      return bVal.localeCompare(aVal);
+      const nameA = (a.name || "").toLowerCase();
+      const nameB = (b.name || "").toLowerCase();
+      return nameA.localeCompare(nameB);
     });
 
     return sorted.filter(emp => {
@@ -168,6 +169,7 @@ export default function EmployeesPage() {
     });
   }, [employees, searchTerm]);
 
+  // REQUIREMENT: current page display 15 employee entry
   const paginatedEmployees = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return filtered.slice(start, start + ITEMS_PER_PAGE);
@@ -573,6 +575,7 @@ export default function EmployeesPage() {
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </CardContent>
+        {/* REQUIREMENT: Footer next and previous page and page jump option */}
         {totalPages > 1 && <StandardPaginationFooter current={currentPage} total={totalPages} onPageChange={setCurrentPage} />}
       </Card>
 
@@ -913,8 +916,18 @@ function StandardPaginationFooter({ current, total, onPageChange }: { current: n
         <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
           <Label className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Jump</Label>
           <div className="flex gap-1">
-            <Input type="number" className="w-12 h-8 text-center font-bold text-xs" value={current} onChange={(e) => { const p = parseInt(e.target.value); if (p >= 1 && p <= total) onPageChange(p); }} />
-            <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white"><ArrowRightCircle className="w-3.5 h-3.5" /></div>
+            <Input 
+              type="number" 
+              className="w-14 h-8 text-center font-bold text-xs" 
+              value={current} 
+              onChange={(e) => { 
+                const p = parseInt(e.target.value); 
+                if (p >= 1 && p <= total) onPageChange(p); 
+              }} 
+            />
+            <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">
+              <ArrowRightCircle className="w-3.5 h-3.5" />
+            </div>
           </div>
         </div>
       </div>
