@@ -612,14 +612,8 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
       isPrintMode ? "p-4" : "p-6 sm:p-12",
       !isPrintMode && "max-w-4xl"
     )}>
-      {/* Title Section */}
-      <div className="text-center mb-6 sm:mb-10">
-        <h1 className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-        <p className="text-[8px] sm:text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
-      </div>
-
-      {/* Header Section */}
-      <div className="grid grid-cols-2 gap-4 sm:gap-8 mb-8 sm:mb-10 items-start">
+      {/* Header Section with Logo in Top Left */}
+      <div className="grid grid-cols-2 gap-4 sm:gap-8 mb-6 items-start">
         <div className="space-y-4">
           <div className="flex flex-col gap-3">
             {firm?.logo ? (
@@ -662,7 +656,13 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* Employee Details Table - ROW FORMAT (Two columns per row) */}
+      {/* Title Section below header */}
+      <div className="text-center mb-8 sm:mb-12">
+        <h1 className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+        <p className="text-[8px] sm:text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
+      </div>
+
+      {/* Employee Details Table */}
       <div className="mb-8 sm:mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
           <UserIcon className="w-3 h-3" /> Employee / Receiver Information
@@ -752,7 +752,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* Legal Footer - Mandatory India Context */}
+      {/* Legal Footer */}
       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-6">
         <p className="text-[7px] sm:text-[8px] font-medium text-slate-500 text-center leading-relaxed">
           This voucher is issued for internal accounting purposes and complies with applicable provisions of the Income Tax Act, 1961 and Goods and Services Tax Act, 2017. All transactions are subject to audit and verification. Aadhaar details, if collected, are handled in accordance with applicable data protection and privacy regulations.
