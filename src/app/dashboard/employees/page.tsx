@@ -327,11 +327,11 @@ export default function EmployeesPage() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">Employee ID *</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-500">Employee ID * (Auto)</Label>
                     <Input 
                       value={formData.employeeId || ""} 
-                      onChange={(e) => setFormData(p => ({...p, employeeId: e.target.value.toUpperCase()}))} 
-                      className="h-12 bg-slate-50 font-black border-primary/20 focus-visible:ring-primary text-primary" 
+                      readOnly
+                      className="h-12 bg-slate-100 font-black border-slate-200 text-primary cursor-not-allowed select-none focus-visible:ring-0" 
                       placeholder="Generating..." 
                     />
                   </div>
