@@ -576,8 +576,8 @@ export default function EmployeesPage() {
 
       {/* Employee Registration Modal */}
       <Dialog open={isRegistrationOpen} onOpenChange={(o) => !o && handleCloseRegistration()}>
-        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl">
-          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+        <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden rounded-2xl border-none shadow-2xl">
+          <DialogHeader className="p-3 bg-slate-900 text-white shrink-0">
             <DialogTitle className="text-xl font-black flex items-center gap-2">
               <UserPlus className="w-6 h-6 text-primary" /> {editEmployee ? 'Edit Staff Profile' : 'Staff Onboarding'}
             </DialogTitle>
@@ -651,28 +651,60 @@ export default function EmployeesPage() {
               </div>
 
               <div className="pt-10 border-t border-slate-200 space-y-6">
-                <div className="flex items-center justify-between"><h3 className="text-sm font-black uppercase text-slate-900 flex items-center gap-2"><Banknote className="w-5 h-5 text-emerald-600" /> Salary Configuration</h3><div className="flex items-center gap-3 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100"><Label className="text-xs font-black text-emerald-700 uppercase">Gov. Statutory Compliance</Label><Switch checked={formData.isGovComplianceEnabled} onCheckedChange={(v) => { setFormData(p => ({...p, isGovComplianceEnabled: v})); updateFormSalary('basic', formData.salary?.basic || 0); }} /></div></div>
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase text-slate-900 flex items-center gap-2"><Banknote className="w-5 h-5 text-emerald-600" /> Salary Configuration</h3>
+                  <div className="flex items-center gap-3 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
+                    <Label className="text-xs font-black text-emerald-700 uppercase">Gov. Statutory Compliance</Label>
+                    <Switch checked={formData.isGovComplianceEnabled} onCheckedChange={(v) => { setFormData(p => ({...p, isGovComplianceEnabled: v})); updateFormSalary('basic', formData.salary?.basic || 0); }} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Basic Salary (Monthly)</Label><Input type="number" value={formData.salary?.basic || ""} onChange={(e) => updateFormSalary('basic', parseFloat(e.target.value) || 0)} className="h-12 text-lg font-black" /></div>
                   <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">HRA (50% Auto)</Label><Input type="number" value={formData.salary?.hra || ""} onChange={(e) => updateFormSalary('hra', parseFloat(e.target.value) || 0)} className="h-12 text-lg font-black" /></div>
                   <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm"><Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Special Allowances</Label><Input type="number" value={formData.salary?.allowance || ""} onChange={(e) => updateFormSalary('allowance', parseFloat(e.target.value) || 0)} className="h-12 text-lg font-black" /></div>
-                  <div className="p-5 bg-slate-900 text-white rounded-2xl shadow-lg flex flex-col justify-center"><p className="text-[10px] font-black uppercase text-slate-400 mb-1">Monthly Cost to Company</p><h4 className="text-2xl font-black text-emerald-400">{formatCurrency(formData.salary?.monthlyCTC || 0)}</h4></div>
                 </div>
+
+                <div className="p-5 bg-blue-50 border border-blue-100 rounded-2xl shadow-sm flex justify-between items-center">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Monthly Net Pay</p>
+                    <p className="text-[9px] text-blue-500 font-bold">(Basic + HRA + Allowances)</p>
+                  </div>
+                  <h4 className="text-3xl font-black text-blue-700">{formatCurrency(formData.salary?.grossSalary || 0)}</h4>
+                </div>
+
                 {formData.isGovComplianceEnabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-slate-100/50 rounded-2xl border border-slate-200">
-                    <StatutoryInput label="EPF Rate (Emp %)" value={formData.salary?.pfRateEmp || 12} onChange={(v) => updateFormSalary('pfRateEmp', v)} />
-                    <StatutoryInput label="ESIC Rate (Emp %)" value={formData.salary?.esicRateEmp || 0.75} onChange={(v) => updateFormSalary('esicRateEmp', v)} />
-                    <StatutoryInput label="PF Rate (Ex %)" value={formData.salary?.pfRateEx || 13} onChange={(v) => updateFormSalary('pfRateEx', v)} />
-                    <StatutoryInput label="ESIC Rate (Ex %)" value={formData.salary?.esicRateEx || 3.25} onChange={(v) => updateFormSalary('esicRateEx', v)} />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6 bg-slate-100/50 rounded-2xl border border-slate-200">
+                      <StatutoryInput label="EPF Rate (Emp %)" value={formData.salary?.pfRateEmp || 12} onChange={(v) => updateFormSalary('pfRateEmp', v)} />
+                      <StatutoryInput label="ESIC Rate (Emp %)" value={formData.salary?.esicRateEmp || 0.75} onChange={(v) => updateFormSalary('esicRateEmp', v)} />
+                      <StatutoryInput label="PF Rate (Ex %)" value={formData.salary?.pfRateEx || 13} onChange={(v) => updateFormSalary('pfRateEx', v)} />
+                      <StatutoryInput label="ESIC Rate (Ex %)" value={formData.salary?.esicRateEx || 3.25} onChange={(v) => updateFormSalary('esicRateEx', v)} />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <AmountDisplay label="Employee PF Amount" value={formData.salary?.employeePF || 0} />
+                      <AmountDisplay label="Employer PF Amount" value={formData.salary?.employerPF || 0} />
+                      <AmountDisplay label="Employee ESIC Amount" value={formData.salary?.employeeESIC || 0} />
+                      <AmountDisplay label="Employer ESIC Amount" value={formData.salary?.employerESIC || 0} />
+                    </div>
                   </div>
                 )}
+
+                <div className="p-6 bg-slate-900 text-white rounded-2xl shadow-xl flex justify-between items-center border-b-4 border-emerald-500">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Monthly Cost to Company (CTC)</p>
+                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Includes Gross + Employer Statutory Contributions</p>
+                  </div>
+                  <h4 className="text-4xl font-black text-emerald-400 tracking-tighter">{formatCurrency(formData.salary?.monthlyCTC || 0)}</h4>
+                </div>
               </div>
             </div>
           </ScrollArea>
           
-          <DialogFooter className="p-6 bg-slate-50 border-t gap-3 shrink-0">
-            <Button variant="ghost" onClick={handleCloseRegistration} className="rounded-xl font-bold h-12 px-8">Cancel</Button>
-            <Button className="bg-primary hover:bg-primary/90 rounded-xl font-black h-12 px-12 shadow-lg shadow-primary/20" onClick={handleRegistrationPost} disabled={isProcessing}>{isProcessing ? "Processing..." : (editEmployee ? "Update Profile" : "Register Employee")}</Button>
+          <DialogFooter className="p-3 bg-slate-50 border-t gap-3 shrink-0">
+            <Button variant="ghost" onClick={handleCloseRegistration} className="rounded-xl font-bold h-10 px-8">Cancel</Button>
+            <Button className="bg-primary hover:bg-primary/90 rounded-xl font-black h-10 px-12 shadow-lg shadow-primary/20" onClick={handleRegistrationPost} disabled={isProcessing}>{isProcessing ? "Processing..." : (editEmployee ? "Update Profile" : "Register Employee")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -685,7 +717,7 @@ export default function EmployeesPage() {
             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Effective Month</Label>
               <Select value={effectiveMonth} onValueChange={setEffectiveMonth}>
                 <SelectTrigger className="h-12 bg-slate-50 font-black"><SelectValue /></SelectTrigger>
-                <SelectContent>{MONTH_OPTIONS.map(m => <SelectItem key={m} value={m} className="font-bold">{m}</SelectItem>)}</SelectContent>
+                <SelectContent>{MONTH_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">New Basic Salary</Label>
@@ -722,6 +754,15 @@ export default function EmployeesPage() {
 function StatutoryInput({ label, value, onChange }: { label: string, value: number, onChange: (v: number) => void }) {
   return (
     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-500">{label}</Label><Input type="number" step="0.01" value={value} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} className="h-10 bg-white font-mono font-bold" /></div>
+  );
+}
+
+function AmountDisplay({ label, value }: { label: string, value: number }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+      <p className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-tighter">{label}</p>
+      <p className="text-sm font-black text-slate-700">{formatCurrency(value)}</p>
+    </div>
   );
 }
 
