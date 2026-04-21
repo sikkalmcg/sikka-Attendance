@@ -87,53 +87,183 @@ export default function ReportsPage() {
 
   const handleExport = (typeOverride?: ReportType) => {
     const data = processReportData(typeOverride);
-    if (!data.length) return toast({ variant: "destructive", title: "No Data" });
+    if (!data.length) {
+      toast({ variant: "destructive", title: "No Data", description: "No records found for the selected period." });
+      return;
+    }
     const csv = [Object.keys(data[0]).join(","), ...data.map(r => Object.values(r).map(v => `"${v}"`).join(","))].join("\n");
     const link = document.createElement("a");
-    link.setAttribute("href", URL.createObjectURL(new Blob([csv], { type: 'text/csv' })));
-    link.setAttribute("download", `Report_${fromDate}_to_${toDate}.csv`);
+    link.setAttribute("href", URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })));
+    link.setAttribute("download", `${typeOverride || viewType}_Report_${fromDate}_to_${toDate}.csv`);
     link.click();
+    toast({ title: "Export Success" });
   };
 
   const processReportData = (typeOverride?: ReportType) => {
     const type = typeOverride || activeReport;
     if (!type) return [];
-    const start = parseISO(fromDate), end = parseISO(toDate);
+    
+    const start = parseISO(fromDate);
+    const end = parseISO(toDate);
+
     if (type === "ATTENDANCE") {
-      return attendanceRecords.filter(r => r.date >= PROJECT_START_DATE_STR && isWithinInterval(parseISO(r.date), { start, end }) && selectedFirmIds.includes(employees.find(e => e.employeeId === r.employeeId)?.firmId || "")).map(r => ({ Name: r.employeeName, ID: r.employeeId, Date: r.date, Status: r.status }));
+      return attendanceRecords
+        .filter(r => {
+          const d = parseISO(r.date);
+          const emp = employees.find(e => e.employeeId === r.employeeId);
+          return r.date >= PROJECT_START_DATE_STR && 
+                 isWithinInterval(d, { start, end }) && 
+                 (emp ? selectedFirmIds.includes(emp.firmId) : true);
+        })
+        .map(r => {
+          const emp = employees.find(e => e.employeeId === r.employeeId);
+          return {
+            "Employee ID": r.employeeId,
+            "Employee Name": r.employeeName,
+            "Department": emp?.department || "N/A",
+            "Designation": emp?.designation || "N/A",
+            "In Plant": r.inPlant || "--",
+            "In Date": formatDate(r.date),
+            "In Time": r.inTime || "--:--",
+            "In Location": r.address || "N/A",
+            "Out Plant": r.outPlant || "--",
+            "Out Date": r.outTime ? formatDate(r.date) : "--",
+            "Out Time": r.outTime || "--:--",
+            "Out Location": r.addressOut || "N/A",
+            "Out Hour": formatMinutesToHHMM(r.unapprovedOutDuration || 0),
+            "Working Hour": formatHoursToHHMM(r.hours),
+            "Attendance Type": r.attendanceType,
+            "Status": r.status
+          };
+        });
     }
-    return payrollRecords.filter(p => p.month >= "Apr-26" && selectedFirmIds.includes(employees.find(e => e.employeeId === p.employeeId)?.firmId || "")).map(p => ({ Name: p.employeeName, ID: p.employeeId, Month: p.month, Net: p.netPayable }));
+
+    // PAYROLL Report Logic
+    return payrollRecords
+      .filter(p => {
+        const emp = employees.find(e => e.employeeId === p.employeeId);
+        return p.month >= "Apr-26" && (emp ? selectedFirmIds.includes(emp.firmId) : true);
+      })
+      .map(p => {
+        const emp = employees.find(e => e.employeeId === p.employeeId);
+        return {
+          "Employee Name": p.employeeName,
+          "Employee ID": p.employeeId,
+          "Department": emp?.department || "N/A",
+          "Month": p.month,
+          "Attendance Days": p.attendance,
+          "Absent Days": p.absent,
+          "Incentive Amt": p.incentiveAmt,
+          "Net Payable": p.netPayable,
+          "Status": p.status
+        };
+      });
   };
 
   return (
     <TooltipProvider>
       <div className="space-y-8 pb-20">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-black">Analytics & Reports</h1>
-          {viewData && <Button variant="outline" onClick={() => setViewData(null)}><X className="w-4 h-4" /> Clear</Button>}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Analytics & Reports</h1>
+            <p className="text-muted-foreground text-sm">Export verified workforce and payroll data for financial audits.</p>
+          </div>
+          {viewData && (
+            <Button variant="outline" onClick={() => setViewData(null)} className="h-10 font-bold gap-2">
+              <X className="w-4 h-4" /> Clear Current View
+            </Button>
+          )}
         </div>
+
         {!viewData ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <ReportCard title="Attendance Export" icon={FileBarChart2} onClick={() => { setActiveReport("ATTENDANCE"); setIsDialogOpen(true); }} />
-            <ReportCard title="Payroll Summary" icon={FileText} onClick={() => { setActiveReport("PAYROLL"); setIsDialogOpen(true); }} />
+            <ReportCard 
+              title="Attendance Export" 
+              description="Detailed audit trail of IN/OUT logs, GPS locations, and plants."
+              icon={FileBarChart2} 
+              onClick={() => { setActiveReport("ATTENDANCE"); setIsDialogOpen(true); }} 
+            />
+            <ReportCard 
+              title="Payroll Summary" 
+              description="Overview of monthly earnings, deductions, and payment statuses."
+              icon={FileText} 
+              onClick={() => { setActiveReport("PAYROLL"); setIsDialogOpen(true); }} 
+            />
           </div>
         ) : (
-          <Card className="border-none shadow-xl overflow-hidden">
-            <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between"><CardTitle>{viewType} View</CardTitle><Button onClick={() => handleExport(viewType!)}><Download className="w-4 h-4 mr-2" /> Excel</Button></CardHeader>
-            <CardContent className="p-0"><Table><TableHeader className="bg-slate-50"><TableRow>{viewData[0] && Object.keys(viewData[0]).map(h => <TableHead key={h} className="font-black uppercase text-[10px]">{h}</TableHead>)}</TableRow></TableHeader><TableBody>{paginatedData.map((row, idx) => (<TableRow key={idx}>{Object.values(row).map((val: any, i) => <TableCell key={i} className="px-6 py-4 text-xs">{val}</TableCell>)}</TableRow>))}</TableBody></Table></CardContent>
+          <Card className="border-none shadow-2xl overflow-hidden rounded-2xl">
+            <CardHeader className="bg-slate-900 text-white flex flex-col sm:flex-row items-center justify-between p-6 gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
+                  <TableIcon className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-black">{viewType} View</CardTitle>
+                  <CardDescription className="text-slate-400 font-medium">Verified Records for the selected range</CardDescription>
+                </div>
+              </div>
+              <Button onClick={() => handleExport(viewType!)} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-8 font-black gap-2">
+                <Download className="w-4 h-4" /> Export to Excel (CSV)
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="w-full">
+                <Table className="min-w-[1800px]">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      {viewData[0] && Object.keys(viewData[0]).map(h => (
+                        <TableHead key={h} className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-4 px-6 border-r border-slate-100 last:border-0">
+                          {h}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedData.map((row, idx) => (
+                      <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        {Object.values(row).map((val: any, i) => (
+                          <TableCell key={i} className="px-6 py-4 text-xs font-bold text-slate-700 border-r border-slate-100 last:border-0">
+                            {val === "PRESENT" ? <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 text-[9px] font-black">PRESENT</Badge> :
+                             val === "ABSENT" ? <Badge className="bg-rose-50 text-rose-700 border-rose-100 text-[9px] font-black">ABSENT</Badge> :
+                             val}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            </CardContent>
             {totalPages > 1 && (
               <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold h-9"><ChevronLeft className="w-4 h-4 mr-1" /> Previous</Button>
-                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold h-9">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold h-9">
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold h-9">
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {currentPage} of {totalPages}</span>
+                  <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                    Page {currentPage} of {totalPages}
+                  </span>
                   <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
                     <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
                     <div className="flex gap-1">
-                      <Input type="number" className="w-14 h-9 text-center font-bold" value={currentPage} onChange={(e) => { const p = parseInt(e.target.value); if (p >= 1 && p <= totalPages) setCurrentPage(p); }} />
-                      <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white"><ArrowRightCircle className="w-4 h-4" /></div>
+                      <Input 
+                        type="number" 
+                        className="w-14 h-9 text-center font-bold" 
+                        value={currentPage} 
+                        onChange={(e) => {
+                          const p = parseInt(e.target.value);
+                          if (p >= 1 && p <= totalPages) setCurrentPage(p);
+                        }} 
+                      />
+                      <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white">
+                        <ArrowRightCircle className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -142,8 +272,78 @@ export default function ReportsPage() {
           </Card>
         )}
       </div>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}><DialogContent><DialogHeader><DialogTitle>Generate {activeReport} Report</DialogTitle></DialogHeader><div className="space-y-4 py-4"><div className="grid grid-cols-2 gap-4"><div><Label>From</Label><Input type="date" value={fromDate} min={PROJECT_START_DATE_STR} onChange={(e) => setFromDate(e.target.value)} /></div><div><Label>To</Label><Input type="date" value={toDate} min={fromDate} onChange={(e) => setToDate(e.target.value)} /></div></div></div><DialogFooter><Button variant="ghost" onClick={() => setIsDialogOpen(false)}>Cancel</Button><Button onClick={() => { const d = processReportData(); setViewData(d); setViewType(activeReport); setIsDialogOpen(false); }}>View</Button></DialogFooter></DialogContent></Dialog>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-slate-900">Generate {activeReport} Report</DialogTitle>
+            <DialogDescription>Define the data range and firms to include in the export.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500">From Date</Label>
+                <Input type="date" value={fromDate} min={PROJECT_START_DATE_STR} onChange={(e) => setFromDate(e.target.value)} className="h-12 bg-slate-50 font-bold" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500">To Date</Label>
+                <Input type="date" value={toDate} min={fromDate} onChange={(e) => setToDate(e.target.value)} className="h-12 bg-slate-50 font-bold" />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+                <Building2 className="w-3.5 h-3.5" /> Selected Firms
+              </Label>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 max-h-40 overflow-y-auto space-y-2">
+                {firms.map(f => (
+                  <div key={f.id} className="flex items-center gap-2">
+                    <Checkbox 
+                      id={`f-${f.id}`} 
+                      checked={selectedFirmIds.includes(f.id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedFirmIds(prev => checked ? [...prev, f.id] : prev.filter(id => id !== f.id));
+                      }}
+                    />
+                    <label htmlFor={`f-${f.id}`} className="text-xs font-bold text-slate-700 cursor-pointer">{f.name}</label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0 bg-slate-50 -m-6 mt-2 p-6 rounded-b-2xl border-t">
+            <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl font-bold">Cancel</Button>
+            <Button 
+              className="bg-primary hover:bg-primary/90 rounded-xl font-black px-10 h-12 shadow-lg shadow-primary/20"
+              onClick={() => { 
+                const d = processReportData(); 
+                setViewData(d); 
+                setViewType(activeReport); 
+                setIsDialogOpen(false); 
+                setCurrentPage(1);
+              }}
+            >
+              Generate View
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }
-function ReportCard({ title, icon: Icon, onClick }: any) { return (<Card className="cursor-pointer hover:shadow-xl p-10 bg-white" onClick={onClick}><div className="w-16 h-16 rounded-3xl bg-slate-50 flex items-center justify-center mb-8"><Icon className="w-8 h-8 text-slate-400" /></div><h3 className="text-2xl font-black mb-3">{title}</h3><Button className="w-full h-14 font-black bg-slate-900">Generate Report</Button></Card>); }
+
+function ReportCard({ title, description, icon: Icon, onClick }: any) { 
+  return (
+    <Card className="cursor-pointer group hover:shadow-2xl transition-all duration-300 border-none bg-white p-10 flex flex-col h-full rounded-3xl" onClick={onClick}>
+      <div className="w-16 h-16 rounded-3xl bg-slate-50 group-hover:bg-primary/10 flex items-center justify-center mb-8 transition-colors">
+        <Icon className="w-8 h-8 text-slate-400 group-hover:text-primary transition-colors" />
+      </div>
+      <div className="space-y-3 flex-1">
+        <h3 className="text-2xl font-black text-slate-900">{title}</h3>
+        <p className="text-sm font-medium text-slate-500 leading-relaxed">{description}</p>
+      </div>
+      <Button className="w-full h-14 font-black bg-slate-900 group-hover:bg-primary transition-all rounded-2xl mt-10 gap-2">
+        Generate Full Report <ArrowRightCircle className="w-4 h-4" />
+      </Button>
+    </Card>
+  ); 
+}
