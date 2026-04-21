@@ -240,7 +240,7 @@ export default function VouchersPage() {
   };
 
   const handleVoucherClick = (v: Voucher) => {
-    window.open(`/dashboard/vouchers/view/${v.id}`, '_blank', 'width=1000,height=900,menubar=no,toolbar=no,location=no,status=no');
+    window.open(`/vouchers/view/${v.id}`, '_blank', 'width=1000,height=900,menubar=no,toolbar=no,location=no,status=no');
   };
 
   if (!isMounted) return null;
