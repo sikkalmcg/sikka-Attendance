@@ -72,7 +72,7 @@ export default function VoucherDetailPage() {
       {/* Main Document Content */}
       <ScrollArea className="flex-1 w-full" tabIndex={0} role="region" aria-label="Voucher Content">
         <div className="py-12 px-4 sm:px-8 flex justify-center">
-          <div className="bg-white shadow-2xl rounded-sm ring-1 ring-slate-200 print:shadow-none print:ring-0">
+          <div className="bg-white shadow-2xl rounded-sm ring-1 ring-slate-200 print:shadow-none print:ring-0 overflow-hidden">
              <VoucherDocumentContent voucher={voucher} employees={employees} firms={firms} />
           </div>
         </div>

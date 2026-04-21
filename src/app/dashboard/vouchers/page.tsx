@@ -240,7 +240,7 @@ export default function VouchersPage() {
   };
 
   const handleVoucherClick = (v: Voucher) => {
-    window.open(`/dashboard/vouchers/view/${v.id}`, '_blank');
+    window.open(`/dashboard/vouchers/view/${v.id}`, '_blank', 'width=1000,height=900,menubar=no,toolbar=no,location=no,status=no');
   };
 
   if (!isMounted) return null;
@@ -341,7 +341,7 @@ export default function VouchersPage() {
                           const emp = employees.find(e => e.id === v.employeeId);
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
                               <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col text-center">
@@ -400,7 +400,7 @@ export default function VouchersPage() {
                           const emp = employees.find(e => e.id === v.employeeId);
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
                               <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col text-center">
@@ -471,7 +471,7 @@ export default function VouchersPage() {
                             const emp = employees.find(e => e.id === v.employeeId);
                             return (
                               <TableRow key={v.id} className="hover:bg-white/50 transition-colors">
-                                <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                                <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
                                 <TableCell className="font-bold uppercase text-slate-600 text-xs sm:text-sm">{emp?.name}</TableCell>
                                 <TableCell>
                                   <div className="flex flex-col text-center">
@@ -578,31 +578,34 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
   const firm = firms.find(f => f.id === emp?.firmId);
   return (
     <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto", isPrintMode ? "p-4" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
-      {/* Centered Titles */}
-      <div className="text-center mb-10">
-        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-        <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
+      {/* Absolute Header with Logo at Left and Title at Center */}
+      <div className="relative mb-10 min-h-[80px]">
+        {/* Logo at Left Corner */}
+        <div className="absolute left-0 top-0">
+          {firm?.logo ? (
+            <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
+          ) : (
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
+              <span className="text-white text-xl sm:text-2xl font-black">S</span>
+            </div>
+          )}
+        </div>
+
+        {/* Centered Titles */}
+        <div className="text-center pt-2">
+          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+          <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
+        </div>
       </div>
 
-      {/* Top Header Row with Logo and Metadata */}
+      {/* Top Meta Row with Firm and Metadata */}
       <div className="flex justify-between items-start mb-8">
-        <div className="flex gap-6 items-start">
-          <div className="shrink-0 pt-1">
-            {firm?.logo ? (
-              <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
-            ) : (
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
-                <span className="text-white text-xl sm:text-2xl font-black">S</span>
-              </div>
-            )}
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
-            <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
-            <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase pt-2">
-              <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
-              <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
-            </div>
+        <div className="space-y-1">
+          <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+          <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
+          <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase pt-2">
+            <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
+            <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
           </div>
         </div>
 
