@@ -104,6 +104,7 @@ export default function VouchersPage() {
   const [paidFromMonth, setPaidFromMonth] = useState("");
   const [paidToMonth, setPaidToMonth] = useState("");
 
+  const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
   const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
   const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
   const [isPayDialogOpen, setIsPayDialogOpen] = useState(false);
@@ -240,10 +241,49 @@ export default function VouchersPage() {
   };
 
   const handleVoucherClick = (v: Voucher) => {
-    window.open(`/vouchers/view/${v.id}`, '_blank', 'width=1000,height=900,menubar=no,toolbar=no,location=no,status=no');
+    setPreviewVoucher(v);
   };
 
   if (!isMounted) return null;
+
+  if (previewVoucher) {
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+        <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm sticky top-0 z-30 gap-4">
+          <div className="flex items-center gap-3">
+             <Button variant="ghost" size="icon" onClick={() => setPreviewVoucher(null)} className="h-10 w-10 rounded-full hover:bg-slate-100">
+                <ChevronLeft className="w-6 h-6 text-slate-600" />
+             </Button>
+             <div>
+                <h1 className="text-sm font-black text-slate-900 uppercase tracking-widest leading-none">{previewVoucher.voucherNo}</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Official Voucher Preview</p>
+             </div>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+             <Button variant="outline" onClick={() => setPreviewVoucher(null)} className="flex-1 sm:flex-none font-bold rounded-xl h-11 border-slate-200 px-6">
+                <X className="w-4 h-4 mr-2" /> Close Preview
+             </Button>
+             <Button onClick={() => setPrintVoucher(previewVoucher)} className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 font-black h-11 px-10 rounded-xl shadow-lg shadow-primary/20">
+                <Printer className="w-4 h-4 mr-2" /> Print Document
+             </Button>
+          </div>
+        </div>
+
+        <div className="flex justify-center pb-20">
+          <div className="bg-white shadow-2xl rounded-sm ring-1 ring-slate-200 overflow-hidden w-full max-w-[210mm] min-h-[297mm]">
+             <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />
+          </div>
+        </div>
+
+        {isMounted && printVoucher && createPortal(
+          <div className="print-only">
+            <VoucherDocumentContent voucher={printVoucher} employees={employees} firms={firms} isPrintMode={true} />
+          </div>,
+          document.body
+        )}
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider>
@@ -501,6 +541,13 @@ export default function VouchersPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {isMounted && printVoucher && createPortal(
+          <div className="print-only">
+            <VoucherDocumentContent voucher={printVoucher} employees={employees} firms={firms} isPrintMode={true} />
+          </div>,
+          document.body
+        )}
       </div>
 
       {/* Pay Dialog */}
@@ -561,14 +608,6 @@ export default function VouchersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Print Portal */}
-      {isMounted && printVoucher && createPortal(
-        <div className="print-only">
-          <VoucherDocumentContent voucher={printVoucher} employees={employees} firms={firms} isPrintMode={true} />
-        </div>,
-        document.body
-      )}
     </TooltipProvider>
   );
 }
@@ -578,7 +617,6 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
   const firm = firms.find(f => f.id === emp?.firmId);
   return (
     <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto", isPrintMode ? "p-4" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
-      {/* Absolute Header with Logo at Left and Title at Center */}
       <div className="relative mb-10 min-h-[80px]">
         {/* Logo at Left Corner */}
         <div className="absolute left-0 top-0">
@@ -598,7 +636,6 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       </div>
 
-      {/* Top Meta Row with Firm and Metadata */}
       <div className="flex justify-between items-start mb-8">
         <div className="space-y-1">
           <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
@@ -631,7 +668,6 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       </div>
 
-      {/* Employee / Receiver Information Table */}
       <div className="mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee / Receiver Information</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
@@ -654,7 +690,6 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       </div>
 
-      {/* Transaction Summary Table */}
       <div className="mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><CreditCard className="w-3 h-3" /> Transaction Summary</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
@@ -677,7 +712,6 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       </div>
 
-      {/* Declaration Section */}
       <div className="mb-10 sm:mb-12 space-y-6">
         <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl">
           <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
@@ -694,7 +728,6 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       </div>
 
-      {/* Footer Signatures */}
       <div className="mt-auto grid grid-cols-3 gap-10 items-end pb-8">
         <div className="text-center space-y-3">
           <div className="h-14 border-b border-slate-400 border-dashed" />
@@ -721,3 +754,5 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
     </div>
   );
 }
+
+function SlipRow({ label, value }: { label: string, value: any }) { return (<div className="flex justify-between border-b border-slate-200 p-2 px-4 last:border-b-0"><span className="font-bold text-[10px] text-slate-500 uppercase">{label}</span><span className="font-black text-xs">{value || "---"}</span></div>); }
