@@ -86,21 +86,20 @@ export function checkIfSunday(date: Date | string) {
 }
 
 /**
- * Standard Date Format: MM/dd/yyyy
+ * Standard Date Format: 21-Mar-2026 (DD-MMM-YYYY)
+ * Corporate requirement for India business use.
  */
 export function formatDate(date: Date | string) {
   const d = typeof date === 'string' ? parseISO(date) : date;
   if (!isValid(d)) return "---";
-  return format(d, "MM/dd/yyyy");
+  return format(d, "dd-MMM-yyyy");
 }
 
 /**
- * Corporate Display Date Format: dd-MMM-yyyy (e.g. 21-Mar-2026)
+ * Legacy support for display date
  */
 export function formatDisplayDate(date: Date | string) {
-  const d = typeof date === 'string' ? parseISO(date) : date;
-  if (!isValid(d)) return "---";
-  return format(d, "dd-MMM-yyyy");
+  return formatDate(date);
 }
 
 /**

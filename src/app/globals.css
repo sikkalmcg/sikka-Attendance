@@ -58,7 +58,7 @@
     font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', 'Arial', sans-serif;
   }
 
-  /* Global Scrollbar Styles - Enhanced for All Devices */
+  /* Global Scrollbar Styles - Standardized for Sikka HR */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -74,7 +74,7 @@
     display: block !important;
   }
 
-  /* Specialized scrollbar for popups/previews - High Visibility */
+  /* Specialized scrollbar for popups/previews - Force Visibility */
   .custom-blue-scrollbar [data-radix-scroll-area-thumb] {
     @apply bg-primary opacity-100 transition-colors !important;
     visibility: visible !important;
@@ -95,14 +95,19 @@
       @apply px-4;
     }
     
-    /* Ensure tables don't break the layout */
     .overflow-x-auto {
       -webkit-overflow-scrolling: touch;
     }
 
-    /* Adjust dialog spacing for mobile */
     [role="dialog"] {
       padding: 0 !important;
+    }
+    
+    /* Document Scaling for mobile preview */
+    .document-preview-container {
+      transform: scale(0.65);
+      transform-origin: top left;
+      width: 153%; /* Adjust for scale */
     }
   }
 }
@@ -125,12 +130,10 @@
     print-color-adjust: exact !important;
   }
 
-  /* Hide EVERYTHING including the Next.js root and portals */
   body > * {
     display: none !important;
   }
 
-  /* Force ONLY the print portal to be visible */
   body > .print-only {
     display: block !important;
     visibility: visible !important;

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -36,9 +35,10 @@ import {
   Briefcase,
   Info,
   ShieldCheck,
-  FileText
+  FileText,
+  Navigation
 } from "lucide-react";
-import { formatCurrency, numberToIndianWords, cn, formatDisplayDate } from "@/lib/utils";
+import { formatCurrency, numberToIndianWords, cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { Voucher } from "@/lib/types";
 import { format, parseISO, isBefore, startOfMonth } from "date-fns";
@@ -347,7 +347,7 @@ export default function VouchersPage() {
                                   <span className="text-[8px] text-muted-foreground uppercase">{emp?.designation}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-xs sm:text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
+                              <TableCell className="text-xs sm:text-sm font-medium">{formatDate(v.date)}</TableCell>
                               <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(v.amount)}</TableCell>
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end gap-2">
@@ -406,7 +406,7 @@ export default function VouchersPage() {
                                   <span className="text-[8px] text-muted-foreground uppercase">{emp?.designation}</span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-xs sm:text-sm font-medium">{formatDisplayDate(v.date)}</TableCell>
+                              <TableCell className="text-xs sm:text-sm font-medium">{formatDate(v.date)}</TableCell>
                               <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(v.amount)}</TableCell>
                               <TableCell className="text-right pr-6">
                                 <Button size="sm" className="font-bold px-4 sm:px-6 bg-slate-900 shadow-sm h-8 text-[10px] sm:text-xs" onClick={() => handleOpenPayDialog(v)}>Process Pay</Button>
@@ -442,7 +442,7 @@ export default function VouchersPage() {
                       }).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold gap-2 text-[10px] sm:text-xs flex-1 sm:flex-none" onClick={() => {}}>
+                  <Button variant="outline" size="sm" className="h-9 border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold gap-2 text-[10px] sm:text-xs flex-1 sm:flex-none">
                     <FileSpreadsheet className="w-4 h-4" /> Export
                   </Button>
                 </div>
@@ -477,7 +477,7 @@ export default function VouchersPage() {
                                     <span className="text-[8px] text-muted-foreground uppercase">{emp?.designation}</span>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-slate-500 text-center text-xs sm:text-sm font-medium">{formatDisplayDate(v.paidDate || v.date)}</TableCell>
+                                <TableCell className="text-slate-500 text-center text-xs sm:text-sm font-medium">{formatDate(v.paidDate || v.date)}</TableCell>
                                 <TableCell className="text-right font-black text-emerald-600 text-xs sm:text-sm">{formatCurrency(v.amount)}</TableCell>
                                 <TableCell className="text-right pr-6">
                                   <div className="flex justify-end items-center gap-2">
@@ -501,7 +501,7 @@ export default function VouchersPage() {
         </Tabs>
       </div>
 
-      {/* Pay Dialog - Responsive */}
+      {/* Pay Dialog */}
       <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
         <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-4 sm:p-6 bg-slate-900 text-white shrink-0">
@@ -541,10 +541,10 @@ export default function VouchersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Voucher Preview Modal - RESPONSIVE PREVIEW */}
+      {/* Voucher Preview Modal */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-2xl sm:rounded-3xl border-none shadow-2xl flex flex-col">
-          <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0}>
+          <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0} role="region" aria-label="Voucher Preview">
             <div className="p-0 overflow-x-auto">
               <div className="min-w-[800px] sm:min-w-0">
                 {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
@@ -554,15 +554,15 @@ export default function VouchersPage() {
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
           
-          <div className="p-2 sm:p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden shrink-0">
-            <div className="flex items-center gap-2 pl-2 sm:pl-4 hidden sm:flex">
+          <div className="p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden shrink-0">
+            <div className="flex items-center gap-2 pl-4 hidden sm:flex">
               <Info className="w-4 h-4 text-slate-400" />
-              <span className="text-[9px] font-bold text-slate-400 uppercase">A4 Corporate Standard</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">A4 Corporate Standard - Press Up/Down to Scroll</span>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
               <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-lg font-bold h-9 px-6 text-[10px] sm:text-xs">Close</Button>
               <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-lg font-black h-9 px-8 gap-2 shadow-sm text-[10px] sm:text-xs" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
-                <Printer className="w-3.5 h-3.5" /> Print
+                <Printer className="w-3.5 h-3.5" /> Print Voucher
               </Button>
             </div>
           </div>
@@ -573,8 +573,8 @@ export default function VouchersPage() {
       <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
         <AlertDialogContent className="w-[90vw] sm:max-w-md rounded-2xl border-none shadow-2xl">
           <AlertDialogHeader>
-            <div className="mx-auto w-12 sm:w-16 h-12 sm:h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-              <AlertTriangle className="w-6 sm:w-8 h-6 sm:h-8 text-rose-500" />
+            <div className="mx-auto w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-rose-500" />
             </div>
             <AlertDialogTitle className="text-center text-xl sm:text-2xl font-black">Confirm Rejection</AlertDialogTitle>
             <AlertDialogDescription className="text-center text-slate-500 font-medium text-xs sm:text-sm">
@@ -599,9 +599,6 @@ export default function VouchersPage() {
   );
 }
 
-/**
- * Professional A4-Standard Voucher Document Component
- */
 function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
   const emp = employees.find(e => e.id === voucher.employeeId);
   const firm = firms.find(f => f.id === emp?.firmId);
@@ -612,19 +609,19 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
       isPrintMode ? "p-4" : "p-6 sm:p-12",
       !isPrintMode && "max-w-4xl"
     )}>
-      {/* Header Section with Logo in Top Left */}
-      <div className="grid grid-cols-2 gap-4 sm:gap-8 mb-6 items-start">
+      {/* Absolute Top-Left Logo placement */}
+      <div className="grid grid-cols-2 gap-8 mb-8 items-start">
         <div className="space-y-4">
           <div className="flex flex-col gap-3">
             {firm?.logo ? (
-              <img src={firm.logo} alt="Logo" className="w-12 h-12 sm:w-16 sm:h-16 object-contain" />
+              <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
             ) : (
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-900 rounded-lg flex items-center justify-center">
-                <span className="text-white text-lg sm:text-xl font-black">S</span>
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
+                <span className="text-white text-xl sm:text-2xl font-black">S</span>
               </div>
             )}
             <div className="space-y-1">
-              <h2 className="text-base sm:text-lg font-black uppercase leading-none tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+              <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
               <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
             </div>
           </div>
@@ -642,7 +639,7 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
             </div>
             <div className="flex justify-between border-b border-slate-100 pb-1.5">
               <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span>
-              <span className="text-xs sm:text-sm font-black">{formatDisplayDate(voucher.date)}</span>
+              <span className="text-xs sm:text-sm font-black">{formatDate(voucher.date)}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 pb-1.5">
               <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
@@ -656,14 +653,13 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
         </div>
       </div>
 
-      {/* Title Section below header */}
-      <div className="text-center mb-8 sm:mb-12">
-        <h1 className="text-xl sm:text-2xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-        <p className="text-[8px] sm:text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
+      <div className="text-center mb-10 sm:mb-12">
+        <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.2em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+        <p className="text-[9px] sm:text-[11px] font-black text-slate-400 mt-2 uppercase tracking-[0.3em]">Advance Disbursement</p>
       </div>
 
-      {/* Employee Details Table */}
-      <div className="mb-8 sm:mb-10">
+      {/* Row Format Information Grid */}
+      <div className="mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
           <UserIcon className="w-3 h-3" /> Employee / Receiver Information
         </h3>
@@ -671,27 +667,23 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Employee ID</th>
-                <td className="p-3 sm:p-4 border-r border-b border-slate-900 font-black font-mono text-primary w-1/4">{emp?.employeeId || "---"}</td>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Full Name</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900 font-black uppercase w-1/4">{emp?.name || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[20%] uppercase text-[8px] sm:text-[9px] font-black">Employee ID</th>
+                <td className="p-3 sm:p-4 border-r border-b border-slate-900 font-black font-mono text-primary w-[30%]">{emp?.employeeId || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[20%] uppercase text-[8px] sm:text-[9px] font-black">Full Name</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900 font-black uppercase w-[30%]">{emp?.name || "---"}</td>
               </tr>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Dept / Desig</th>
-                <td className="p-3 sm:p-4 border-r border-slate-900 font-bold uppercase w-1/4">{emp?.department} / {emp?.designation}</td>
-                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Aadhaar Number</th>
-                <td className="p-3 sm:p-4 font-mono font-bold tracking-widest w-1/4">{emp?.aadhaar || "---"}</td>
+                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Dept / Desig</th>
+                <td className="p-3 sm:p-4 border-r border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
+                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Aadhaar Number</th>
+                <td className="p-3 sm:p-4 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-4 flex items-center gap-2">
-          <ShieldCheck className="w-3 h-3 text-emerald-500" /> Identity Verified via Official Records
-        </p>
       </div>
 
-      {/* Payment Details Table */}
-      <div className="mb-8 sm:mb-10">
+      <div className="mb-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
           <CreditCard className="w-3 h-3" /> Transaction Summary
         </h3>
@@ -699,26 +691,25 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-1/3 sm:w-1/4 uppercase text-[9px] sm:text-[10px] font-black">Amount (₹)</th>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[25%] uppercase text-[8px] sm:text-[9px] font-black">Amount (₹)</th>
                 <td className="p-3 sm:p-4 border-b border-slate-900">
-                   <div className="bg-slate-900 text-white px-4 sm:px-6 py-1.5 sm:py-2 rounded-md inline-block text-lg sm:text-2xl font-black">{formatCurrency(voucher.amount)}</div>
+                   <div className="bg-slate-900 text-white px-6 py-2 rounded-md inline-block text-xl sm:text-2xl font-black">{formatCurrency(voucher.amount)}</div>
                 </td>
               </tr>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">In Words</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900 font-bold italic text-slate-700 text-[11px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td>
+                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">In Words</th>
+                <td className="p-3 sm:p-4 border-b border-slate-900 font-bold italic text-slate-700 text-[10px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td>
               </tr>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[9px] sm:text-[10px] font-black">Purpose</th>
-                <td className="p-3 sm:p-4 font-black uppercase tracking-widest text-primary text-[11px] sm:text-sm">Advance Salary</td>
+                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Purpose</th>
+                <td className="p-3 sm:p-4 font-black uppercase tracking-widest text-primary text-[10px] sm:text-sm">Advance Salary</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Declaration Section */}
-      <div className="mb-8 sm:mb-12 space-y-6">
+      <div className="mb-10 sm:mb-12 space-y-6">
         <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl">
           <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
           <div className="space-y-4 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify">
@@ -731,35 +722,32 @@ function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false
               <li>In case of resignation, termination, or separation from the company, the outstanding advance shall be recoverable from final settlement dues.</li>
               <li>The company reserves the right to deduct the balance amount from any payable dues.</li>
             </ul>
-            <p className="pt-2 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes only.</p>
+            <p className="pt-2 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes.</p>
           </div>
         </div>
       </div>
 
-      {/* Footer Section */}
-      <div className="mt-auto grid grid-cols-3 gap-4 sm:gap-10 items-end pb-6 sm:pb-10">
+      <div className="mt-auto grid grid-cols-3 gap-10 items-end pb-8">
         <div className="text-center space-y-3">
-          <div className="h-14 sm:h-20 border-b border-slate-400 border-dashed" />
+          <div className="h-20 border-b border-slate-400 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>
         </div>
         <div className="text-center space-y-3">
-          <div className="h-14 sm:h-20 border-b border-slate-400 border-dashed" />
+          <div className="h-20 border-b border-slate-400 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
         </div>
         <div className="text-center space-y-3">
-          <div className="h-14 sm:h-20 border-b border-slate-400 border-dashed" />
+          <div className="h-20 border-b border-slate-400 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
         </div>
       </div>
 
-      {/* Legal Footer */}
       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-6">
         <p className="text-[7px] sm:text-[8px] font-medium text-slate-500 text-center leading-relaxed">
           This voucher is issued for internal accounting purposes and complies with applicable provisions of the Income Tax Act, 1961 and Goods and Services Tax Act, 2017. All transactions are subject to audit and verification. Aadhaar details, if collected, are handled in accordance with applicable data protection and privacy regulations.
         </p>
       </div>
 
-      {/* Micro Footer */}
       <div className="flex justify-between items-center text-[7px] sm:text-[8px] font-black uppercase text-slate-300 tracking-[0.3em] border-t pt-4 mt-4">
         <span>SikkaTrack HRMS Enterprise Node</span>
         <span className="hidden sm:block">Corporate Original Document</span>

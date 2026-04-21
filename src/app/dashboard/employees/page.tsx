@@ -62,7 +62,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { formatCurrency, cn } from "@/lib/utils";
+import { formatCurrency, cn, formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Employee, SalaryStructure } from "@/lib/types";
 import { DEPARTMENTS, DESIGNATIONS } from "@/lib/constants";
@@ -491,7 +491,7 @@ export default function EmployeesPage() {
                           <span className="text-[10px] text-muted-foreground">{emp.designation}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs sm:text-sm">{emp.joinDate}</TableCell>
+                      <TableCell className="text-xs sm:text-sm">{formatDate(emp.joinDate)}</TableCell>
                       <TableCell className="text-right font-bold text-emerald-600 text-xs sm:text-sm">
                         {formatCurrency(emp.salary?.monthlyCTC || 0)}
                       </TableCell>
@@ -694,7 +694,7 @@ export default function EmployeesPage() {
 
                 <div className="p-4 sm:p-6 bg-slate-900 text-white rounded-2xl shadow-xl flex justify-between items-center border-b-4 border-emerald-500 mt-6">
                   <div className="space-y-0.5">
-                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Monthly CTC</p>
+                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Monthly Cost to Company (CTC)</p>
                     <p className="text-[8px] text-slate-500 font-bold uppercase hidden sm:block">Incl. Employer Contributions</p>
                   </div>
                   <h4 className="text-2xl sm:text-4xl font-black text-emerald-400 tracking-tighter">{formatCurrency(formData.salary?.monthlyCTC || 0)}</h4>
@@ -705,7 +705,7 @@ export default function EmployeesPage() {
           
           <DialogFooter className="p-3 bg-slate-50 border-t gap-3 shrink-0">
             <Button variant="ghost" onClick={handleCloseRegistration} className="rounded-xl font-bold h-10 px-4 sm:px-8 text-xs">Cancel</Button>
-            <Button className="bg-primary hover:bg-primary/90 rounded-xl font-black h-10 px-6 sm:px-12 shadow-lg text-xs" onClick={handleRegistrationPost} disabled={isProcessing}>{isProcessing ? "Wait..." : (editEmployee ? "Update" : "Onboard Staff")}</Button>
+            <Button className="bg-primary hover:bg-primary/90 rounded-xl font-black h-10 px-6 sm:px-12 shadow-lg text-xs" onClick={handleRegistrationPost} disabled={isProcessing}>{isProcessing ? "Wait..." : (editEmployee ? "Update Profile" : "Onboard Staff")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -742,13 +742,13 @@ export default function EmployeesPage() {
                 <Table>
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="font-black text-[9px] uppercase tracking-widest text-slate-500 py-3">Component</TableHead>
-                      <TableHead className="font-black text-[9px] uppercase tracking-widest text-slate-500 text-right py-3">Amount (₹)</TableHead>
+                      <TableHead className="font-black text-[9px] uppercase tracking-widest text-slate-500 py-3">Salary Component</TableHead>
+                      <TableHead className="font-black text-[9px] uppercase tracking-widest text-slate-500 text-right py-3">Monthly Amount (₹)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     <TableRow className="hover:bg-slate-50/50">
-                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">Basic Salary</TableCell>
+                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">Basic Salary (₹)</TableCell>
                       <TableCell className="py-2">
                         <Input 
                           type="number" 
@@ -763,7 +763,7 @@ export default function EmployeesPage() {
                       </TableCell>
                     </TableRow>
                     <TableRow className="hover:bg-slate-50/50">
-                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">HRA (50% Auto)</TableCell>
+                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">HRA (₹)</TableCell>
                       <TableCell className="py-2">
                         <Input 
                           type="number" 
@@ -777,7 +777,7 @@ export default function EmployeesPage() {
                       </TableCell>
                     </TableRow>
                     <TableRow className="hover:bg-slate-50/50">
-                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">Other Allowance</TableCell>
+                      <TableCell className="font-bold text-slate-700 py-4 text-xs sm:text-sm">Other Allowance (₹)</TableCell>
                       <TableCell className="py-2">
                         <Input 
                           type="number" 
@@ -864,7 +864,7 @@ export default function EmployeesPage() {
                               {hike}%
                             </div>
                           ) : (
-                            <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">Join Sal.</span>
+                            <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">Join Salary</span>
                           )}
                         </TableCell>
                       </TableRow>
