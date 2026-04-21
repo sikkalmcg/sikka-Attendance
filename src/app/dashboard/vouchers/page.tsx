@@ -535,7 +535,7 @@ export default function VouchersPage() {
             <div className="p-0">
               {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
             </div>
-            <ScrollBar orientation="vertical" className="w-2.5 opacity-100" />
+            <ScrollBar orientation="vertical" className="w-2.5 opacity-100 block" />
           </ScrollArea>
           
           <div className="p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4 print:hidden shrink-0">
