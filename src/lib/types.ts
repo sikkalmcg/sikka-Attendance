@@ -74,7 +74,9 @@ export interface SalaryStructure {
 export interface Employee {
   id: string;
   employeeId: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  name: string; // Derived or combined for legacy
   fatherName: string;
   aadhaar: string;
   pan: string;
