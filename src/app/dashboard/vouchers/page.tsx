@@ -104,9 +104,7 @@ export default function VouchersPage() {
   const [paidFromMonth, setPaidFromMonth] = useState("");
   const [paidToMonth, setPaidToMonth] = useState("");
 
-  const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
   const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
   const [isPayDialogOpen, setIsPayDialogOpen] = useState(false);
   const [voucherToPay, setVoucherToPay] = useState<Voucher | null>(null);
@@ -241,6 +239,10 @@ export default function VouchersPage() {
     }, 800);
   };
 
+  const handleVoucherClick = (v: Voucher) => {
+    window.open(`/dashboard/vouchers/view/${v.id}`, '_blank');
+  };
+
   if (!isMounted) return null;
 
   return (
@@ -339,7 +341,7 @@ export default function VouchersPage() {
                           const emp = employees.find(e => e.id === v.employeeId);
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
                               <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col text-center">
@@ -398,7 +400,7 @@ export default function VouchersPage() {
                           const emp = employees.find(e => e.id === v.employeeId);
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
-                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                              <TableCell className="font-mono font-bold text-primary cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
                               <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col text-center">
@@ -469,7 +471,7 @@ export default function VouchersPage() {
                             const emp = employees.find(e => e.id === v.employeeId);
                             return (
                               <TableRow key={v.id} className="hover:bg-white/50 transition-colors">
-                                <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => {setPreviewVoucher(v); setIsPreviewOpen(true);}}>{v.voucherNo}</TableCell>
+                                <TableCell className="font-mono font-bold text-slate-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
                                 <TableCell className="font-bold uppercase text-slate-600 text-xs sm:text-sm">{emp?.name}</TableCell>
                                 <TableCell>
                                   <div className="flex flex-col text-center">
@@ -541,34 +543,6 @@ export default function VouchersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Unified Voucher Preview Modal */}
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[95vh] p-0 overflow-hidden rounded-2xl sm:rounded-3xl border-none shadow-2xl flex flex-col">
-          <ScrollArea className="flex-1 bg-white custom-blue-scrollbar" tabIndex={0} role="region" aria-label="Voucher Preview Content">
-            <div className="p-0 overflow-x-auto">
-              <div className="min-w-[800px] sm:min-w-0">
-                {previewVoucher && <VoucherDocumentContent voucher={previewVoucher} employees={employees} firms={firms} />}
-              </div>
-            </div>
-            <ScrollBar orientation="vertical" className="w-2.5 opacity-100 block" />
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
-          
-          <div className="p-3 bg-slate-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 print:hidden shrink-0">
-            <div className="flex items-center gap-2 pl-4 hidden sm:flex">
-              <Info className="w-4 h-4 text-slate-400" />
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">A4 Corporate Standard - Press Up/Down to Scroll</span>
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button variant="ghost" onClick={() => setIsPreviewOpen(false)} className="flex-1 sm:flex-none rounded-lg font-bold h-9 px-6 text-[10px] sm:text-xs">Close</Button>
-              <Button className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 rounded-lg font-black h-9 px-8 gap-2 shadow-sm text-[10px] sm:text-xs" onClick={() => handleDownloadAndPrint(previewVoucher!)}>
-                <Printer className="w-3.5 h-3.5" /> Print Voucher
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Reject Alert */}
       <AlertDialog open={!!voucherToReject} onOpenChange={(o) => !o && setVoucherToReject(null)}>
         <AlertDialogContent className="w-[90vw] sm:max-w-md rounded-2xl border-none shadow-2xl">
@@ -599,7 +573,7 @@ export default function VouchersPage() {
   );
 }
 
-function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
+export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode = false }: { voucher: Voucher, employees: any[], firms: any[], isPrintMode?: boolean }) {
   const emp = employees.find(e => e.id === voucher.employeeId);
   const firm = firms.find(f => f.id === emp?.firmId);
   return (
