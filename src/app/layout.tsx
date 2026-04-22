@@ -7,15 +7,7 @@ export const metadata: Metadata = {
   title: 'SikkaTrack HR - Sikka Industries & Logistics',
   description: 'Enterprise HRMS for Sikka Industries & Logistics',
   icons: {
-    icon: [
-      {
-        url: '/assets/favicon-32x32.png',
-        type: 'image/png',
-        sizes: '32x32',
-      },
-    ],
-    shortcut: 'https://ibb.co/35gNxtzq',
-    apple: 'https://ibb.co/35gNxtzq',
+    icon: '/favicon.ico',
   },
 };
 
