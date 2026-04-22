@@ -82,7 +82,7 @@ const getISTTime = () => {
 };
 
 export default function AttendancePage() {
-  const { attendanceRecords, leaveRequests, addRecord, updateRecord, plants, holidays, employees } = useData();
+  const { attendanceRecords, leaveRequests, addRecord, updateRecord, plants, holidays, employees, notifications } = useData();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -844,26 +844,26 @@ export default function AttendancePage() {
               </CardTitle>
               
               {showReminderIcon && (
-                <div className="absolute right-4 top-4">
+                <div className="absolute right-4 top-2">
                   <Popover open={isReminderPopoverOpen} onOpenChange={setIsReminderPopoverOpen}>
                     <PopoverTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-rose-50 border border-rose-100 relative hover:bg-rose-100 transition-all">
+                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-rose-50 border border-rose-100 relative hover:bg-rose-100 transition-all shadow-sm">
                         <Bell className="w-5 h-5 text-rose-500" />
-                        {!reminderReadAt && <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-rose-600 rounded-full border-2 border-white animate-pulse" />}
+                        <span className="absolute top-0 right-0 w-3.5 h-3.5 bg-rose-600 rounded-full border-2 border-white flex items-center justify-center animate-pulse shadow-sm" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-80 p-6 rounded-2xl shadow-2xl border-rose-100 bg-white" align="end">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 border-b border-rose-50 pb-3">
+                    <PopoverContent className="w-80 p-0 rounded-2xl shadow-2xl border-rose-100 bg-white overflow-hidden" align="end" sideOffset={12}>
+                      <div className="p-5 space-y-4">
+                        <div className="flex items-center gap-3 pb-3 border-b border-rose-50">
                           <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
                             <MessageCircle className="w-6 h-6 text-rose-600" />
                           </div>
                           <div>
-                            <p className="text-[10px] font-black uppercase text-rose-400 tracking-widest leading-none mb-1">Attention</p>
+                            <p className="text-[10px] font-black uppercase text-rose-400 tracking-[0.2em] leading-none mb-1">Attention</p>
                             <h4 className="text-sm font-black text-rose-900 leading-none">Attendance Reminder</h4>
                           </div>
                         </div>
-                        <p className="text-sm font-bold text-rose-800 leading-relaxed italic">
+                        <p className="text-sm font-bold text-rose-800 leading-relaxed italic pr-2">
                           "{effectiveEmployeeName} hope you reached at Office. Please mark attendance"
                         </p>
                       </div>
