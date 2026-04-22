@@ -275,8 +275,8 @@ export default function AttendancePage() {
       setReminderReadAt(now);
       localStorage.setItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`, now.toString());
       
-      // REQUIREMENT: "[Employee Name], hope you reached at office. Please mark attendance."
-      const notifyMsg = `${effectiveEmployeeName}, hope you reached at office. Please mark attendance.`;
+      // REQUIREMENT: “[Employee Name] hope you reached at Office. Please mark attendance”
+      const notifyMsg = `${effectiveEmployeeName} hope you reached at Office. Please mark attendance`;
       
       addRecord('notifications', {
         message: notifyMsg,
@@ -858,10 +858,7 @@ export default function AttendancePage() {
                           </div>
                         </div>
                         <p className="text-sm font-bold text-rose-800 leading-relaxed italic">
-                          "{effectiveEmployeeName}, hope you reached at office. Please mark attendance."
-                        </p>
-                        <p className="text-[11px] font-medium text-slate-500 border-t pt-2 italic">
-                          "क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें।"
+                          "{effectiveEmployeeName} hope you reached at Office. Please mark attendance"
                         </p>
                       </div>
                     </PopoverContent>
