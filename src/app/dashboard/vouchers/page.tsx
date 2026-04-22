@@ -728,17 +728,13 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       </div>
 
-      <div className="mt-auto grid grid-cols-3 gap-10 items-end pb-8">
+      <div className="mt-auto flex justify-between items-end pb-8 px-10">
         <div className="text-center space-y-3">
-          <div className="h-14 border-b border-slate-400 border-dashed" />
+          <div className="w-48 h-14 border-b border-slate-400 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>
         </div>
         <div className="text-center space-y-3">
-          <div className="h-14 border-b border-slate-400 border-dashed" />
-          <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
-        </div>
-        <div className="text-center space-y-3">
-          <div className="h-14 border-b border-slate-400 border-dashed" />
+          <div className="w-48 h-14 border-b border-slate-400 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
         </div>
       </div>
