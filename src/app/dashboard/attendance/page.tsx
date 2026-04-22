@@ -232,20 +232,16 @@ export default function AttendancePage() {
     if (!isMounted || !isAccessAllowed || activeRecord || !currentTime || !todayStr) return false;
     if (todayStr < PROJECT_START_DATE_STR) return false;
 
-    // Check if current time is >= 10:30 AM
     const currentHHMM = format(currentTime, "HH:mm");
     if (currentHHMM < "10:30") return false;
 
-    // Check if today is working day (Exclude Sunday & Holidays)
     const isSun = isSunday(currentTime);
     const isHoliday = (holidays || []).some(h => h.date === todayStr);
     if (isSun || isHoliday) return false;
 
-    // Check if already checked in
     const hasInToday = (employeeRecords || []).some(r => r.date === todayStr && r.inTime);
     if (hasInToday) return false;
 
-    // Check if on approved leave
     const hasApprovedLeave = (myLeaveRequests || []).some(l => {
       if (l.status !== 'APPROVED') return false;
       try {
@@ -257,10 +253,9 @@ export default function AttendancePage() {
     });
     if (hasApprovedLeave) return false;
 
-    // Auto-hide after some time or if already seen recently (to prevent infinite annoyance)
     if (reminderReadAt) {
       const diffMins = (currentTime.getTime() - reminderReadAt) / (1000 * 60);
-      if (diffMins >= 120) return false; // Hide after 2 hours of seeing it
+      if (diffMins >= 120) return false; 
     }
 
     return true;
@@ -275,7 +270,6 @@ export default function AttendancePage() {
       setReminderReadAt(now);
       localStorage.setItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`, now.toString());
       
-      // REQUIREMENT: “[Employee Name] hope you reached at Office. Please mark attendance”
       const notifyMsg = `${effectiveEmployeeName} hope you reached at Office. Please mark attendance`;
       
       addRecord('notifications', {
@@ -694,7 +688,6 @@ export default function AttendancePage() {
 
     addRecord('attendance', newRecord);
     
-    // Notification Logic
     const notifyMsg = `${effectiveEmployeeName} – Mark IN at ${time}`;
     addRecord('notifications', {
       message: notifyMsg,
@@ -707,8 +700,6 @@ export default function AttendancePage() {
 
     setActiveDialog("NONE");
     toast({ title: "Check-In Success", description: "Attendance logged successfully." });
-    
-    // Reset reminder states upon check-in
     setIsReminderPopoverOpen(false);
   };
 
@@ -749,7 +740,6 @@ export default function AttendancePage() {
       autoCheckout: isAuto
     });
 
-    // Notification Logic
     const workingHoursStr = formatHoursToHHMM(finalHours);
     const notifyMsg = `${effectiveEmployeeName} – Mark OUT at ${timeDisplay}. Working Hours: ${workingHoursStr} Hrs`;
     addRecord('notifications', {
@@ -836,7 +826,6 @@ export default function AttendancePage() {
                 <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
               </CardTitle>
               
-              {/* Attendance Reminder Badge Style */}
               {showReminderIcon && (
                 <div className="absolute right-4 top-4">
                   <Popover open={isReminderPopoverOpen} onOpenChange={setIsReminderPopoverOpen}>
