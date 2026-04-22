@@ -68,48 +68,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import Cookies from 'js-cookie';
-import { useFirestore } from "@/firebase";
-import { doc, getDoc } from "firebase/firestore";
 
 function HeaderActions() {
-  const { notifications, employees, users, updateRecord, deleteRecord, currentUser: contextUser } = useData();
-  const [localUser, setLocalUser] = useState<any>(null);
+  const { notifications, updateRecord, deleteRecord, verifiedUser } = useData();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-
-  useEffect(() => {
-    const session = Cookies.get('sikka_session');
-    if (session) {
-      try {
-        setLocalUser(JSON.parse(session));
-      } catch (e) {
-        console.error("Session parse error", e);
-      }
-    }
-  }, []);
-
-  const verifiedUser = useMemo(() => {
-    const userToVerify = contextUser || localUser;
-    if (!userToVerify) return null;
-
-    if (userToVerify.role === 'EMPLOYEE') {
-      const loginIdent = userToVerify.username?.replace(/\s/g, '');
-      const dbEmp = employees.find(e => {
-        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
-        const empMobile = e.mobile?.replace(/\s/g, '');
-        return empAadhaar === loginIdent || empMobile === loginIdent;
-      });
-      return dbEmp ? { ...userToVerify, fullName: dbEmp.name, avatar: dbEmp.avatar } : userToVerify;
-    }
-
-    if (userToVerify.role !== 'SUPER_ADMIN') {
-      const dbUser = users.find(u => u.id === userToVerify.id);
-      return dbUser ? { ...userToVerify, fullName: dbUser.fullName, avatar: dbUser.avatar } : userToVerify;
-    }
-
-    return userToVerify;
-  }, [contextUser, localUser, employees, users]);
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
   
@@ -145,7 +109,6 @@ function HeaderActions() {
   };
 
   const handleSaveProfile = (updatedUser: any) => {
-    setLocalUser(updatedUser);
     const sessionData = JSON.stringify(updatedUser);
     Cookies.set('sikka_session', sessionData, { expires: 365, path: '/' });
     localStorage.setItem("user", sessionData);
@@ -389,36 +352,7 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
 function SidebarNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { employees, users, currentUser: contextUser } = useData();
-  const [localUser, setLocalUser] = useState<any>(null);
-
-  useEffect(() => {
-    const session = Cookies.get('sikka_session');
-    if (session) {
-      try {
-        setLocalUser(JSON.parse(session));
-      } catch (e) {}
-    }
-  }, []);
-
-  const verifiedUser = useMemo(() => {
-    const userToVerify = contextUser || localUser;
-    if (!userToVerify) return null;
-    if (userToVerify.role === 'EMPLOYEE') {
-      const loginIdent = userToVerify.username?.replace(/\s/g, '');
-      const dbEmp = employees.find(e => {
-        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
-        const empMobile = e.mobile?.replace(/\s/g, '');
-        return empAadhaar === loginIdent || empMobile === loginIdent;
-      });
-      return dbEmp ? { ...userToVerify, fullName: dbEmp.name } : userToVerify;
-    }
-    if (userToVerify.role !== 'SUPER_ADMIN') {
-      const dbUser = users.find(u => u.id === userToVerify.id);
-      return dbUser ? { ...userToVerify, fullName: dbUser.fullName } : userToVerify;
-    }
-    return userToVerify;
-  }, [contextUser, localUser, employees, users]);
+  const { verifiedUser } = useData();
 
   if (!verifiedUser) return null;
 
@@ -483,72 +417,58 @@ function SidebarNav() {
   );
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+function AuthorizedContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { verifiedUser, isLoading } = useData();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-  const [user, setUser] = useState<any>(null);
-  const db = useFirestore();
 
   useEffect(() => {
-    const session = Cookies.get('sikka_session');
-    if (!session) {
+    if (isLoading) return;
+
+    if (!verifiedUser) {
       router.push("/login");
       return;
     }
 
-    try {
-      const userData = JSON.parse(session);
-      setUser(userData);
-      
-      const validateSession = async () => {
-        if (userData.id && userData.role !== 'SUPER_ADMIN') {
-          const col = userData.role === 'EMPLOYEE' ? 'employees' : 'users';
-          const docRef = doc(db, col, userData.id);
-          const docSnap = await getDoc(docRef);
-          
-          if (!docSnap.exists() || (userData.role === 'EMPLOYEE' && !docSnap.data().active)) {
-            Cookies.remove('sikka_session', { path: '/' });
-            localStorage.removeItem("user");
-            router.push("/login");
-          }
-        }
-      };
+    const menuPermissions: Record<string, string> = {
+      "/dashboard": "Dashboard",
+      "/dashboard/attendance": "Attendance",
+      "/dashboard/approvals": "Approvals",
+      "/dashboard/employees": "Employees",
+      "/dashboard/payroll": "Payroll",
+      "/dashboard/vouchers": "Vouchers",
+      "/dashboard/holidays": "Holidays",
+      "/dashboard/reports": "Reports",
+      "/dashboard/settings/firms": "Settings",
+      "/dashboard/settings/users": "Users"
+    };
 
-      validateSession();
-      
-      const menuPermissions: Record<string, string> = {
-        "/dashboard": "Dashboard",
-        "/dashboard/attendance": "Attendance",
-        "/dashboard/approvals": "Approvals",
-        "/dashboard/employees": "Employees",
-        "/dashboard/payroll": "Payroll",
-        "/dashboard/vouchers": "Vouchers",
-        "/dashboard/holidays": "Holidays",
-        "/dashboard/reports": "Reports",
-        "/dashboard/settings/firms": "Settings",
-        "/dashboard/settings/users": "Users"
-      };
-
-      const requiredPermission = menuPermissions[pathname];
-      const isSuperAdmin = userData.role === 'SUPER_ADMIN';
-      
-      if (isSuperAdmin) {
-        setIsAuthorized(true);
-      } else if (userData.role === 'EMPLOYEE') {
-        const canAccessAttendance = pathname === '/dashboard/attendance';
-        setIsAuthorized(canAccessAttendance);
-        if (!canAccessAttendance) router.push("/dashboard/attendance");
-      } else if (requiredPermission) {
-        const hasPerm = userData.permissions?.includes(requiredPermission) || requiredPermission === "Dashboard";
-        setIsAuthorized(hasPerm);
-      } else {
-        setIsAuthorized(true); 
-      }
-    } catch (e) {
-      router.push("/login");
+    const requiredPermission = menuPermissions[pathname];
+    const isSuperAdmin = verifiedUser.role === 'SUPER_ADMIN';
+    
+    if (isSuperAdmin) {
+      setIsAuthorized(true);
+    } else if (verifiedUser.role === 'EMPLOYEE') {
+      const canAccessAttendance = pathname === '/dashboard/attendance';
+      setIsAuthorized(canAccessAttendance);
+      if (!canAccessAttendance) router.push("/dashboard/attendance");
+    } else if (requiredPermission) {
+      const hasPerm = (verifiedUser.permissions || []).includes(requiredPermission) || requiredPermission === "Dashboard";
+      setIsAuthorized(hasPerm);
+    } else {
+      setIsAuthorized(true); 
     }
-  }, [router, pathname, db]);
+  }, [verifiedUser, isLoading, pathname, router]);
+
+  if (isLoading || isAuthorized === null) {
+    return <div className="h-screen w-full flex items-center justify-center bg-slate-50">
+      <div className="flex flex-col items-center gap-4">
+        <Clock className="w-10 h-10 text-primary animate-pulse" />
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Validating Gateway...</p>
+      </div>
+    </div>;
+  }
 
   if (isAuthorized === false) {
     return (
@@ -562,7 +482,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </p>
         <Button 
           className="bg-primary px-8 h-12 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2"
-          onClick={() => router.push(user?.role === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard")}
+          onClick={() => router.push(verifiedUser?.role === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard")}
         >
           <ArrowLeft className="w-4 h-4" /> Go Back Home
         </Button>
@@ -571,43 +491,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full bg-background overflow-hidden">
+        <Sidebar collapsible="icon" className="border-r border-slate-200">
+          <SidebarNav />
+        </Sidebar>
+
+        <SidebarInset className="flex flex-col flex-1 h-screen overflow-hidden">
+          <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white shrink-0 z-20">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger />
+              <Separator orientation="vertical" className="h-6" />
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
+                {pathname.split("/").pop()?.replace(/-/g, " ") || "Overview"}
+              </h2>
+            </div>
+            
+            <HeaderActions />
+          </header>
+
+          <main 
+            className="flex-1 p-6 overflow-y-auto bg-slate-50/50 outline-none focus-visible:ring-1 focus-visible:ring-primary/10"
+            tabIndex={0}
+            role="main"
+          >
+            <div className="max-w-7xl mx-auto">
+              {children}
+            </div>
+          </main>
+          
+          <footer className="h-12 border-t border-slate-100 flex items-center justify-center px-6 bg-white text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
+            © Sikka Industries & Logistics – Version 1.0
+          </footer>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
     <TooltipProvider>
       <DataProvider>
-        <SidebarProvider>
-          <div className="flex min-h-screen w-full bg-background overflow-hidden">
-            <Sidebar collapsible="icon" className="border-r border-slate-200">
-              <SidebarNav />
-            </Sidebar>
-
-            <SidebarInset className="flex flex-col flex-1 h-screen overflow-hidden">
-              <header className="h-16 border-b border-slate-200 flex items-center justify-between px-6 bg-white shrink-0 z-20">
-                <div className="flex items-center gap-4">
-                  <SidebarTrigger />
-                  <Separator orientation="vertical" className="h-6" />
-                  <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
-                    {pathname.split("/").pop()?.replace(/-/g, " ") || "Overview"}
-                  </h2>
-                </div>
-                
-                <HeaderActions />
-              </header>
-
-              <main 
-                className="flex-1 p-6 overflow-y-auto bg-slate-50/50 outline-none focus-visible:ring-1 focus-visible:ring-primary/10"
-                tabIndex={0}
-                role="main"
-              >
-                <div className="max-w-7xl mx-auto">
-                  {children}
-                </div>
-              </main>
-              
-              <footer className="h-12 border-t border-slate-100 flex items-center justify-center px-6 bg-white text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
-                © Sikka Industries & Logistics – Version 1.0
-              </footer>
-            </SidebarInset>
-          </div>
-        </SidebarProvider>
+        <AuthorizedContent>
+          {children}
+        </AuthorizedContent>
       </DataProvider>
     </TooltipProvider>
   );

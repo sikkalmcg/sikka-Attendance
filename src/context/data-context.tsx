@@ -26,6 +26,7 @@ import {
 import { collection, doc, query, where } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
+import Cookies from 'js-cookie';
 
 interface DataContextType {
   employees: Employee[];
@@ -44,6 +45,8 @@ interface DataContextType {
   deleteRecord: (col: string, id: string) => void;
   setRecord: (col: string, id: string, data: any) => void;
   currentUser: any;
+  verifiedUser: any;
+  isLoading: boolean;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -52,15 +55,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const db = useFirestore();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("user");
-    if (saved) setCurrentUser(JSON.parse(saved));
-
+    const session = Cookies.get('sikka_session');
+    if (session) {
+      try {
+        setCurrentUser(JSON.parse(session));
+      } catch (e) {
+        console.error("Session parse error", e);
+      }
+    }
+    
     // Ensure Firebase Auth is active to satisfy Security Rules
     const auth = getAuth();
     if (!auth.currentUser) {
-      signInAnonymously(auth).catch(err => console.error("Auth sync error:", err));
+      signInAnonymously(auth)
+        .then(() => setIsAuthReady(true))
+        .catch(err => {
+          console.error("Auth sync error:", err);
+          setIsAuthReady(true);
+        });
+    } else {
+      setIsAuthReady(true);
     }
   }, []);
 
@@ -69,54 +86,71 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser]);
 
   // Real-time Firestore Subscriptions - Guarded by auth state
-  const employeesQuery = useMemoFirebase(() => currentUser ? collection(db, 'employees') : null, [db, currentUser]);
-  const { data: employees } = useCollection<Employee>(employeesQuery);
+  const employeesQuery = useMemoFirebase(() => isAuthReady && currentUser ? collection(db, 'employees') : null, [db, currentUser, isAuthReady]);
+  const { data: employees, isLoading: loadingEmployees } = useCollection<Employee>(employeesQuery);
 
-  const attendanceQuery = useMemoFirebase(() => currentUser ? collection(db, 'attendance') : null, [db, currentUser]);
-  const { data: attendance } = useCollection<AttendanceRecord>(attendanceQuery);
+  const attendanceQuery = useMemoFirebase(() => isAuthReady && currentUser ? collection(db, 'attendance') : null, [db, currentUser, isAuthReady]);
+  const { data: attendance, isLoading: loadingAttendance } = useCollection<AttendanceRecord>(attendanceQuery);
 
-  const vouchersQuery = useMemoFirebase(() => currentUser ? collection(db, 'vouchers') : null, [db, currentUser]);
-  const { data: vouchers } = useCollection<Voucher>(vouchersQuery);
+  const vouchersQuery = useMemoFirebase(() => isAuthReady && currentUser ? collection(db, 'vouchers') : null, [db, currentUser, isAuthReady]);
+  const { data: vouchers, isLoading: loadingVouchers } = useCollection<Voucher>(vouchersQuery);
 
   const payrollQuery = useMemoFirebase(() => {
-    if (!currentUser || !isAdminRole) return null;
+    if (!isAuthReady || !currentUser || !isAdminRole) return null;
     return collection(db, 'payroll');
-  }, [db, currentUser, isAdminRole]);
-  const { data: payroll } = useCollection<PayrollRecord>(payrollQuery);
+  }, [db, currentUser, isAdminRole, isAuthReady]);
+  const { data: payroll, isLoading: loadingPayroll } = useCollection<PayrollRecord>(payrollQuery);
 
-  const plantsQuery = useMemoFirebase(() => currentUser ? collection(db, 'plants') : null, [db, currentUser]);
-  const { data: plants } = useCollection<Plant>(plantsQuery);
+  const plantsQuery = useMemoFirebase(() => isAuthReady && currentUser ? collection(db, 'plants') : null, [db, currentUser, isAuthReady]);
+  const { data: plants, isLoading: loadingPlants } = useCollection<Plant>(plantsQuery);
 
-  const firmsQuery = useMemoFirebase(() => currentUser ? collection(db, 'firms') : null, [db, currentUser]);
-  const { data: firms } = useCollection<Firm>(firmsQuery);
+  const firmsQuery = useMemoFirebase(() => isAuthReady && currentUser ? collection(db, 'firms') : null, [db, currentUser, isAuthReady]);
+  const { data: firms, isLoading: loadingFirms } = useCollection<Firm>(firmsQuery);
 
   const usersQuery = useMemoFirebase(() => {
-    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') return null;
+    if (!isAuthReady || !currentUser || currentUser.role !== 'SUPER_ADMIN') return null;
     return collection(db, 'users');
-  }, [db, currentUser]);
-  const { data: users } = useCollection<User>(usersQuery);
+  }, [db, currentUser, isAuthReady]);
+  const { data: users, isLoading: loadingUsers } = useCollection<User>(usersQuery);
 
-  const holidaysQuery = useMemoFirebase(() => currentUser ? collection(db, 'holidays') : null, [db, currentUser]);
-  const { data: holidays } = useCollection<Holiday>(holidaysQuery);
+  const holidaysQuery = useMemoFirebase(() => isAuthReady && currentUser ? collection(db, 'holidays') : null, [db, currentUser, isAuthReady]);
+  const { data: holidays, isLoading: loadingHolidays } = useCollection<Holiday>(holidaysQuery);
 
   const notificationsQuery = useMemoFirebase(() => {
-    if (!currentUser) return null;
-    // Admins see all notifications
+    if (!isAuthReady || !currentUser) return null;
     if (isAdminRole) return collection(db, 'notifications');
-    
-    // Employees see notifications addressed to them or marked as global (no employeeId)
-    // We fetch where employeeId matches or where it's specifically a reminder for them
     return query(collection(db, 'notifications'), where('employeeId', '==', currentUser.username));
-  }, [db, currentUser, isAdminRole]);
-  const { data: notifications } = useCollection<AppNotification>(notificationsQuery);
+  }, [db, currentUser, isAdminRole, isAuthReady]);
+  const { data: notifications, isLoading: loadingNotifications } = useCollection<AppNotification>(notificationsQuery);
 
-  const leaveQuery = useMemoFirebase(() => currentUser ? collection(db, 'leaveRequests') : null, [db, currentUser]);
-  const { data: leaveRequests } = useCollection<LeaveRequest>(leaveQuery);
+  const leaveQuery = useMemoFirebase(() => isAuthReady && currentUser ? collection(db, 'leaveRequests') : null, [db, currentUser, isAuthReady]);
+  const { data: leaveRequests, isLoading: loadingLeaves } = useCollection<LeaveRequest>(leaveQuery);
 
-  // Helper to check if current user is Super Admin
-  const isSuperAdmin = () => currentUser?.role === 'SUPER_ADMIN';
+  // Centralized Verified User Logic
+  const verifiedUser = useMemo(() => {
+    if (!currentUser) return null;
 
-  // Firestore Mutation Helpers with RBAC
+    if (currentUser.role === 'EMPLOYEE') {
+      const loginIdent = currentUser.username?.replace(/\s/g, '');
+      const dbEmp = (employees || []).find(e => {
+        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
+        const empMobile = e.mobile?.replace(/\s/g, '');
+        return empAadhaar === loginIdent || empMobile === loginIdent;
+      });
+      return dbEmp ? { ...currentUser, fullName: dbEmp.name, avatar: dbEmp.avatar } : currentUser;
+    }
+
+    if (currentUser.role !== 'SUPER_ADMIN') {
+      const dbUser = (users || []).find(u => u.id === currentUser.id);
+      return dbUser ? { ...currentUser, fullName: dbUser.fullName, avatar: dbUser.avatar } : currentUser;
+    }
+
+    return currentUser;
+  }, [currentUser, employees, users]);
+
+  const isLoading = loadingEmployees || loadingAttendance || loadingVouchers || loadingPlants || loadingFirms || !isAuthReady;
+
+  // Mutation helpers
   const addRecord = (col: string, data: any) => {
     const colRef = collection(db, col);
     addDocumentNonBlocking(colRef, { ...data, createdAt: new Date().toISOString() });
@@ -128,7 +162,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteRecord = (col: string, id: string) => {
-    if (!isSuperAdmin()) {
+    if (currentUser?.role !== 'SUPER_ADMIN') {
       toast({
         variant: "destructive",
         title: "Permission Denied",
@@ -160,8 +194,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     updateRecord,
     deleteRecord,
     setRecord,
-    currentUser
-  }), [employees, attendance, vouchers, payroll, plants, firms, users, holidays, notifications, leaveRequests, currentUser]);
+    currentUser,
+    verifiedUser,
+    isLoading
+  }), [employees, attendance, vouchers, payroll, plants, firms, users, holidays, notifications, leaveRequests, currentUser, verifiedUser, isLoading]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
