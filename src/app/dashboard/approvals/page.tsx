@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -63,7 +62,7 @@ import {
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
-import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays, isValid, isBefore } from "date-fns";
+import { differenceInDays, parseISO, format, isWithinInterval, startOfDay, endOfDay, subDays, isValid, isBefore, addDays } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -225,6 +224,7 @@ export default function ApprovalsPage() {
           employeeId: rec.employeeId,
           employeeName: rec.employeeName,
           date: rec.date,
+          inDate: rec.date,
           status: 'ABSENT',
           attendanceType: 'FIELD',
           approved: true,
@@ -261,9 +261,18 @@ export default function ApprovalsPage() {
     setIsProcessing(true);
     try {
       let finalHours = 0;
+      let effectiveOutDate = attendanceEditData.date;
+
       if (attendanceEditData.inTime && attendanceEditData.outTime) {
         const inDT = new Date(`${attendanceEditData.date}T${attendanceEditData.inTime}`);
-        const outDT = new Date(`${attendanceEditData.date}T${attendanceEditData.outTime}`);
+        let outDT = new Date(`${attendanceEditData.date}T${attendanceEditData.outTime}`);
+        
+        // Logic: if outTime is earlier than inTime, assume it's the next day
+        if (outDT < inDT) {
+          outDT = addDays(outDT, 1);
+          effectiveOutDate = format(outDT, "yyyy-MM-dd");
+        }
+        
         const diff = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
         finalHours = parseFloat(diff.toFixed(2));
       }
@@ -274,6 +283,8 @@ export default function ApprovalsPage() {
           employeeId: selectedAttendance.employeeId,
           employeeName: selectedAttendance.employeeName,
           date: attendanceEditData.date,
+          inDate: attendanceEditData.date,
+          outDate: effectiveOutDate,
           status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
           attendanceType: 'FIELD',
           inTime: attendanceEditData.inTime,
@@ -286,6 +297,8 @@ export default function ApprovalsPage() {
       } else {
         updateRecord('attendance', selectedAttendance.id, {
           date: attendanceEditData.date,
+          inDate: attendanceEditData.date,
+          outDate: effectiveOutDate,
           inTime: attendanceEditData.inTime,
           outTime: attendanceEditData.outTime,
           hours: finalHours,
@@ -312,6 +325,7 @@ export default function ApprovalsPage() {
           employeeId: selectedAttendance.employeeId,
           employeeName: selectedAttendance.employeeName,
           date: selectedAttendance.date,
+          inDate: selectedAttendance.date,
           status: 'ABSENT',
           attendanceType: 'FIELD',
           remark: attendanceRejectReason,
@@ -386,6 +400,7 @@ export default function ApprovalsPage() {
             employeeId: selectedLeave.employeeId,
             employeeName: selectedLeave.employeeName,
             date: leaveDate,
+            inDate: leaveDate,
             status: 'PRESENT', // 4 hours is > 1 hour
             attendanceType: 'FIELD',
             hours: 4,
@@ -615,7 +630,7 @@ export default function ApprovalsPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.date || rec.fromDate)}</span>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.inDate || rec.date || rec.fromDate)}</span>
                               <span className={cn("text-xs font-mono font-bold", !isLeaveTypeActive && !rec.inTime && rec.status === 'PRESENT' && "text-rose-500 italic")}>
                                 {isLeaveTypeActive ? "" : (rec.inTime || "--:--")}
                               </span>
@@ -623,7 +638,7 @@ export default function ApprovalsPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.date || rec.toDate)}</span>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(rec.outDate || rec.date || rec.toDate)}</span>
                               <span className={cn("text-xs font-mono font-bold", !isLeaveTypeActive && rec.outTime ? "text-rose-500" : "text-slate-300 italic")}>
                                 {isLeaveTypeActive ? "" : (rec.outTime || "--:--")}
                               </span>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -287,16 +286,18 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (activeRecord && isMounted && currentTime && isAccessAllowed) {
-      const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
+      const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
       const diffMs = currentTime.getTime() - inDateTime.getTime();
       const diffHours = diffMs / (1000 * 60 * 60);
 
       if (diffHours >= 16) {
         const autoOutDateTime = addHours(inDateTime, 16);
         const autoOutTimeStr = format(autoOutDateTime, "HH:mm");
+        const autoOutDateStr = format(autoOutDateTime, "yyyy-MM-dd");
         
         updateRecord('attendance', activeRecord.id, {
           outTime: autoOutTimeStr,
+          outDate: autoOutDateStr,
           hours: 8,
           status: 'PRESENT',
           autoCheckout: true,
@@ -325,15 +326,15 @@ export default function AttendancePage() {
     return [...employeeRecords]
       .filter(r => r.outTime)
       .sort((a, b) => {
-        const dateTimeA = new Date(`${a.date}T${a.outTime}`);
-        const dateTimeB = new Date(`${b.date}T${b.outTime}`);
+        const dateTimeA = new Date(`${a.outDate || a.date}T${a.outTime}`);
+        const dateTimeB = new Date(`${b.outDate || b.date}T${b.outTime}`);
         return dateTimeB.getTime() - dateTimeA.getTime();
       })[0];
   }, [employeeRecords]);
 
   const lockState = useMemo(() => {
     if (!lastOutRecord || !lastOutRecord.outTime) return { isLocked: false, unlockTime: null };
-    const lastOutDateTime = new Date(`${lastOutRecord.date}T${lastOutRecord.outTime}`);
+    const lastOutDateTime = new Date(`${lastOutRecord.outDate || lastOutRecord.date}T${lastOutRecord.outTime}`);
     const allowedDateTime = addHours(lastOutDateTime, 8);
     const now = getISTTime();
     const isLocked = isAfter(allowedDateTime, now);
@@ -349,7 +350,7 @@ export default function AttendancePage() {
             const nearestPlant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
             
             const now = getISTTime();
-            const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
+            const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
             const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
 
             if (!nearestPlant && activeRecord.attendanceType === 'OFFICE' && !activeRecord.lastDetectedOutAt) {
@@ -583,9 +584,9 @@ export default function AttendancePage() {
       if (!h) return false;
       const nameMatch = h.employeeName?.toLowerCase().includes(columnFilters.name.toLowerCase());
       const plantMatch = (h.inPlant || '--').toLowerCase().includes(columnFilters.inPlant.toLowerCase());
-      const inTimeStr = `${formatDate(h.date)} ${h.inTime || "--:--"}`;
+      const inTimeStr = `${formatDate(h.inDate || h.date)} ${h.inTime || "--:--"}`;
       const inTimeMatch = inTimeStr.toLowerCase().includes(columnFilters.inTime.toLowerCase());
-      const outTimeStr = `${formatDate(h.date)} ${h.outTime || "--:--"}`;
+      const outTimeStr = `${formatDate(h.outDate || h.date)} ${h.outTime || "--:--"}`;
       const outTimeMatch = outTimeStr.toLowerCase().includes(columnFilters.outTime.toLowerCase());
       const typeMatch = (h.attendanceType || '--').toLowerCase().includes(columnFilters.type.toLowerCase());
       const statusMatch = h.status?.toLowerCase().includes(columnFilters.status.toLowerCase());
@@ -673,6 +674,7 @@ export default function AttendancePage() {
       employeeId: effectiveEmployeeId,
       employeeName: effectiveEmployeeName,
       date: today,
+      inDate: today,
       inTime: format(now, "HH:mm"),
       outTime: null,
       hours: 0,
@@ -707,18 +709,21 @@ export default function AttendancePage() {
     if (!activeRecord || !currentGPS || !isAccessAllowed) return;
     const now = getISTTime();
     const timeHHMM = format(now, "HH:mm");
+    const todayStr = format(now, "yyyy-MM-dd");
     const timeDisplay = format(now, "hh:mm a");
-    const inDateTime = new Date(`${activeRecord.date}T${activeRecord.inTime}`);
-    const outDateTime = new Date(`${format(now, "yyyy-MM-dd")}T${timeHHMM}`);
+    const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
+    const outDateTime = new Date(`${todayStr}T${timeHHMM}`);
     const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
     let isAuto = diffHours >= 16;
     let finalOutTime = timeHHMM;
+    let finalOutDate = todayStr;
     let finalHours = parseFloat(diffHours.toFixed(2));
 
     if (isAuto) {
       const autoOutDateTime = addHours(inDateTime, 16);
       finalOutTime = format(autoOutDateTime, "HH:mm");
+      finalOutDate = format(autoOutDateTime, "yyyy-MM-dd");
       finalHours = 8.0;
     }
 
@@ -729,6 +734,7 @@ export default function AttendancePage() {
 
     updateRecord('attendance', activeRecord.id, { 
       outTime: finalOutTime, 
+      outDate: finalOutDate,
       hours: parseFloat(finalHours.toFixed(2)),
       status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
       attendanceTypeOut: detectedPlant ? 'OFFICE' : selectedType,
@@ -760,9 +766,17 @@ export default function AttendancePage() {
     setIsProcessing(true);
     try {
       let finalHours = 0;
+      let effectiveOutDate = selectedRecordToEdit.date;
+
       if (editTimes.in && editTimes.out) {
         const inDT = new Date(`${selectedRecordToEdit.date}T${editTimes.in}`);
-        const outDT = new Date(`${selectedRecordToEdit.date}T${editTimes.out}`);
+        let outDT = new Date(`${selectedRecordToEdit.date}T${editTimes.out}`);
+        
+        if (outDT < inDT) {
+          outDT = addDays(outDT, 1);
+          effectiveOutDate = format(outDT, "yyyy-MM-dd");
+        }
+        
         const diff = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
         finalHours = parseFloat(diff.toFixed(2));
       }
@@ -772,6 +786,8 @@ export default function AttendancePage() {
           employeeId: selectedRecordToEdit.employeeId,
           employeeName: selectedRecordToEdit.employeeName,
           date: selectedRecordToEdit.date,
+          inDate: selectedRecordToEdit.date,
+          outDate: effectiveOutDate,
           inTime: editTimes.in || null,
           outTime: editTimes.out || null,
           hours: isNaN(finalHours) ? 0 : finalHours,
@@ -784,6 +800,7 @@ export default function AttendancePage() {
         updateRecord('attendance', selectedRecordToEdit.id, {
           inTime: editTimes.in || null,
           outTime: editTimes.out || null,
+          outDate: effectiveOutDate,
           hours: isNaN(finalHours) ? 0 : finalHours,
           status: (finalHours >= 1.0) ? 'PRESENT' : 'ABSENT'
         });
@@ -918,8 +935,18 @@ export default function AttendancePage() {
                       <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
                         <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
                         <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs">{formatDate(h.date)} {h.inTime || "--:--"}</TableCell>
-                        <TableCell className="font-mono text-xs">{formatDate(h.date)} {h.outTime || "--:--"}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
+                            <span>{h.inTime || "--:--"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
+                            <span>{h.outTime || "--:--"}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="text-[9px] font-black uppercase">{h.attendanceType}</Badge></TableCell>
                         <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
                         <TableCell className="text-center">

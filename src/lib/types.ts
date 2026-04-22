@@ -129,9 +129,11 @@ export interface AttendanceRecord {
   id: string;
   employeeId: string;
   employeeName: string;
-  date: string;
+  date: string; // This is the logical date of the shift start
   inTime: string | null;
   outTime: string | null;
+  inDate?: string;
+  outDate?: string;
   hours: number;
   status: 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'FIELD' | 'WFH';
   attendanceType: 'OFFICE' | 'FIELD' | 'WFH' | 'ABSENT';
