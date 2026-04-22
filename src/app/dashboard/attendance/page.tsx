@@ -276,7 +276,7 @@ export default function AttendancePage() {
         message: notifyMsg,
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
         read: false,
-        type: 'ATTENDANCE_REMINDER', // Filtered out from global header
+        type: 'ATTENDANCE_REMINDER',
         employeeId: currentUser?.username || effectiveEmployeeId,
         senderName: "HR System"
       });
@@ -285,14 +285,21 @@ export default function AttendancePage() {
     }
   }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord, triggerNotification, currentUser]);
 
+  /**
+   * FEATURE: Auto OUT Logic
+   * Trigger at 16:01 hours from IN time.
+   * Recorded OUT = IN Time + 8:00 Hours (Fixed working hours cap).
+   */
   useEffect(() => {
     if (activeRecord && isMounted && currentTime && isAccessAllowed) {
       const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
       const diffMs = currentTime.getTime() - inDateTime.getTime();
       const diffHours = diffMs / (1000 * 60 * 60);
 
+      // Requirement: Trigger Auto OUT at 16:00 hours from IN time (using 16.0 threshold)
       if (diffHours >= 16) {
-        const autoOutDateTime = addHours(inDateTime, 16);
+        // Recorded OUT time should be IN Time + 8:00 hours
+        const autoOutDateTime = addHours(inDateTime, 8);
         const autoOutTimeStr = format(autoOutDateTime, "HH:mm");
         const autoOutDateStr = format(autoOutDateTime, "yyyy-MM-dd");
         
@@ -307,7 +314,8 @@ export default function AttendancePage() {
         });
 
         const workingHoursStr = "08:00";
-        const notifyMsg = `${effectiveEmployeeName} – OUT: ${autoOutDateStr} ${autoOutTimeStr} | Work: ${workingHoursStr} Hrs (Auto)`;
+        const timestamp = format(autoOutDateTime, "dd-MMM-yyyy HH:mm");
+        const notifyMsg = `${effectiveEmployeeName} – OUT: ${timestamp} | Work: ${workingHoursStr} Hrs (Auto)`;
         
         addRecord('notifications', { 
           message: notifyMsg, 
@@ -320,7 +328,7 @@ export default function AttendancePage() {
 
         toast({
           title: "Security: Auto Check-out",
-          description: `Your shift has been auto-closed at ${autoOutTimeStr} as per the 16:00 Hours policy.`,
+          description: `Your shift has been auto-closed at ${autoOutTimeStr} as per the 16:00 Hours policy. (8h capped)`,
         });
       }
     }
@@ -336,6 +344,10 @@ export default function AttendancePage() {
       })[0];
   }, [employeeRecords]);
 
+  /**
+   * REQUIREMENT: Re-Enable IN Eligibility
+   * Employee allowed to mark IN again only after 8:00 hours from OUT time.
+   */
   const lockState = useMemo(() => {
     if (!lastOutRecord || !lastOutRecord.outTime) return { isLocked: false, unlockTime: null };
     const lastOutDateTime = new Date(`${lastOutRecord.outDate || lastOutRecord.date}T${lastOutRecord.outTime}`);
@@ -392,7 +404,6 @@ export default function AttendancePage() {
 
       addRecord('leaveRequests', newLeave);
       
-      // REQUIREMENT: Leave Request submission notification
       addRecord('notifications', {
         message: `Leave Request submitted: ${effectiveEmployeeName} (${daysCount} Day/s)`,
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
@@ -480,7 +491,6 @@ export default function AttendancePage() {
 
     addRecord('attendance', newRecord);
     
-    // REQUIREMENT: Employee Name + IN Date & Time
     const notifyMsg = `${effectiveEmployeeName} – IN: ${timestamp}`;
     addRecord('notifications', {
       message: notifyMsg,
@@ -500,11 +510,11 @@ export default function AttendancePage() {
     if (!activeRecord || !currentGPS || !isAccessAllowed) return;
     const now = getISTTime();
     const timeHHMM = format(now, "HH:mm");
-    const todayStr = format(now, "yyyy-MM-dd");
+    const todayStrLocal = format(now, "yyyy-MM-dd");
     const timestamp = format(now, "dd-MMM-yyyy HH:mm");
     
     const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
-    const outDateTime = new Date(`${todayStr}T${timeHHMM}`);
+    const outDateTime = new Date(`${todayStrLocal}T${timeHHMM}`);
     const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
     const finalHours = parseFloat(diffHours.toFixed(2));
@@ -512,7 +522,7 @@ export default function AttendancePage() {
 
     updateRecord('attendance', activeRecord.id, { 
       outTime: timeHHMM, 
-      outDate: todayStr,
+      outDate: todayStrLocal,
       hours: finalHours,
       status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
       latOut: currentGPS.lat,
@@ -521,7 +531,6 @@ export default function AttendancePage() {
       outPlant: detectedPlant?.name || "Remote"
     });
 
-    // REQUIREMENT: Employee Name + OUT Date & Time + Working Hours
     const notifyMsg = `${effectiveEmployeeName} – OUT: ${timestamp} | Work: ${workingHoursStr} Hrs`;
     addRecord('notifications', {
       message: notifyMsg,
@@ -675,6 +684,11 @@ export default function AttendancePage() {
                 <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} onClick={() => requestLocation("IN")}>Mark IN</Button>
                 <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} onClick={() => requestLocation("OUT")}>Mark OUT</Button>
               </div>
+              {lockState.isLocked && (
+                <p className="text-[10px] font-black text-rose-500 text-center uppercase tracking-widest bg-rose-50 py-2 rounded-lg border border-rose-100 animate-pulse">
+                   Mandatory 8h Rest Period. Next IN Allowed at {lockState.unlockTime}
+                </p>
+              )}
             </CardContent>
           </Card>
 
