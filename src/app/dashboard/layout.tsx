@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -74,13 +75,18 @@ function HeaderActions() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
+  // REQUIREMENT: Restricted Notifications Only (No Attendance Reminders)
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter(n => (n as any).type !== 'ATTENDANCE_REMINDER');
+  }, [notifications]);
+
+  const unreadCount = useMemo(() => filteredNotifications.filter(n => !n.read).length, [filteredNotifications]);
   
   const latestNotifications = useMemo(() => {
-    return [...notifications]
+    return [...filteredNotifications]
       .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))
-      .slice(0, 10);
-  }, [notifications]);
+      .slice(0, 20);
+  }, [filteredNotifications]);
 
   const markAllRead = () => {
     latestNotifications.forEach(n => {
@@ -155,23 +161,29 @@ function HeaderActions() {
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {latestNotifications.map((n) => (
-                  <div key={n.id} className={cn(
-                    "p-4 flex gap-3 items-start hover:bg-slate-50 transition-colors",
-                    !n.read && "bg-primary/5"
-                  )}>
-                    <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-                      n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
+                {latestNotifications.map((n) => {
+                  const isSuccessEvent = n.message.toLowerCase().includes("in") || 
+                                       n.message.toLowerCase().includes("paid") || 
+                                       n.message.toLowerCase().includes("approved");
+                  
+                  return (
+                    <div key={n.id} className={cn(
+                      "p-4 flex gap-3 items-start hover:bg-slate-50 transition-colors",
+                      !n.read && "bg-primary/5"
                     )}>
-                      {n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                      <div className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
+                        isSuccessEvent ? "bg-emerald-100 text-emerald-600" : "bg-primary/10 text-primary"
+                      )}>
+                        {isSuccessEvent ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.message}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono font-medium">{n.timestamp}</p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.message}</p>
-                      <p className="text-[10px] text-muted-foreground font-mono font-medium">{n.timestamp}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </ScrollArea>

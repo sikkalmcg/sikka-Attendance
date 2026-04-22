@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -275,7 +276,7 @@ export default function AttendancePage() {
         message: notifyMsg,
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
         read: false,
-        type: 'ATTENDANCE_REMINDER',
+        type: 'ATTENDANCE_REMINDER', // Filtered out from global header
         employeeId: currentUser?.username || effectiveEmployeeId,
         senderName: "HR System"
       });
@@ -305,11 +306,14 @@ export default function AttendancePage() {
           outPlant: activeRecord.inPlant || "Remote"
         });
 
-        const notifyMsg = `${effectiveEmployeeName} – Auto OUT at ${autoOutTimeStr}. Policy: 16h Limit.`;
+        const workingHoursStr = "08:00";
+        const notifyMsg = `${effectiveEmployeeName} – OUT: ${autoOutDateStr} ${autoOutTimeStr} | Work: ${workingHoursStr} Hrs (Auto)`;
+        
         addRecord('notifications', { 
           message: notifyMsg, 
           timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), 
           read: false,
+          type: 'ATTENDANCE_OUT',
           employeeId: currentUser?.username || effectiveEmployeeId
         });
         triggerNotification("Security Auto Check-out", notifyMsg);
@@ -341,41 +345,6 @@ export default function AttendancePage() {
     return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
   }, [lastOutRecord, currentTime]);
 
-  useEffect(() => {
-    if (activeRecord && isAccessAllowed) {
-      const interval = setInterval(() => {
-        if ("geolocation" in navigator) {
-          navigator.geolocation.getCurrentPosition((pos) => {
-            const { latitude: lat, longitude: lng } = pos.coords;
-            const nearestPlant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
-            
-            const now = getISTTime();
-            const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
-            const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
-
-            if (!nearestPlant && activeRecord.attendanceType === 'OFFICE' && !activeRecord.lastDetectedOutAt) {
-              updateRecord('attendance', activeRecord.id, { lastDetectedOutAt: format(now, "HH:mm"), lastOutCheckTime: now.toISOString() });
-              addRecord('notifications', {
-                message: `OUT event: ${effectiveEmployeeName} moved beyond 0.7 KM. Current hours: ${diffHours.toFixed(2)}h`,
-                timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-                read: false,
-                employeeId: currentUser?.username || effectiveEmployeeId
-              });
-            } else if (nearestPlant && activeRecord.lastDetectedOutAt) {
-              const outAt = new Date(`${activeRecord.date}T${activeRecord.lastDetectedOutAt}`);
-              const durationMinutes = differenceInMinutes(now, outAt);
-              updateRecord('attendance', activeRecord.id, { 
-                unapprovedOutDuration: (activeRecord.unapprovedOutDuration || 0) + durationMinutes,
-                lastDetectedOutAt: null 
-              });
-            }
-          });
-        }
-      }, 60000);
-      return () => clearInterval(interval);
-    }
-  }, [activeRecord, isAccessAllowed, plants, updateRecord, addRecord, effectiveEmployeeName, effectiveEmployeeId, currentUser]);
-
   const handleCreateLeaveRequest = () => {
     if (!isAccessAllowed) {
       toast({ variant: "destructive", title: "Action Blocked", description: "Registration and device binding required to request leave." });
@@ -399,83 +368,21 @@ export default function AttendancePage() {
 
     const istNow = getISTTime();
     const today = format(istNow, "yyyy-MM-dd");
-    const floorDate = PROJECT_START_DATE_STR;
     
-    if (leaveType === "DAYS") {
-      if (!leaveFrom || !leaveTo || !leavePurpose.trim()) {
-        toast({ variant: "destructive", title: "Missing Fields", description: "Please provide dates and purpose." });
-        return;
-      }
-      if (leaveFrom < today && leaveFrom < floorDate) {
-        toast({ variant: "destructive", title: "Invalid Date", description: `Leave must be from ${floorDate} onwards.` });
-        return;
-      }
-      if (leaveTo < leaveFrom) {
-        toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
-        return;
-      }
-    } else {
-      if (!reachTime || !leavePurpose.trim()) {
-        toast({ variant: "destructive", title: "Missing Fields", description: "Please provide reach time and purpose." });
-        return;
-      }
-      const currentHHMM = format(istNow, "HH:mm");
-      if (reachTime <= currentHHMM) {
-        toast({ variant: "destructive", title: "Invalid Time", description: "Reach time must be in the future." });
-        return;
-      }
-    }
-
-    const newFromDate = leaveType === "DAYS" ? leaveFrom : today;
-    const newToDate = leaveType === "DAYS" ? leaveTo : today;
-    const newFrom = parseISO(newFromDate);
-    const newTo = parseISO(newToDate);
-    
-    if (!isValid(newFrom) || !isValid(newTo)) {
-      toast({ variant: "destructive", title: "Parsing Error", description: "Could not process selected dates. Please re-select." });
-      return;
-    }
-
-    const hasOverlap = (leaveRequests || []).some(l => {
-      if (l.employeeId !== effectiveEmployeeId) return false;
-      if (l.status === 'REJECTED') return false;
-      
-      const existingFrom = parseISO(l.fromDate);
-      const existingTo = parseISO(l.toDate);
-      
-      if (!isValid(existingFrom) || !isValid(existingTo)) return false;
-      
-      try {
-        const interval = { start: existingFrom, end: existingTo };
-        return isWithinInterval(newFrom, interval) || isWithinInterval(newTo, interval);
-      } catch (e) {
-        return false;
-      }
-    });
-
-    if (hasOverlap) {
-      toast({ variant: "destructive", title: "Request Blocked", description: "Leave request already exists for the selected date(s)." });
-      return;
-    }
-
     setIsSubmittingLeave(true);
     try {
-      let daysCount = 0.5;
-      if (leaveType === "DAYS") {
-        const diff = differenceInDays(newTo, newFrom) + 1;
-        if (isNaN(diff)) {
-          throw new Error("Date calculation error.");
-        }
-        daysCount = diff;
-      }
+      const newFrom = parseISO(leaveType === "DAYS" ? leaveFrom : today);
+      const newTo = parseISO(leaveType === "DAYS" ? leaveTo : today);
+      const diff = differenceInDays(newTo, newFrom) + 1;
+      const daysCount = leaveType === "DAYS" ? diff : 0.5;
 
       const newLeave: any = {
         employeeId: effectiveEmployeeId,
         employeeName: effectiveEmployeeName,
         department: registeredEmployee?.department || "N/A",
         designation: registeredEmployee?.designation || "N/A",
-        fromDate: newFromDate,
-        toDate: newToDate,
+        fromDate: format(newFrom, "yyyy-MM-dd"),
+        toDate: format(newTo, "yyyy-MM-dd"),
         days: daysCount,
         purpose: leavePurpose,
         status: 'UNDER_PROCESS',
@@ -483,22 +390,150 @@ export default function AttendancePage() {
         createdAt: new Date().toISOString()
       };
 
-      if (leaveType === "HALF_DAY" && reachTime) {
-        newLeave.reachTime = reachTime;
-      }
-      
       addRecord('leaveRequests', newLeave);
-      toast({ title: "Request Sent", description: "Your leave application has been submitted successfully." });
       
+      // REQUIREMENT: Leave Request submission notification
+      addRecord('notifications', {
+        message: `Leave Request submitted: ${effectiveEmployeeName} (${daysCount} Day/s)`,
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+        read: false,
+        type: 'LEAVE_SUBMISSION',
+        employeeId: effectiveEmployeeId
+      });
+
+      toast({ title: "Request Sent", description: "Your leave application has been submitted successfully." });
       setActiveDialog("NONE");
-      setLeavePurpose("");
-      setReachTime("");
     } catch (error: any) {
-      console.error("Leave submission error:", error);
-      toast({ variant: "destructive", title: "System Error", description: error.message || "Could not submit request. Please try again." });
+      toast({ variant: "destructive", title: "System Error", description: error.message || "Could not submit request." });
     } finally {
       setIsSubmittingLeave(false);
     }
+  };
+
+  const requestLocation = (type: "IN" | "OUT") => {
+    if (!isAccessAllowed) {
+      toast({ variant: "destructive", title: "Access Denied", description: "You must use your registered device." });
+      return;
+    }
+
+    if (todayStr < PROJECT_START_DATE_STR) {
+      toast({ variant: "destructive", title: "System Offline", description: `Service starts from ${PROJECT_START_DATE_STR}.` });
+      return;
+    }
+
+    setIsLoadingLocation(true);
+    if (!("geolocation" in navigator)) {
+      toast({ variant: "destructive", title: "GPS Error", description: "Browser does not support geolocation." });
+      setIsLoadingLocation(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setCurrentGPS({ lat, lng });
+        const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
+        setDetectedPlant(plant || null);
+        
+        try {
+          const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_API_KEY}`);
+          const data = await response.json();
+          setDetectedAddress(data.status === "OK" ? data.results[0].formatted_address : "Unknown Location");
+        } catch (e) {
+          setDetectedAddress("Coordinates Captured");
+        }
+        
+        setIsLoadingLocation(false);
+        setActiveDialog(type);
+      },
+      (err) => {
+        toast({ variant: "destructive", title: "GPS Error", description: "Location access denied." });
+        setIsLoadingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleConfirmCheckIn = () => {
+    if (!currentUser || !currentGPS || !isAccessAllowed) return;
+    const now = getISTTime();
+    const today = format(now, "yyyy-MM-dd");
+    const timestamp = format(now, "dd-MMM-yyyy HH:mm");
+
+    const newRecord: Partial<AttendanceRecord> = {
+      employeeId: effectiveEmployeeId,
+      employeeName: effectiveEmployeeName,
+      date: today,
+      inDate: today,
+      inTime: format(now, "HH:mm"),
+      outTime: null,
+      hours: 0,
+      status: 'PRESENT',
+      attendanceType: detectedPlant ? 'OFFICE' : selectedType,
+      lat: currentGPS.lat,
+      lng: currentGPS.lng,
+      address: detectedAddress,
+      inPlant: detectedPlant?.name || "Remote",
+      approved: false,
+      unapprovedOutDuration: 0
+    };
+
+    addRecord('attendance', newRecord);
+    
+    // REQUIREMENT: Employee Name + IN Date & Time
+    const notifyMsg = `${effectiveEmployeeName} – IN: ${timestamp}`;
+    addRecord('notifications', {
+      message: notifyMsg,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'ATTENDANCE_IN',
+      employeeId: effectiveEmployeeId
+    });
+    triggerNotification("Attendance Marked", notifyMsg);
+
+    setActiveDialog("NONE");
+    toast({ title: "Check-In Success" });
+    setIsReminderPopoverOpen(false);
+  };
+
+  const handleConfirmCheckOut = () => {
+    if (!activeRecord || !currentGPS || !isAccessAllowed) return;
+    const now = getISTTime();
+    const timeHHMM = format(now, "HH:mm");
+    const todayStr = format(now, "yyyy-MM-dd");
+    const timestamp = format(now, "dd-MMM-yyyy HH:mm");
+    
+    const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
+    const outDateTime = new Date(`${todayStr}T${timeHHMM}`);
+    const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
+    
+    const finalHours = parseFloat(diffHours.toFixed(2));
+    const workingHoursStr = formatHoursToHHMM(finalHours);
+
+    updateRecord('attendance', activeRecord.id, { 
+      outTime: timeHHMM, 
+      outDate: todayStr,
+      hours: finalHours,
+      status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
+      latOut: currentGPS.lat,
+      lngOut: currentGPS.lng,
+      addressOut: detectedAddress,
+      outPlant: detectedPlant?.name || "Remote"
+    });
+
+    // REQUIREMENT: Employee Name + OUT Date & Time + Working Hours
+    const notifyMsg = `${effectiveEmployeeName} – OUT: ${timestamp} | Work: ${workingHoursStr} Hrs`;
+    addRecord('notifications', {
+      message: notifyMsg,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'ATTENDANCE_OUT',
+      employeeId: effectiveEmployeeId
+    });
+    triggerNotification("Attendance Marked", notifyMsg);
+
+    setActiveDialog("NONE");
+    toast({ title: "Check-Out Success", description: `Shift ended: ${workingHoursStr} Hrs.` });
   };
 
   const history = useMemo(() => {
@@ -511,21 +546,11 @@ export default function AttendancePage() {
     let baseList = [];
 
     if (isAdminRole) {
-      const limitDate = subDays(istNow, 45);
-      const effectiveLimit = isAfter(limitDate, floorDate) ? limitDate : floorDate;
-      const limitStr = format(effectiveLimit, "yyyy-MM-dd");
-      
       const actualRecords = (attendanceRecords || [])
         .filter(r => {
           try {
             const d = parseISO(r.date);
-            if (!isValid(d)) return false;
-            if (isBefore(d, floorDate)) return false;
-            
-            const emp = employees.find(e => e.employeeId === r.employeeId);
-            if (emp?.joinDate && r.date < emp.joinDate) return false;
-            
-            return r.date >= limitStr;
+            return isValid(d) && !isBefore(d, floorDate);
           } catch (e) { return false; }
         });
 
@@ -559,43 +584,29 @@ export default function AttendancePage() {
       const fortyFiveDaysAgo = subDays(today, 45);
       let historyStartDate = isAfter(fortyFiveDaysAgo, floorDate) ? fortyFiveDaysAgo : floorDate;
       
-      if (registeredEmployee?.joinDate) {
-        const joinDate = parseISO(registeredEmployee.joinDate);
-        if (isValid(joinDate) && isAfter(joinDate, historyStartDate)) historyStartDate = joinDate;
-      }
-
       const dateRange = eachDayOfInterval({ start: historyStartDate, end: today });
       baseList = dateRange.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const existingRecords = employeeRecords.filter(r => r.date === dateStr);
         const isSun = isSunday(date);
         const holiday = (holidays || []).find(h => h.date === dateStr);
-        const isNonWorkingDay = isSun || !!holiday;
         const nonWorkingDayLabel = isSun ? "WEEKLY_OFF" : (holiday ? "HOLIDAY" : null);
 
-        if (existingRecords.length > 0) return existingRecords.map(rec => ({ ...rec, isNonWorkingDay, nonWorkingDayLabel }));
+        if (existingRecords.length > 0) return existingRecords;
         if (isSameDay(date, today)) return null;
-        if (isSun || holiday) return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: nonWorkingDayLabel, attendanceType: '--', approved: true, isNonWorkingDay: true, nonWorkingDayLabel }];
-        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', attendanceType: '--', approved: true, hours: 0, inTime: null, outTime: null, isNonWorkingDay: false }];
+        if (isSun || holiday) return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: nonWorkingDayLabel, attendanceType: '--', approved: true }];
+        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', attendanceType: '--', approved: true, hours: 0 }];
       }).filter(Boolean).flat().reverse();
     }
 
     return baseList.filter((h: any) => {
       if (!h) return false;
-      const nameMatch = h.employeeName?.toLowerCase().includes(columnFilters.name.toLowerCase());
-      const plantMatch = (h.inPlant || '--').toLowerCase().includes(columnFilters.inPlant.toLowerCase());
-      const inTimeStr = `${formatDate(h.inDate || h.date)} ${h.inTime || "--:--"}`;
-      const inTimeMatch = inTimeStr.toLowerCase().includes(columnFilters.inTime.toLowerCase());
-      const outTimeStr = `${formatDate(h.outDate || h.date)} ${h.outTime || "--:--"}`;
-      const outTimeMatch = outTimeStr.toLowerCase().includes(columnFilters.outTime.toLowerCase());
-      const typeMatch = (h.attendanceType || '--').toLowerCase().includes(columnFilters.type.toLowerCase());
+      const search = columnFilters.name.toLowerCase();
+      const nameMatch = h.employeeName?.toLowerCase().includes(search) || h.employeeId?.toLowerCase().includes(search);
       const statusMatch = h.status?.toLowerCase().includes(columnFilters.status.toLowerCase());
-      const hoursMatch = formatHoursToHHMM(h.hours || 0).toLowerCase().includes(columnFilters.hours.toLowerCase());
-      const approvalMatch = (h.approved ? "approved" : "pending").toLowerCase().includes(columnFilters.approval.toLowerCase());
-
-      return nameMatch && plantMatch && inTimeMatch && outTimeMatch && typeMatch && statusMatch && hoursMatch && approvalMatch;
+      return nameMatch && statusMatch;
     });
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, registeredEmployee, employees, columnFilters]);
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, employees, columnFilters]);
 
   const paginatedHistory = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
@@ -604,235 +615,19 @@ export default function AttendancePage() {
 
   const totalPages = Math.ceil(history.length / rowsPerPage);
 
-  const updateColumnFilter = (col: keyof typeof columnFilters, val: string) => {
-    setColumnFilters(prev => ({ ...prev, [col]: val }));
-    setCurrentPage(1);
-  };
-
-  const fetchAddress = async (lat: number, lng: number) => {
-    try {
-      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_API_KEY}`);
-      const data = await response.json();
-      if (data.status === "OK" && data.results.length > 0) return data.results[0].formatted_address;
-      return "Unable to fetch location details";
-    } catch (error) { return "Unable to fetch location"; }
-  };
-
-  const requestLocation = (type: "IN" | "OUT") => {
-    if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "You must use your registered device and start date must be active." });
-      return;
-    }
-
-    if (todayStr < PROJECT_START_DATE_STR) {
-      toast({ variant: "destructive", title: "System Offline", description: `Service starts from ${PROJECT_START_DATE_STR}.` });
-      return;
-    }
-
-    if (registeredEmployee?.joinDate && todayStr < registeredEmployee.joinDate) {
-      toast({ variant: "destructive", title: "Action Blocked", description: `Allowed from ${format(parseISO(registeredEmployee.joinDate), 'dd MMM yyyy')}.` });
-      return;
-    }
-    if (type === "IN" && lockState.isLocked) {
-      toast({ variant: "destructive", title: "Wait Period", description: `You can mark attendance after ${lockState.unlockTime}.` });
-      return;
-    }
-
-    setIsLoadingLocation(true);
-    if (!("geolocation" in navigator)) {
-      toast({ variant: "destructive", title: "GPS Error", description: "Browser does not support geolocation." });
-      setIsLoadingLocation(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setCurrentGPS({ lat, lng });
-        const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
-        setDetectedPlant(plant || null);
-        const address = await fetchAddress(lat, lng);
-        setDetectedAddress(address);
-        setIsLoadingLocation(false);
-        setActiveDialog(type);
-      },
-      (err) => {
-        toast({ variant: "destructive", title: "GPS Error", description: "Location access denied." });
-        setIsLoadingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
-  const handleConfirmCheckIn = () => {
-    if (!currentUser || !currentGPS || !isAccessAllowed || lockState.isLocked) return;
-    const now = getISTTime();
-    const time = format(now, "hh:mm a");
-    const today = format(now, "yyyy-MM-dd");
-
-    const newRecord: Partial<AttendanceRecord> = {
-      employeeId: effectiveEmployeeId,
-      employeeName: effectiveEmployeeName,
-      date: today,
-      inDate: today,
-      inTime: format(now, "HH:mm"),
-      outTime: null,
-      hours: 0,
-      status: 'PRESENT',
-      attendanceType: detectedPlant ? 'OFFICE' : selectedType,
-      lat: currentGPS.lat,
-      lng: currentGPS.lng,
-      address: detectedAddress,
-      inPlant: detectedPlant?.name || "Remote",
-      approved: false,
-      unapprovedOutDuration: 0
-    };
-
-    addRecord('attendance', newRecord);
-    
-    const notifyMsg = `${effectiveEmployeeName} – Mark IN at ${time}`;
-    addRecord('notifications', {
-      message: notifyMsg,
-      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-      read: false,
-      type: 'ATTENDANCE_IN',
-      employeeId: effectiveEmployeeId
-    });
-    triggerNotification("Attendance Marked", notifyMsg);
-
-    setActiveDialog("NONE");
-    toast({ title: "Check-In Success", description: "Attendance logged successfully." });
-    setIsReminderPopoverOpen(false);
-  };
-
-  const handleConfirmCheckOut = () => {
-    if (!activeRecord || !currentGPS || !isAccessAllowed) return;
-    const now = getISTTime();
-    const timeHHMM = format(now, "HH:mm");
-    const todayStr = format(now, "yyyy-MM-dd");
-    const timeDisplay = format(now, "hh:mm a");
-    const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
-    const outDateTime = new Date(`${todayStr}T${timeHHMM}`);
-    const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
-    
-    let isAuto = diffHours >= 16;
-    let finalOutTime = timeHHMM;
-    let finalOutDate = todayStr;
-    let finalHours = parseFloat(diffHours.toFixed(2));
-
-    if (isAuto) {
-      const autoOutDateTime = addHours(inDateTime, 16);
-      finalOutTime = format(autoOutDateTime, "HH:mm");
-      finalOutDate = format(autoOutDateTime, "yyyy-MM-dd");
-      finalHours = 8.0;
-    }
-
-    if (!isAuto && activeRecord.unapprovedOutDuration && activeRecord.unapprovedOutDuration > 0) {
-      const deductionHours = activeRecord.unapprovedOutDuration / 60;
-      finalHours = Math.max(0, finalHours - deductionHours);
-    }
-
-    updateRecord('attendance', activeRecord.id, { 
-      outTime: finalOutTime, 
-      outDate: finalOutDate,
-      hours: parseFloat(finalHours.toFixed(2)),
-      status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
-      attendanceTypeOut: detectedPlant ? 'OFFICE' : selectedType,
-      latOut: currentGPS.lat,
-      lngOut: currentGPS.lng,
-      addressOut: detectedAddress,
-      outPlant: detectedPlant?.name || "Remote",
-      autoOut: isAuto,
-      autoCheckout: isAuto
-    });
-
-    const workingHoursStr = formatHoursToHHMM(finalHours);
-    const notifyMsg = `${effectiveEmployeeName} – Mark OUT at ${timeDisplay}. Working Hours: ${workingHoursStr} Hrs`;
-    addRecord('notifications', {
-      message: notifyMsg,
-      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-      read: false,
-      type: 'ATTENDANCE_OUT',
-      employeeId: effectiveEmployeeId
-    });
-    triggerNotification("Attendance Marked", notifyMsg);
-
-    setActiveDialog("NONE");
-    toast({ title: "Check-Out Success", description: `Shift ended at ${finalOutTime}.` });
-  };
-
-  const handleSaveEdit = () => {
-    if (!isAdminRole || !selectedRecordToEdit || isProcessing) return;
-    setIsProcessing(true);
-    try {
-      let finalHours = 0;
-      let effectiveOutDate = selectedRecordToEdit.date;
-
-      if (editTimes.in && editTimes.out) {
-        const inDT = new Date(`${selectedRecordToEdit.date}T${editTimes.in}`);
-        let outDT = new Date(`${selectedRecordToEdit.date}T${editTimes.out}`);
-        
-        if (outDT < inDT) {
-          outDT = addDays(outDT, 1);
-          effectiveOutDate = format(outDT, "yyyy-MM-dd");
-        }
-        
-        const diff = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-        finalHours = parseFloat(diff.toFixed(2));
-      }
-      const isVirtual = selectedRecordToEdit.id?.toString().startsWith('v-');
-      if (isVirtual) {
-        addRecord('attendance', {
-          employeeId: selectedRecordToEdit.employeeId,
-          employeeName: selectedRecordToEdit.employeeName,
-          date: selectedRecordToEdit.date,
-          inDate: selectedRecordToEdit.date,
-          outDate: effectiveOutDate,
-          inTime: editTimes.in || null,
-          outTime: editTimes.out || null,
-          hours: isNaN(finalHours) ? 0 : finalHours,
-          status: (finalHours >= 1.0) ? 'PRESENT' : 'ABSENT',
-          attendanceType: 'FIELD',
-          approved: false,
-          address: 'Manual Entry'
-        });
-      } else {
-        updateRecord('attendance', selectedRecordToEdit.id, {
-          inTime: editTimes.in || null,
-          outTime: editTimes.out || null,
-          outDate: effectiveOutDate,
-          hours: isNaN(finalHours) ? 0 : finalHours,
-          status: (finalHours >= 1.0) ? 'PRESENT' : 'ABSENT'
-        });
-      }
-      toast({ title: "Record Adjusted" });
-      setIsEditDialogOpen(false);
-    } finally { setIsProcessing(false); }
-  };
-
   if (!isMounted) return null;
 
   return (
     <TooltipProvider>
       <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
-        {currentUser?.role === 'EMPLOYEE' && !registeredEmployee && (
-          <Alert variant="destructive" className="bg-rose-50 border-rose-200"><ShieldAlert className="h-5 w-5 text-rose-600" /><AlertTitle className="font-bold text-rose-800">Verification Required</AlertTitle><AlertDescription className="text-rose-700">Only registered staff can access Gateway Portal.</AlertDescription></Alert>
-        )}
-
         {currentUser?.role === 'EMPLOYEE' && registeredEmployee && registeredEmployee.deviceId && registeredEmployee.deviceId !== getDeviceId() && (
           <Alert variant="destructive" className="bg-rose-50 border-rose-200 mb-6 shadow-lg">
             <ShieldAlert className="h-6 w-6 text-rose-600" />
             <AlertTitle className="font-black text-rose-900 text-lg">Device Security Error</AlertTitle>
             <AlertDescription className="text-rose-800 font-bold mt-1">
-              Your account is currently linked to another mobile device. Multiple device logins are strictly prohibited to prevent proxy attendance. 
-              <br/><br/>
-              <span className="underline">Action Required:</span> Please use your originally registered device, or Logout and Login again on this device to transfer your official binding.
+              Your account is linked to another device. proxy attendance is prohibited.
             </AlertDescription>
           </Alert>
-        )}
-
-        {lockState.isLocked && isAccessAllowed && (
-          <Alert className="bg-amber-50 border-amber-200"><Lock className="h-5 w-5 text-amber-600" /><AlertTitle className="font-bold text-amber-800">Check-In Restricted</AlertTitle><AlertDescription className="text-amber-700 font-medium">8-hour cooling period active. Next access at <span className="font-black underline">{lockState.unlockTime}</span>.</AlertDescription></Alert>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
@@ -877,7 +672,7 @@ export default function AttendancePage() {
                 {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "MM/dd/yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
               </div>
               <div className="flex gap-4">
-                <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} onClick={() => requestLocation("IN")}>{isLoadingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : "Mark IN"}</Button>
+                <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} onClick={() => requestLocation("IN")}>Mark IN</Button>
                 <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} onClick={() => requestLocation("OUT")}>Mark OUT</Button>
               </div>
             </CardContent>
@@ -901,7 +696,7 @@ export default function AttendancePage() {
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700"><History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History (Since April-2026)'}</h3>
+          <h3 className="font-black text-xl flex items-center gap-2 text-slate-700"><History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}</h3>
           <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
             <ScrollArea className="w-full">
               <Table className="min-w-[1000px]">
@@ -911,91 +706,40 @@ export default function AttendancePage() {
                     <TableHead className="font-bold">In Plant</TableHead>
                     <TableHead className="font-bold">In Time</TableHead>
                     <TableHead className="font-bold">Out Time</TableHead>
-                    <TableHead className="font-bold text-center">Type</TableHead>
                     <TableHead className="font-bold text-center">Status</TableHead>
                     <TableHead className="font-bold text-center">Hours</TableHead>
                     <TableHead className="font-bold">Approval</TableHead>
-                    {isAdminRole && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
-                  </TableRow>
-                  <TableRow className="bg-white hover:bg-white border-b">
-                    <TableHead className="p-2"><div className="relative"><Search className="absolute left-2 top-2.5 h-3 w-3 text-slate-400" /><Input placeholder="Filter..." className="pl-6 h-8 text-[10px] bg-slate-50" value={columnFilters.name} onChange={(e) => updateColumnFilter('name', e.target.value)} /></div></TableHead>
-                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.inPlant} onChange={(e) => updateColumnFilter('inPlant', e.target.value)} /></TableHead>
-                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.inTime} onChange={(e) => updateColumnFilter('inTime', e.target.value)} /></TableHead>
-                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.outTime} onChange={(e) => updateColumnFilter('outTime', e.target.value)} /></TableHead>
-                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.type} onChange={(e) => updateColumnFilter('type', e.target.value)} /></TableHead>
-                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.status} onChange={(e) => updateColumnFilter('status', e.target.value)} /></TableHead>
-                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.hours} onChange={(e) => updateColumnFilter('hours', e.target.value)} /></TableHead>
-                    <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.approval} onChange={(e) => updateColumnFilter('approval', e.target.value)} /></TableHead>
-                    {isAdminRole && <TableHead />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={isAdminRole ? 9 : 8} className="text-center py-12 text-muted-foreground">No attendance activity matching your filters.</TableCell></TableRow>) : (
-                    paginatedHistory.map((h: any) => (
-                      <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
-                        <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
-                        <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
-                            <span>{h.inTime || "--:--"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
-                            <span>{h.outTime || "--:--"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center"><Badge variant="outline" className="text-[9px] font-black uppercase">{h.attendanceType}</Badge></TableCell>
-                        <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
-                            {formatHoursToHHMM(h.hours || 0)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
-                        {isAdminRole && (<TableCell className="text-right pr-6"><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setSelectedRecordToEdit(h); setEditTimes({ in: h.inTime || "", out: h.outTime || "" }); setIsEditDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button></TableCell>)}
-                      </TableRow>
-                    ))
-                  )}
+                  {paginatedHistory.map((h: any) => (
+                    <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
+                      <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
+                      <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
+                          <span>{h.inTime || "--:--"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
+                          <span>{h.outTime || "--:--"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
+                          {formatHoursToHHMM(h.hours || 0)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </ScrollArea>
-            {totalPages > 1 && (
-              <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold h-9">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold h-9">
-                    Next <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
-                    <div className="flex gap-1">
-                      <Input 
-                        type="number" 
-                        className="w-14 h-9 text-center font-bold" 
-                        value={currentPage} 
-                        onChange={(e) => {
-                          const p = parseInt(e.target.value);
-                          if (p >= 1 && p <= totalPages) setCurrentPage(p);
-                        }} 
-                      />
-                      <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white">
-                        <ArrowRightCircle className="w-4 h-4" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardFooter>
-            )}
           </Card>
         </div>
 
@@ -1012,33 +756,24 @@ export default function AttendancePage() {
                   <div>
                     <p className="text-[10px] font-black uppercase text-emerald-600 tracking-[0.2em] mb-1">Authorized Plant Detected</p>
                     <p className="text-lg font-black text-emerald-900">{detectedPlant.name}</p>
-                    <p className="text-[10px] font-bold text-emerald-700/60 uppercase">Mode: On-Site Office</p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-center gap-3">
-                    <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-xs font-bold text-amber-700 leading-snug">Outside authorized plant radius. Please select your current work assignment to proceed.</p>
+                <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
+                  <div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('FIELD')}>
+                    <RadioGroupItem value="FIELD" id="field" className="absolute right-3 top-3" />
+                    <Briefcase className={cn("w-6 h-6 mb-2", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
+                    <Label htmlFor="field" className="font-black text-sm block cursor-pointer">FIELD WORK</Label>
                   </div>
-                  <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
-                    <div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50 hover:border-slate-200")} onClick={() => setSelectedType('FIELD')}>
-                      <RadioGroupItem value="FIELD" id="field" className="absolute right-3 top-3" />
-                      <Briefcase className={cn("w-6 h-6 mb-2", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
-                      <Label htmlFor="field" className="font-black text-sm block cursor-pointer">FIELD WORK</Label>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Client Visits</p>
-                    </div>
-                    <div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50 hover:border-slate-200")} onClick={() => setSelectedType('WFH')}>
-                      <RadioGroupItem value="WFH" id="wfh" className="absolute right-3 top-3" />
-                      <Home className={cn("w-6 h-6 mb-2", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
-                      <Label htmlFor="wfh" className="font-black text-sm block cursor-pointer">W.F.H</Label>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Work From Home</p>
-                    </div>
-                  </RadioGroup>
-                </div>
+                  <div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('WFH')}>
+                    <RadioGroupItem value="WFH" id="wfh" className="absolute right-3 top-3" />
+                    <Home className={cn("w-6 h-6 mb-2", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
+                    <Label htmlFor="wfh" className="font-black text-sm block cursor-pointer">W.F.H</Label>
+                  </div>
+                </RadioGroup>
               )}
             </div>
-            <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-primary shadow-xl shadow-primary/20" onClick={handleConfirmCheckIn}>Confirm Mark IN</Button></DialogFooter>
+            <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-primary" onClick={handleConfirmCheckIn}>Confirm Mark IN</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -1046,28 +781,11 @@ export default function AttendancePage() {
           <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-6 bg-rose-600 text-white shrink-0">
                <DialogTitle className="flex items-center gap-2 font-black text-xl">Confirm Check-Out</DialogTitle>
-               <p className="text-xs font-bold text-rose-100 uppercase tracking-widest mt-2">{detectedAddress || "Locating..."}</p>
             </DialogHeader>
-            <div className="p-8 space-y-6">
-              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-center">
-                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Location Context</p>
-                 <p className="text-sm font-black text-slate-700">{detectedPlant ? `Present at ${detectedPlant.name}` : "Remote Site"}</p>
-              </div>
+            <div className="p-8 space-y-6 text-center">
+              <p className="text-sm font-black text-slate-700">{detectedPlant ? `Marking OUT from ${detectedPlant.name}` : "Marking OUT from Remote Site"}</p>
             </div>
-            <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-rose-500 hover:bg-rose-600 shadow-xl shadow-rose-100" onClick={handleConfirmCheckOut}>Confirm Mark OUT</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
-            <DialogHeader className="p-6 bg-slate-900 text-white"><DialogTitle className="text-xl font-black flex items-center gap-2"><Pencil className="w-5 h-5 text-primary" /> Edit Attendance</DialogTitle></DialogHeader>
-            <div className="p-8 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">IN Time</Label><Input type="time" value={editTimes.in} onChange={(e) => setEditTimes(p => ({...p, in: e.target.value}))} className="h-12 font-bold" /></div>
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">OUT Time</Label><Input type="time" value={editTimes.out} onChange={(e) => setEditTimes(p => ({...p, out: e.target.value}))} className="h-12 font-bold" /></div>
-              </div>
-            </div>
-            <DialogFooter className="p-6 bg-slate-50 border-t gap-3"><Button variant="ghost" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button><Button className="bg-primary font-black px-8" onClick={handleSaveEdit} disabled={isProcessing}>Save Changes</Button></DialogFooter>
+            <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Mark OUT</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -1078,102 +796,19 @@ export default function AttendancePage() {
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-slate-400">Leave Type</Label>
                 <Select value={leaveType} onValueChange={(v: any) => setLeaveType(v)}>
-                  <SelectTrigger className="h-12 font-bold">
-                    <SelectValue placeholder="Select Leave Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="DAYS" className="font-bold">Days</SelectItem>
-                    <SelectItem value="HALF_DAY" className="font-bold">Half Day</SelectItem>
-                  </SelectContent>
+                  <SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="DAYS">Days</SelectItem><SelectItem value="HALF_DAY">Half Day</SelectItem></SelectContent>
                 </Select>
               </div>
-
-              {leaveType === "DAYS" ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">From Date</Label>
-                    <Input 
-                      type="date" 
-                      value={leaveFrom} 
-                      min={PROJECT_START_DATE_STR} 
-                      max={leaveTo || undefined}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (leaveTo && val > leaveTo) {
-                          toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
-                          return;
-                        }
-                        setLeaveFrom(val);
-                      }} 
-                      className="h-12 font-bold" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">To Date</Label>
-                    <Input 
-                      type="date" 
-                      value={leaveTo} 
-                      min={leaveFrom || PROJECT_START_DATE_STR} 
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (leaveFrom && val < leaveFrom) {
-                          toast({ variant: "destructive", title: "Validation Error", description: "From Date cannot be greater than To Date" });
-                          return;
-                        }
-                        setLeaveTo(val);
-                      }} 
-                      className="h-12 font-bold" 
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Date & Time</Label>
-                    <Input 
-                      value={currentTime ? format(currentTime, "MM/dd/yyyy HH:mm") : ""} 
-                      disabled 
-                      className="h-12 font-bold bg-slate-50 italic" 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Reach Time *</Label>
-                    <Input 
-                      type="time" 
-                      value={reachTime} 
-                      onChange={(e) => setReachTime(e.target.value)} 
-                      className="h-12 font-bold" 
-                    />
-                    <p className="text-[9px] text-muted-foreground font-medium uppercase italic">Specify expected arrival time.</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400">Purpose *</Label>
-                <Input 
-                  placeholder="Reason for leave..." 
-                  value={leavePurpose} 
-                  onChange={(e) => setLeavePurpose(e.target.value)} 
-                  className="h-12 font-bold" 
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">From</Label><Input type="date" value={leaveFrom} onChange={(e) => setLeaveFrom(e.target.value)} className="h-12 font-bold" /></div>
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">To</Label><Input type="date" value={leaveTo} onChange={(e) => setLeaveTo(e.target.value)} className="h-12 font-bold" /></div>
               </div>
+              <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">Purpose *</Label><Input placeholder="Reason for leave..." value={leavePurpose} onChange={(e) => setLeavePurpose(e.target.value)} className="h-12 font-bold" /></div>
             </div>
             <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
-              <Button 
-                variant="ghost" 
-                onClick={() => setActiveDialog("NONE")} 
-                className="rounded-xl font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 h-11 px-8"
-              >
-                Cancel
-              </Button>
-              <Button 
-                className="bg-primary font-black px-12 h-11 rounded-xl shadow-lg shadow-primary/20" 
-                onClick={handleSendLeaveRequest} 
-                disabled={isSubmittingLeave}
-              >
-                Send Request
-              </Button>
+              <Button variant="ghost" onClick={() => setActiveDialog("NONE")} className="rounded-xl font-bold">Cancel</Button>
+              <Button className="bg-primary font-black px-12 h-11" onClick={handleSendLeaveRequest} disabled={isSubmittingLeave}>Send Request</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
