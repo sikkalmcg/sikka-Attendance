@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -154,79 +155,77 @@ function HeaderActions() {
 
   return (
     <div className="flex items-center gap-5">
-      {verifiedUser.role !== 'EMPLOYEE' && (
-        <Popover onOpenChange={(open) => open && markAllRead()}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
-                  <Bell className="w-5 h-5 text-slate-500" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
-                      {unreadCount}
-                    </span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-            </TooltipTrigger>
-            <TooltipContent>Activity Notifications</TooltipContent>
-          </Tooltip>
-          <PopoverContent className="w-80 p-0 overflow-hidden rounded-2xl shadow-2xl border-none mt-2" align="end">
-            <div className="bg-primary p-4 text-white flex items-center justify-between">
-              <div>
-                <h3 className="font-black text-sm uppercase tracking-widest">Notifications</h3>
-                <p className="text-[10px] text-white/70 font-bold">Recent Activity Logs</p>
-              </div>
-              {unreadCount > 0 && (
-                <Badge variant="secondary" className="bg-white/20 text-white border-none font-bold text-[10px]">
-                  {unreadCount} New
-                </Badge>
-              )}
+      <Popover onOpenChange={(open) => open && markAllRead()}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-xl bg-slate-50 border hover:bg-slate-100 transition-all">
+                <Bell className="w-5 h-5 text-slate-500" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce shadow-sm">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Activity Notifications</TooltipContent>
+        </Tooltip>
+        <PopoverContent className="w-80 p-0 overflow-hidden rounded-2xl shadow-2xl border-none mt-2" align="end">
+          <div className="bg-primary p-4 text-white flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-sm uppercase tracking-widest">Notifications</h3>
+              <p className="text-[10px] text-white/70 font-bold">Recent Activity Logs</p>
             </div>
-            <ScrollArea className="max-h-[400px] custom-blue-scrollbar" tabIndex={0}>
-              {latestNotifications.length === 0 ? (
-                <div className="p-10 text-center space-y-3">
-                  <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
-                    <Bell className="w-6 h-6 text-slate-300" />
-                  </div>
-                  <p className="text-xs text-muted-foreground font-bold leading-relaxed">No logs available yet.</p>
+            {unreadCount > 0 && (
+              <Badge variant="secondary" className="bg-white/20 text-white border-none font-bold text-[10px]">
+                {unreadCount} New
+              </Badge>
+            )}
+          </div>
+          <ScrollArea className="max-h-[400px] custom-blue-scrollbar" tabIndex={0}>
+            {latestNotifications.length === 0 ? (
+              <div className="p-10 text-center space-y-3">
+                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto">
+                  <Bell className="w-6 h-6 text-slate-300" />
                 </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {latestNotifications.map((n) => (
-                    <div key={n.id} className={cn(
-                      "p-4 flex gap-3 items-start hover:bg-slate-50 transition-colors",
-                      !n.read && "bg-primary/5"
+                <p className="text-xs text-muted-foreground font-bold leading-relaxed">No logs available yet.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {latestNotifications.map((n) => (
+                  <div key={n.id} className={cn(
+                    "p-4 flex gap-3 items-start hover:bg-slate-50 transition-colors",
+                    !n.read && "bg-primary/5"
+                  )}>
+                    <div className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
+                      n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
                     )}>
-                      <div className={cn(
-                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-                        n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600"
-                      )}>
-                        {n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.message}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono font-medium">{n.timestamp}</p>
-                      </div>
+                      {n.message.toLowerCase().includes("in") || n.message.toLowerCase().includes("paid") ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                     </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-            {latestNotifications.length > 0 && verifiedUser.role === 'SUPER_ADMIN' && (
-              <div className="p-3 bg-slate-50 border-t text-center">
-                <Button 
-                  variant="ghost" 
-                  className="text-[10px] font-black uppercase tracking-widest text-primary h-8 w-full hover:bg-primary/5" 
-                  onClick={handleClearLogs}
-                >
-                  Clear Recent Logs
-                </Button>
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.message}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono font-medium">{n.timestamp}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-          </PopoverContent>
-        </Popover>
-      )}
+          </ScrollArea>
+          {latestNotifications.length > 0 && verifiedUser.role === 'SUPER_ADMIN' && (
+            <div className="p-3 bg-slate-50 border-t text-center">
+              <Button 
+                variant="ghost" 
+                className="text-[10px] font-black uppercase tracking-widest text-primary h-8 w-full hover:bg-primary/5" 
+                onClick={handleClearLogs}
+              >
+                Clear Recent Logs
+              </Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

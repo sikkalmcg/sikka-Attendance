@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -165,10 +166,6 @@ export default function AttendancePage() {
     return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
   }, [currentUser]);
 
-  const isSuperAdmin = useMemo(() => {
-    return currentUser?.role === 'SUPER_ADMIN';
-  }, [currentUser]);
-
   const registeredEmployee = useMemo(() => {
     if (!currentUser || !employees || employees.length === 0) return null;
     const loginIdent = currentUser.username?.replace(/\s/g, '');
@@ -278,18 +275,21 @@ export default function AttendancePage() {
       setReminderReadAt(now);
       localStorage.setItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`, now.toString());
       
-      // Push notification & log for Admin
-      const notifyMsg = `${effectiveEmployeeName} hope you reached at Office. Please mark attendance.`;
+      // REQUIREMENT: "[Employee Name], hope you reached at office. Please mark attendance."
+      const notifyMsg = `${effectiveEmployeeName}, hope you reached at office. Please mark attendance.`;
+      
       addRecord('notifications', {
         message: notifyMsg,
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
         read: false,
         type: 'ATTENDANCE_REMINDER',
-        employeeId: effectiveEmployeeId
+        employeeId: currentUser?.username || effectiveEmployeeId,
+        senderName: "HR System"
       });
-      triggerNotification("Sikka HR Reminder", notifyMsg);
+      
+      triggerNotification("Attendance Reminder", notifyMsg);
     }
-  }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord, triggerNotification]);
+  }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord, triggerNotification, currentUser]);
 
   useEffect(() => {
     if (activeRecord && isMounted && currentTime && isAccessAllowed) {
@@ -311,7 +311,12 @@ export default function AttendancePage() {
         });
 
         const notifyMsg = `${effectiveEmployeeName} – Auto OUT at ${autoOutTimeStr}. Policy: 16h Limit.`;
-        addRecord('notifications', { message: notifyMsg, timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), read: false });
+        addRecord('notifications', { 
+          message: notifyMsg, 
+          timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), 
+          read: false,
+          employeeId: currentUser?.username || effectiveEmployeeId
+        });
         triggerNotification("Security Auto Check-out", notifyMsg);
 
         toast({
@@ -320,7 +325,7 @@ export default function AttendancePage() {
         });
       }
     }
-  }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast, effectiveEmployeeName, addRecord, triggerNotification]);
+  }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast, effectiveEmployeeName, addRecord, triggerNotification, effectiveEmployeeId, currentUser]);
 
   const lastOutRecord = useMemo(() => {
     return [...employeeRecords]
@@ -358,7 +363,8 @@ export default function AttendancePage() {
               addRecord('notifications', {
                 message: `OUT event: ${effectiveEmployeeName} moved beyond 0.7 KM. Current hours: ${diffHours.toFixed(2)}h`,
                 timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-                read: false
+                read: false,
+                employeeId: currentUser?.username || effectiveEmployeeId
               });
             } else if (nearestPlant && activeRecord.lastDetectedOutAt) {
               const outAt = new Date(`${activeRecord.date}T${activeRecord.lastDetectedOutAt}`);
@@ -373,7 +379,7 @@ export default function AttendancePage() {
       }, 60000);
       return () => clearInterval(interval);
     }
-  }, [activeRecord, isAccessAllowed, plants, updateRecord, addRecord, effectiveEmployeeName]);
+  }, [activeRecord, isAccessAllowed, plants, updateRecord, addRecord, effectiveEmployeeName, effectiveEmployeeId, currentUser]);
 
   const handleCreateLeaveRequest = () => {
     if (!isAccessAllowed) {
@@ -760,7 +766,7 @@ export default function AttendancePage() {
   };
 
   const handleSaveEdit = () => {
-    if (!isSuperAdmin || !selectedRecordToEdit || isProcessing) return;
+    if (!isAdminRole || !selectedRecordToEdit || isProcessing) return;
     setIsProcessing(true);
     try {
       let finalHours = 0;
@@ -830,7 +836,7 @@ export default function AttendancePage() {
                 <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
               </CardTitle>
               
-              {/* REQUIREMENT: Notification badge style reminder for late attendance */}
+              {/* Attendance Reminder Badge Style */}
               {showReminderIcon && (
                 <div className="absolute right-4 top-4">
                   <Popover open={isReminderPopoverOpen} onOpenChange={setIsReminderPopoverOpen}>
@@ -852,7 +858,7 @@ export default function AttendancePage() {
                           </div>
                         </div>
                         <p className="text-sm font-bold text-rose-800 leading-relaxed italic">
-                          "{effectiveEmployeeName} hope you reached at Office. Please mark attendance"
+                          "{effectiveEmployeeName}, hope you reached at office. Please mark attendance."
                         </p>
                         <p className="text-[11px] font-medium text-slate-500 border-t pt-2 italic">
                           "क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें।"
@@ -906,7 +912,7 @@ export default function AttendancePage() {
                     <TableHead className="font-bold text-center">Status</TableHead>
                     <TableHead className="font-bold text-center">Hours</TableHead>
                     <TableHead className="font-bold">Approval</TableHead>
-                    {isSuperAdmin && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
+                    {isAdminRole && <TableHead className="font-bold text-right pr-6">Action</TableHead>}
                   </TableRow>
                   <TableRow className="bg-white hover:bg-white border-b">
                     <TableHead className="p-2"><div className="relative"><Search className="absolute left-2 top-2.5 h-3 w-3 text-slate-400" /><Input placeholder="Filter..." className="pl-6 h-8 text-[10px] bg-slate-50" value={columnFilters.name} onChange={(e) => updateColumnFilter('name', e.target.value)} /></div></TableHead>
@@ -917,11 +923,11 @@ export default function AttendancePage() {
                     <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.status} onChange={(e) => updateColumnFilter('status', e.target.value)} /></TableHead>
                     <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.hours} onChange={(e) => updateColumnFilter('hours', e.target.value)} /></TableHead>
                     <TableHead className="p-2"><Input placeholder="Filter..." className="h-8 text-[10px] bg-slate-50" value={columnFilters.approval} onChange={(e) => updateColumnFilter('approval', e.target.value)} /></TableHead>
-                    {isSuperAdmin && <TableHead />}
+                    {isAdminRole && <TableHead />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-12 text-muted-foreground">No attendance activity matching your filters.</TableCell></TableRow>) : (
+                  {paginatedHistory.length === 0 ? (<TableRow><TableCell colSpan={isAdminRole ? 9 : 8} className="text-center py-12 text-muted-foreground">No attendance activity matching your filters.</TableCell></TableRow>) : (
                     paginatedHistory.map((h: any) => (
                       <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
                         <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
@@ -936,7 +942,7 @@ export default function AttendancePage() {
                           </Badge>
                         </TableCell>
                         <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
-                        {isSuperAdmin && (<TableCell className="text-right pr-6"><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setSelectedRecordToEdit(h); setEditTimes({ in: h.inTime || "", out: h.outTime || "" }); setIsEditDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button></TableCell>)}
+                        {isAdminRole && (<TableCell className="text-right pr-6"><Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setSelectedRecordToEdit(h); setEditTimes({ in: h.inTime || "", out: h.outTime || "" }); setIsEditDialogOpen(true); }}><Pencil className="w-4 h-4" /></Button></TableCell>)}
                       </TableRow>
                     ))
                   )}

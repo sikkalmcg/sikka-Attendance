@@ -23,7 +23,7 @@ import {
   deleteDocumentNonBlocking,
   setDocumentNonBlocking
 } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { collection, doc, query, where } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -100,8 +100,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: holidays } = useCollection<Holiday>(holidaysQuery);
 
   const notificationsQuery = useMemoFirebase(() => {
-    if (!currentUser || !isAdminRole) return null;
-    return collection(db, 'notifications');
+    if (!currentUser) return null;
+    // Admins see all notifications
+    if (isAdminRole) return collection(db, 'notifications');
+    
+    // Employees see notifications addressed to them or marked as global (no employeeId)
+    // We fetch where employeeId matches or where it's specifically a reminder for them
+    return query(collection(db, 'notifications'), where('employeeId', '==', currentUser.username));
   }, [db, currentUser, isAdminRole]);
   const { data: notifications } = useCollection<AppNotification>(notificationsQuery);
 
