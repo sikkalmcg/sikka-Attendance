@@ -110,7 +110,7 @@ export default function AttendancePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
 
-  // Reminder States
+  // Notification Reminder States
   const [reminderReadAt, setReminderReadAt] = useState<number | null>(null);
   const [isReminderPopoverOpen, setIsReminderPopoverOpen] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
@@ -228,20 +228,27 @@ export default function AttendancePage() {
     }
   }, [isMounted, effectiveEmployeeId, todayStr]);
 
+  /**
+   * REQUIREMENT: Notification for Late Attendance at 10:30 AM
+   */
   const showReminderIcon = useMemo(() => {
     if (!isMounted || !isAccessAllowed || activeRecord || !currentTime || !todayStr) return false;
     if (todayStr < PROJECT_START_DATE_STR) return false;
 
+    // Check if current time is >= 10:30 AM
     const currentHHMM = format(currentTime, "HH:mm");
     if (currentHHMM < "10:30") return false;
 
+    // Check if today is working day (Exclude Sunday & Holidays)
     const isSun = isSunday(currentTime);
     const isHoliday = (holidays || []).some(h => h.date === todayStr);
     if (isSun || isHoliday) return false;
 
+    // Check if already checked in
     const hasInToday = (employeeRecords || []).some(r => r.date === todayStr && r.inTime);
     if (hasInToday) return false;
 
+    // Check if on approved leave
     const hasApprovedLeave = (myLeaveRequests || []).some(l => {
       if (l.status !== 'APPROVED') return false;
       try {
@@ -253,9 +260,10 @@ export default function AttendancePage() {
     });
     if (hasApprovedLeave) return false;
 
+    // Auto-hide after some time or if already seen recently (to prevent infinite annoyance)
     if (reminderReadAt) {
       const diffMins = (currentTime.getTime() - reminderReadAt) / (1000 * 60);
-      if (diffMins >= 30) return false;
+      if (diffMins >= 120) return false; // Hide after 2 hours of seeing it
     }
 
     return true;
@@ -270,15 +278,18 @@ export default function AttendancePage() {
       setReminderReadAt(now);
       localStorage.setItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`, now.toString());
       
+      // Push notification & log for Admin
+      const notifyMsg = `${effectiveEmployeeName} hope you reached at Office. Please mark attendance.`;
       addRecord('notifications', {
-        message: `Reminder Displayed: ${effectiveEmployeeName} has not checked in by 10:30 AM.`,
+        message: notifyMsg,
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
         read: false,
         type: 'ATTENDANCE_REMINDER',
         employeeId: effectiveEmployeeId
       });
+      triggerNotification("Sikka HR Reminder", notifyMsg);
     }
-  }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord]);
+  }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord, triggerNotification]);
 
   useEffect(() => {
     if (activeRecord && isMounted && currentTime && isAccessAllowed) {
@@ -690,6 +701,8 @@ export default function AttendancePage() {
 
     setActiveDialog("NONE");
     toast({ title: "Check-In Success", description: "Attendance logged successfully." });
+    
+    // Reset reminder states upon check-in
     setIsReminderPopoverOpen(false);
   };
 
@@ -816,6 +829,8 @@ export default function AttendancePage() {
               <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
                 <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
               </CardTitle>
+              
+              {/* REQUIREMENT: Notification badge style reminder for late attendance */}
               {showReminderIcon && (
                 <div className="absolute right-4 top-4">
                   <Popover open={isReminderPopoverOpen} onOpenChange={setIsReminderPopoverOpen}>
@@ -837,7 +852,10 @@ export default function AttendancePage() {
                           </div>
                         </div>
                         <p className="text-sm font-bold text-rose-800 leading-relaxed italic">
-                          "क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें। मुझे उम्मीद है आप अपनी कंपनी के नियमों का पालन ज़रूर करेंगे। आपका दिन शुभ हो।"
+                          "{effectiveEmployeeName} hope you reached at Office. Please mark attendance"
+                        </p>
+                        <p className="text-[11px] font-medium text-slate-500 border-t pt-2 italic">
+                          "क्या आप ऑफिस पहुँच गए? आप आज अटेंडेंस लगाना भूल गए। कृपया अपनी अटेंडेंस मार्क करें।"
                         </p>
                       </div>
                     </PopoverContent>
