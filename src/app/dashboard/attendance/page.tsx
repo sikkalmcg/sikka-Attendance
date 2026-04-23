@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,7 @@ import {
   ArrowRightCircle,
   Search
 } from "lucide-react";
-import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM } from "@/lib/utils";
+import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM, formatMinutesToHHMM } from "@/lib/utils";
 import { 
   Table, 
   TableHeader, 
@@ -77,6 +77,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
 const PROJECT_START_DATE_STR = "2026-04-01";
+const TRACKING_INTERVAL_MS = 30 * 60 * 1000; // 30 Minutes
 
 const getISTTime = () => {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -96,18 +97,6 @@ export default function AttendancePage() {
   const [detectedAddress, setDetectedAddress] = useState("");
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH">("FIELD");
 
-  const [leaveType, setLeaveType] = useState<"DAYS" | "HALF_DAY">("DAYS");
-  const [leaveFrom, setLeaveFrom] = useState("");
-  const [leaveTo, setLeaveTo] = useState("");
-  const [reachTime, setReachTime] = useState("");
-  const [leavePurpose, setLeavePurpose] = useState("");
-  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
-
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [selectedRecordToEdit, setSelectedRecordToEdit] = useState<any>(null);
-  const [editTimes, setEditTimes] = useState({ in: "", out: "" });
-  const [isProcessing, setIsProcessing] = useState(false);
-
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
 
@@ -117,6 +106,7 @@ export default function AttendancePage() {
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
 
   const { toast } = useToast();
+  const trackingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper for device notifications
   const triggerNotification = useCallback((title: string, body: string) => {
@@ -199,10 +189,6 @@ export default function AttendancePage() {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [leaveRequests, effectiveEmployeeId, isMounted]);
 
-  /**
-   * REFINED AUTO OUT DETECTION
-   * Checks for shifts older than 16 hours.
-   */
   const { activeRecord, staleRecord } = useMemo(() => {
     const rec = (employeeRecords || []).find(r => !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
@@ -218,9 +204,78 @@ export default function AttendancePage() {
   }, [employeeRecords, currentTime]);
 
   /**
-   * AUTO OUT FORMALIZATION
-   * Automatically closes stale records in the database.
+   * BACKGROUND MOVEMENT TRACKER (30 MIN)
+   * Captures location and calculates duration outside plant radius
    */
+  useEffect(() => {
+    if (!isMounted || !activeRecord || !isAccessAllowed) {
+      if (trackingTimerRef.current) clearInterval(trackingTimerRef.current);
+      return;
+    }
+
+    const performBackgroundCheck = () => {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        const assignedPlant = plants.find(p => p.name === activeRecord.inPlant);
+        
+        if (assignedPlant) {
+          const distance = calculateDistance(lat, lng, assignedPlant.lat, assignedPlant.lng);
+          const isOutside = distance > 700;
+          const now = new Date();
+          const timestamp = format(now, "HH:mm");
+
+          // 1. Employee detected outside for the first time
+          if (isOutside && !activeRecord.lastDetectedOutAt) {
+            updateRecord('attendance', activeRecord.id, { 
+              lastDetectedOutAt: now.toISOString(),
+              lastOutCheckTime: now.toISOString()
+            });
+            addRecord('notifications', {
+              message: `${effectiveEmployeeName} detected outside plant area at ${timestamp}`,
+              timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+              read: false,
+              type: 'MOVEMENT_ALERT',
+              employeeId: effectiveEmployeeId
+            });
+          } 
+          // 2. Employee returns to plant area
+          else if (!isOutside && activeRecord.lastDetectedOutAt) {
+            const outAt = new Date(activeRecord.lastDetectedOutAt);
+            const diffMins = Math.round((now.getTime() - outAt.getTime()) / (1000 * 60));
+            const newTotalOut = (activeRecord.unapprovedOutDuration || 0) + diffMins;
+
+            updateRecord('attendance', activeRecord.id, {
+              unapprovedOutDuration: newTotalOut,
+              lastDetectedOutAt: null,
+              lastOutCheckTime: now.toISOString()
+            });
+
+            addRecord('notifications', {
+              message: `${effectiveEmployeeName} returned to plant at ${timestamp}. Spent ${diffMins} mins outside.`,
+              timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+              read: false,
+              type: 'MOVEMENT_ALERT',
+              employeeId: effectiveEmployeeId
+            });
+          } else {
+            // Just update last check time to keep record alive
+            updateRecord('attendance', activeRecord.id, { lastOutCheckTime: now.toISOString() });
+          }
+        }
+      }, () => {}, { enableHighAccuracy: true });
+    };
+
+    // Run every 30 minutes
+    trackingTimerRef.current = setInterval(performBackgroundCheck, TRACKING_INTERVAL_MS);
+    
+    // Initial check on mount/activation
+    performBackgroundCheck();
+
+    return () => {
+      if (trackingTimerRef.current) clearInterval(trackingTimerRef.current);
+    };
+  }, [activeRecord?.id, isMounted, isAccessAllowed, plants, effectiveEmployeeName, effectiveEmployeeId]);
+
   useEffect(() => {
     if (staleRecord && isMounted && currentUser?.username === staleRecord.employeeId) {
       const inDateTime = new Date(`${staleRecord.inDate || staleRecord.date}T${staleRecord.inTime}`);
@@ -250,10 +305,6 @@ export default function AttendancePage() {
     }
   }, [staleRecord, isMounted, currentUser, updateRecord, addRecord, triggerNotification]);
 
-  /**
-   * NEXT IN ELIGIBILITY (LOCK STATE)
-   * 8:00 hours rest period from OUT time (including virtual Auto-OUT).
-   */
   const lockState = useMemo(() => {
     const latestRec = [...employeeRecords].sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""))[0];
     if (!latestRec) return { isLocked: false, unlockTime: null };
@@ -268,7 +319,6 @@ export default function AttendancePage() {
       
       if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
       
-      // It's stale. Recorded OUT = IN + 8h
       const autoOutDT = addHours(inDT, 8);
       effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
       effectiveOutTime = format(autoOutDT, "HH:mm");
@@ -563,7 +613,7 @@ export default function AttendancePage() {
           <h3 className="font-black text-xl flex items-center gap-2 text-slate-700"><History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}</h3>
           <Card className="rounded-2xl overflow-hidden shadow-sm border-slate-200">
             <ScrollArea className="w-full">
-              <Table className="min-w-[1000px]">
+              <Table className="min-w-[1200px]">
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead className="font-bold">Employee Name</TableHead>
@@ -571,7 +621,8 @@ export default function AttendancePage() {
                     <TableHead className="font-bold">In Date & Time</TableHead>
                     <TableHead className="font-bold">Out Date & Time</TableHead>
                     <TableHead className="font-bold text-center">Status</TableHead>
-                    <TableHead className="font-bold text-center">Hours</TableHead>
+                    <TableHead className="font-bold text-center">Out Hour</TableHead>
+                    <TableHead className="font-bold text-center">Working Hour</TableHead>
                     <TableHead className="font-bold">Approval</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -593,6 +644,7 @@ export default function AttendancePage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
+                      <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(h.unapprovedOutDuration || 0)}</span></TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
                           {formatHoursToHHMM(h.hours || 0)}
