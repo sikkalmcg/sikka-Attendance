@@ -116,18 +116,6 @@ export default function AttendancePage() {
   const [isReminderPopoverOpen, setIsReminderPopoverOpen] = useState(false);
   const [hasAutoOpened, setHasAutoOpened] = useState(false);
 
-  // Column Filters
-  const [columnFilters, setColumnFilters] = useState({
-    name: '',
-    inPlant: '',
-    inTime: '',
-    outTime: '',
-    type: '',
-    status: '',
-    hours: '',
-    approval: ''
-  });
-
   const { toast } = useToast();
 
   // Helper for device notifications
@@ -147,7 +135,6 @@ export default function AttendancePage() {
     setCurrentTime(getISTTime());
     const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
 
-    // Request notification permission
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
         Notification.requestPermission();
@@ -180,9 +167,7 @@ export default function AttendancePage() {
     const currentDevice = getDeviceId();
     const isEmployee = currentUser?.role === 'EMPLOYEE';
     const hasEmployeeRecord = !!registeredEmployee && registeredEmployee.active;
-    
     const isBoundDevice = !registeredEmployee?.deviceId || registeredEmployee.deviceId === currentDevice;
-    
     return isEmployee && hasEmployeeRecord && isBoundDevice;
   }, [currentUser, registeredEmployee]);
 
@@ -214,9 +199,88 @@ export default function AttendancePage() {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [leaveRequests, effectiveEmployeeId, isMounted]);
 
-  const activeRecord = useMemo(() => {
-    return (employeeRecords || []).find(r => !r.outTime);
-  }, [employeeRecords]);
+  /**
+   * REFINED AUTO OUT DETECTION
+   * Checks for shifts older than 16 hours.
+   */
+  const { activeRecord, staleRecord } = useMemo(() => {
+    const rec = (employeeRecords || []).find(r => !r.outTime);
+    if (!rec) return { activeRecord: null, staleRecord: null };
+
+    const inDateTime = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
+    const now = getISTTime();
+    const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
+
+    if (diffHours >= 16) {
+      return { activeRecord: null, staleRecord: rec };
+    }
+    return { activeRecord: rec, staleRecord: null };
+  }, [employeeRecords, currentTime]);
+
+  /**
+   * AUTO OUT FORMALIZATION
+   * Automatically closes stale records in the database.
+   */
+  useEffect(() => {
+    if (staleRecord && isMounted && currentUser?.username === staleRecord.employeeId) {
+      const inDateTime = new Date(`${staleRecord.inDate || staleRecord.date}T${staleRecord.inTime}`);
+      const autoOutDateTime = addHours(inDateTime, 8);
+      const autoOutTimeStr = format(autoOutDateTime, "HH:mm");
+      const autoOutDateStr = format(autoOutDateTime, "yyyy-MM-dd");
+      
+      updateRecord('attendance', staleRecord.id, {
+        outTime: autoOutTimeStr,
+        outDate: autoOutDateStr,
+        hours: 8,
+        status: 'PRESENT',
+        autoCheckout: true,
+        addressOut: 'System Auto Check-out (16h Policy Limit)',
+        outPlant: staleRecord.inPlant || "Remote"
+      });
+
+      const notifyMsg = `${staleRecord.employeeName} – OUT: ${format(autoOutDateTime, "dd-MMM HH:mm")} | Work: 08:00 Hrs (Auto)`;
+      addRecord('notifications', { 
+        message: notifyMsg, 
+        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), 
+        read: false,
+        type: 'ATTENDANCE_OUT',
+        employeeId: staleRecord.employeeId
+      });
+      triggerNotification("Security Auto Check-out", notifyMsg);
+    }
+  }, [staleRecord, isMounted, currentUser, updateRecord, addRecord, triggerNotification]);
+
+  /**
+   * NEXT IN ELIGIBILITY (LOCK STATE)
+   * 8:00 hours rest period from OUT time (including virtual Auto-OUT).
+   */
+  const lockState = useMemo(() => {
+    const latestRec = [...employeeRecords].sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""))[0];
+    if (!latestRec) return { isLocked: false, unlockTime: null };
+
+    let effectiveOutDate = latestRec.outDate || latestRec.date;
+    let effectiveOutTime = latestRec.outTime;
+
+    if (!latestRec.outTime) {
+      const inDT = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
+      const now = getISTTime();
+      const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+      
+      if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
+      
+      // It's stale. Recorded OUT = IN + 8h
+      const autoOutDT = addHours(inDT, 8);
+      effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
+      effectiveOutTime = format(autoOutDT, "HH:mm");
+    }
+
+    const lastOutDateTime = new Date(`${effectiveOutDate}T${effectiveOutTime}`);
+    const allowedDateTime = addHours(lastOutDateTime, 8);
+    const now = getISTTime();
+    const isLocked = isAfter(allowedDateTime, now);
+    
+    return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
+  }, [employeeRecords, currentTime]);
 
   useEffect(() => {
     if (isMounted && effectiveEmployeeId && todayStr) {
@@ -225,9 +289,6 @@ export default function AttendancePage() {
     }
   }, [isMounted, effectiveEmployeeId, todayStr]);
 
-  /**
-   * REQUIREMENT: Notification for Late Attendance at 10:30 AM
-   */
   const showReminderIcon = useMemo(() => {
     if (!isMounted || !isAccessAllowed || activeRecord || !currentTime || !todayStr) return false;
     if (todayStr < PROJECT_START_DATE_STR) return false;
@@ -242,15 +303,7 @@ export default function AttendancePage() {
     const hasInToday = (employeeRecords || []).some(r => r.date === todayStr && r.inTime);
     if (hasInToday) return false;
 
-    const hasApprovedLeave = (myLeaveRequests || []).some(l => {
-      if (l.status !== 'APPROVED') return false;
-      try {
-        const current = parseISO(todayStr);
-        const start = parseISO(l.fromDate);
-        const end = parseISO(l.toDate);
-        return isWithinInterval(current, { start, end });
-      } catch (e) { return false; }
-    });
+    const hasApprovedLeave = (myLeaveRequests || []).some(l => l.status === 'APPROVED' && isWithinInterval(parseISO(todayStr), { start: parseISO(l.fromDate), end: parseISO(l.toDate) }));
     if (hasApprovedLeave) return false;
 
     if (reminderReadAt) {
@@ -265,199 +318,49 @@ export default function AttendancePage() {
     if (showReminderIcon && !reminderReadAt && !hasAutoOpened) {
       setIsReminderPopoverOpen(true);
       setHasAutoOpened(true);
-      
       const now = Date.now();
       setReminderReadAt(now);
       localStorage.setItem(`read_reminder_${effectiveEmployeeId}_${todayStr}`, now.toString());
-      
       const notifyMsg = `${effectiveEmployeeName} hope you reached at Office. Please mark attendance`;
-      
       addRecord('notifications', {
         message: notifyMsg,
         timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
         read: false,
         type: 'ATTENDANCE_REMINDER',
-        employeeId: currentUser?.username || effectiveEmployeeId,
-        senderName: "HR System"
+        employeeId: currentUser?.username || effectiveEmployeeId
       });
-      
       triggerNotification("Attendance Reminder", notifyMsg);
     }
   }, [showReminderIcon, reminderReadAt, hasAutoOpened, effectiveEmployeeId, todayStr, effectiveEmployeeName, addRecord, triggerNotification, currentUser]);
 
-  /**
-   * FEATURE: Auto OUT Logic
-   * Trigger at 16:01 hours from IN time.
-   * Recorded OUT = IN Time + 8:00 Hours (Fixed working hours cap).
-   */
-  useEffect(() => {
-    if (activeRecord && isMounted && currentTime && isAccessAllowed) {
-      const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
-      const diffMs = currentTime.getTime() - inDateTime.getTime();
-      const diffHours = diffMs / (1000 * 60 * 60);
-
-      // Requirement: Trigger Auto OUT at 16:00 hours from IN time (using 16.0 threshold)
-      if (diffHours >= 16) {
-        // Recorded OUT time should be IN Time + 8:00 hours
-        const autoOutDateTime = addHours(inDateTime, 8);
-        const autoOutTimeStr = format(autoOutDateTime, "HH:mm");
-        const autoOutDateStr = format(autoOutDateTime, "yyyy-MM-dd");
-        
-        updateRecord('attendance', activeRecord.id, {
-          outTime: autoOutTimeStr,
-          outDate: autoOutDateStr,
-          hours: 8,
-          status: 'PRESENT',
-          autoCheckout: true,
-          addressOut: 'System Auto Check-out (16h Policy Limit)',
-          outPlant: activeRecord.inPlant || "Remote"
-        });
-
-        const workingHoursStr = "08:00";
-        const timestamp = format(autoOutDateTime, "dd-MMM-yyyy HH:mm");
-        const notifyMsg = `${effectiveEmployeeName} – OUT: ${timestamp} | Work: ${workingHoursStr} Hrs (Auto)`;
-        
-        addRecord('notifications', { 
-          message: notifyMsg, 
-          timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), 
-          read: false,
-          type: 'ATTENDANCE_OUT',
-          employeeId: currentUser?.username || effectiveEmployeeId
-        });
-        triggerNotification("Security Auto Check-out", notifyMsg);
-
-        toast({
-          title: "Security: Auto Check-out",
-          description: `Your shift has been auto-closed at ${autoOutTimeStr} as per the 16:00 Hours policy. (8h capped)`,
-        });
-      }
-    }
-  }, [activeRecord, isMounted, currentTime, isAccessAllowed, updateRecord, toast, effectiveEmployeeName, addRecord, triggerNotification, effectiveEmployeeId, currentUser]);
-
-  const lastOutRecord = useMemo(() => {
-    return [...employeeRecords]
-      .filter(r => r.outTime)
-      .sort((a, b) => {
-        const dateTimeA = new Date(`${a.outDate || a.date}T${a.outTime}`);
-        const dateTimeB = new Date(`${b.outDate || b.date}T${b.outTime}`);
-        return dateTimeB.getTime() - dateTimeA.getTime();
-      })[0];
-  }, [employeeRecords]);
-
-  /**
-   * REQUIREMENT: Re-Enable IN Eligibility
-   * Employee allowed to mark IN again only after 8:00 hours from OUT time.
-   */
-  const lockState = useMemo(() => {
-    if (!lastOutRecord || !lastOutRecord.outTime) return { isLocked: false, unlockTime: null };
-    const lastOutDateTime = new Date(`${lastOutRecord.outDate || lastOutRecord.date}T${lastOutRecord.outTime}`);
-    const allowedDateTime = addHours(lastOutDateTime, 8);
-    const now = getISTTime();
-    const isLocked = isAfter(allowedDateTime, now);
-    return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
-  }, [lastOutRecord, currentTime]);
-
-  const handleCreateLeaveRequest = () => {
-    if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Action Blocked", description: "Registration and device binding required to request leave." });
-      return;
-    }
-    const today = format(getISTTime(), "yyyy-MM-dd");
-    const startConstraint = today < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : today;
-    setLeaveType("DAYS");
-    setLeaveFrom(startConstraint);
-    setLeaveTo(startConstraint);
-    setReachTime("");
-    setLeavePurpose("");
-    setActiveDialog("LEAVE");
-  };
-
-  const handleSendLeaveRequest = () => {
-    if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") {
-      toast({ variant: "destructive", title: "Identity Error", description: "Could not identify employee record." });
-      return;
-    }
-
-    const istNow = getISTTime();
-    const today = format(istNow, "yyyy-MM-dd");
-    
-    setIsSubmittingLeave(true);
-    try {
-      const newFrom = parseISO(leaveType === "DAYS" ? leaveFrom : today);
-      const newTo = parseISO(leaveType === "DAYS" ? leaveTo : today);
-      const diff = differenceInDays(newTo, newFrom) + 1;
-      const daysCount = leaveType === "DAYS" ? diff : 0.5;
-
-      const newLeave: any = {
-        employeeId: effectiveEmployeeId,
-        employeeName: effectiveEmployeeName,
-        department: registeredEmployee?.department || "N/A",
-        designation: registeredEmployee?.designation || "N/A",
-        fromDate: format(newFrom, "yyyy-MM-dd"),
-        toDate: format(newTo, "yyyy-MM-dd"),
-        days: daysCount,
-        purpose: leavePurpose,
-        status: 'UNDER_PROCESS',
-        leaveType: leaveType,
-        createdAt: new Date().toISOString()
-      };
-
-      addRecord('leaveRequests', newLeave);
-      
-      addRecord('notifications', {
-        message: `Leave Request submitted: ${effectiveEmployeeName} (${daysCount} Day/s)`,
-        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
-        read: false,
-        type: 'LEAVE_SUBMISSION',
-        employeeId: effectiveEmployeeId
-      });
-
-      toast({ title: "Request Sent", description: "Your leave application has been submitted successfully." });
-      setActiveDialog("NONE");
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "System Error", description: error.message || "Could not submit request." });
-    } finally {
-      setIsSubmittingLeave(false);
-    }
-  };
-
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "You must use your registered device." });
+      toast({ variant: "destructive", title: "Access Denied", description: "Use your registered device." });
       return;
     }
-
     if (todayStr < PROJECT_START_DATE_STR) {
-      toast({ variant: "destructive", title: "System Offline", description: `Service starts from ${PROJECT_START_DATE_STR}.` });
+      toast({ variant: "destructive", title: "System Offline", description: `Service starts ${PROJECT_START_DATE_STR}.` });
       return;
     }
 
     setIsLoadingLocation(true);
-    if (!("geolocation" in navigator)) {
-      toast({ variant: "destructive", title: "GPS Error", description: "Browser does not support geolocation." });
-      setIsLoadingLocation(false);
-      return;
-    }
-
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setCurrentGPS({ lat, lng });
         const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
         setDetectedPlant(plant || null);
-        
         try {
           const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_API_KEY}`);
           const data = await response.json();
-          setDetectedAddress(data.status === "OK" ? data.results[0].formatted_address : "Unknown Location");
+          setDetectedAddress(data.status === "OK" ? data.results[0].formatted_address : "Coordinates Captured");
         } catch (e) {
           setDetectedAddress("Coordinates Captured");
         }
-        
         setIsLoadingLocation(false);
         setActiveDialog(type);
       },
-      (err) => {
+      () => {
         toast({ variant: "destructive", title: "GPS Error", description: "Location access denied." });
         setIsLoadingLocation(false);
       },
@@ -490,7 +393,6 @@ export default function AttendancePage() {
     };
 
     addRecord('attendance', newRecord);
-    
     const notifyMsg = `${effectiveEmployeeName} – IN: ${timestamp}`;
     addRecord('notifications', {
       message: notifyMsg,
@@ -500,10 +402,8 @@ export default function AttendancePage() {
       employeeId: effectiveEmployeeId
     });
     triggerNotification("Attendance Marked", notifyMsg);
-
     setActiveDialog("NONE");
     toast({ title: "Check-In Success" });
-    setIsReminderPopoverOpen(false);
   };
 
   const handleConfirmCheckOut = () => {
@@ -516,9 +416,7 @@ export default function AttendancePage() {
     const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
     const outDateTime = new Date(`${todayStrLocal}T${timeHHMM}`);
     const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
-    
     const finalHours = parseFloat(diffHours.toFixed(2));
-    const workingHoursStr = formatHoursToHHMM(finalHours);
 
     updateRecord('attendance', activeRecord.id, { 
       outTime: timeHHMM, 
@@ -531,7 +429,7 @@ export default function AttendancePage() {
       outPlant: detectedPlant?.name || "Remote"
     });
 
-    const notifyMsg = `${effectiveEmployeeName} – OUT: ${timestamp} | Work: ${workingHoursStr} Hrs`;
+    const notifyMsg = `${effectiveEmployeeName} – OUT: ${timestamp} | Work: ${formatHoursToHHMM(finalHours)} Hrs`;
     addRecord('notifications', {
       message: notifyMsg,
       timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
@@ -540,105 +438,72 @@ export default function AttendancePage() {
       employeeId: effectiveEmployeeId
     });
     triggerNotification("Attendance Marked", notifyMsg);
-
     setActiveDialog("NONE");
-    toast({ title: "Check-Out Success", description: `Shift ended: ${workingHoursStr} Hrs.` });
+    toast({ title: "Check-Out Success" });
   };
 
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
-    
     const floorDate = parseISO(PROJECT_START_DATE_STR);
-    const istNow = getISTTime();
-    const todayStrLocal = format(istNow, "yyyy-MM-dd");
+    const now = getISTTime();
+    const todayStrLocal = format(now, "yyyy-MM-dd");
 
     let baseList = [];
-
     if (isAdminRole) {
-      const actualRecords = (attendanceRecords || [])
-        .filter(r => {
-          try {
-            const d = parseISO(r.date);
-            return isValid(d) && !isBefore(d, floorDate);
-          } catch (e) { return false; }
-        });
+      const rawRecords = (attendanceRecords || []).filter(r => isValid(parseISO(r.date)) && !isBefore(parseISO(r.date), floorDate));
+      
+      const processedActual = rawRecords.map(r => {
+        if (!r.outTime) {
+          const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
+          const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+          if (diff >= 16) {
+            const autoOutDT = addHours(inDT, 8);
+            return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+          }
+        }
+        return r;
+      });
 
       const virtualTodayRecords: any[] = [];
       if (todayStrLocal >= PROJECT_START_DATE_STR) {
         employees.filter(e => e.active).forEach(emp => {
-          const hasRecord = actualRecords.some(r => r.employeeId === emp.employeeId && r.date === todayStrLocal);
-          if (!hasRecord) {
-            virtualTodayRecords.push({
-              id: `v-today-${emp.employeeId}`,
-              employeeId: emp.employeeId,
-              employeeName: emp.name,
-              date: todayStrLocal,
-              status: 'ABSENT',
-              attendanceType: '--',
-              approved: true,
-              hours: 0,
-              inTime: null,
-              outTime: null,
-              isVirtual: true,
-              inPlant: '--'
-            });
-          }
+          const hasRecord = processedActual.some(r => r.employeeId === emp.employeeId && r.date === todayStrLocal);
+          if (!hasRecord) virtualTodayRecords.push({ id: `v-today-${emp.employeeId}`, employeeId: emp.employeeId, employeeName: emp.name, date: todayStrLocal, status: 'ABSENT', approved: true, hours: 0, isVirtual: true });
         });
       }
-
-      baseList = [...actualRecords, ...virtualTodayRecords]
-        .sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
+      baseList = [...processedActual, ...virtualTodayRecords].sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
     } else {
-      const today = startOfDay(new Date());
-      const fortyFiveDaysAgo = subDays(today, 45);
-      let historyStartDate = isAfter(fortyFiveDaysAgo, floorDate) ? fortyFiveDaysAgo : floorDate;
-      
-      const dateRange = eachDayOfInterval({ start: historyStartDate, end: today });
+      const dateRange = eachDayOfInterval({ start: isAfter(subDays(startOfDay(new Date()), 45), floorDate) ? subDays(startOfDay(new Date()), 45) : floorDate, end: startOfDay(new Date()) });
       baseList = dateRange.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        const existingRecords = employeeRecords.filter(r => r.date === dateStr);
-        const isSun = isSunday(date);
-        const holiday = (holidays || []).find(h => h.date === dateStr);
-        const nonWorkingDayLabel = isSun ? "WEEKLY_OFF" : (holiday ? "HOLIDAY" : null);
-
-        if (existingRecords.length > 0) return existingRecords;
-        if (isSameDay(date, today)) return null;
-        if (isSun || holiday) return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: nonWorkingDayLabel, attendanceType: '--', approved: true }];
-        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', attendanceType: '--', approved: true, hours: 0 }];
+        const existing = employeeRecords.filter(r => r.date === dateStr).map(r => {
+          if (!r.outTime) {
+            const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
+            const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+            if (diff >= 16) {
+              const autoOutDT = addHours(inDT, 8);
+              return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+            }
+          }
+          return r;
+        });
+        const sun = isSunday(date);
+        const hol = (holidays || []).find(h => h.date === dateStr);
+        if (existing.length > 0) return existing;
+        if (isSameDay(date, now)) return null;
+        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: sun ? "WEEKLY_OFF" : (hol ? "HOLIDAY" : "ABSENT"), approved: true, hours: 0, isVirtual: true }];
       }).filter(Boolean).flat().reverse();
     }
+    return baseList;
+  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, employees]);
 
-    return baseList.filter((h: any) => {
-      if (!h) return false;
-      const search = columnFilters.name.toLowerCase();
-      const nameMatch = h.employeeName?.toLowerCase().includes(search) || h.employeeId?.toLowerCase().includes(search);
-      const statusMatch = h.status?.toLowerCase().includes(columnFilters.status.toLowerCase());
-      return nameMatch && statusMatch;
-    });
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, employees, columnFilters]);
-
-  const paginatedHistory = useMemo(() => {
-    const start = (currentPage - 1) * rowsPerPage;
-    return history.slice(start, start + rowsPerPage);
-  }, [history, currentPage]);
-
-  const totalPages = Math.ceil(history.length / rowsPerPage);
+  const paginatedHistory = useMemo(() => history.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage), [history, currentPage]);
 
   if (!isMounted) return null;
 
   return (
     <TooltipProvider>
       <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
-        {currentUser?.role === 'EMPLOYEE' && registeredEmployee && registeredEmployee.deviceId && registeredEmployee.deviceId !== getDeviceId() && (
-          <Alert variant="destructive" className="bg-rose-50 border-rose-200 mb-6 shadow-lg">
-            <ShieldAlert className="h-6 w-6 text-rose-600" />
-            <AlertTitle className="font-black text-rose-900 text-lg">Device Security Error</AlertTitle>
-            <AlertDescription className="text-rose-800 font-bold mt-1">
-              Your account is linked to another device. proxy attendance is prohibited.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
           <Card className="shadow-2xl border-none overflow-hidden bg-white">
             <div className="h-1 bg-primary" />
@@ -646,7 +511,6 @@ export default function AttendancePage() {
               <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
                 <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
               </CardTitle>
-              
               {showReminderIcon && (
                 <div className="absolute right-4 top-2">
                   <Popover open={isReminderPopoverOpen} onOpenChange={setIsReminderPopoverOpen}>
@@ -667,9 +531,7 @@ export default function AttendancePage() {
                             <h4 className="text-sm font-black text-rose-900 leading-none">Attendance Reminder</h4>
                           </div>
                         </div>
-                        <p className="text-sm font-bold text-rose-800 leading-relaxed italic pr-2">
-                          "{effectiveEmployeeName} hope you reached at Office. Please mark attendance"
-                        </p>
+                        <p className="text-sm font-bold text-rose-800 leading-relaxed italic pr-2">"{effectiveEmployeeName} hope you reached at Office. Please mark attendance"</p>
                       </div>
                     </PopoverContent>
                   </Popover>
@@ -678,34 +540,22 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="space-y-6 px-6 pb-8">
               <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto">
-                {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "MM/dd/yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
+                {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMM-yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
               </div>
               <div className="flex gap-4">
                 <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} onClick={() => requestLocation("IN")}>Mark IN</Button>
                 <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} onClick={() => requestLocation("OUT")}>Mark OUT</Button>
               </div>
-              {lockState.isLocked && (
+              {lockState.isLocked && lockState.unlockTime !== 'Shift Active' && (
                 <p className="text-[10px] font-black text-rose-500 text-center uppercase tracking-widest bg-rose-50 py-2 rounded-lg border border-rose-100 animate-pulse">
                    Mandatory 8h Rest Period. Next IN Allowed at {lockState.unlockTime}
                 </p>
               )}
             </CardContent>
           </Card>
-
           <Card className="shadow-xl border-none overflow-hidden bg-white h-full">
-            <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4"><CardTitle className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Leave Requests</CardTitle><Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={handleCreateLeaveRequest} disabled={!isAccessAllowed}><Plus className="w-3 h-3" /> Create Request</Button></CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[240px]">
-                {myLeaveRequests.length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground font-medium">No active leave records from April-2026.</div>) : (
-                  <div className="divide-y divide-slate-100">{myLeaveRequests.map((l) => (
-                    <div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors">
-                      <div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'MM/dd')} - {format(parseISO(l.toDate), 'MM/dd')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div>
-                      <Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge>
-                    </div>
-                  ))}</div>
-                )}
-              </ScrollArea>
-            </CardContent>
+            <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4"><CardTitle className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Leave Requests</CardTitle><Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={() => setActiveDialog("LEAVE")} disabled={!isAccessAllowed}><Plus className="w-3 h-3" /> Create Request</Button></CardHeader>
+            <CardContent className="p-0"><ScrollArea className="h-[240px]">{myLeaveRequests.length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground">No active records from April-2026.</div>) : (<div className="divide-y divide-slate-100">{myLeaveRequests.map((l) => (<div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors"><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div><Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge></div>))}</div>)}</ScrollArea></CardContent>
           </Card>
         </div>
 
@@ -718,8 +568,8 @@ export default function AttendancePage() {
                   <TableRow>
                     <TableHead className="font-bold">Employee Name</TableHead>
                     <TableHead className="font-bold">In Plant</TableHead>
-                    <TableHead className="font-bold">In Time</TableHead>
-                    <TableHead className="font-bold">Out Time</TableHead>
+                    <TableHead className="font-bold">In Date & Time</TableHead>
+                    <TableHead className="font-bold">Out Date & Time</TableHead>
                     <TableHead className="font-bold text-center">Status</TableHead>
                     <TableHead className="font-bold text-center">Hours</TableHead>
                     <TableHead className="font-bold">Approval</TableHead>
@@ -739,7 +589,7 @@ export default function AttendancePage() {
                       <TableCell className="font-mono text-xs">
                         <div className="flex flex-col">
                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
-                          <span>{h.outTime || "--:--"}</span>
+                          <span className={cn(h.autoCheckout && "text-rose-600 font-bold")}>{h.outTime || (h.isVirtual ? "--:--" : "Shift In-Progress")}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
@@ -759,72 +609,14 @@ export default function AttendancePage() {
 
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
           <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
-            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
-              <DialogTitle className="flex items-center gap-2 font-black text-xl"><Navigation className="w-5 h-5 text-primary" /> Confirm Attendance</DialogTitle>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">{detectedAddress || "Locating..."}</p>
-            </DialogHeader>
-            <div className="p-8 space-y-8">
-              {detectedPlant ? (
-                <div className="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-3xl flex items-center gap-4 shadow-sm">
-                  <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-200"><Factory className="w-6 h-6 text-white" /></div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-emerald-600 tracking-[0.2em] mb-1">Authorized Plant Detected</p>
-                    <p className="text-lg font-black text-emerald-900">{detectedPlant.name}</p>
-                  </div>
-                </div>
-              ) : (
-                <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
-                  <div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('FIELD')}>
-                    <RadioGroupItem value="FIELD" id="field" className="absolute right-3 top-3" />
-                    <Briefcase className={cn("w-6 h-6 mb-2", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
-                    <Label htmlFor="field" className="font-black text-sm block cursor-pointer">FIELD WORK</Label>
-                  </div>
-                  <div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('WFH')}>
-                    <RadioGroupItem value="WFH" id="wfh" className="absolute right-3 top-3" />
-                    <Home className={cn("w-6 h-6 mb-2", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
-                    <Label htmlFor="wfh" className="font-black text-sm block cursor-pointer">W.F.H</Label>
-                  </div>
-                </RadioGroup>
-              )}
-            </div>
+            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0"><DialogTitle className="flex items-center gap-2 font-black text-xl"><Navigation className="w-5 h-5 text-primary" /> Confirm Attendance</DialogTitle><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">{detectedAddress || "Locating..."}</p></DialogHeader>
+            <div className="p-8 space-y-8">{detectedPlant ? (<div className="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-3xl flex items-center gap-4 shadow-sm"><div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-200"><Factory className="w-6 h-6 text-white" /></div><div><p className="text-[10px] font-black uppercase text-emerald-600 tracking-[0.2em] mb-1">Plant Detected</p><p className="text-lg font-black text-emerald-900">{detectedPlant.name}</p></div></div>) : (<RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4"><div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('FIELD')}><RadioGroupItem value="FIELD" id="field" className="absolute right-3 top-3" /><Briefcase className={cn("w-6 h-6 mb-2", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} /><Label htmlFor="field" className="font-black text-sm block cursor-pointer">FIELD WORK</Label></div><div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('WFH')}><RadioGroupItem value="WFH" id="wfh" className="absolute right-3 top-3" /><Home className={cn("w-6 h-6 mb-2", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} /><Label htmlFor="wfh" className="font-black text-sm block cursor-pointer">W.F.H</Label></div></RadioGroup>)}</div>
             <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-primary" onClick={handleConfirmCheckIn}>Confirm Mark IN</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
         <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
-            <DialogHeader className="p-6 bg-rose-600 text-white shrink-0">
-               <DialogTitle className="flex items-center gap-2 font-black text-xl">Confirm Check-Out</DialogTitle>
-            </DialogHeader>
-            <div className="p-8 space-y-6 text-center">
-              <p className="text-sm font-black text-slate-700">{detectedPlant ? `Marking OUT from ${detectedPlant.name}` : "Marking OUT from Remote Site"}</p>
-            </div>
-            <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Mark OUT</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={activeDialog === "LEAVE"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden">
-            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0"><DialogTitle className="text-xl font-black">Create Leave Request</DialogTitle></DialogHeader>
-            <div className="p-6 space-y-6 bg-white">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400">Leave Type</Label>
-                <Select value={leaveType} onValueChange={(v: any) => setLeaveType(v)}>
-                  <SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="DAYS">Days</SelectItem><SelectItem value="HALF_DAY">Half Day</SelectItem></SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">From</Label><Input type="date" value={leaveFrom} onChange={(e) => setLeaveFrom(e.target.value)} className="h-12 font-bold" /></div>
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">To</Label><Input type="date" value={leaveTo} onChange={(e) => setLeaveTo(e.target.value)} className="h-12 font-bold" /></div>
-              </div>
-              <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">Purpose *</Label><Input placeholder="Reason for leave..." value={leavePurpose} onChange={(e) => setLeavePurpose(e.target.value)} className="h-12 font-bold" /></div>
-            </div>
-            <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
-              <Button variant="ghost" onClick={() => setActiveDialog("NONE")} className="rounded-xl font-bold">Cancel</Button>
-              <Button className="bg-primary font-black px-12 h-11" onClick={handleSendLeaveRequest} disabled={isSubmittingLeave}>Send Request</Button>
-            </DialogFooter>
-          </DialogContent>
+          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden"><DialogHeader className="p-6 bg-rose-600 text-white shrink-0"><DialogTitle className="flex items-center gap-2 font-black text-xl">Confirm Check-Out</DialogTitle></DialogHeader><div className="p-8 space-y-6 text-center"><p className="text-sm font-black text-slate-700">{detectedPlant ? `Marking OUT from ${detectedPlant.name}` : "Marking OUT from Remote Site"}</p></div><DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Mark OUT</Button></DialogFooter></DialogContent>
         </Dialog>
       </div>
     </TooltipProvider>
