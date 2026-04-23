@@ -180,6 +180,95 @@ export default function EmployeesPage() {
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
 
+  const handleExportEmployees = () => {
+    if (filtered.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No employee records found to export." });
+      return;
+    }
+
+    const headers = [
+      "Employee ID",
+      "First Name",
+      "Last Name",
+      "Father Name",
+      "Aadhaar Number",
+      "PAN Number",
+      "Mobile No",
+      "Join Date",
+      "Address",
+      "Employer Firm",
+      "Department",
+      "Designation",
+      "Bank Name",
+      "Account Number",
+      "IFSC Code",
+      "Statutory Compliance",
+      "PF Number",
+      "ESIC Number",
+      "Basic Salary",
+      "HRA",
+      "DA",
+      "Allowance",
+      "Gross Salary",
+      "Net Payable",
+      "Monthly CTC",
+      "PF Emp Rate %",
+      "PF Ex Rate %",
+      "ESIC Emp Rate %",
+      "ESIC Ex Rate %",
+      "Status"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...filtered.map(emp => {
+        const firmName = firms.find(f => f.id === emp.firmId)?.name || "N/A";
+        return [
+          `"${emp.employeeId}"`,
+          `"${emp.firstName}"`,
+          `"${emp.lastName || ''}"`,
+          `"${emp.fatherName || ''}"`,
+          `"${emp.aadhaar}"`,
+          `"${emp.pan || ''}"`,
+          `"${emp.mobile || ''}"`,
+          `"${emp.joinDate || ''}"`,
+          `"${emp.address || ''}"`,
+          `"${firmName}"`,
+          `"${emp.department}"`,
+          `"${emp.designation}"`,
+          `"${emp.bankName || ''}"`,
+          `"${emp.accountNo || ''}"`,
+          `"${emp.ifscCode || ''}"`,
+          `"${emp.isGovComplianceEnabled ? 'Enabled' : 'Disabled'}"`,
+          `"${emp.pfNumber || ''}"`,
+          `"${emp.esicNumber || ''}"`,
+          emp.salary?.basic || 0,
+          emp.salary?.hra || 0,
+          emp.salary?.da || 0,
+          emp.salary?.allowance || 0,
+          emp.salary?.grossSalary || 0,
+          emp.salary?.netSalary || 0,
+          emp.salary?.monthlyCTC || 0,
+          emp.salary?.pfRateEmp || 12,
+          emp.salary?.pfRateEx || 13,
+          emp.salary?.esicRateEmp || 0.75,
+          emp.salary?.esicRateEx || 3.25,
+          `"${emp.active ? 'Active' : 'Inactive'}"`
+        ].join(",");
+      })
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Employee_Directory_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Export Success", description: "Complete directory has been downloaded." });
+  };
+
   const calculateFullSalary = (s: SalaryStructure, compliance: boolean) => {
     const gross = (Number(s.basic) || 0) + (Number(s.hra) || 0) + (Number(s.da) || 0) + (Number(s.allowance) || 0);
     let epf = 0, eesic = 0, erpf = 0, eresic = 0;
@@ -519,7 +608,12 @@ export default function EmployeesPage() {
     <div className="space-y-6 pb-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div><h1 className="text-2xl font-bold">Employee Directory</h1><p className="text-muted-foreground">Comprehensive registry for identity, banking, and statutory compliance.</p></div>
-        <Button className="font-bold shadow-lg shadow-primary/20 bg-primary h-11 px-8" onClick={() => { setFormData({ ...INITIAL_FORM_DATA }); setView('form'); }} disabled={isProcessing}><UserPlus className="w-5 h-5 mr-2" /> Add New Staff</Button>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={handleExportEmployees} className="font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50 h-11 px-6 gap-2">
+            <FileSpreadsheet className="w-5 h-5" /> Export Excel
+          </Button>
+          <Button className="font-bold shadow-lg shadow-primary/20 bg-primary h-11 px-8" onClick={() => { setFormData({ ...INITIAL_FORM_DATA }); setView('form'); }} disabled={isProcessing}><UserPlus className="w-5 h-5 mr-2" /> Add New Staff</Button>
+        </div>
       </div>
 
       <Card className="border-slate-200 shadow-sm overflow-hidden">
