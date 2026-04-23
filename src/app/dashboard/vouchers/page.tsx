@@ -173,6 +173,61 @@ export default function VouchersPage() {
   const totalPagesPayable = Math.ceil(paymentTabLists.pending.length / ROWS_PER_PAGE);
   const totalPagesPaid = Math.ceil(paymentTabLists.paid.length / ROWS_PER_PAGE);
 
+  const handleExportPaidHistory = () => {
+    if (paymentTabLists.paid.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No records found to export." });
+      return;
+    }
+
+    const headers = [
+      "Voucher No", 
+      "Voucher Date", 
+      "Employee Name", 
+      "Employee ID",
+      "Department", 
+      "Designation", 
+      "Amount", 
+      "Paid Type", 
+      "Paid Date", 
+      "Ref. No", 
+      "Purpose",
+      "Created By",
+      "Approved By"
+    ];
+
+    const csvRows = [
+      headers.join(","),
+      ...paymentTabLists.paid.map(v => {
+        const emp = employees.find(e => e.id === v.employeeId);
+        return [
+          `"${v.voucherNo}"`,
+          `"${formatDate(v.date)}"`,
+          `"${emp?.name || ''}"`,
+          `"${emp?.employeeId || ''}"`,
+          `"${emp?.department || ''}"`,
+          `"${emp?.designation || ''}"`,
+          v.amount,
+          `"${v.paymentMode || ''}"`,
+          `"${formatDate(v.paidDate || '')}"`,
+          `"${v.paymentReference || ''}"`,
+          `"${v.purpose}"`,
+          `"${v.createdByName || ''}"`,
+          `"${v.approvedByName || ''}"`
+        ].join(",");
+      })
+    ];
+
+    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Voucher_Paid_History_${paidFromMonth}_to_${paidToMonth}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Export Success" });
+  };
+
   const StandardPaginationFooter = ({ current, total, onPageChange }: any) => (
     <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
       <div className="flex items-center gap-2">
@@ -229,7 +284,7 @@ export default function VouchersPage() {
   const handleApproveVoucher = (v: Voucher) => {
     const emp = employees.find(e => e.id === v.employeeId);
     const approver = currentUser?.fullName || "Manager";
-    updateRecord('vouchers', v.id, { status: 'APPROVED' });
+    updateRecord('vouchers', v.id, { status: 'APPROVED', approvedByName: approver });
 
     addRecord('notifications', {
       message: `Voucher Approved: ${emp?.name}, ₹${v.amount}, By: ${approver}`,
@@ -256,8 +311,7 @@ export default function VouchersPage() {
         status: 'PAID',
         paymentMode: payMode,
         paymentReference: payMode === 'BANKING' ? payRef : '',
-        paidDate: payDate,
-        approvedByName: currentUser?.fullName || "Accountant"
+        paidDate: payDate
       });
 
       addRecord('notifications', {
@@ -523,6 +577,9 @@ export default function VouchersPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                   <Button variant="outline" size="sm" onClick={handleExportPaidHistory} className="h-9 gap-2 font-bold text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50">
+                      <FileSpreadsheet className="w-4 h-4" /> Export Excel
+                   </Button>
                    <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm">
                       <Filter className="w-3.5 h-3.5 text-slate-400" />
                       <Select value={paidFromMonth} onValueChange={setPaidFromMonth}>
@@ -541,7 +598,7 @@ export default function VouchersPage() {
               <Card className="shadow-sm border-slate-200 overflow-hidden">
                 <CardContent className="p-0">
                   <ScrollArea className="w-full">
-                    <Table className="min-w-[1400px]">
+                    <Table className="min-w-[1600px]">
                       <TableHeader className="bg-slate-50">
                         <TableRow>
                           <TableHead className="font-bold">Voucher No</TableHead>
@@ -553,12 +610,14 @@ export default function VouchersPage() {
                           <TableHead className="font-bold text-center">Paid Type</TableHead>
                           <TableHead className="font-bold">Paid Date</TableHead>
                           <TableHead className="font-bold">Ref. No.</TableHead>
-                          <TableHead className="font-bold pr-6">Purpose</TableHead>
+                          <TableHead className="font-bold">Purpose</TableHead>
+                          <TableHead className="font-bold">Created By</TableHead>
+                          <TableHead className="font-bold pr-6">Approved By</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {paginatedPaid.length === 0 ? (
-                          <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground font-medium">No paid vouchers found for the selected criteria.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={12} className="text-center py-20 text-muted-foreground font-medium">No paid vouchers found for the selected criteria.</TableCell></TableRow>
                         ) : (
                           paginatedPaid.map(v => {
                             const emp = employees.find(e => e.id === v.employeeId);
@@ -577,7 +636,9 @@ export default function VouchersPage() {
                                 </TableCell>
                                 <TableCell className="text-xs font-bold text-emerald-600">{formatDate(v.paidDate || '')}</TableCell>
                                 <TableCell className="text-xs font-mono font-medium">{v.paymentReference || "---"}</TableCell>
-                                <TableCell className="text-xs text-muted-foreground pr-6">{v.purpose}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{v.purpose}</TableCell>
+                                <TableCell className="text-xs font-bold text-slate-600">{v.createdByName || '---'}</TableCell>
+                                <TableCell className="text-xs font-bold text-slate-600 pr-6">{v.approvedByName || '---'}</TableCell>
                               </TableRow>
                             );
                           })
