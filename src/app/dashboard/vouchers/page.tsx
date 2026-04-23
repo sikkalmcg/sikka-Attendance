@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -242,6 +241,12 @@ export default function VouchersPage() {
       employeeId: emp?.employeeId
     });
     toast({ title: "Voucher Approved" });
+  };
+
+  const handleOpenPayDialog = (v: Voucher) => {
+    setVoucherToPay(v);
+    setPayAmount(v.amount.toString());
+    setIsPayDialogOpen(true);
   };
 
   const handlePostPay = () => {
