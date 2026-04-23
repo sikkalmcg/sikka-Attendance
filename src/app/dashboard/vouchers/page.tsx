@@ -257,7 +257,7 @@ export default function VouchersPage() {
       updateRecord('vouchers', voucherToPay.id, {
         status: 'PAID',
         paymentMode: payMode,
-        paymentReference: payRef,
+        paymentReference: payMode === 'BANKING' ? payRef : '',
         paidDate: payDate,
         approvedByName: currentUser?.fullName || "Accountant"
       });
@@ -543,10 +543,12 @@ export default function VouchersPage() {
                 <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} className="h-11 sm:h-12 font-bold text-sm" min={PROJECT_START_DATE_STR} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label className="text-[9px] sm:text-[10px] font-black uppercase text-slate-500">Reference No / Txn ID</Label>
-              <Input placeholder="Enter Banking Txn ID or Chq No" value={payRef} onChange={(e) => setPayRef(e.target.value)} className="h-11 sm:h-12 font-bold text-sm" />
-            </div>
+            {payMode === 'BANKING' && (
+              <div className="space-y-2">
+                <Label className="text-[9px] sm:text-[10px] font-black uppercase text-slate-500">Reference No / Txn ID</Label>
+                <Input placeholder="Enter Banking Txn ID or Chq No" value={payRef} onChange={(e) => setPayRef(e.target.value)} className="h-11 sm:h-12 font-bold text-sm" />
+              </div>
+            )}
           </div>
           <DialogFooter className="p-4 sm:p-6 bg-slate-50 border-t gap-3 flex-row">
             <Button variant="ghost" onClick={() => setIsPayDialogOpen(false)} className="flex-1 h-11 sm:h-12 rounded-xl font-bold text-xs sm:text-sm">Cancel</Button>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -59,7 +58,8 @@ import {
   ArrowUpRight,
   Info,
   Briefcase,
-  CalendarClock
+  CalendarClock,
+  Wallet
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -102,8 +102,7 @@ export default function PayrollPage() {
 
   const [generatePage, setGeneratePage] = useState(1);
   const [paymentPendingPage, setPaymentPendingPage] = useState(1);
-  const [historyFromMonth, setHistoryFromMonth] = useState("");
-  const [historyToMonth, setHistoryToMonth] = useState("");
+  const [advancePage, setAdvancePage] = useState(1);
 
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
   const [printSlip, setPrintSlip] = useState<PayrollRecord | null>(null);
@@ -125,8 +124,6 @@ export default function PayrollPage() {
     setIsMounted(true);
     const initialMonth = PAYROLL_MONTHS_12M_GEN[0] || "";
     setSelectedMonth(initialMonth);
-    setHistoryFromMonth(initialMonth);
-    setHistoryToMonth(initialMonth);
     setPaymentDate(new Date().toISOString().split('T')[0]);
   }, []);
 
@@ -144,7 +141,6 @@ export default function PayrollPage() {
       });
 
       if (newPaid >= paySalaryRec.netPayable) {
-        // REQUIREMENT: Salary Paid: Employee Name, Month
         addRecord('notifications', {
           message: `Salary Disbursed: ${paySalaryRec.employeeName} (${paySalaryRec.month})`,
           timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
@@ -197,6 +193,27 @@ export default function PayrollPage() {
     return { pending };
   }, [payrollRecords, searchTerm, selectedFirmId, employees]);
 
+  const advanceSalaryData = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return employees.filter(emp => {
+      const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
+      const firmMatch = selectedFirmId === "all" || emp.firmId === selectedFirmId;
+      return match && firmMatch;
+    }).map(emp => {
+      const empVouchers = vouchers.filter(v => v.employeeId === emp.id && v.status === 'PAID');
+      const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
+      const totalRecovered = payrollRecords
+        .filter(p => p.employeeId === emp.employeeId)
+        .reduce((sum, p) => sum + (p.advanceRecovery || 0), 0);
+      return {
+        ...emp,
+        totalAdvance: totalAdv,
+        totalRecovered: totalRecovered,
+        remainingBalance: Math.max(0, totalAdv - totalRecovered)
+      };
+    }).sort((a, b) => b.remainingBalance - a.remainingBalance);
+  }, [employees, vouchers, payrollRecords, searchTerm, selectedFirmId]);
+
   if (!isMounted) return null;
 
   if (adjustLeaveEmp) {
@@ -237,7 +254,12 @@ export default function PayrollPage() {
     <div className="space-y-8 pb-12 font-calibri print:hidden">
         <div><h1 className="text-2xl font-bold">Payroll Management</h1><p className="text-muted-foreground">Centralized alerts and processing for staff earnings.</p></div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-md bg-slate-100 p-1 rounded-xl h-12"><TabsTrigger value="generate">Generate Salary</TabsTrigger><TabsTrigger value="payment">Salary Payment</TabsTrigger></TabsList>
+          <TabsList className="grid w-full grid-cols-3 max-w-xl bg-slate-100 p-1 rounded-xl h-12">
+            <TabsTrigger value="generate">Generate Salary</TabsTrigger>
+            <TabsTrigger value="payment">Salary Payment</TabsTrigger>
+            <TabsTrigger value="advance">Advance Salary</TabsTrigger>
+          </TabsList>
+          
           <TabsContent value="generate" className="mt-8 space-y-6">
             <Card className="border-none shadow-sm"><CardHeader className="bg-slate-50 border-b flex flex-row items-center gap-4"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search staff..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-40 font-bold"><SelectValue /></SelectTrigger><SelectContent>{PAYROLL_MONTHS_12M_GEN.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></CardHeader>
             <CardContent className="p-0"><Table className="min-w-[1200px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold">Employee Name / ID</TableHead><TableHead className="font-bold">Dept / Designation</TableHead><TableHead className="font-bold">Month</TableHead><TableHead className="font-bold text-right">Monthly CTC</TableHead><TableHead className="text-right font-bold pr-6">Actions</TableHead></TableRow></TableHeader>
@@ -245,10 +267,69 @@ export default function PayrollPage() {
               <TableRow key={emp.id} className="hover:bg-slate-50/50"><TableCell><div className="flex flex-col"><span className="font-bold uppercase text-sm">{emp.name}</span><span className="text-xs font-mono text-primary font-black">{emp.employeeId}</span></div></TableCell><TableCell><div className="text-sm font-medium">{emp.department}</div><div className="text-[10px] text-muted-foreground uppercase">{emp.designation}</div></TableCell><TableCell><Badge variant="outline" className="font-bold">{selectedMonth}</Badge></TableCell><TableCell className="text-right font-bold">{formatCurrency(emp.salary.monthlyCTC)}</TableCell><TableCell className="text-right pr-6"><div className="flex justify-end gap-2"><Button variant="outline" size="sm" className={cn(adj?.adjusted && "bg-emerald-50 text-emerald-700")} onClick={() => { setAdjustmentState({present: emp.metrics.presents, absent: 26 - emp.metrics.presents, holidayWork: emp.metrics.holidayWork, holidayBanked: 0, holidayPaid: 0, balanceUsed: 0, remainingBalance: emp.advanceLeaveBalance || 0, earningDays: emp.metrics.presents, isPaidAction: false, isBankedAction: false}); setAdjustLeaveEmp(emp); }}>Adjust Leave</Button><Button size="sm" className="font-black bg-primary" disabled={!adj?.adjusted} onClick={() => router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adj.earningDays}`)}>Generate</Button></div></TableCell></TableRow>
             );})}</TableBody></Table></CardContent></Card>
           </TabsContent>
+          
           <TabsContent value="payment" className="mt-8 space-y-6">
             <Card className="border-none shadow-sm"><CardHeader className="bg-slate-50 border-b flex flex-row items-center gap-4"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search slips..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></CardHeader>
             <CardContent className="p-0"><Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold">Slip No</TableHead><TableHead className="font-bold">Employee Name</TableHead><TableHead className="font-bold text-center">Month</TableHead><TableHead className="font-bold text-right">Net Payable</TableHead><TableHead className="text-right font-bold pr-6">Actions</TableHead></TableRow></TableHeader>
             <TableBody>{paymentTabLists.pending.map((p) => (<TableRow key={p.id} className="hover:bg-slate-50/50"><TableCell className="font-mono font-bold text-blue-600">{p.slipNo}</TableCell><TableCell className="font-bold uppercase text-sm">{p.employeeName}</TableCell><TableCell className="text-center"><Badge variant="secondary">{p.month}</Badge></TableCell><TableCell className="text-right font-black">{formatCurrency(p.netPayable)}</TableCell><TableCell className="text-right pr-6"><Button variant="ghost" size="icon" onClick={() => { setPaySalaryRec(p); setPaymentAmount(p.netPayable - p.salaryPaidAmount); }}><CreditCard className="w-4 h-4" /></Button></TableCell></TableRow>))}</TableBody></Table></CardContent></Card>
+          </TabsContent>
+
+          <TabsContent value="advance" className="mt-8 space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <Wallet className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg font-black">Advance Salary Ledger</CardTitle>
+                    <CardDescription className="text-xs">Tracking advance payments and recoveries.</CardDescription>
+                  </div>
+                </div>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search employee..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1000px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest px-6">Employee Name / ID</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest text-right">Total Advance Given</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest text-right">Total Recovered</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest text-right pr-6">Remaining Balance</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {advanceSalaryData.length === 0 ? (
+                        <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground">No records found.</TableCell></TableRow>
+                      ) : (
+                        advanceSalaryData.map((emp) => (
+                          <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                            <TableCell className="px-6">
+                              <div className="flex flex-col">
+                                <span className="font-bold uppercase text-sm">{emp.name}</span>
+                                <span className="text-[10px] font-mono text-primary font-black uppercase">{emp.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-slate-600">{formatCurrency(emp.totalAdvance)}</TableCell>
+                            <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(emp.totalRecovered)}</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Badge className={cn("font-black text-sm px-4", emp.remainingBalance > 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100")}>
+                                {formatCurrency(emp.remainingBalance)}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
         <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary" /> Record Disbursement</DialogTitle></DialogHeader><div className="p-8 space-y-6"><div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Amount Due</span><span className="text-lg font-black text-rose-600">{formatCurrency(paymentAmount)}</span></div><Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-11 font-bold" /><Button onClick={handlePostPayment} className="w-full h-12 font-black bg-primary">Confirm Pay</Button></div></DialogContent></Dialog>
