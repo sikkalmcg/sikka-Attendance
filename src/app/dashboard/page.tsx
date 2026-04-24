@@ -23,7 +23,9 @@ import {
   TrendingDown,
   ChevronRight,
   User as UserIcon,
-  Filter
+  Filter,
+  ChevronLeft,
+  CalendarDays
 } from "lucide-react";
 import { useData } from "@/context/data-context";
 import {
@@ -45,8 +47,9 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatDate, formatHoursToHHMM } from "@/lib/utils";
-import { format, addHours, parseISO, isValid, isBefore, startOfMonth } from "date-fns";
+import { format, addHours, parseISO, isValid, isBefore, startOfMonth, setMonth, setYear } from "date-fns";
 
 const PRESENT_STATUSES = ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'];
 const PROJECT_START_DATE = new Date(2026, 3, 1); // April 2026
@@ -55,27 +58,18 @@ const getISTTime = () => {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 };
 
-const generateLeaderboardMonths = () => {
-  const options = [];
-  const date = getISTTime();
-  // Generate from April 2026 to 12 months ahead of now
-  for (let i = -12; i <= 120; i++) {
-    const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
-    if (isBefore(d, startOfMonth(PROJECT_START_DATE))) continue;
-    const mmm = d.toLocaleString('en-US', { month: 'short' });
-    const yy = d.getFullYear().toString().slice(-2);
-    options.push(`${mmm}-${yy}`);
-  }
-  // Return unique sorted options
-  return Array.from(new Set(options)).reverse();
-};
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function DashboardHome() {
   const { employees, attendanceRecords, vouchers } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh'>(null);
   const [todayStr, setTodayStr] = useState("");
+  
+  // Leaderboard States
   const [selectedLeaderboardMonth, setSelectedLeaderboardMonth] = useState("");
+  const [pickerYear, setPickerYear] = useState(2026);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -87,6 +81,7 @@ export default function DashboardHome() {
     const yy = now.getFullYear().toString().slice(-2);
     const currentMonthKey = `${mmm}-${yy}`;
     setSelectedLeaderboardMonth(currentMonthKey);
+    setPickerYear(now.getFullYear());
   }, []);
 
   const stats = useMemo(() => {
@@ -127,8 +122,7 @@ export default function DashboardHome() {
     if (!isMounted || !selectedLeaderboardMonth || !employees.length) return { top: [], bottom: [] };
 
     const [mmm, yy] = selectedLeaderboardMonth.split('-');
-    const mNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const mIndex = mNames.indexOf(mmm);
+    const mIndex = MONTHS.indexOf(mmm);
     const year = 2000 + parseInt(yy);
 
     const hourMap: Record<string, number> = {};
@@ -205,6 +199,16 @@ export default function DashboardHome() {
       .map(e => ({ name: e.name, employeeId: e.employeeId, dept: e.department, desig: e.designation, date: todayStr }));
   }, [employees, attendanceRecords, todayStr, isMounted]);
 
+  const handleMonthSelect = (monthIndex: number) => {
+    const selectedDate = new Date(pickerYear, monthIndex, 1);
+    if (isBefore(selectedDate, startOfMonth(PROJECT_START_DATE))) return;
+    
+    const mmm = MONTHS[monthIndex];
+    const yy = pickerYear.toString().slice(-2);
+    setSelectedLeaderboardMonth(`${mmm}-${yy}`);
+    setIsPickerOpen(false);
+  };
+
   if (!isMounted) return null;
 
   if (viewMode === 'absent') {
@@ -272,18 +276,55 @@ export default function DashboardHome() {
               <p className="text-xs text-muted-foreground font-medium">Monthly working hour ranking and exception analysis.</p>
             </div>
           </div>
-          <div className="w-full sm:w-48">
+          <div className="w-full sm:w-56">
             <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Analysis Period</Label>
-            <Select value={selectedLeaderboardMonth} onValueChange={setSelectedLeaderboardMonth}>
-              <SelectTrigger className="h-11 bg-slate-50 border-slate-200 font-bold rounded-xl focus:ring-primary/20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl shadow-2xl">
-                {generateLeaderboardMonths().map(m => (
-                  <SelectItem key={m} value={m} className="font-bold text-xs">{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full h-11 bg-slate-50 border-slate-200 font-black rounded-xl flex items-center justify-between px-4 hover:bg-slate-100 transition-all">
+                  <span className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-primary" />
+                    {selectedLeaderboardMonth || "Select Month"}
+                  </span>
+                  <ChevronRight className={cn("w-4 h-4 text-slate-400 transition-transform", isPickerOpen && "rotate-90")} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-0 rounded-2xl shadow-2xl border-slate-100 overflow-hidden" align="end">
+                <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => setPickerYear(p => Math.max(2026, p - 1))} disabled={pickerYear === 2026}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-sm font-black tracking-widest uppercase">{pickerYear}</span>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => setPickerYear(p => p + 1)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="p-3 grid grid-cols-3 gap-2 bg-white">
+                  {MONTHS.map((m, idx) => {
+                    const isSelected = selectedLeaderboardMonth === `${m}-${pickerYear.toString().slice(-2)}`;
+                    const isPast = isBefore(new Date(pickerYear, idx, 1), startOfMonth(PROJECT_START_DATE));
+                    
+                    return (
+                      <Button
+                        key={m}
+                        variant={isSelected ? "default" : "ghost"}
+                        disabled={isPast}
+                        className={cn(
+                          "h-12 rounded-xl text-xs font-bold transition-all",
+                          isSelected ? "bg-primary text-white shadow-lg shadow-primary/20" : "hover:bg-slate-50 text-slate-600",
+                          isPast && "opacity-20 pointer-events-none grayscale"
+                        )}
+                        onClick={() => handleMonthSelect(idx)}
+                      >
+                        {m}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-tighter">Project Boundary: April 2026</p>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
