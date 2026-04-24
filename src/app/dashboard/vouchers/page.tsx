@@ -886,25 +886,25 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         <div className="flex flex-col items-end pt-0">
           <div className="w-full max-w-[280px] space-y-1.5">
             <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
-              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
+              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Voucher No.</span>
               <span className="text-xs sm:text-sm font-black font-mono text-primary">{voucher.voucherNo}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
-              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</span>
+              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Date</span>
               <span className="text-xs sm:text-sm font-black">{formatDate(voucher.date)}</span>
             </div>
             <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
-              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
+              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Created By</span>
               <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.createdByName || "System Admin"}</span>
             </div>
             {voucher.status === 'REJECTED' ? (
               <div className="flex justify-between border-b border-rose-100 pb-1 gap-8">
-                <span className="text-[8px] sm:text-[9px] font-black text-rose-400 uppercase tracking-widest">Rejected By</span>
+                <span className="text-[8px] sm:text-[9px] font-black text-rose-400 uppercase tracking-widest whitespace-nowrap">Rejected By</span>
                 <span className="text-[9px] sm:text-[10px] font-bold uppercase text-rose-600">{voucher.rejectedByName || "Admin"}</span>
               </div>
             ) : (
               <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
-                <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
+                <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Approved By</span>
                 <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
               </div>
             )}
@@ -918,15 +918,15 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[12%] uppercase text-[8px] sm:text-[9px] font-black">Employee ID</th>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[12%] uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Employee ID</th>
                 <td className="p-3 border-r border-b border-slate-900 font-black font-mono text-primary w-[38%]">{emp?.employeeId || "---"}</td>
-                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Full Name</th>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Full Name</th>
                 <td className="p-3 border-b border-slate-900 font-black uppercase w-[38%]">{emp?.name || "---"}</td>
               </tr>
               <tr>
-                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Dept / Desig</th>
+                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Dept / Desig</th>
                 <td className="p-3 border-r border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
-                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Aadhaar Number</th>
+                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Aadhaar Number</th>
                 <td className="p-3 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
               </tr>
             </tbody>
@@ -940,15 +940,15 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[15%] uppercase text-[8px] sm:text-[9px] font-black">Amount (₹)</th>
-                <td className="p-3 border-b border-slate-900"><div className="text-xl sm:text-2xl font-black text-slate-900 py-1">{formatCurrency(voucher.amount)}</div></td>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[18%] uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Amount (₹)</th>
+                <td className="p-3 border-b border-slate-900"><div className="text-lg sm:text-xl font-black text-slate-900 py-0.5">{formatCurrency(voucher.amount)}</div></td>
               </tr>
               <tr>
-                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">In Words</th>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">In Words</th>
                 <td className="p-3 border-b border-slate-900 font-bold italic text-slate-700 text-[10px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td>
               </tr>
               <tr>
-                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Purpose</th>
+                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Purpose</th>
                 <td className="p-3 font-black uppercase tracking-widest text-primary text-[10px] sm:text-sm">Advance Salary</td>
               </tr>
             </tbody>
