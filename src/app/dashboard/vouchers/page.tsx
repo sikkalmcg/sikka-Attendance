@@ -915,17 +915,17 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
       <div className="mb-6 z-10">
         <h3 className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee / Receiver Information</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
-          <table className="w-full text-left text-xs sm:text-sm border-collapse">
+          <table className="w-full text-left text-xs sm:text-sm border-collapse table-fixed">
             <tbody>
               <tr>
-                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[12%] uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Employee ID</th>
-                <td className="p-3 border-r border-b border-slate-900 font-black font-mono text-primary w-[38%]">{emp?.employeeId || "---"}</td>
-                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Full Name</th>
-                <td className="p-3 border-b border-slate-900 font-black uppercase w-[38%]">{emp?.name || "---"}</td>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[15%] uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Employee ID</th>
+                <td className="p-3 border-r border-b border-slate-900 font-black font-mono text-primary w-[35%]">{emp?.employeeId || "---"}</td>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap w-[15%]">Full Name</th>
+                <td className="p-3 border-b border-slate-900 font-black uppercase w-[35%]">{emp?.name || "---"}</td>
               </tr>
               <tr>
                 <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Dept / Desig</th>
-                <td className="p-3 border-r border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
+                <td className="p-3 border-r border-slate-900 font-bold uppercase leading-snug">{emp?.department} / {emp?.designation}</td>
                 <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Aadhaar Number</th>
                 <td className="p-3 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
               </tr>
@@ -937,15 +937,15 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
       <div className="mb-6 z-10">
         <h3 className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2 flex items-center gap-2"><CreditCard className="w-3 h-3" /> Transaction Summary</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
-          <table className="w-full text-left text-xs sm:text-sm border-collapse">
+          <table className="w-full text-left text-xs sm:text-sm border-collapse table-fixed">
             <tbody>
               <tr>
                 <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[18%] uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Amount (₹)</th>
-                <td className="p-3 border-b border-slate-900"><div className="text-lg sm:text-xl font-black text-slate-900 py-0.5">{formatCurrency(voucher.amount)}</div></td>
+                <td className="p-3 border-b border-slate-900 w-[82%]"><div className="text-lg sm:text-xl font-black text-slate-900 py-0.5">{formatCurrency(voucher.amount)}</div></td>
               </tr>
               <tr>
                 <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">In Words</th>
-                <td className="p-3 border-b border-slate-900 font-bold italic text-slate-700 text-[10px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td>
+                <td className="p-3 border-b border-slate-900 font-bold italic text-slate-700 text-[10px] sm:text-sm leading-snug">{numberToIndianWords(voucher.amount)}</td>
               </tr>
               <tr>
                 <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black whitespace-nowrap">Purpose</th>
