@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
@@ -42,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -387,4 +387,3 @@ export default function DashboardHome() {
 function StatCard({ title, value, icon: Icon, trend, trendUp, description, onClick }: any) {
   return (<Card className={cn("shadow-sm border-slate-200 overflow-hidden relative transition-all", onClick && "cursor-pointer hover:shadow-md hover:border-primary/20 group")} onClick={onClick}><CardContent className="p-6"><div className="flex justify-between items-start"><div><p className="text-sm font-medium text-muted-foreground">{title}</p><h3 className="text-3xl font-bold mt-2">{value}</h3></div><div className={cn("p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-sm transition-colors", onClick && "group-hover:bg-primary/10 group-hover:border-primary/20")}><Icon className="w-6 h-6 text-primary" /></div></div><div className="mt-4 flex items-center gap-2"><span className={`text-xs font-bold flex items-center gap-1 px-1.5 py-0.5 rounded ${trendUp ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>{trendUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}{trend}</span><span className="text-xs text-muted-foreground">{description}</span></div></CardContent></Card>);
 }
-
