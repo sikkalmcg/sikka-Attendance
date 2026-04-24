@@ -36,7 +36,8 @@ import {
   Info,
   ShieldCheck,
   FileText,
-  Navigation
+  Navigation,
+  FileX
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -58,6 +59,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Tooltip,
@@ -66,6 +68,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 
 const PROJECT_START_DATE_STR = "2026-04-01";
 const PROJECT_START_DATE = new Date(2026, 3, 1);
@@ -100,13 +103,15 @@ export default function VouchersPage() {
   const [pendingPage, setPendingPage] = useState(1);
   const [payablePage, setPayablePage] = useState(1);
   const [paidPage, setPaidPage] = useState(1);
+  const [rejectedPage, setRejectedPage] = useState(1);
 
   const [paidFromMonth, setPaidFromMonth] = useState("");
   const [paidToMonth, setPaidToMonth] = useState("");
 
   const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
   const [printVoucher, setPrintVoucher] = useState<Voucher | null>(null);
-  const [voucherToReject, setVoucherToReject] = useState<string | null>(null);
+  const [voucherToReject, setVoucherToReject] = useState<Voucher | null>(null);
+  const [rejectionRemark, setRejectionRemark] = useState("");
   const [isPayDialogOpen, setIsPayDialogOpen] = useState(false);
   const [voucherToPay, setVoucherToPay] = useState<Voucher | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -144,6 +149,15 @@ export default function VouchersPage() {
     ).reverse();
   }, [vouchers, searchTerm, employees]);
 
+  const rejectedVouchersList = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return (vouchers || []).filter(v => 
+      v.status === 'REJECTED' && 
+      v.date >= PROJECT_START_DATE_STR && 
+      (v.voucherNo.toLowerCase().includes(search) || employees.find(e => e.id === v.employeeId)?.name.toLowerCase().includes(search))
+    ).reverse();
+  }, [vouchers, searchTerm, employees]);
+
   const voucherRecoveryLedger = useMemo(() => {
     return (vouchers || []).filter(v => (v.status === 'APPROVED' || v.status === 'PAID') && v.date >= PROJECT_START_DATE_STR).reverse();
   }, [vouchers]);
@@ -168,10 +182,12 @@ export default function VouchersPage() {
   const paginatedPending = useMemo(() => filteredPendingVouchers.slice((pendingPage - 1) * ROWS_PER_PAGE, pendingPage * ROWS_PER_PAGE), [filteredPendingVouchers, pendingPage]);
   const paginatedPayable = useMemo(() => paymentTabLists.pending.slice((payablePage - 1) * ROWS_PER_PAGE, payablePage * ROWS_PER_PAGE), [paymentTabLists.pending, payablePage]);
   const paginatedPaid = useMemo(() => paymentTabLists.paid.slice((paidPage - 1) * ROWS_PER_PAGE, paidPage * ROWS_PER_PAGE), [paymentTabLists.paid, paidPage]);
+  const paginatedRejected = useMemo(() => rejectedVouchersList.slice((rejectedPage - 1) * ROWS_PER_PAGE, rejectedPage * ROWS_PER_PAGE), [rejectedVouchersList, rejectedPage]);
 
   const totalPagesPending = Math.ceil(filteredPendingVouchers.length / ROWS_PER_PAGE);
   const totalPagesPayable = Math.ceil(paymentTabLists.pending.length / ROWS_PER_PAGE);
   const totalPagesPaid = Math.ceil(paymentTabLists.paid.length / ROWS_PER_PAGE);
+  const totalPagesRejected = Math.ceil(rejectedVouchersList.length / ROWS_PER_PAGE);
 
   const handleExportPaidHistory = () => {
     if (paymentTabLists.paid.length === 0) {
@@ -296,6 +312,33 @@ export default function VouchersPage() {
     toast({ title: "Voucher Approved" });
   };
 
+  const handleRejectVoucher = () => {
+    if (!voucherToReject || !rejectionRemark.trim()) {
+      toast({ variant: "destructive", title: "Remark Required", description: "Please specify why this voucher is being rejected." });
+      return;
+    }
+
+    const emp = employees.find(e => e.id === voucherToReject.employeeId);
+    const rejector = currentUser?.fullName || "Manager";
+    updateRecord('vouchers', voucherToReject.id, { 
+      status: 'REJECTED', 
+      rejectedByName: rejector,
+      rejectionRemark: rejectionRemark 
+    });
+
+    addRecord('notifications', {
+      message: `Voucher Rejected: ${emp?.name}, ₹${voucherToReject.amount}, Reason: ${rejectionRemark}`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'VOUCHER_REJECTED',
+      employeeId: emp?.employeeId
+    });
+
+    toast({ variant: "destructive", title: "Voucher Rejected" });
+    setVoucherToReject(null);
+    setRejectionRemark("");
+  };
+
   const handleOpenPayDialog = (v: Voucher) => {
     setVoucherToPay(v);
     setPayAmount(v.amount.toString());
@@ -328,15 +371,6 @@ export default function VouchersPage() {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleDownloadAndPrint = (v: Voucher) => {
-    if (!v) return;
-    setPrintVoucher(v);
-    setTimeout(() => {
-      window.print();
-      setPrintVoucher(null);
-    }, 800);
   };
 
   const handleVoucherClick = (v: Voucher) => {
@@ -450,7 +484,7 @@ export default function VouchersPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="approve">
+          <TabsContent value="approve" className="space-y-12">
             <Card className="shadow-sm border-slate-200 overflow-hidden">
               <CardHeader className="bg-slate-50/50 p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between border-b gap-4">
                 <CardTitle className="text-sm sm:text-lg">Pending Approvals ({filteredPendingVouchers.length})</CardTitle>
@@ -492,7 +526,7 @@ export default function VouchersPage() {
                               <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(v.amount)}</TableCell>
                               <TableCell className="text-right pr-6">
                                 <div className="flex justify-end gap-2">
-                                  <Button size="sm" variant="outline" className="text-rose-600 border-rose-200 hover:bg-rose-50 font-bold h-8 text-[10px] sm:text-xs" onClick={() => setVoucherToReject(v.id)}>Reject</Button>
+                                  <Button size="sm" variant="outline" className="text-rose-600 border-rose-200 hover:bg-rose-50 font-bold h-8 text-[10px] sm:text-xs" onClick={() => setVoucherToReject(v)}>Reject</Button>
                                   <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold h-8 px-4 sm:px-6 shadow-sm text-[10px] sm:text-xs" onClick={() => handleApproveVoucher(v)}>Approve</Button>
                                 </div>
                               </TableCell>
@@ -507,6 +541,75 @@ export default function VouchersPage() {
               </CardContent>
               {totalPagesPending > 1 && <StandardPaginationFooter current={pendingPage} total={totalPagesPending} onPageChange={setPendingPage} />}
             </Card>
+
+            {/* Rejected Voucher History */}
+            <div className="space-y-6">
+               <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center border border-rose-100">
+                    <FileX className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">Rejected Voucher History</h2>
+                    <p className="text-xs text-muted-foreground">Log of all declined advance requests.</p>
+                  </div>
+                </div>
+
+                <Card className="shadow-sm border-slate-200 overflow-hidden">
+                  <CardContent className="p-0">
+                    <ScrollArea className="w-full">
+                      <Table className="min-w-[1500px]">
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="font-bold">Voucher No</TableHead>
+                            <TableHead className="font-bold">Voucher Date</TableHead>
+                            <TableHead className="font-bold">Employee Name/ID</TableHead>
+                            <TableHead className="font-bold">Department/Designation</TableHead>
+                            <TableHead className="font-bold text-right">Amount</TableHead>
+                            <TableHead className="font-bold">Purpose</TableHead>
+                            <TableHead className="font-bold">Create By</TableHead>
+                            <TableHead className="font-bold">Reject By</TableHead>
+                            <TableHead className="font-bold pr-6">Reject Remark</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedRejected.length === 0 ? (
+                            <TableRow><TableCell colSpan={9} className="text-center py-20 text-muted-foreground font-medium">No rejected records found.</TableCell></TableRow>
+                          ) : (
+                            paginatedRejected.map(v => {
+                              const emp = employees.find(e => e.id === v.employeeId);
+                              return (
+                                <TableRow key={v.id} className="hover:bg-slate-50/50">
+                                  <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                                  <TableCell className="text-xs font-medium">{formatDate(v.date)}</TableCell>
+                                  <TableCell className="font-bold uppercase text-slate-700 text-xs">
+                                    <div className="flex flex-col">
+                                      <span>{emp?.name}</span>
+                                      <span className="text-[10px] text-primary font-mono">{emp?.employeeId}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-slate-600">
+                                    <div className="flex flex-col">
+                                      <span>{emp?.department}</span>
+                                      <span className="text-[10px] text-muted-foreground">{emp?.designation}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right font-black text-rose-600 text-xs">{formatCurrency(v.amount)}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">{v.purpose}</TableCell>
+                                  <TableCell className="text-xs font-bold text-slate-600">{v.createdByName || '---'}</TableCell>
+                                  <TableCell className="text-xs font-bold text-slate-600">{v.rejectedByName || '---'}</TableCell>
+                                  <TableCell className="text-xs font-medium text-rose-600 italic pr-6">{v.rejectionRemark || '---'}</TableCell>
+                                </TableRow>
+                              );
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                      <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
+                  </CardContent>
+                  {totalPagesRejected > 1 && <StandardPaginationFooter current={rejectedPage} total={totalPagesRejected} onPageChange={setRejectedPage} />}
+                </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="payment" className="space-y-12">
@@ -655,6 +758,38 @@ export default function VouchersPage() {
         </Tabs>
       </div>
 
+      <Dialog open={!!voucherToReject} onOpenChange={(o) => { if (!o) { setVoucherToReject(null); setRejectionRemark(""); } }}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-rose-600 flex items-center gap-2">
+              <XCircle className="w-5 h-5" /> Reject Voucher
+            </DialogTitle>
+            <DialogDescription>Please provide a valid reason for declining this request.</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="font-bold text-xs uppercase text-slate-500">Rejection Remark *</Label>
+              <Textarea 
+                placeholder="e.g. Documentation incomplete, Amount exceeds limit..."
+                value={rejectionRemark}
+                onChange={(e) => setRejectionRemark(e.target.value)}
+                className="min-h-[100px] bg-slate-50 border-slate-200"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => { setVoucherToReject(null); setRejectionRemark(""); }} className="rounded-xl font-bold">Cancel</Button>
+            <Button 
+              className="bg-rose-600 hover:bg-rose-700 font-bold px-8 rounded-xl" 
+              onClick={handleRejectVoucher}
+              disabled={!rejectionRemark.trim()}
+            >
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isPayDialogOpen} onOpenChange={setIsPayDialogOpen}>
         <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-4 sm:p-6 bg-slate-900 text-white shrink-0">
@@ -703,8 +838,16 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
   const emp = employees.find(e => e.id === voucher.employeeId);
   const firm = firms.find(f => f.id === emp?.firmId);
   return (
-    <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto", isPrintMode ? "p-4" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
-      <div className="relative mb-10 min-h-[80px]">
+    <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto relative", isPrintMode ? "p-4" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
+      {voucher.status === 'REJECTED' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden select-none opacity-[0.08] z-0">
+          <span className="text-[120px] font-black uppercase tracking-[0.2em] -rotate-45 border-[20px] border-rose-600 text-rose-600 px-10 py-5 rounded-[40px]">
+            REJECTED
+          </span>
+        </div>
+      )}
+      
+      <div className="relative mb-10 min-h-[80px] z-10">
         <div className="absolute left-0 top-0">
           {firm?.logo ? (
             <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
@@ -719,7 +862,8 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
           <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
         </div>
       </div>
-      <div className="flex justify-between items-start mb-8">
+
+      <div className="flex justify-between items-start mb-8 z-10">
         <div className="space-y-1">
           <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
           <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
@@ -742,14 +886,22 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
               <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
               <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.createdByName || "System Admin"}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
-              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
-              <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
-            </div>
+            {voucher.status === 'REJECTED' ? (
+              <div className="flex justify-between border-b border-rose-100 pb-1.5 gap-8">
+                <span className="text-[8px] sm:text-[10px] font-black text-rose-400 uppercase tracking-widest">Rejected By</span>
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase text-rose-600">{voucher.rejectedByName || "Admin"}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
+                <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
-      <div className="mb-10">
+
+      <div className="mb-10 z-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee / Receiver Information</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
@@ -770,7 +922,8 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
           </table>
         </div>
       </div>
-      <div className="mb-10">
+
+      <div className="mb-10 z-10">
         <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><CreditCard className="w-3 h-3" /> Transaction Summary</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
@@ -791,7 +944,17 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
           </table>
         </div>
       </div>
-      <div className="mb-10 sm:mb-12 space-y-6">
+
+      {voucher.status === 'REJECTED' && (
+        <div className="mb-10 z-10">
+           <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-rose-400 tracking-widest mb-3 flex items-center gap-2"><AlertTriangle className="w-3 h-3" /> Rejection Remark</h3>
+           <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg">
+             <p className="text-xs font-bold text-rose-700 italic">"{voucher.rejectionRemark}"</p>
+           </div>
+        </div>
+      )}
+
+      <div className="mb-10 sm:mb-12 space-y-6 z-10">
         <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl">
           <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
           <div className="space-y-4 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify">
@@ -806,7 +969,8 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
           </div>
         </div>
       </div>
-      <div className="mt-auto flex justify-between items-end pb-8 px-10">
+
+      <div className="mt-auto flex justify-between items-end pb-8 px-10 z-10">
         <div className="text-center space-y-3">
           <div className="w-48 h-14 border-b border-slate-400 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>

@@ -118,11 +118,14 @@ export interface Voucher {
   date: string;
   purpose: string;
   amount: number;
-  status: 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED';
+  status: 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED' | 'REJECTED';
   createdByName?: string;
   approvedByName?: string;
+  rejectedByName?: string;
+  rejectionRemark?: string;
   paymentMode?: 'CASH' | 'BANKING';
   paymentReference?: string;
+  paidDate?: string;
 }
 
 export interface AttendanceRecord {
