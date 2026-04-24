@@ -138,6 +138,7 @@ export default function DashboardHome() {
       name: e.name,
       id: e.employeeId,
       dept: e.department,
+      desig: e.designation,
       hours: hourMap[e.employeeId] || 0
     }));
 
@@ -361,8 +362,7 @@ export default function DashboardHome() {
                         <div>
                           <p className="font-black text-slate-800 uppercase text-sm leading-none">{emp.name}</p>
                           <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="outline" className="text-[9px] font-black uppercase px-2 py-0 h-4 border-slate-200 text-slate-400 bg-white">{emp.id}</Badge>
-                            <span className="text-[10px] text-muted-foreground font-bold uppercase">{emp.dept}</span>
+                            <span className="text-[10px] text-muted-foreground font-bold uppercase">{emp.dept} • {emp.desig}</span>
                           </div>
                         </div>
                       </div>
@@ -404,8 +404,7 @@ export default function DashboardHome() {
                         <div>
                           <p className="font-black text-slate-800 uppercase text-sm leading-none">{emp.name}</p>
                           <div className="flex items-center gap-2 mt-2">
-                            <Badge variant="outline" className="text-[9px] font-black uppercase px-2 py-0 h-4 border-slate-200 text-slate-400 bg-white">{emp.id}</Badge>
-                            <span className="text-[10px] text-muted-foreground font-bold uppercase">{emp.dept}</span>
+                            <span className="text-[10px] text-muted-foreground font-bold uppercase">{emp.dept} • {emp.desig}</span>
                           </div>
                         </div>
                       </div>
