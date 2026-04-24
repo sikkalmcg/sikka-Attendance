@@ -849,7 +849,7 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
   const emp = employees.find(e => e.id === voucher.employeeId);
   const firm = firms.find(f => f.id === emp?.firmId);
   return (
-    <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto relative", isPrintMode ? "p-4" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
+    <div className={cn("font-calibri text-slate-900 bg-white min-h-[297mm] flex flex-col mx-auto relative", isPrintMode ? "p-6" : "p-6 sm:p-12", !isPrintMode && "max-w-4xl")}>
       {voucher.status === 'REJECTED' && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden select-none opacity-[0.08] z-0">
           <span className="text-[120px] font-black uppercase tracking-[0.2em] -rotate-45 border-[20px] border-rose-600 text-rose-600 px-10 py-5 rounded-[40px]">
@@ -858,53 +858,53 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       )}
       
-      <div className="relative mb-10 min-h-[80px] z-10">
+      <div className="relative mb-6 min-h-[70px] z-10">
         <div className="absolute left-0 top-0">
           {firm?.logo ? (
-            <img src={firm.logo} alt="Logo" className="w-14 h-14 sm:w-16 sm:h-16 object-contain" />
+            <img src={firm.logo} alt="Logo" className="w-12 h-12 sm:w-14 sm:h-14 object-contain" />
           ) : (
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-900 rounded-lg flex items-center justify-center">
-              <span className="text-white text-xl sm:text-2xl font-black">S</span>
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-900 rounded-lg flex items-center justify-center">
+              <span className="text-white text-lg sm:text-xl font-black">S</span>
             </div>
           )}
         </div>
-        <div className="text-center pt-2">
-          <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-[0.3em] border-b-4 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
-          <p className="text-[10px] sm:text-[12px] font-black text-slate-400 mt-2 uppercase tracking-[0.5em]">Advance Disbursement</p>
+        <div className="text-center">
+          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-[0.3em] border-b-2 border-slate-900 inline-block pb-1 leading-tight">Payment Voucher</h1>
+          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 mt-1 uppercase tracking-[0.4em]">Advance Disbursement</p>
         </div>
       </div>
 
-      <div className="flex justify-between items-start mb-8 z-10">
+      <div className="flex justify-between items-start mb-6 z-10">
         <div className="space-y-1">
-          <h2 className="text-lg sm:text-xl font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
+          <h2 className="text-base sm:text-lg font-black uppercase leading-tight tracking-tight">{firm?.name || "SIKKA INDUSTRIES & LOGISTICS"}</h2>
           <p className="text-[8px] sm:text-[9px] font-bold text-slate-500 uppercase leading-relaxed max-w-[320px]">{firm?.registeredAddress}</p>
-          <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[10px] font-black uppercase pt-2">
+          <div className="flex gap-4 sm:gap-6 text-[8px] sm:text-[9px] font-black uppercase pt-1.5">
             <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">GSTIN</span><span className="font-mono">{firm?.gstin || "---"}</span></div>
             <div><span className="text-slate-400 text-[7px] sm:text-[8px] block">PAN</span><span className="font-mono">{firm?.pan || "---"}</span></div>
           </div>
         </div>
         <div className="flex flex-col items-end pt-0">
-          <div className="w-full max-w-[280px] space-y-2">
-            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
-              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
+          <div className="w-full max-w-[280px] space-y-1.5">
+            <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
+              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Voucher No.</span>
               <span className="text-xs sm:text-sm font-black font-mono text-primary">{voucher.voucherNo}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
-              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
+              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</span>
               <span className="text-xs sm:text-sm font-black">{formatDate(voucher.date)}</span>
             </div>
-            <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
-              <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
+            <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
+              <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Created By</span>
               <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.createdByName || "System Admin"}</span>
             </div>
             {voucher.status === 'REJECTED' ? (
-              <div className="flex justify-between border-b border-rose-100 pb-1.5 gap-8">
-                <span className="text-[8px] sm:text-[10px] font-black text-rose-400 uppercase tracking-widest">Rejected By</span>
+              <div className="flex justify-between border-b border-rose-100 pb-1 gap-8">
+                <span className="text-[8px] sm:text-[9px] font-black text-rose-400 uppercase tracking-widest">Rejected By</span>
                 <span className="text-[9px] sm:text-[10px] font-bold uppercase text-rose-600">{voucher.rejectedByName || "Admin"}</span>
               </div>
             ) : (
-              <div className="flex justify-between border-b border-slate-100 pb-1.5 gap-8">
-                <span className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
+              <div className="flex justify-between border-b border-slate-100 pb-1 gap-8">
+                <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Approved By</span>
                 <span className="text-[9px] sm:text-[10px] font-bold uppercase">{voucher.approvedByName || "Authorized Manager"}</span>
               </div>
             )}
@@ -912,44 +912,44 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
         </div>
       </div>
 
-      <div className="mb-10 z-10">
-        <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee / Receiver Information</h3>
+      <div className="mb-6 z-10">
+        <h3 className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2 flex items-center gap-2"><UserIcon className="w-3 h-3" /> Employee / Receiver Information</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[20%] uppercase text-[8px] sm:text-[9px] font-black">Employee ID</th>
-                <td className="p-3 sm:p-4 border-r border-b border-slate-900 font-black font-mono text-primary w-[30%]">{emp?.employeeId || "---"}</td>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Full Name</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900 font-black uppercase w-[30%]">{emp?.name || "---"}</td>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[12%] uppercase text-[8px] sm:text-[9px] font-black">Employee ID</th>
+                <td className="p-3 border-r border-b border-slate-900 font-black font-mono text-primary w-[38%]">{emp?.employeeId || "---"}</td>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Full Name</th>
+                <td className="p-3 border-b border-slate-900 font-black uppercase w-[38%]">{emp?.name || "---"}</td>
               </tr>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Dept / Desig</th>
-                <td className="p-3 sm:p-4 border-r border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
-                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Aadhaar Number</th>
-                <td className="p-3 sm:p-4 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
+                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Dept / Desig</th>
+                <td className="p-3 border-r border-slate-900 font-bold uppercase">{emp?.department} / {emp?.designation}</td>
+                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Aadhaar Number</th>
+                <td className="p-3 font-mono font-bold tracking-widest">{emp?.aadhaar || "---"}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      <div className="mb-10 z-10">
-        <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2"><CreditCard className="w-3 h-3" /> Transaction Summary</h3>
+      <div className="mb-6 z-10">
+        <h3 className="text-[8px] sm:text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2 flex items-center gap-2"><CreditCard className="w-3 h-3" /> Transaction Summary</h3>
         <div className="border border-slate-900 rounded-lg overflow-hidden">
           <table className="w-full text-left text-xs sm:text-sm border-collapse">
             <tbody>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 w-[25%] uppercase text-[8px] sm:text-[9px] font-black">Amount (₹)</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900"><div className="text-xl sm:text-2xl font-black text-slate-900 py-1">{formatCurrency(voucher.amount)}</div></td>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 w-[15%] uppercase text-[8px] sm:text-[9px] font-black">Amount (₹)</th>
+                <td className="p-3 border-b border-slate-900"><div className="text-xl sm:text-2xl font-black text-slate-900 py-1">{formatCurrency(voucher.amount)}</div></td>
               </tr>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">In Words</th>
-                <td className="p-3 sm:p-4 border-b border-slate-900 font-bold italic text-slate-700 text-[10px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td>
+                <th className="p-3 border-r border-b border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">In Words</th>
+                <td className="p-3 border-b border-slate-900 font-bold italic text-slate-700 text-[10px] sm:text-sm">{numberToIndianWords(voucher.amount)}</td>
               </tr>
               <tr>
-                <th className="p-3 sm:p-4 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Purpose</th>
-                <td className="p-3 sm:p-4 font-black uppercase tracking-widest text-primary text-[10px] sm:text-sm">Advance Salary</td>
+                <th className="p-3 border-r border-slate-900 bg-slate-50 uppercase text-[8px] sm:text-[9px] font-black">Purpose</th>
+                <td className="p-3 font-black uppercase tracking-widest text-primary text-[10px] sm:text-sm">Advance Salary</td>
               </tr>
             </tbody>
           </table>
@@ -957,37 +957,37 @@ export function VoucherDocumentContent({ voucher, employees, firms, isPrintMode 
       </div>
 
       {voucher.status === 'REJECTED' && (
-        <div className="mb-10 z-10">
-           <h3 className="text-[8px] sm:text-[10px] font-black uppercase text-rose-400 tracking-widest mb-3 flex items-center gap-2"><AlertTriangle className="w-3 h-3" /> Rejection Remark</h3>
-           <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg">
+        <div className="mb-6 z-10">
+           <h3 className="text-[8px] sm:text-[9px] font-black uppercase text-rose-400 tracking-widest mb-2 flex items-center gap-2"><AlertTriangle className="w-3 h-3" /> Rejection Remark</h3>
+           <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg">
              <p className="text-xs font-bold text-rose-700 italic">"{voucher.rejectionRemark}"</p>
            </div>
         </div>
       )}
 
-      <div className="mb-10 sm:mb-12 space-y-6 z-10">
-        <div className="p-4 sm:p-6 bg-slate-50 border border-slate-200 rounded-xl">
-          <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-4 border-b border-slate-300 pb-2">Declaration / Terms of Recovery</h4>
-          <div className="space-y-4 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify">
+      <div className="mb-8 space-y-6 z-10 flex-1">
+        <div className="p-4 sm:p-5 bg-slate-50 border border-slate-200 rounded-xl">
+          <h4 className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest mb-3 border-b border-slate-300 pb-1.5">Declaration / Terms of Recovery</h4>
+          <div className="space-y-3 text-[10px] sm:text-xs font-medium leading-relaxed text-slate-600 text-justify">
             <p>The above-mentioned amount is being paid as an advance against the employee’s future salary and shall be adjusted/deducted from the upcoming salary payments, as per company policy or mutual agreement.</p>
             <p className="font-bold text-slate-900 underline">The employee hereby agrees and acknowledges that:</p>
-            <ul className="list-disc pl-6 space-y-2">
+            <ul className="list-disc pl-6 space-y-1.5">
               <li>The advance amount will be recovered from salary in full or in installments.</li>
               <li>In case of resignation, termination, or separation from the company, the outstanding advance (if any) shall be recoverable from final settlement dues.</li>
               <li>The company reserves the right to deduct the balance amount from any payable dues.</li>
             </ul>
-            <p className="pt-2 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes.</p>
+            <p className="pt-1.5 italic text-[9px] sm:text-[10px] font-bold">This voucher is issued for record and accounting purposes.</p>
           </div>
         </div>
       </div>
 
-      <div className="mt-auto flex justify-between items-end pb-8 px-10 z-10">
+      <div className="mt-auto flex justify-between items-end pb-12 px-10 z-10 w-full shrink-0">
         <div className="text-center space-y-3">
-          <div className="w-48 h-14 border-b border-slate-400 border-dashed" />
+          <div className="w-48 sm:w-56 h-14 border-b-2 border-slate-900 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Receiver Signature</p>
         </div>
         <div className="text-center space-y-3">
-          <div className="w-48 h-14 border-b border-slate-400 border-dashed" />
+          <div className="w-48 sm:w-56 h-14 border-b-2 border-slate-900 border-dashed" />
           <p className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-800">Authorized Signatory</p>
         </div>
       </div>
