@@ -88,6 +88,7 @@ export default function AttendancePage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
   
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT" | "LEAVE">("NONE");
@@ -122,6 +123,7 @@ export default function AttendancePage() {
     const savedUser = localStorage.getItem("user");
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
     
+    setCurrentDeviceId(getDeviceId());
     setCurrentTime(getISTTime());
     const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
 
@@ -145,21 +147,22 @@ export default function AttendancePage() {
 
   const registeredEmployee = useMemo(() => {
     if (!currentUser || !employees || employees.length === 0) return null;
-    const loginIdent = currentUser.username?.replace(/\s/g, '');
+    const loginIdent = (currentUser.username || "").replace(/\s/g, '');
+    if (!loginIdent) return null;
     return employees.find(e => {
-      const empAadhaar = e.aadhaar?.replace(/\s/g, '');
-      const empMobile = e.mobile?.replace(/\s/g, '');
+      const empAadhaar = (e.aadhaar || "").replace(/\s/g, '');
+      const empMobile = (e.mobile || "").replace(/\s/g, '');
       return empAadhaar === loginIdent || empMobile === loginIdent;
     });
   }, [currentUser, employees]);
 
   const isAccessAllowed = useMemo(() => {
-    const currentDevice = getDeviceId();
+    if (!isMounted) return false;
     const isEmployee = currentUser?.role === 'EMPLOYEE';
     const hasEmployeeRecord = !!registeredEmployee && registeredEmployee.active;
-    const isBoundDevice = !registeredEmployee?.deviceId || registeredEmployee.deviceId === currentDevice;
+    const isBoundDevice = !registeredEmployee?.deviceId || registeredEmployee.deviceId === currentDeviceId;
     return isEmployee && hasEmployeeRecord && isBoundDevice;
-  }, [currentUser, registeredEmployee]);
+  }, [currentUser, registeredEmployee, currentDeviceId, isMounted]);
 
   const effectiveEmployeeId = useMemo(() => {
     return registeredEmployee?.employeeId || currentUser?.username || "N/A";
@@ -193,7 +196,10 @@ export default function AttendancePage() {
     const rec = (employeeRecords || []).find(r => !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
 
-    const inDateTime = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
+    const inTimeStr = rec.inTime || "00:00";
+    const inDateTime = new Date(`${rec.inDate || rec.date}T${inTimeStr}`);
+    if (!isValid(inDateTime)) return { activeRecord: rec, staleRecord: null };
+
     const now = getISTTime();
     const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
 
@@ -205,7 +211,6 @@ export default function AttendancePage() {
 
   /**
    * BACKGROUND MOVEMENT TRACKER (30 MIN)
-   * Captures location and calculates duration outside plant radius
    */
   useEffect(() => {
     if (!isMounted || !activeRecord || !isAccessAllowed) {
@@ -214,6 +219,7 @@ export default function AttendancePage() {
     }
 
     const performBackgroundCheck = () => {
+      if (!activeRecord) return;
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         const assignedPlant = plants.find(p => p.name === activeRecord.inPlant);
@@ -224,7 +230,6 @@ export default function AttendancePage() {
           const now = new Date();
           const timestamp = format(now, "HH:mm");
 
-          // 1. Employee detected outside for the first time
           if (isOutside && !activeRecord.lastDetectedOutAt) {
             updateRecord('attendance', activeRecord.id, { 
               lastDetectedOutAt: now.toISOString(),
@@ -237,9 +242,7 @@ export default function AttendancePage() {
               type: 'MOVEMENT_ALERT',
               employeeId: effectiveEmployeeId
             });
-          } 
-          // 2. Employee returns to plant area
-          else if (!isOutside && activeRecord.lastDetectedOutAt) {
+          } else if (!isOutside && activeRecord.lastDetectedOutAt) {
             const outAt = new Date(activeRecord.lastDetectedOutAt);
             const diffMins = Math.round((now.getTime() - outAt.getTime()) / (1000 * 60));
             const newTotalOut = (activeRecord.unapprovedOutDuration || 0) + diffMins;
@@ -258,17 +261,13 @@ export default function AttendancePage() {
               employeeId: effectiveEmployeeId
             });
           } else {
-            // Just update last check time to keep record alive
             updateRecord('attendance', activeRecord.id, { lastOutCheckTime: now.toISOString() });
           }
         }
       }, () => {}, { enableHighAccuracy: true });
     };
 
-    // Run every 30 minutes
     trackingTimerRef.current = setInterval(performBackgroundCheck, TRACKING_INTERVAL_MS);
-    
-    // Initial check on mount/activation
     performBackgroundCheck();
 
     return () => {
@@ -278,30 +277,34 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (staleRecord && isMounted && currentUser?.username === staleRecord.employeeId) {
-      const inDateTime = new Date(`${staleRecord.inDate || staleRecord.date}T${staleRecord.inTime}`);
-      const autoOutDateTime = addHours(inDateTime, 8);
-      const autoOutTimeStr = format(autoOutDateTime, "HH:mm");
-      const autoOutDateStr = format(autoOutDateTime, "yyyy-MM-dd");
+      const inTimeStr = staleRecord.inTime || "00:00";
+      const inDateTime = new Date(`${staleRecord.inDate || staleRecord.date}T${inTimeStr}`);
       
-      updateRecord('attendance', staleRecord.id, {
-        outTime: autoOutTimeStr,
-        outDate: autoOutDateStr,
-        hours: 8,
-        status: 'PRESENT',
-        autoCheckout: true,
-        addressOut: 'System Auto Check-out (16h Policy Limit)',
-        outPlant: staleRecord.inPlant || "Remote"
-      });
+      if (isValid(inDateTime)) {
+        const autoOutDateTime = addHours(inDateTime, 8);
+        const autoOutTimeStr = format(autoOutDateTime, "HH:mm");
+        const autoOutDateStr = format(autoOutDateTime, "yyyy-MM-dd");
+        
+        updateRecord('attendance', staleRecord.id, {
+          outTime: autoOutTimeStr,
+          outDate: autoOutDateStr,
+          hours: 8,
+          status: 'PRESENT',
+          autoCheckout: true,
+          addressOut: 'System Auto Check-out (16h Policy Limit)',
+          outPlant: staleRecord.inPlant || "Remote"
+        });
 
-      const notifyMsg = `${staleRecord.employeeName} – OUT: ${format(autoOutDateTime, "dd-MMM HH:mm")} | Work: 08:00 Hrs (Auto)`;
-      addRecord('notifications', { 
-        message: notifyMsg, 
-        timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), 
-        read: false,
-        type: 'ATTENDANCE_OUT',
-        employeeId: staleRecord.employeeId
-      });
-      triggerNotification("Security Auto Check-out", notifyMsg);
+        const notifyMsg = `${staleRecord.employeeName} – OUT: ${format(autoOutDateTime, "dd-MMM HH:mm")} | Work: 08:00 Hrs (Auto)`;
+        addRecord('notifications', { 
+          message: notifyMsg, 
+          timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"), 
+          read: false,
+          type: 'ATTENDANCE_OUT',
+          employeeId: staleRecord.employeeId
+        });
+        triggerNotification("Security Auto Check-out", notifyMsg);
+      }
     }
   }, [staleRecord, isMounted, currentUser, updateRecord, addRecord, triggerNotification]);
 
@@ -313,10 +316,13 @@ export default function AttendancePage() {
     let effectiveOutTime = latestRec.outTime;
 
     if (!latestRec.outTime) {
+      if (!latestRec.inTime) return { isLocked: false, unlockTime: null };
       const inDT = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
-      const now = getISTTime();
-      const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+      const nowTime = getISTTime();
       
+      if (!isValid(inDT)) return { isLocked: false, unlockTime: null };
+      
+      const diffHours = (nowTime.getTime() - inDT.getTime()) / (1000 * 60 * 60);
       if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
       
       const autoOutDT = addHours(inDT, 8);
@@ -325,9 +331,11 @@ export default function AttendancePage() {
     }
 
     const lastOutDateTime = new Date(`${effectiveOutDate}T${effectiveOutTime}`);
+    if (!isValid(lastOutDateTime)) return { isLocked: false, unlockTime: null };
+    
     const allowedDateTime = addHours(lastOutDateTime, 8);
-    const now = getISTTime();
-    const isLocked = isAfter(allowedDateTime, now);
+    const nowCheck = getISTTime();
+    const isLocked = isAfter(allowedDateTime, nowCheck);
     
     return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
   }, [employeeRecords, currentTime]);
@@ -463,10 +471,15 @@ export default function AttendancePage() {
     const todayStrLocal = format(now, "yyyy-MM-dd");
     const timestamp = format(now, "dd-MMM-yyyy HH:mm");
     
-    const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${activeRecord.inTime}`);
+    const inTimeStr = activeRecord.inTime || "00:00";
+    const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${inTimeStr}`);
     const outDateTime = new Date(`${todayStrLocal}T${timeHHMM}`);
-    const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
-    const finalHours = parseFloat(diffHours.toFixed(2));
+    
+    let finalHours = 0;
+    if (isValid(inDateTime) && isValid(outDateTime)) {
+      const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
+      finalHours = parseFloat(diffHours.toFixed(2));
+    }
 
     updateRecord('attendance', activeRecord.id, { 
       outTime: timeHHMM, 
@@ -504,11 +517,13 @@ export default function AttendancePage() {
       
       const processedActual = rawRecords.map(r => {
         if (!r.outTime) {
-          const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
-          const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-          if (diff >= 16) {
-            const autoOutDT = addHours(inDT, 8);
-            return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+          const inDT = new Date(`${r.inDate || r.date}T${r.inTime || "00:00"}`);
+          if (isValid(inDT)) {
+            const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+            if (diff >= 16) {
+              const autoOutDT = addHours(inDT, 8);
+              return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+            }
           }
         }
         return r;
@@ -528,11 +543,13 @@ export default function AttendancePage() {
         const dateStr = format(date, 'yyyy-MM-dd');
         const existing = employeeRecords.filter(r => r.date === dateStr).map(r => {
           if (!r.outTime) {
-            const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
-            const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-            if (diff >= 16) {
-              const autoOutDT = addHours(inDT, 8);
-              return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+            const inDT = new Date(`${r.inDate || r.date}T${r.inTime || "00:00"}`);
+            if (isValid(inDT)) {
+              const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+              if (diff >= 16) {
+                const autoOutDT = addHours(inDT, 8);
+                return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+              }
             }
           }
           return r;

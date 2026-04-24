@@ -8,6 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // Haversine formula to calculate distance between two coordinates in meters
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) return 999999;
   const R = 6371e3; // Earth radius in meters
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
@@ -90,6 +91,7 @@ export function checkIfSunday(date: Date | string) {
  * Corporate requirement for India business use.
  */
 export function formatDate(date: Date | string) {
+  if (!date) return "---";
   const d = typeof date === 'string' ? parseISO(date) : date;
   if (!isValid(d)) return "---";
   return format(d, "dd-MMM-yyyy");
@@ -134,11 +136,16 @@ export function formatHoursToHHMM(hours: number | null | undefined) {
  */
 export function getDeviceId() {
   if (typeof window === 'undefined') return null;
-  let id = localStorage.getItem('sikka_device_id');
-  if (!id) {
-    // Generate a new UUID-like identifier
-    id = window.crypto?.randomUUID ? window.crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
-    localStorage.setItem('sikka_device_id', id);
+  try {
+    let id = localStorage.getItem('sikka_device_id');
+    if (!id) {
+      // Generate a new UUID-like identifier
+      id = window.crypto?.randomUUID ? window.crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+      localStorage.setItem('sikka_device_id', id);
+    }
+    return id;
+  } catch (e) {
+    console.warn("Storage access restricted. Device ID not persisted.");
+    return "DEVICE_RESTRICTED";
   }
-  return id;
 }
