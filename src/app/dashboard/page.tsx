@@ -49,7 +49,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatDate, formatHoursToHHMM } from "@/lib/utils";
-import { format, addHours, parseISO, isValid, isBefore, startOfMonth, setMonth, setYear } from "date-fns";
+import { format, addHours, parseISO, isValid, isBefore, startOfMonth, setMonth, setYear, isAfter } from "date-fns";
 
 const PRESENT_STATUSES = ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'];
 const PROJECT_START_DATE = new Date(2026, 3, 1); // April 2026
@@ -202,7 +202,11 @@ export default function DashboardHome() {
 
   const handleMonthSelect = (monthIndex: number) => {
     const selectedDate = new Date(pickerYear, monthIndex, 1);
+    const now = startOfMonth(getISTTime());
+    
+    // RESTRICTION: No months before April 2026 AND No months in the future
     if (isBefore(selectedDate, startOfMonth(PROJECT_START_DATE))) return;
+    if (isAfter(selectedDate, now)) return;
     
     const mmm = MONTHS[monthIndex];
     const yy = pickerYear.toString().slice(-2);
@@ -295,24 +299,34 @@ export default function DashboardHome() {
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
                   <span className="text-sm font-black tracking-widest uppercase">{pickerYear}</span>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => setPickerYear(p => p + 1)}>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-white hover:bg-white/10 disabled:opacity-30" 
+                    onClick={() => setPickerYear(p => p + 1)}
+                    disabled={pickerYear >= getISTTime().getFullYear()}
+                  >
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
                 <div className="p-3 grid grid-cols-3 gap-2 bg-white">
                   {MONTHS.map((m, idx) => {
                     const isSelected = selectedLeaderboardMonth === `${m}-${pickerYear.toString().slice(-2)}`;
-                    const isPast = isBefore(new Date(pickerYear, idx, 1), startOfMonth(PROJECT_START_DATE));
+                    const dateToCompare = new Date(pickerYear, idx, 1);
+                    const isBeforeStart = isBefore(dateToCompare, startOfMonth(PROJECT_START_DATE));
+                    const isFuture = isAfter(dateToCompare, startOfMonth(getISTTime()));
+                    
+                    const isDisabled = isBeforeStart || isFuture;
                     
                     return (
                       <Button
                         key={m}
                         variant={isSelected ? "default" : "ghost"}
-                        disabled={isPast}
+                        disabled={isDisabled}
                         className={cn(
                           "h-12 rounded-xl text-xs font-bold transition-all",
                           isSelected ? "bg-primary text-white shadow-lg shadow-primary/20" : "hover:bg-slate-50 text-slate-600",
-                          isPast && "opacity-20 pointer-events-none grayscale"
+                          isDisabled && "opacity-20 pointer-events-none grayscale"
                         )}
                         onClick={() => handleMonthSelect(idx)}
                       >
@@ -322,7 +336,7 @@ export default function DashboardHome() {
                   })}
                 </div>
                 <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
-                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-tighter">Project Boundary: April 2026</p>
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-tighter">Current Date Restriction Enabled</p>
                 </div>
               </PopoverContent>
             </Popover>
