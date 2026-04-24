@@ -19,7 +19,12 @@ import {
   Navigation,
   Building2,
   Calendar,
-  LayoutDashboard
+  LayoutDashboard,
+  Trophy,
+  TrendingDown,
+  ChevronRight,
+  User as UserIcon,
+  Filter
 } from "lucide-react";
 import { useData } from "@/context/data-context";
 import {
@@ -30,16 +35,39 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatDate, formatHoursToHHMM } from "@/lib/utils";
-import { format, addHours } from "date-fns";
+import { format, addHours, parseISO, isValid, isBefore, startOfMonth } from "date-fns";
 
 const PRESENT_STATUSES = ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'];
+const PROJECT_START_DATE = new Date(2026, 3, 1); // April 2026
 
 const getISTTime = () => {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+};
+
+const generateLeaderboardMonths = () => {
+  const options = [];
+  const date = getISTTime();
+  // Generate from April 2026 to 12 months ahead of now
+  for (let i = -12; i <= 120; i++) {
+    const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+    if (isBefore(d, startOfMonth(PROJECT_START_DATE))) continue;
+    const mmm = d.toLocaleString('en-US', { month: 'short' });
+    const yy = d.getFullYear().toString().slice(-2);
+    options.push(`${mmm}-${yy}`);
+  }
+  // Return unique sorted options
+  return Array.from(new Set(options)).reverse();
 };
 
 export default function DashboardHome() {
@@ -47,10 +75,18 @@ export default function DashboardHome() {
   const [isMounted, setIsMounted] = useState(false);
   const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh'>(null);
   const [todayStr, setTodayStr] = useState("");
+  const [selectedLeaderboardMonth, setSelectedLeaderboardMonth] = useState("");
 
   useEffect(() => {
     setIsMounted(true);
-    setTodayStr(format(getISTTime(), 'yyyy-MM-dd'));
+    const now = getISTTime();
+    setTodayStr(format(now, 'yyyy-MM-dd'));
+    
+    // Default to current month string (MMM-YY)
+    const mmm = now.toLocaleString('en-US', { month: 'short' });
+    const yy = now.getFullYear().toString().slice(-2);
+    const currentMonthKey = `${mmm}-${yy}`;
+    setSelectedLeaderboardMonth(currentMonthKey);
   }, []);
 
   const stats = useMemo(() => {
@@ -59,14 +95,12 @@ export default function DashboardHome() {
     const now = getISTTime();
     const activeEmployees = employees.filter(e => e.active);
     
-    // REQUIREMENT: Correctly identify today's active logs, excluding stale ones
     const todayLogs = attendanceRecords.filter(r => {
       if (r.date !== todayStr) return false;
-      // If it's an old shift from today's perspective but > 16h, it's virtually closed
       if (!r.outTime) {
         const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
         const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-        if (diff >= 16) return false; // Stale shift is not "Live"
+        if (diff >= 16) return false;
       }
       return true;
     });
@@ -89,6 +123,38 @@ export default function DashboardHome() {
     };
   }, [employees, attendanceRecords, vouchers, isMounted, todayStr]);
 
+  const leaderboardData = useMemo(() => {
+    if (!isMounted || !selectedLeaderboardMonth || !employees.length) return { top: [], bottom: [] };
+
+    const [mmm, yy] = selectedLeaderboardMonth.split('-');
+    const mNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const mIndex = mNames.indexOf(mmm);
+    const year = 2000 + parseInt(yy);
+
+    const hourMap: Record<string, number> = {};
+
+    attendanceRecords.forEach(r => {
+      const d = parseISO(r.date);
+      if (isValid(d) && d.getMonth() === mIndex && d.getFullYear() === year) {
+        hourMap[r.employeeId] = (hourMap[r.employeeId] || 0) + (r.hours || 0);
+      }
+    });
+
+    const activeList = employees.filter(e => e.active).map(e => ({
+      name: e.name,
+      id: e.employeeId,
+      dept: e.department,
+      hours: hourMap[e.employeeId] || 0
+    }));
+
+    const sorted = [...activeList].sort((a, b) => b.hours - a.hours);
+    
+    return {
+      top: sorted.slice(0, 3),
+      bottom: [...activeList].sort((a, b) => a.hours - b.hours).slice(0, 3)
+    };
+  }, [attendanceRecords, employees, selectedLeaderboardMonth, isMounted]);
+
   const getCategorizedData = (type?: 'FIELD' | 'WFH' | 'PRESENT') => {
     if (!isMounted || !todayStr) return [];
     const now = getISTTime();
@@ -105,7 +171,6 @@ export default function DashboardHome() {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         let processed = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
         
-        // VIRTUAL AUTO-OUT for today's view
         if (!rec.outTime) {
           const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
           const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
@@ -186,7 +251,7 @@ export default function DashboardHome() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 pb-12">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Total Employees" value={stats.totalEmployees} icon={Users} trend="+1" trendUp={true} description="Active manpower" />
         <StatCard title="Present Today" value={stats.presentToday} icon={CalendarCheck} trend={`${stats.attendancePct}%`} trendUp={parseFloat(stats.attendancePct) > 80} description="At various plants" onClick={() => setViewMode('present')} />
@@ -195,6 +260,126 @@ export default function DashboardHome() {
         <StatCard title="Work at Home" value={stats.wfhToday} icon={Home} trend="Live" trendUp={true} description="Remote operations" onClick={() => setViewMode('wfh')} />
         <StatCard title="Pending Approvals" value={stats.pendingApprovals} icon={AlertCircle} trend={`+${stats.pendingApprovals}`} trendUp={false} description="Attendance & Vouchers" />
       </div>
+
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
+              <Filter className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 leading-tight">Performance Insights</h3>
+              <p className="text-xs text-muted-foreground font-medium">Monthly working hour ranking and exception analysis.</p>
+            </div>
+          </div>
+          <div className="w-full sm:w-48">
+            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Analysis Period</Label>
+            <Select value={selectedLeaderboardMonth} onValueChange={setSelectedLeaderboardMonth}>
+              <SelectTrigger className="h-11 bg-slate-50 border-slate-200 font-bold rounded-xl focus:ring-primary/20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl shadow-2xl">
+                {generateLeaderboardMonths().map(m => (
+                  <SelectItem key={m} value={m} className="font-bold text-xs">{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* TOP PERFORMERS */}
+          <Card className="border-none shadow-xl rounded-[32px] overflow-hidden bg-white group transition-all">
+            <CardHeader className="bg-emerald-50/50 p-8 border-b border-emerald-100/50">
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-emerald-600" />
+                    <CardTitle className="text-lg font-black text-emerald-900 uppercase tracking-tight">Top Efficient Staff</CardTitle>
+                  </div>
+                  <p className="text-[10px] font-black text-emerald-600/70 uppercase tracking-[0.2em]">Highest Working Hours • {selectedLeaderboardMonth}</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-50">
+                {leaderboardData.top.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 font-bold text-xs">No records available for this period.</div>
+                ) : (
+                  leaderboardData.top.map((emp, idx) => (
+                    <div key={emp.id} className="p-6 flex items-center justify-between hover:bg-emerald-50/30 transition-colors">
+                      <div className="flex items-center gap-5">
+                        <div className={cn(
+                          "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm border-2",
+                          idx === 0 ? "bg-amber-100 border-amber-200 text-amber-600" :
+                          idx === 1 ? "bg-slate-100 border-slate-200 text-slate-500" :
+                          "bg-orange-50 border-orange-100 text-orange-600"
+                        )}>
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-800 uppercase text-sm leading-none">{emp.name}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge variant="outline" className="text-[9px] font-black uppercase px-2 py-0 h-4 border-slate-200 text-slate-400 bg-white">{emp.id}</Badge>
+                            <span className="text-[10px] text-muted-foreground font-bold uppercase">{emp.dept}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-black text-emerald-600 leading-none">{formatHoursToHHMM(emp.hours)}</p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Total Hours</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* BOTTOM PERFORMERS / ATTENTION REQUIRED */}
+          <Card className="border-none shadow-xl rounded-[32px] overflow-hidden bg-white group transition-all">
+            <CardHeader className="bg-rose-50/50 p-8 border-b border-rose-100/50">
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="w-5 h-5 text-rose-600" />
+                    <CardTitle className="text-lg font-black text-rose-900 uppercase tracking-tight">Attention Required</CardTitle>
+                  </div>
+                  <p className="text-[10px] font-black text-rose-600/70 uppercase tracking-[0.2em]">Lowest Working Hours • {selectedLeaderboardMonth}</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-50">
+                {leaderboardData.bottom.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 font-bold text-xs">No records available for this period.</div>
+                ) : (
+                  leaderboardData.bottom.map((emp, idx) => (
+                    <div key={emp.id} className="p-6 flex items-center justify-between hover:bg-rose-50/30 transition-colors">
+                      <div className="flex items-center gap-5">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center font-black text-lg text-slate-400">
+                          <AlertCircle className="w-6 h-6 opacity-40" />
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-800 uppercase text-sm leading-none">{emp.name}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Badge variant="outline" className="text-[9px] font-black uppercase px-2 py-0 h-4 border-slate-200 text-slate-400 bg-white">{emp.id}</Badge>
+                            <span className="text-[10px] text-muted-foreground font-bold uppercase">{emp.dept}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-black text-rose-600 leading-none">{formatHoursToHHMM(emp.hours)}</p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Total Hours</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -202,3 +387,4 @@ export default function DashboardHome() {
 function StatCard({ title, value, icon: Icon, trend, trendUp, description, onClick }: any) {
   return (<Card className={cn("shadow-sm border-slate-200 overflow-hidden relative transition-all", onClick && "cursor-pointer hover:shadow-md hover:border-primary/20 group")} onClick={onClick}><CardContent className="p-6"><div className="flex justify-between items-start"><div><p className="text-sm font-medium text-muted-foreground">{title}</p><h3 className="text-3xl font-bold mt-2">{value}</h3></div><div className={cn("p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-sm transition-colors", onClick && "group-hover:bg-primary/10 group-hover:border-primary/20")}><Icon className="w-6 h-6 text-primary" /></div></div><div className="mt-4 flex items-center gap-2"><span className={`text-xs font-bold flex items-center gap-1 px-1.5 py-0.5 rounded ${trendUp ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>{trendUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}{trend}</span><span className="text-xs text-muted-foreground">{description}</span></div></CardContent></Card>);
 }
+
