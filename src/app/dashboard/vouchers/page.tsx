@@ -130,6 +130,17 @@ export default function VouchersPage() {
     setPayDate(today < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : today);
   }, []);
 
+  // PRINT TRIGGER EFFECT
+  useEffect(() => {
+    if (printVoucher) {
+      const timer = setTimeout(() => {
+        window.print();
+        setPrintVoucher(null);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [printVoucher]);
+
   const voucherNo = useMemo(() => {
     if (!voucherDate) return "SIL-XXXXXX-XXXXX";
     const d = new Date(voucherDate);

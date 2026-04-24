@@ -40,7 +40,10 @@ function VoucherDetailContent() {
   }
 
   const handlePrint = () => {
-    window.print();
+    // Small delay to ensure any UI states are settled
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   return (
