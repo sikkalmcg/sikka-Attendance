@@ -52,14 +52,14 @@ import {
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
 import { AttendanceRecord, LeaveRequest } from "@/lib/types";
-import { parseISO, format, subDays, isBefore, addDays, addHours } from "date-fns";
+import { parseISO, format, subDays, isBefore, addDays, addHours, isSunday } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
 const PROJECT_START_DATE_STR = "2026-04-01";
 
 export default function ApprovalsPage() {
-  const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord, currentUser } = useData();
+  const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord, currentUser, holidays } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
@@ -337,93 +337,99 @@ export default function ApprovalsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {currentData.items.map((rec: any) => (
-                    <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
-                      <TableCell className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
-                          <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-600">{rec.dept || rec.department}</span>
-                          <span className="text-[10px] text-muted-foreground uppercase">{rec.desig || rec.designation}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date || rec.fromDate)}</span>
-                          <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.outDate || rec.date || rec.toDate)}</span>
-                          <span className={cn("text-xs font-mono font-bold", rec.autoCheckout && "text-rose-600")}>{rec.outTime || (rec.isVirtual ? "--:--" : "Shift In-Progress")}</span>
-                        </div>
-                      </TableCell>
-
-                      {currentTab === 'attendance' && (
-                        <>
-                          <TableCell><span className="text-xs font-bold text-slate-600">{rec.inPlant || "--"}</span></TableCell>
-                          <TableCell><span className="text-xs font-bold text-slate-600">{rec.outPlant || "--"}</span></TableCell>
-                          <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}</span></TableCell>
-                        </>
-                      )}
-
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>
-                          {rec.leaveType ? `${rec.days}d` : formatHoursToHHMM(rec.hours)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center"><Badge variant="outline" className="font-black text-[9px] uppercase">{rec.attendanceType || "LEAVE"}</Badge></TableCell>
-                      <TableCell className="text-center">
-                        <Badge className={cn("text-[9px] font-black uppercase px-3", rec.status === 'PRESENT' || rec.status === 'APPROVED' ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>
-                          {rec.autoCheckout ? "AUTO_OUT" : rec.status}
-                        </Badge>
-                      </TableCell>
-                      
-                      {!(viewMode === 'history' && currentTab === 'leave') && (
-                        <TableCell className="text-right pr-6">
-                          <div className="flex justify-end gap-1">
-                            {viewMode === 'pending' ? (
-                              <>
-                                {currentTab === 'attendance' && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenAttendanceEdit(rec)}><Pencil className="w-3.5 h-3.5" /></Button>
-                                )}
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-rose-600 hover:bg-rose-50" 
-                                  onClick={() => {
-                                    if (currentTab === 'attendance') { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }
-                                    else { setSelectedLeave(rec); setIsLeaveRejectOpen(true); }
-                                  }}
-                                >
-                                  <XCircle className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  className="h-8 font-black text-[10px] uppercase px-4 bg-emerald-600" 
-                                  onClick={() => currentTab === 'attendance' ? handleApproveAttendance(rec) : handleApproveLeave(rec)} 
-                                  disabled={isProcessing || (currentTab === 'attendance' && !rec.outTime && rec.status !== 'ABSENT')}
-                                >
-                                  Approve
-                                </Button>
-                              </>
-                            ) : (
-                              currentTab === 'attendance' && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }}>
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                </Button>
-                              )
-                            )}
+                  {currentData.items.map((rec: any) => {
+                    const isHolidayDate = (holidays || []).some(hol => hol.date === rec.date) || isSunday(parseISO(rec.date));
+                    const isActuallyPresent = ['PRESENT', 'FIELD', 'WFH', 'HALF_DAY'].includes(rec.status);
+                    const displayStatus = (isActuallyPresent && isHolidayDate) ? "PRESENT ON HOLIDAY" : (rec.autoCheckout ? "AUTO_OUT" : rec.status);
+                    
+                    return (
+                      <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
+                        <TableCell className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
+                            <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
                           </div>
                         </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-600">{rec.dept || rec.department}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase">{rec.desig || rec.designation}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date || rec.fromDate)}</span>
+                            <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.outDate || rec.date || rec.toDate)}</span>
+                            <span className={cn("text-xs font-mono font-bold", rec.autoCheckout && "text-rose-600")}>{rec.outTime || (rec.isVirtual ? "--:--" : "Shift In-Progress")}</span>
+                          </div>
+                        </TableCell>
+
+                        {currentTab === 'attendance' && (
+                          <>
+                            <TableCell><span className="text-xs font-bold text-slate-600">{rec.inPlant || "--"}</span></TableCell>
+                            <TableCell><span className="text-xs font-bold text-slate-600">{rec.outPlant || "--"}</span></TableCell>
+                            <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}</span></TableCell>
+                          </>
+                        )}
+
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>
+                            {rec.leaveType ? `${rec.days}d` : formatHoursToHHMM(rec.hours)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="font-black text-[9px] uppercase">{rec.attendanceType || "LEAVE"}</Badge></TableCell>
+                        <TableCell className="text-center">
+                          <Badge className={cn("text-[9px] font-black uppercase px-3", isActuallyPresent || rec.status === 'APPROVED' ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>
+                            {displayStatus}
+                          </Badge>
+                        </TableCell>
+                        
+                        {!(viewMode === 'history' && currentTab === 'leave') && (
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-1">
+                              {viewMode === 'pending' ? (
+                                <>
+                                  {currentTab === 'attendance' && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenAttendanceEdit(rec)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                  )}
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8 text-rose-600 hover:bg-rose-50" 
+                                    onClick={() => {
+                                      if (currentTab === 'attendance') { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }
+                                      else { setSelectedLeave(rec); setIsLeaveRejectOpen(true); }
+                                    }}
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    className="h-8 font-black text-[10px] uppercase px-4 bg-emerald-600" 
+                                    onClick={() => currentTab === 'attendance' ? handleApproveAttendance(rec) : handleApproveLeave(rec)} 
+                                    disabled={isProcessing || (currentTab === 'attendance' && !rec.outTime && rec.status !== 'ABSENT')}
+                                  >
+                                    Approve
+                                  </Button>
+                                </>
+                              ) : (
+                                currentTab === 'attendance' && (
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }}>
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </Button>
+                                )
+                              )}
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
               <ScrollBar orientation="horizontal" />

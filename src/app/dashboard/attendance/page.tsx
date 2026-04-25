@@ -709,32 +709,45 @@ export default function AttendancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedHistory.map((h: any) => (
-                    <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
-                      <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
-                      <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
-                          <span>{h.inTime || "--:--"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
-                          <span className={cn(h.autoCheckout && "text-rose-600 font-bold")}>{h.outTime || (h.isVirtual ? "--:--" : "Shift In-Progress")}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase tracking-widest", h.status === 'PRESENT' ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700")}>{h.status}</Badge></TableCell>
-                      <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(h.unapprovedOutDuration || 0)}</span></TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
-                          {formatHoursToHHMM(h.hours || 0)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
-                    </TableRow>
-                  ))}
+                  {paginatedHistory.map((h: any) => {
+                    const isHolidayDate = (holidays || []).some(hol => hol.date === h.date) || isSunday(parseISO(h.date));
+                    const isActuallyPresent = ['PRESENT', 'FIELD', 'WFH', 'HALF_DAY'].includes(h.status);
+                    const displayStatus = (isActuallyPresent && isHolidayDate) ? "PRESENT ON HOLIDAY" : h.status;
+                    
+                    return (
+                      <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
+                        <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
+                        <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
+                            <span>{h.inTime || "--:--"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
+                            <span className={cn(h.autoCheckout && "text-rose-600 font-bold")}>{h.outTime || (h.isVirtual ? "--:--" : "Shift In-Progress")}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge className={cn(
+                            "text-[9px] font-black uppercase tracking-widest", 
+                            isActuallyPresent ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"
+                          )}>
+                            {displayStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(h.unapprovedOutDuration || 0)}</span></TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
+                            {formatHoursToHHMM(h.hours || 0)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </ScrollArea>
