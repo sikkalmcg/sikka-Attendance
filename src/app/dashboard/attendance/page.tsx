@@ -32,7 +32,8 @@ import {
   Home,
   Bell,
   ArrowRightCircle,
-  Search
+  Search,
+  CalendarDays
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM, formatMinutesToHHMM } from "@/lib/utils";
 import { 
@@ -63,6 +64,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ATTENDANCE_RULES } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -97,6 +99,13 @@ export default function AttendancePage() {
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH">("FIELD");
+
+  // Leave Form State
+  const [leaveFromDate, setLeaveFromDate] = useState("");
+  const [leaveToDate, setLeaveToDate] = useState("");
+  const [leavePurpose, setLeavePurpose] = useState("");
+  const [leaveTypeReq, setLeaveTypeReq] = useState<'DAYS' | 'HALF_DAY'>('DAYS');
+  const [leaveReachTime, setLeaveReachTime] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
@@ -505,6 +514,62 @@ export default function AttendancePage() {
     toast({ title: "Check-Out Success" });
   };
 
+  const calculatedLeaveDays = useMemo(() => {
+    if (!leaveFromDate || !leaveToDate) return 0;
+    if (leaveTypeReq === 'HALF_DAY') return 0.5;
+    const start = parseISO(leaveFromDate);
+    const end = parseISO(leaveToDate);
+    if (!isValid(start) || !isValid(end)) return 0;
+    if (isBefore(end, start)) return 0;
+    return differenceInDays(end, start) + 1;
+  }, [leaveFromDate, leaveToDate, leaveTypeReq]);
+
+  const handleCreateLeaveRequest = () => {
+    if (!leaveFromDate || !leaveToDate || !leavePurpose || !isAccessAllowed) {
+      toast({ variant: "destructive", title: "Missing Information", description: "Please fill all required fields." });
+      return;
+    }
+    
+    const start = parseISO(leaveFromDate);
+    const end = parseISO(leaveToDate);
+    if (isBefore(end, start) && leaveTypeReq === 'DAYS') {
+      toast({ variant: "destructive", title: "Invalid Dates", description: "To Date cannot be before From Date." });
+      return;
+    }
+
+    const newRequest: any = {
+      employeeId: effectiveEmployeeId,
+      employeeName: effectiveEmployeeName,
+      department: registeredEmployee?.department || "N/A",
+      designation: registeredEmployee?.designation || "N/A",
+      fromDate: leaveFromDate,
+      toDate: leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate,
+      days: calculatedLeaveDays,
+      purpose: leavePurpose,
+      status: 'UNDER_PROCESS',
+      createdAt: new Date().toISOString(),
+      leaveType: leaveTypeReq,
+      reachTime: leaveTypeReq === 'HALF_DAY' ? leaveReachTime : undefined
+    };
+
+    addRecord('leaveRequests', newRequest);
+    
+    addRecord('notifications', {
+      message: `Leave Requested: ${effectiveEmployeeName} (${leaveFromDate}${leaveTypeReq === 'DAYS' ? ' to ' + leaveToDate : ''})`,
+      timestamp: format(new Date(), "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'LEAVE_REQUEST',
+      employeeId: effectiveEmployeeId
+    });
+
+    setActiveDialog("NONE");
+    setLeaveFromDate("");
+    setLeaveToDate("");
+    setLeavePurpose("");
+    setLeaveReachTime("");
+    toast({ title: "Leave Request Submitted", description: "Your request is now under process." });
+  };
+
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
     const floorDate = parseISO(PROJECT_START_DATE_STR);
@@ -686,6 +751,73 @@ export default function AttendancePage() {
 
         <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
           <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden"><DialogHeader className="p-6 bg-rose-600 text-white shrink-0"><DialogTitle className="flex items-center gap-2 font-black text-xl">Confirm Check-Out</DialogTitle></DialogHeader><div className="p-8 space-y-6 text-center"><p className="text-sm font-black text-slate-700">{detectedPlant ? `Marking OUT from ${detectedPlant.name}` : "Marking OUT from Remote Site"}</p></div><DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Mark OUT</Button></DialogFooter></DialogContent>
+        </Dialog>
+
+        {/* Leave Request Dialog */}
+        <Dialog open={activeDialog === "LEAVE"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
+          <DialogContent className="sm:max-w-lg rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
+            <DialogHeader className="p-6 bg-primary text-white shrink-0">
+              <DialogTitle className="flex items-center gap-2 font-black text-xl">
+                <CalendarDays className="w-5 h-5 text-white" /> Create Leave Request
+              </DialogTitle>
+              <DialogDescription className="text-primary-foreground/80 mt-1">Submit your request for leave approval (Since April-2026).</DialogDescription>
+            </DialogHeader>
+            <div className="p-8 space-y-6">
+              <div className="space-y-4">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Leave Type</Label>
+                <RadioGroup value={leaveTypeReq} onValueChange={(v: any) => setLeaveTypeReq(v)} className="grid grid-cols-2 gap-4">
+                  <div className={cn("relative rounded-xl border-2 transition-all p-3 cursor-pointer", leaveTypeReq === 'DAYS' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setLeaveTypeReq('DAYS')}>
+                    <RadioGroupItem value="DAYS" id="l-days" className="absolute right-2 top-2" />
+                    <Label htmlFor="l-days" className="font-bold text-sm block cursor-pointer">Full Day(s)</Label>
+                  </div>
+                  <div className={cn("relative rounded-xl border-2 transition-all p-3 cursor-pointer", leaveTypeReq === 'HALF_DAY' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setLeaveTypeReq('HALF_DAY')}>
+                    <RadioGroupItem value="HALF_DAY" id="l-half" className="absolute right-2 top-2" />
+                    <Label htmlFor="l-half" className="font-bold text-sm block cursor-pointer">Half Day</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">From Date</Label>
+                  <Input type="date" min={PROJECT_START_DATE_STR} value={leaveFromDate} onChange={(e) => setLeaveFromDate(e.target.value)} className="h-12 font-bold" />
+                </div>
+                {leaveTypeReq === 'DAYS' ? (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">To Date</Label>
+                    <Input type="date" min={leaveFromDate || PROJECT_START_DATE_STR} value={leaveToDate} onChange={(e) => setLeaveToDate(e.target.value)} className="h-12 font-bold" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Reporting Time</Label>
+                    <Input type="time" value={leaveReachTime} onChange={(e) => setLeaveReachTime(e.target.value)} className="h-12 font-bold" />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Purpose / Reason</Label>
+                <Textarea 
+                  placeholder="Reason for leave request..." 
+                  value={leavePurpose} 
+                  onChange={(e) => setLeavePurpose(e.target.value)} 
+                  className="min-h-[100px] bg-slate-50"
+                />
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center">
+                <div className="flex items-center gap-2 text-slate-500">
+                  <Info className="w-4 h-4" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Duration</span>
+                </div>
+                <Badge className="bg-primary text-white font-black px-4 py-1 rounded-full">{calculatedLeaveDays} Day(s)</Badge>
+              </div>
+            </div>
+            <DialogFooter className="p-6 bg-slate-50 border-t">
+              <Button variant="ghost" onClick={() => setActiveDialog("NONE")} className="font-bold">Cancel</Button>
+              <Button className="h-12 px-10 rounded-xl font-black bg-primary" onClick={handleCreateLeaveRequest}>Submit Request</Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
       </div>
     </TooltipProvider>
