@@ -60,7 +60,8 @@ import {
   Briefcase,
   CalendarClock,
   Wallet,
-  CalendarDays
+  CalendarDays,
+  Eye
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -102,6 +103,7 @@ export default function PayrollPage() {
 
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
+  const [viewVouchersEmp, setViewVouchersEmp] = useState<Employee | null>(null);
   const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
   const [adjustmentState, setAdjustmentState] = useState({
     present: 0, absent: 0, holidayWork: 0, holidayBanked: 0, holidayPaid: 0, balanceUsed: 0, remainingBalance: 0, earningDays: 0, isPaidAction: false, isBankedAction: false
@@ -302,18 +304,20 @@ export default function PayrollPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="w-full">
-                  <Table className="min-w-[1000px]">
+                  <Table className="min-w-[1200px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-black text-[11px] uppercase tracking-widest px-6">Employee Name / ID</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest">Dept / Designation</TableHead>
                         <TableHead className="font-black text-[11px] uppercase tracking-widest text-right">Total Advance Given</TableHead>
                         <TableHead className="font-black text-[11px] uppercase tracking-widest text-right">Total Recovered</TableHead>
-                        <TableHead className="font-black text-[11px] uppercase tracking-widest text-right pr-6">Remaining Balance</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest text-right">Remaining Balance</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest text-right pr-6">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {advanceSalaryData.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} className="text-center py-20 text-muted-foreground">No records found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No records found.</TableCell></TableRow>
                       ) : (
                         advanceSalaryData.map((emp) => (
                           <TableRow key={emp.id} className="hover:bg-slate-50/50">
@@ -323,12 +327,28 @@ export default function PayrollPage() {
                                 <span className="text-[10px] font-mono text-primary font-black uppercase">{emp.employeeId}</span>
                               </div>
                             </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-700">{emp.department}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase">{emp.designation}</span>
+                              </div>
+                            </TableCell>
                             <TableCell className="text-right font-bold text-slate-600">{formatCurrency(emp.totalAdvance)}</TableCell>
                             <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(emp.totalRecovered)}</TableCell>
-                            <TableCell className="text-right pr-6">
+                            <TableCell className="text-right">
                               <Badge className={cn("font-black text-sm px-4", emp.remainingBalance > 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100")}>
                                 {formatCurrency(emp.remainingBalance)}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="font-black text-primary text-[10px] uppercase gap-1 hover:bg-primary/5"
+                                onClick={() => setViewVouchersEmp(emp)}
+                              >
+                                <Eye className="w-3.5 h-3.5" /> View Details
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))
@@ -405,6 +425,65 @@ export default function PayrollPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Advance History Dialog */}
+        <Dialog open={!!viewVouchersEmp} onOpenChange={(o) => !o && setViewVouchersEmp(null)}>
+          <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+              <DialogTitle className="flex items-center gap-3 text-xl font-black">
+                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-6 h-6 text-primary" />
+                </div>
+                {viewVouchersEmp?.name} - Advance History
+              </DialogTitle>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 ml-13">Voucher Audit Trail</p>
+            </DialogHeader>
+            <div className="p-6 bg-white">
+              <ScrollArea className="h-[50vh] pr-4">
+                <Table className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-black text-[10px] uppercase">Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase">Voucher No</TableHead>
+                      <TableHead className="text-right font-black text-[10px] uppercase">Amount</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase">Purpose</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase text-center">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {vouchers.filter(v => v.employeeId === viewVouchersEmp?.id).length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No voucher records found.</TableCell></TableRow>
+                    ) : (
+                      vouchers.filter(v => v.employeeId === viewVouchersEmp?.id).map(v => (
+                        <TableRow key={v.id} className="hover:bg-slate-50/50">
+                          <TableCell className="text-xs font-bold text-slate-500">{formatDate(v.date)}</TableCell>
+                          <TableCell className="font-mono font-black text-xs text-blue-600">{v.voucherNo}</TableCell>
+                          <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
+                          <TableCell className="text-xs text-slate-600 font-medium">{v.purpose}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className={cn(
+                              "text-[9px] font-black uppercase px-2 py-0.5 rounded-full",
+                              v.status === 'PAID' ? "bg-emerald-50 text-emerald-700" :
+                              v.status === 'PENDING' ? "bg-amber-50 text-amber-600" :
+                              v.status === 'APPROVED' ? "bg-blue-50 text-blue-700" :
+                              "bg-slate-100 text-slate-600"
+                            )}>
+                              {v.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
+            <DialogFooter className="p-4 bg-slate-50 border-t">
+              <Button onClick={() => setViewVouchersEmp(null)} className="rounded-xl font-bold bg-slate-900 px-8">Close Trail</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary" /> Record Disbursement</DialogTitle></DialogHeader><div className="p-8 space-y-6"><div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Amount Due</span><span className="text-lg font-black text-rose-600">{formatCurrency(paymentAmount)}</span></div><Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-11 font-bold" /><Button onClick={handlePostPayment} className="w-full h-12 font-black bg-primary">Confirm Pay</Button></div></DialogContent></Dialog>
     </div>
   );
