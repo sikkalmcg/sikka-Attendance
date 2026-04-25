@@ -59,7 +59,8 @@ import {
   Info,
   Briefcase,
   CalendarClock,
-  Wallet
+  Wallet,
+  CalendarDays
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -85,7 +86,6 @@ const generatePayrollMonths = (count = 120, includeCurrent = true) => {
   return options;
 };
 
-const PAYROLL_MONTHS_10Y = generatePayrollMonths(120, true);
 const PAYROLL_MONTHS_12M_GEN = generatePayrollMonths(13, true);
 
 export default function PayrollPage() {
@@ -100,13 +100,7 @@ export default function PayrollPage() {
   const [selectedFirmId, setSelectedFirmId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const [generatePage, setGeneratePage] = useState(1);
-  const [paymentPendingPage, setPaymentPendingPage] = useState(1);
-  const [advancePage, setAdvancePage] = useState(1);
-
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
-  const [printSlip, setPrintSlip] = useState<PayrollRecord | null>(null);
-  
   const [adjustLeaveEmp, setAdjustLeaveEmp] = useState<Employee | null>(null);
   const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
   const [adjustmentState, setAdjustmentState] = useState({
@@ -214,6 +208,20 @@ export default function PayrollPage() {
     }).sort((a, b) => b.remainingBalance - a.remainingBalance);
   }, [employees, vouchers, payrollRecords, searchTerm, selectedFirmId]);
 
+  const advanceLeaveData = useMemo(() => {
+    const search = searchTerm.toLowerCase();
+    return employees.filter(emp => {
+      const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
+      const firmMatch = selectedFirmId === "all" || emp.firmId === selectedFirmId;
+      return match && firmMatch;
+    }).map(emp => {
+      return {
+        ...emp,
+        currentBalance: emp.advanceLeaveBalance || 0
+      };
+    }).sort((a, b) => b.currentBalance - a.currentBalance);
+  }, [employees, searchTerm, selectedFirmId]);
+
   if (!isMounted) return null;
 
   if (adjustLeaveEmp) {
@@ -254,10 +262,11 @@ export default function PayrollPage() {
     <div className="space-y-8 pb-12 font-calibri print:hidden">
         <div><h1 className="text-2xl font-bold">Payroll Management</h1><p className="text-muted-foreground">Centralized alerts and processing for staff earnings.</p></div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 max-w-xl bg-slate-100 p-1 rounded-xl h-12">
-            <TabsTrigger value="generate">Generate Salary</TabsTrigger>
-            <TabsTrigger value="payment">Salary Payment</TabsTrigger>
-            <TabsTrigger value="advance">Advance Salary</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl bg-slate-100 p-1 rounded-xl h-12">
+            <TabsTrigger value="generate" className="text-xs font-bold">Generate Salary</TabsTrigger>
+            <TabsTrigger value="payment" className="text-xs font-bold">Salary Payment</TabsTrigger>
+            <TabsTrigger value="advance" className="text-xs font-bold">Advance Salary</TabsTrigger>
+            <TabsTrigger value="advance-leave" className="text-xs font-bold">Advance Leave</TabsTrigger>
           </TabsList>
           
           <TabsContent value="generate" className="mt-8 space-y-6">
@@ -319,6 +328,70 @@ export default function PayrollPage() {
                             <TableCell className="text-right pr-6">
                               <Badge className={cn("font-black text-sm px-4", emp.remainingBalance > 0 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-100")}>
                                 {formatCurrency(emp.remainingBalance)}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="advance-leave" className="mt-8 space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                    <CalendarClock className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg font-black">Advance Leave Ledger</CardTitle>
+                    <CardDescription className="text-xs">Holiday/Sunday work banking summary.</CardDescription>
+                  </div>
+                </div>
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search employee..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1000px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest px-6 py-4">Employee Name / ID</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest">Dept / Designation</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest text-right pr-6">Current Balance (Days)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {advanceLeaveData.length === 0 ? (
+                        <TableRow><TableCell colSpan={3} className="text-center py-20 text-muted-foreground">No leave records found.</TableCell></TableRow>
+                      ) : (
+                        advanceLeaveData.map((emp) => (
+                          <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                            <TableCell className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="font-bold uppercase text-sm">{emp.name}</span>
+                                <span className="text-[10px] font-mono text-primary font-black uppercase">{emp.employeeId}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-slate-700">{emp.department}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase">{emp.designation}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Badge className={cn(
+                                "font-black text-sm px-5 py-1",
+                                emp.currentBalance > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-50 text-slate-400 border-slate-100"
+                              )}>
+                                {emp.currentBalance} Day(s)
                               </Badge>
                             </TableCell>
                           </TableRow>
