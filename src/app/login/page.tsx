@@ -11,7 +11,7 @@ import Image from "next/image";
 import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import Cookies from 'js-cookie';
-import { getDeviceId } from "@/lib/utils";
+import { getDeviceId, getDeviceName } from "@/lib/utils";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -106,6 +106,7 @@ export default function LoginPage() {
 
           // --- DEVICE BINDING LOGIC ---
           const currentDeviceId = getDeviceId();
+          const currentDeviceName = getDeviceName();
           
           // Check if this device is already registered with another employee
           const deviceTakenByOther = empSnapshot.docs.find(d => {
@@ -120,9 +121,9 @@ export default function LoginPage() {
             return;
           }
 
-          // Automatically bind/update current device ID for this employee
+          // Automatically bind/update current device ID and Name for this employee
           const empDocRef = doc(db, 'employees', registeredEmpDoc.id);
-          await updateDoc(empDocRef, { deviceId: currentDeviceId });
+          await updateDoc(empDocRef, { deviceId: currentDeviceId, deviceName: currentDeviceName });
 
           const userData = {
             id: registeredEmpDoc.id,

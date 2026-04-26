@@ -100,6 +100,7 @@ export interface Employee {
   advanceLeaveBalance?: number;
   avatar?: string;
   deviceId?: string; // Security binding for attendance
+  deviceName?: string; // Human readable device name
 }
 
 export interface Holiday {

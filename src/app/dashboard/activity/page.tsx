@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -30,7 +31,8 @@ import {
   Clock,
   ArrowRightCircle,
   SmartphoneNfc,
-  CheckCircle2
+  CheckCircle2,
+  MonitorSmartphone
 } from "lucide-react";
 import { useData } from "@/context/data-context";
 import { formatDate, cn } from "@/lib/utils";
@@ -55,7 +57,8 @@ export default function ActivityPage() {
       .filter(emp => 
         (emp.name || "").toLowerCase().includes(search) || 
         (emp.employeeId || "").toLowerCase().includes(search) || 
-        (emp.deviceId || "").toLowerCase().includes(search)
+        (emp.deviceId || "").toLowerCase().includes(search) ||
+        (emp.deviceName || "").toLowerCase().includes(search)
       );
   }, [employees, searchTerm]);
 
@@ -65,24 +68,26 @@ export default function ActivityPage() {
     const today = new Date();
     
     // For demo purposes, we simulate random device login periods in last 90 days
-    // In a real system, this would come from a 'loginSessions' collection
     return [
       { 
         id: "h1", 
         from: format(subDays(today, 2), "dd-MMM-yyyy"), 
         to: "Present", 
+        deviceName: emp.deviceName || "Authorized Web Node",
         deviceId: emp.deviceId || "DEV-UNSYNCED" 
       },
       { 
         id: "h2", 
         from: format(subDays(today, 15), "dd-MMM-yyyy"), 
         to: format(subDays(today, 3), "dd-MMM-yyyy"), 
+        deviceName: "Mobile Terminal",
         deviceId: emp.deviceId || "DEV-UNSYNCED" 
       },
       { 
         id: "h3", 
         from: format(subDays(today, 45), "dd-MMM-yyyy"), 
         to: format(subDays(today, 16), "dd-MMM-yyyy"), 
+        deviceName: "Old Legacy Device",
         deviceId: "OLD-HARDWARE-3342" 
       }
     ];
@@ -115,11 +120,12 @@ export default function ActivityPage() {
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="w-full">
-            <Table className="min-w-[1000px]">
+            <Table className="min-w-[1200px]">
               <TableHeader className="bg-slate-50/50">
                 <TableRow>
                   <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-5 px-6">Employee Name / ID</TableHead>
                   <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">Department / Designation</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">Device Name</TableHead>
                   <TableHead className="font-black uppercase text-[10px] tracking-widest text-primary">Current Device ID</TableHead>
                   <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">Active From Date</TableHead>
                   <TableHead className="text-right font-black uppercase text-[10px] tracking-widest text-slate-500 pr-6">Action</TableHead>
@@ -127,7 +133,7 @@ export default function ActivityPage() {
               </TableHeader>
               <TableBody>
                 {filteredEmployees.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground font-bold">No active hardware records found.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-bold">No active hardware records found.</TableCell></TableRow>
                 ) : (
                   filteredEmployees.map((emp) => (
                     <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
@@ -141,6 +147,12 @@ export default function ActivityPage() {
                         <div className="flex flex-col">
                           <span className="text-xs font-bold text-slate-700">{emp.department}</span>
                           <span className="text-[10px] text-muted-foreground uppercase font-medium">{emp.designation}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                           <MonitorSmartphone className="w-3.5 h-3.5 text-slate-400" />
+                           <span className="text-xs font-bold text-slate-600 uppercase">{emp.deviceName || "Authorized Web Node"}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -216,6 +228,7 @@ export default function ActivityPage() {
                       <TableRow>
                          <TableHead className="font-black text-[10px] uppercase tracking-tighter">From Date</TableHead>
                          <TableHead className="font-black text-[10px] uppercase tracking-tighter">To Date</TableHead>
+                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device Name</TableHead>
                          <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device ID Login</TableHead>
                          <TableHead className="font-black text-[10px] uppercase tracking-tighter text-right">Status</TableHead>
                       </TableRow>
@@ -228,6 +241,9 @@ export default function ActivityPage() {
                                {log.to === "Present" ? (
                                   <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none font-black text-[9px] px-2 uppercase">Active Now</Badge>
                                ) : log.to}
+                            </TableCell>
+                            <TableCell className="font-bold text-slate-500 text-[10px] uppercase">
+                               {log.deviceName}
                             </TableCell>
                             <TableCell>
                                <div className="flex items-center gap-2">

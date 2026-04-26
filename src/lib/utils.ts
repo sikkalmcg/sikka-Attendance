@@ -149,3 +149,19 @@ export function getDeviceId() {
     return "DEVICE_RESTRICTED";
   }
 }
+
+/**
+ * Detects a human-readable device/OS name from the User Agent.
+ */
+export function getDeviceName() {
+  if (typeof window === 'undefined') return "Internal System";
+  const ua = window.navigator.userAgent;
+  
+  if (/android/i.test(ua)) return "Android Device";
+  if (/iPad|iPhone|iPod/.test(ua)) return "iOS Device";
+  if (/Windows/i.test(ua)) return "Windows PC";
+  if (/Macintosh/i.test(ua)) return "Apple Mac";
+  if (/Linux/i.test(ua)) return "Linux System";
+  
+  return "Authorized Web Node";
+}
