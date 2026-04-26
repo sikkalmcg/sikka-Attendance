@@ -366,17 +366,18 @@ export default function ApprovalsPage() {
           <CardContent className="p-0">
             {currentData.isLeaveView ? (
               <ScrollArea className="w-full">
-                <Table className="min-w-[1700px]">
+                <Table className="min-w-[1900px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee / ID</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Department</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Designation</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-primary">Target Plant</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-primary">Plant</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Leave Type</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">From Date</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">To Date</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Leave Days</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Purpose</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
@@ -403,6 +404,9 @@ export default function ApprovalsPage() {
                         <TableCell><span className="text-xs font-bold text-slate-600">{formatDate(l.toDate)}</span></TableCell>
                         <TableCell className="text-center">
                            <Badge variant="secondary" className="font-black text-xs px-3">{l.days}</Badge>
+                        </TableCell>
+                        <TableCell>
+                           <span className="text-xs font-bold text-slate-600 truncate max-w-[150px] block" title={l.purpose}>{l.purpose || "--"}</span>
                         </TableCell>
                         <TableCell>
                            <div className="flex items-center gap-1.5">
