@@ -65,7 +65,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export default function DashboardHome() {
   const { employees, attendanceRecords, vouchers, holidays, leaveRequests } = useData();
   const [isMounted, setIsMounted] = useState(false);
-  const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh'>(null);
+  const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh' | 'leave'>(null);
   const [todayStr, setTodayStr] = useState("");
   
   // Leaderboard States
@@ -205,6 +205,66 @@ export default function DashboardHome() {
     );
   }
 
+  if (viewMode === 'leave') {
+    const pendingLeaves = (leaveRequests || []).filter(l => l.status === 'UNDER_PROCESS');
+    return (
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
+          <div className="p-8 bg-slate-900 text-white shrink-0 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center"><FileText className="w-7 h-7 text-primary" /></div>
+              <div><h2 className="text-2xl font-black uppercase">Pending Leave Requests</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Awaiting Management Decision</p></div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setViewMode(null)} className="text-white"><X className="w-6 h-6" /></Button>
+          </div>
+          <ScrollArea className="flex-1 bg-white">
+            <Table className="min-w-[1200px]">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="px-8 py-5 font-black uppercase text-[11px] tracking-widest">Employee Name</TableHead>
+                  <TableHead className="font-black uppercase text-[11px] tracking-widest">Department / Designation</TableHead>
+                  <TableHead className="font-black uppercase text-[11px] tracking-widest">Plant</TableHead>
+                  <TableHead className="font-black uppercase text-[11px] tracking-widest">Leave From</TableHead>
+                  <TableHead className="font-black uppercase text-[11px] tracking-widest">Leave To</TableHead>
+                  <TableHead className="text-center font-black uppercase text-[11px] tracking-widest">Days</TableHead>
+                  <TableHead className="pr-8 font-black uppercase text-[11px] tracking-widest">Purpose</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingLeaves.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground font-bold">No pending requests found.</TableCell></TableRow>
+                ) : (
+                  pendingLeaves.map((l, idx) => (
+                    <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="px-8 py-6">
+                        <div className="flex flex-col">
+                          <span className="font-black text-slate-900 uppercase text-sm">{l.employeeName}</span>
+                          <span className="text-[10px] font-mono text-primary font-black uppercase">{l.employeeId}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-700">{l.department}</span>
+                          <span className="text-[9px] text-muted-foreground uppercase">{l.designation}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell><Badge variant="outline" className="bg-slate-50 text-slate-700 text-[10px] font-black">{l.plantName}</Badge></TableCell>
+                      <TableCell className="text-xs font-bold">{formatDate(l.fromDate)}</TableCell>
+                      <TableCell className="text-xs font-bold">{formatDate(l.toDate)}</TableCell>
+                      <TableCell className="text-center"><Badge className="bg-primary/10 text-primary border-none font-black">{l.days}</Badge></TableCell>
+                      <TableCell className="pr-8 text-xs font-medium text-slate-500 max-w-[250px] truncate" title={l.purpose}>{l.purpose}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </div>
+      </div>
+    );
+  }
+
   if (viewMode) {
     const data = getCategorizedData(viewMode === 'present' ? 'PRESENT' : viewMode.toUpperCase() as any);
     return (
@@ -238,7 +298,7 @@ export default function DashboardHome() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Field Work Today" value={stats.fieldWorkToday} icon={Briefcase} trend="Active" trendUp={true} description="On-site logs" onClick={() => setViewMode('field')} />
         <StatCard title="Work at Home" value={stats.wfhToday} icon={Home} trend="Remote" trendUp={true} description="WFH shift logs" onClick={() => setViewMode('wfh')} />
-        <StatCard title="Leave Requests" value={stats.pendingLeaves} icon={FileText} trend="Pending" trendUp={false} description="Awaiting process" />
+        <StatCard title="Leave Requests" value={stats.pendingLeaves} icon={FileText} trend="Pending" trendUp={false} description="Awaiting process" onClick={() => setViewMode('leave')} />
       </div>
 
       <div className="space-y-6 mt-10">
