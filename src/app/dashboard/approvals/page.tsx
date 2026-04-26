@@ -171,12 +171,12 @@ export default function ApprovalsPage() {
 
     const all = [...actual, ...missing].filter(rec => rec.date >= PROJECT_START_DATE_STR);
 
-    // 3. Apply Security Scoping (Plant-wise)
+    // 3. Apply Strict Security Scoping (Plant-wise)
     return all.filter(rec => {
       // Super admin sees everything
       if (!userAssignedPlantIds) return true;
 
-      // For actual logs, check the IN plant name
+      // For actual logs, check the IN plant name against user's authorized plant list
       if (!rec.isVirtual) {
         return authorizedPlantNames.includes(rec.inPlant);
       }
@@ -427,14 +427,15 @@ export default function ApprovalsPage() {
               </ScrollArea>
             ) : (
               <ScrollArea className="w-full">
-                <Table className="min-w-[2000px]">
+                <Table className="min-w-[2200px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Plant</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Plant</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Date/Time</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Date & Time</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Date / Time</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Out Hour</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
@@ -467,7 +468,15 @@ export default function ApprovalsPage() {
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date)}</span>
-                            <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"} - {rec.outTime || "--:--"}</span>
+                            <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.outDate || rec.date)}</span>
+                            <span className={cn("text-xs font-mono font-bold", rec.autoCheckout && "text-rose-600")}>
+                              {rec.outTime || "--:--"}
+                            </span>
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
@@ -490,7 +499,7 @@ export default function ApprovalsPage() {
                            </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-col max-w-[300px]">
+                          <div className="flex flex-col max-w-[400px]">
                             <span className="text-[10px] font-bold text-slate-500 truncate" title={rec.address}><MapPin className="w-2.5 h-2.5 inline mr-1" />{rec.address || "N/A"}</span>
                             <span className="text-[10px] font-bold text-slate-400 truncate" title={rec.addressOut}><Navigation className="w-2.5 h-2.5 inline mr-1" />{rec.addressOut || "N/A"}</span>
                           </div>
