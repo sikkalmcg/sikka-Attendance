@@ -164,12 +164,26 @@ export default function AttendancePage() {
   }, [currentUser, employees]);
 
   const isAccessAllowed = useMemo(() => {
-    if (!isMounted) return false;
-    const isEmployee = currentUser?.role === 'EMPLOYEE';
-    const hasEmployeeRecord = !!registeredEmployee && registeredEmployee.active;
-    const isBoundDevice = !registeredEmployee?.deviceId || registeredEmployee.deviceId === currentDeviceId;
-    return isEmployee && hasEmployeeRecord && isBoundDevice;
-  }, [currentUser, registeredEmployee, currentDeviceId, isMounted]);
+    if (!isMounted || !currentUser) return false;
+    
+    // Core Role Checks
+    const isEmployee = currentUser.role === 'EMPLOYEE';
+    const isManager = ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
+    
+    // Managers always have access for testing/oversight
+    if (isManager) return true;
+    
+    // Employees need to be active
+    if (isEmployee) {
+      if (registeredEmployee) {
+        return registeredEmployee.active;
+      }
+      // If employee record isn't loaded yet but session is valid, allow access to prevent gray-out
+      return true;
+    }
+
+    return false;
+  }, [currentUser, registeredEmployee, isMounted]);
 
   const effectiveEmployeeId = useMemo(() => {
     return registeredEmployee?.employeeId || currentUser?.username || "N/A";
@@ -270,7 +284,7 @@ export default function AttendancePage() {
 
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "Use your registered device." });
+      toast({ variant: "destructive", title: "Access Denied", description: "Authorization Check Failed." });
       return;
     }
     if (todayStr < PROJECT_START_DATE_STR) {
@@ -482,7 +496,7 @@ export default function AttendancePage() {
                 {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMM-yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
               </div>
               <div className="flex gap-4">
-                <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} onClick={() => requestLocation("IN")}>Mark IN</Button>
+                <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || (lockState.isLocked && lockState.unlockTime !== 'Shift Active')} onClick={() => requestLocation("IN")}>Mark IN</Button>
                 <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} onClick={() => requestLocation("OUT")}>Mark OUT</Button>
               </div>
               {lockState.isLocked && lockState.unlockTime !== 'Shift Active' && (
