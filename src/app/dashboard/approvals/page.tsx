@@ -451,7 +451,7 @@ export default function ApprovalsPage() {
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Out Hour</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>
+                      {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / Out Location</TableHead>
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                     </TableRow>
@@ -504,12 +504,14 @@ export default function ApprovalsPage() {
                             {rec.displayStatus}
                           </Badge>
                         </TableCell>
-                        <TableCell>
-                           <div className="flex items-center gap-1.5">
-                              <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || "--"}</span>
-                           </div>
-                        </TableCell>
+                        {viewMode === 'history' && (
+                          <TableCell>
+                             <div className="flex items-center gap-1.5">
+                                <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || "--"}</span>
+                             </div>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex flex-col max-w-[400px]">
                             <span className="text-[10px] font-bold text-slate-500 truncate" title={rec.address}><MapPin className="w-2.5 h-2.5 inline mr-1" />{rec.address || "N/A"}</span>
