@@ -26,7 +26,8 @@ import {
   User as UserIcon,
   Filter,
   ChevronLeft,
-  CalendarDays
+  CalendarDays,
+  FileText
 } from "lucide-react";
 import { useData } from "@/context/data-context";
 import {
@@ -62,7 +63,7 @@ const getISTTime = () => {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function DashboardHome() {
-  const { employees, attendanceRecords, vouchers, holidays } = useData();
+  const { employees, attendanceRecords, vouchers, holidays, leaveRequests } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh'>(null);
   const [todayStr, setTodayStr] = useState("");
@@ -98,7 +99,7 @@ export default function DashboardHome() {
   };
 
   const stats = useMemo(() => {
-    if (!isMounted || !todayStr) return { totalEmployees: 0, presentToday: 0, absentToday: 0, fieldWorkToday: 0, wfhToday: 0, pendingApprovals: 0, attendancePct: "0" };
+    if (!isMounted || !todayStr) return { totalEmployees: 0, presentToday: 0, absentToday: 0, fieldWorkToday: 0, wfhToday: 0, pendingApprovals: 0, attendancePct: "0", pendingLeaves: 0 };
     
     const now = getISTTime();
     const activeEmployees = employees.filter(e => e.active);
@@ -119,6 +120,7 @@ export default function DashboardHome() {
     
     const absentToday = Math.max(0, activeEmployees.length - presentToday.length);
     const pendingApprovals = attendanceRecords.filter(r => !r.approved).length + vouchers.filter(v => v.status === 'PENDING').length;
+    const pendingLeaves = (leaveRequests || []).filter(l => l.status === 'UNDER_PROCESS').length;
 
     return {
       totalEmployees: activeEmployees.length,
@@ -127,9 +129,10 @@ export default function DashboardHome() {
       fieldWorkToday: fieldWorkToday.length,
       wfhToday: wfhToday.length,
       pendingApprovals: pendingApprovals,
+      pendingLeaves: pendingLeaves,
       attendancePct: activeEmployees.length > 0 ? ((presentToday.length / activeEmployees.length) * 100).toFixed(1) : "0"
     };
-  }, [employees, attendanceRecords, vouchers, isMounted, todayStr]);
+  }, [employees, attendanceRecords, vouchers, isMounted, todayStr, leaveRequests]);
 
   const leaderboardData = useMemo(() => {
     if (!isMounted || !selectedLeaderboardMonth || !employees.length) return { top: [], bottom: [] };
@@ -223,15 +226,23 @@ export default function DashboardHome() {
   }
 
   return (
-    <div className="space-y-10 pb-12">
+    <div className="space-y-6 pb-12">
+      {/* Primary Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Total Employees" value={stats.totalEmployees} icon={Users} trend="+1" trendUp={true} description="Active manpower" />
         <StatCard title="Present Today" value={stats.presentToday} icon={CalendarCheck} trend={`${stats.attendancePct}%`} trendUp={true} description="Across units" onClick={() => setViewMode('present')} />
         <StatCard title="Absent Today" value={stats.absentToday} icon={UserX} trend="0" trendUp={false} description="Missing logs" onClick={() => setViewMode('absent')} />
       </div>
 
-      <div className="space-y-6">
-        <div className="flex justify-between items-center bg-white p-6 rounded-3xl border">
+      {/* Missing Widgets Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatCard title="Field Work Today" value={stats.fieldWorkToday} icon={Briefcase} trend="Active" trendUp={true} description="On-site logs" onClick={() => setViewMode('field')} />
+        <StatCard title="Work at Home" value={stats.wfhToday} icon={Home} trend="Remote" trendUp={true} description="WFH shift logs" onClick={() => setViewMode('wfh')} />
+        <StatCard title="Leave Requests" value={stats.pendingLeaves} icon={FileText} trend="Pending" trendUp={false} description="Awaiting process" />
+      </div>
+
+      <div className="space-y-6 mt-10">
+        <div className="flex justify-between items-center bg-white p-6 rounded-3xl border shadow-sm">
           <h3 className="text-xl font-black">Performance Insights</h3>
           <div className="flex items-center gap-3">
              <Label className="text-[10px] font-black uppercase text-slate-400">Analysis Month</Label>
@@ -267,5 +278,5 @@ export default function DashboardHome() {
 }
 
 function StatCard({ title, value, icon: Icon, trend, trendUp, description, onClick }: any) {
-  return (<Card className={cn("shadow-sm cursor-pointer hover:shadow-md transition-all", onClick && "group")} onClick={onClick}><CardContent className="p-6"><div className="flex justify-between items-start"><div><p className="text-sm font-medium text-muted-foreground">{title}</p><h3 className="text-3xl font-bold mt-2">{value}</h3></div><div className="p-3 rounded-xl bg-slate-50"><Icon className="w-6 h-6 text-primary" /></div></div></CardContent></Card>);
+  return (<Card className={cn("shadow-sm cursor-pointer hover:shadow-md transition-all border-slate-100", onClick && "group")} onClick={onClick}><CardContent className="p-6 flex justify-between items-center"><div className="space-y-1"><div><p className="text-xs font-bold text-muted-foreground uppercase tracking-tight">{title}</p><h3 className="text-3xl font-black mt-1 text-slate-900">{value}</h3></div><p className="text-[10px] text-muted-foreground font-medium">{description}</p></div><div className="p-4 rounded-2xl bg-slate-50 group-hover:bg-primary/10 transition-colors"><Icon className="w-6 h-6 text-slate-400 group-hover:text-primary transition-colors" /></div></CardContent></Card>);
 }
