@@ -12,6 +12,7 @@ import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from 
 import { getAuth, signInAnonymously } from "firebase/auth";
 import Cookies from 'js-cookie';
 import { getDeviceId, getDeviceName } from "@/lib/utils";
+import { DeviceHistoryEntry } from "@/lib/types";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -104,7 +105,7 @@ export default function LoginPage() {
             return;
           }
 
-          // --- DEVICE BINDING LOGIC ---
+          // --- DEVICE BINDING & HISTORY LOGIC ---
           const currentDeviceId = getDeviceId();
           const currentDeviceName = getDeviceName();
           
@@ -121,9 +122,40 @@ export default function LoginPage() {
             return;
           }
 
+          // Update Device History Ledger
+          let history: DeviceHistoryEntry[] = empData.deviceHistory || [];
+          const nowIso = new Date().toISOString();
+
+          if (history.length === 0) {
+            history = [{
+              id: "h-" + Date.now(),
+              from: nowIso,
+              to: "Present",
+              deviceId: currentDeviceId!,
+              deviceName: currentDeviceName
+            }];
+          } else {
+            const lastEntry = history[history.length - 1];
+            if (lastEntry.deviceId !== currentDeviceId) {
+              // Hardware Switch Detected: Close old session, start new one
+              lastEntry.to = nowIso;
+              history.push({
+                id: "h-" + Date.now(),
+                from: nowIso,
+                to: "Present",
+                deviceId: currentDeviceId!,
+                deviceName: currentDeviceName
+              });
+            }
+          }
+
           // Automatically bind/update current device ID and Name for this employee
           const empDocRef = doc(db, 'employees', registeredEmpDoc.id);
-          await updateDoc(empDocRef, { deviceId: currentDeviceId, deviceName: currentDeviceName });
+          await updateDoc(empDocRef, { 
+            deviceId: currentDeviceId, 
+            deviceName: currentDeviceName,
+            deviceHistory: history 
+          });
 
           const userData = {
             id: registeredEmpDoc.id,

@@ -35,7 +35,7 @@ import {
   MonitorSmartphone
 } from "lucide-react";
 import { useData } from "@/context/data-context";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, formatDateTime, cn } from "@/lib/utils";
 import { format, subDays, subMonths, eachDayOfInterval, isSameDay } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
@@ -62,35 +62,11 @@ export default function ActivityPage() {
       );
   }, [employees, searchTerm]);
 
-  // Generate 90-day history for the dialog
-  const generateHistory = (emp: any) => {
-    if (!emp) return [];
-    const today = new Date();
-    
-    // For demo purposes, we simulate random device login periods in last 90 days
-    return [
-      { 
-        id: "h1", 
-        from: format(subDays(today, 2), "dd-MMM-yyyy"), 
-        to: "Present", 
-        deviceName: emp.deviceName || "Authorized Web Node",
-        deviceId: emp.deviceId || "DEV-UNSYNCED" 
-      },
-      { 
-        id: "h2", 
-        from: format(subDays(today, 15), "dd-MMM-yyyy"), 
-        to: format(subDays(today, 3), "dd-MMM-yyyy"), 
-        deviceName: "Mobile Terminal",
-        deviceId: emp.deviceId || "DEV-UNSYNCED" 
-      },
-      { 
-        id: "h3", 
-        from: format(subDays(today, 45), "dd-MMM-yyyy"), 
-        to: format(subDays(today, 16), "dd-MMM-yyyy"), 
-        deviceName: "Old Legacy Device",
-        deviceId: "OLD-HARDWARE-3342" 
-      }
-    ];
+  // Read actual history from the database object
+  const getActualHistory = (emp: any) => {
+    if (!emp || !emp.deviceHistory) return [];
+    // Display in reverse chronological order (newest first)
+    return [...emp.deviceHistory].reverse();
   };
 
   if (!isMounted) return null;
@@ -217,7 +193,7 @@ export default function ActivityPage() {
           <div className="p-8 bg-slate-50/50">
              <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                   <Clock className="w-4 h-4" /> Activity Log (Last 90 Days)
+                   <Clock className="w-4 h-4" /> Activity Log (Actual Login Records)
                 </h3>
                 <Badge variant="outline" className="font-bold text-[10px] border-slate-200">System Records Only</Badge>
              </div>
@@ -226,36 +202,40 @@ export default function ActivityPage() {
                 <Table>
                    <TableHeader className="bg-white">
                       <TableRow>
-                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">From Date</TableHead>
-                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">To Date</TableHead>
+                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">From Date & Time</TableHead>
+                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">To Date & Time</TableHead>
                          <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device Name</TableHead>
                          <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device ID Login</TableHead>
                          <TableHead className="font-black text-[10px] uppercase tracking-tighter text-right">Status</TableHead>
                       </TableRow>
                    </TableHeader>
                    <TableBody>
-                      {generateHistory(selectedEmployee).map((log) => (
-                         <TableRow key={log.id} className="hover:bg-slate-50 transition-colors">
-                            <TableCell className="font-bold text-slate-700 text-xs py-4">{log.from}</TableCell>
-                            <TableCell className="font-bold text-slate-700 text-xs py-4">
-                               {log.to === "Present" ? (
-                                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none font-black text-[9px] px-2 uppercase">Active Now</Badge>
-                               ) : log.to}
-                            </TableCell>
-                            <TableCell className="font-bold text-slate-500 text-[10px] uppercase">
-                               {log.deviceName}
-                            </TableCell>
-                            <TableCell>
-                               <div className="flex items-center gap-2">
-                                  <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                                  <span className="text-xs font-mono font-bold text-slate-500">{log.deviceId}</span>
-                               </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                               <CheckCircle2 className={cn("w-4 h-4 ml-auto", log.to === "Present" ? "text-emerald-500" : "text-slate-300")} />
-                            </TableCell>
-                         </TableRow>
-                      ))}
+                      {getActualHistory(selectedEmployee).length === 0 ? (
+                         <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground font-bold italic">No hardware transition records found.</TableCell></TableRow>
+                      ) : (
+                         getActualHistory(selectedEmployee).map((log) => (
+                           <TableRow key={log.id} className="hover:bg-slate-50 transition-colors">
+                              <TableCell className="font-bold text-slate-700 text-xs py-4">{formatDateTime(log.from)}</TableCell>
+                              <TableCell className="font-bold text-slate-700 text-xs py-4">
+                                 {log.to === "Present" ? (
+                                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none font-black text-[9px] px-2 uppercase">Active Now</Badge>
+                                 ) : formatDateTime(log.to)}
+                              </TableCell>
+                              <TableCell className="font-bold text-slate-500 text-[10px] uppercase">
+                                 {log.deviceName}
+                              </TableCell>
+                              <TableCell>
+                                 <div className="flex items-center gap-2">
+                                    <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                                    <span className="text-xs font-mono font-bold text-slate-500">{log.deviceId}</span>
+                                 </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                 <CheckCircle2 className={cn("w-4 h-4 ml-auto", log.to === "Present" ? "text-emerald-500" : "text-slate-300")} />
+                              </TableCell>
+                           </TableRow>
+                         ))
+                      )}
                    </TableBody>
                 </Table>
              </Card>

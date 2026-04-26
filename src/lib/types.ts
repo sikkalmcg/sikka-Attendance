@@ -71,6 +71,14 @@ export interface SalaryStructure {
   esicRateEx: number;
 }
 
+export interface DeviceHistoryEntry {
+  id: string;
+  from: string; // ISO String
+  to: string;   // ISO String or "Present"
+  deviceId: string;
+  deviceName: string;
+}
+
 export interface Employee {
   id: string;
   employeeId: string;
@@ -101,6 +109,7 @@ export interface Employee {
   avatar?: string;
   deviceId?: string; // Security binding for attendance
   deviceName?: string; // Human readable device name
+  deviceHistory?: DeviceHistoryEntry[];
 }
 
 export interface Holiday {

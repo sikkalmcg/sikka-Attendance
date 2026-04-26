@@ -88,13 +88,22 @@ export function checkIfSunday(date: Date | string) {
 
 /**
  * Standard Date Format: 21-Mar-2026 (DD-MMM-YYYY)
- * Corporate requirement for India business use.
  */
 export function formatDate(date: Date | string) {
   if (!date) return "---";
   const d = typeof date === 'string' ? parseISO(date) : date;
   if (!isValid(d)) return "---";
   return format(d, "dd-MMM-yyyy");
+}
+
+/**
+ * High-precision Date and Time Format: 21-Mar-2026 14:30
+ */
+export function formatDateTime(date: Date | string) {
+  if (!date) return "---";
+  const d = typeof date === 'string' ? parseISO(date) : date;
+  if (!isValid(d)) return "---";
+  return format(d, "dd-MMM-yyyy HH:mm");
 }
 
 /**
