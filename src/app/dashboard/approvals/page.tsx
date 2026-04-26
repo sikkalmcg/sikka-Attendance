@@ -47,7 +47,9 @@ import {
   ChevronRight,
   ChevronLeft,
   X,
-  AlertTriangle
+  AlertTriangle,
+  MapPin,
+  Navigation
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -259,14 +261,18 @@ export default function ApprovalsPage() {
         <Card className="border-slate-200 shadow-sm overflow-hidden">
           <CardContent className="p-0">
             <ScrollArea className="w-full">
-              <Table className="min-w-[1200px]">
+              <Table className="min-w-[1800px]">
                 <TableHeader className="bg-slate-50/50">
                   <TableRow>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
+                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Plant</TableHead>
+                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Plant</TableHead>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Date/Time</TableHead>
+                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Out Hour</TableHead>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
+                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / Out Location</TableHead>
                     <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -286,10 +292,19 @@ export default function ApprovalsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <span className="text-xs font-bold text-slate-700">{rec.inPlant || "--"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs font-bold text-slate-700">{rec.outPlant || "--"}</span>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex flex-col">
                           <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date)}</span>
                           <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"} - {rec.outTime || "--:--"}</span>
                         </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}</span>
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>
@@ -300,6 +315,12 @@ export default function ApprovalsPage() {
                         <Badge className={cn("text-[9px] font-black uppercase px-3", rec.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>
                           {rec.displayStatus}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col max-w-[300px]">
+                          <span className="text-[10px] font-bold text-slate-500 truncate" title={rec.address}><MapPin className="w-2.5 h-2.5 inline mr-1" />{rec.address || "N/A"}</span>
+                          <span className="text-[10px] font-bold text-slate-400 truncate" title={rec.addressOut}><Navigation className="w-2.5 h-2.5 inline mr-1" />{rec.addressOut || "N/A"}</span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right pr-6">
                         <div className="flex justify-end gap-1">
