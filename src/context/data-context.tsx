@@ -141,8 +141,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (currentUser.role !== 'SUPER_ADMIN') {
+      // FIX: Ensure all user record fields (plantIds, permissions) are merged for proper filtering
       const dbUser = (users || []).find(u => u.id === currentUser.id);
-      return dbUser ? { ...currentUser, fullName: dbUser.fullName, avatar: dbUser.avatar } : currentUser;
+      return dbUser ? { ...currentUser, ...dbUser } : currentUser;
     }
 
     return currentUser;

@@ -209,7 +209,16 @@ export default function ApprovalsPage() {
   }, [filteredAttendance, searchTerm, selectedPlantFilter, employees, plants]);
 
   const pendingAttendanceList = useMemo(() => {
-    return listAttendance.filter(rec => !rec.approved && !rec.remark).sort((a, b) => b.date.localeCompare(a.date));
+    return listAttendance.filter(rec => {
+      // Must not be already approved or rejected
+      if (rec.approved || !!rec.remark) return false;
+      
+      // REQUIREMENT: Only approve once complete Mark IN and OUT
+      // Physical records must have an OUT time to appear in the Pending queue
+      if (!rec.isVirtual && !rec.outTime) return false;
+      
+      return true;
+    }).sort((a, b) => b.date.localeCompare(a.date));
   }, [listAttendance]);
 
   const historyAttendanceList = useMemo(() => {
