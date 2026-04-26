@@ -106,6 +106,7 @@ export default function AttendancePage() {
   const [leavePurpose, setLeavePurpose] = useState("");
   const [leaveTypeReq, setLeaveTypeReq] = useState<'DAYS' | 'HALF_DAY'>('DAYS');
   const [leaveReachTime, setLeaveReachTime] = useState("");
+  const [selectedLeavePlantId, setSelectedLeavePlantId] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
@@ -493,7 +494,7 @@ export default function AttendancePage() {
           </Card>
           <Card className="shadow-xl border-none overflow-hidden bg-white h-full">
             <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4"><CardTitle className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Leave Requests</CardTitle><Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={() => setActiveDialog("LEAVE")} disabled={!isAccessAllowed}><Plus className="w-3 h-3" /> Create Request</Button></CardHeader>
-            <CardContent className="p-0"><ScrollArea className="h-[240px]">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground">No active records.</div>) : (<div className="divide-y divide-slate-100">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).map((l) => (<div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors"><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div><Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge></div>))}</div>)}</ScrollArea></CardContent>
+            <CardContent className="p-0"><ScrollArea className="h-[240px]">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground">No active records.</div>) : (<div className="divide-y divide-slate-100">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).map((l) => (<div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors"><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p><p className="text-[9px] font-black text-primary uppercase">{l.plantName}</p></div><Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge></div>))}</div>)}</ScrollArea></CardContent>
           </Card>
         </div>
 
@@ -572,6 +573,20 @@ export default function AttendancePage() {
               <DialogTitle className="flex items-center gap-2 font-black text-xl"><CalendarDays className="w-5 h-5 text-white" /> Create Leave Request</DialogTitle>
             </DialogHeader>
             <div className="p-8 space-y-6">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Target Plant *</Label>
+                <Select value={selectedLeavePlantId} onValueChange={setSelectedLeavePlantId}>
+                  <SelectTrigger className="h-12 bg-slate-50 font-bold border-slate-200">
+                    <SelectValue placeholder="Choose Facility for Leave" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {plants.map(p => (
+                      <SelectItem key={p.id} value={p.id} className="font-bold">{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-4">
                 <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Leave Type</Label>
                 <RadioGroup value={leaveTypeReq} onValueChange={(v: any) => setLeaveTypeReq(v)} className="grid grid-cols-2 gap-4">
@@ -609,27 +624,36 @@ export default function AttendancePage() {
             </div>
             <DialogFooter className="p-6 bg-slate-50 border-t">
               <Button variant="ghost" onClick={() => setActiveDialog("NONE")} className="font-bold">Cancel</Button>
-              <Button className="h-12 px-10 rounded-xl font-black bg-primary" onClick={() => {
-                const start = parseISO(leaveFromDate);
-                const end = parseISO(leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate);
-                const days = leaveTypeReq === 'HALF_DAY' ? 0.5 : differenceInDays(end, start) + 1;
-                addRecord('leaveRequests', {
-                  employeeId: effectiveEmployeeId,
-                  employeeName: effectiveEmployeeName,
-                  department: registeredEmployee?.department || "N/A",
-                  designation: registeredEmployee?.designation || "N/A",
-                  fromDate: leaveFromDate,
-                  toDate: leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate,
-                  days,
-                  purpose: leavePurpose,
-                  status: 'UNDER_PROCESS',
-                  createdAt: new Date().toISOString(),
-                  leaveType: leaveTypeReq,
-                  reachTime: leaveTypeReq === 'HALF_DAY' ? leaveReachTime : undefined
-                });
-                setActiveDialog("NONE");
-                toast({ title: "Request Submitted" });
-              }}>Submit Request</Button>
+              <Button 
+                className="h-12 px-10 rounded-xl font-black bg-primary" 
+                disabled={!selectedLeavePlantId || !leaveFromDate || (leaveTypeReq === 'DAYS' && !leaveToDate)}
+                onClick={() => {
+                  const start = parseISO(leaveFromDate);
+                  const end = parseISO(leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate);
+                  const days = leaveTypeReq === 'HALF_DAY' ? 0.5 : differenceInDays(end, start) + 1;
+                  const targetPlant = plants.find(p => p.id === selectedLeavePlantId);
+                  
+                  addRecord('leaveRequests', {
+                    employeeId: effectiveEmployeeId,
+                    employeeName: effectiveEmployeeName,
+                    department: registeredEmployee?.department || "N/A",
+                    designation: registeredEmployee?.designation || "N/A",
+                    plantName: targetPlant?.name || "N/A",
+                    fromDate: leaveFromDate,
+                    toDate: leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate,
+                    days,
+                    purpose: leavePurpose,
+                    status: 'UNDER_PROCESS',
+                    createdAt: new Date().toISOString(),
+                    leaveType: leaveTypeReq,
+                    reachTime: leaveTypeReq === 'HALF_DAY' ? leaveReachTime : undefined
+                  });
+                  setActiveDialog("NONE");
+                  toast({ title: "Request Submitted" });
+                }}
+              >
+                Submit Request
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

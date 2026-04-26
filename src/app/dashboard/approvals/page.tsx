@@ -366,11 +366,13 @@ export default function ApprovalsPage() {
           <CardContent className="p-0">
             {currentData.isLeaveView ? (
               <ScrollArea className="w-full">
-                <Table className="min-w-[1500px]">
+                <Table className="min-w-[1700px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee / ID</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Department</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Designation</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-primary">Target Plant</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Leave Type</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">From Date</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">To Date</TableHead>
@@ -389,12 +391,9 @@ export default function ApprovalsPage() {
                             <span className="text-[10px] font-mono font-black text-primary uppercase">{l.employeeId}</span>
                           </div>
                         </TableCell>
-                        <TableCell>
-                           <div className="flex flex-col">
-                              <span className="text-xs font-bold text-slate-700">{l.department}</span>
-                              <span className="text-[9px] text-muted-foreground uppercase font-medium">{l.designation}</span>
-                           </div>
-                        </TableCell>
+                        <TableCell><span className="text-xs font-bold text-slate-700">{l.department}</span></TableCell>
+                        <TableCell><span className="text-[9px] text-muted-foreground uppercase font-medium">{l.designation}</span></TableCell>
+                        <TableCell><Badge variant="outline" className="text-[9px] font-black uppercase text-primary border-primary/20 bg-primary/5">{l.plantName || "N/A"}</Badge></TableCell>
                         <TableCell>
                            <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2.5", l.leaveType === 'DAYS' ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700")}>
                              {l.leaveType === 'DAYS' ? 'Full Days' : 'Half Day'}

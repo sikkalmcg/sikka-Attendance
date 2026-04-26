@@ -168,6 +168,7 @@ export interface LeaveRequest {
   employeeName: string;
   department: string;
   designation: string;
+  plantName: string; // Added: Mandatory plant context
   fromDate: string;
   toDate: string;
   days: number;
