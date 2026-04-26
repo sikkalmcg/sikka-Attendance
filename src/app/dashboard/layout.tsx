@@ -33,7 +33,8 @@ import {
   Camera,
   Upload,
   ShieldAlert,
-  ArrowLeft
+  ArrowLeft,
+  Smartphone
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -376,6 +377,7 @@ function SidebarNav() {
     { title: "Vouchers", icon: FileText, path: "/dashboard/vouchers", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Vouchers" },
     { title: "Holidays", icon: Calendar, path: "/dashboard/holidays", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Holidays" },
     { title: "Reports", icon: BarChart3, path: "/dashboard/reports", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Reports" },
+    { title: "Activity", icon: Smartphone, path: "/dashboard/activity", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Activity" },
     { title: "Plants & Firms", icon: Factory, path: "/dashboard/settings/firms", roles: ["SUPER_ADMIN", "ADMIN"], permission: "Settings" },
     { title: "Users", icon: Settings, path: "/dashboard/settings/users", roles: ["SUPER_ADMIN"], permission: "Users" },
   ];
@@ -451,6 +453,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
       "/dashboard/vouchers": "Vouchers",
       "/dashboard/holidays": "Holidays",
       "/dashboard/reports": "Reports",
+      "/dashboard/activity": "Activity",
       "/dashboard/settings/firms": "Settings",
       "/dashboard/settings/users": "Users"
     };

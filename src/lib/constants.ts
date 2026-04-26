@@ -81,6 +81,7 @@ export const APP_PERMISSIONS = [
   "Vouchers",
   "Holidays",
   "Reports",
+  "Activity",
   "Settings",
   "Users"
 ];
