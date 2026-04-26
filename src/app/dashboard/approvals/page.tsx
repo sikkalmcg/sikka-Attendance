@@ -66,8 +66,6 @@ export default function ApprovalsPage() {
   const [pendingType, setPendingType] = useState("attendance");
   const [historyType, setHistoryType] = useState("attendance");
   const [currentPage, setCurrentPage] = useState(1);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
 
   // Attendance Reject/Edit/Restore States
   const [selectedAttendance, setSelectedAttendance] = useState<any>(null);
@@ -88,16 +86,26 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    const today = new Date();
-    const floorDate = parseISO(PROJECT_START_DATE_STR);
-    const thirtyDaysAgo = subDays(today, 30);
-    setFromDate(format(isBefore(thirtyDaysAgo, floorDate) ? floorDate : thirtyDaysAgo, "yyyy-MM-dd"));
-    setToDate(format(today, "yyyy-MM-dd"));
   }, []);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [viewMode, pendingType, historyType, fromDate, toDate]);
+  }, [viewMode, pendingType, historyType]);
+
+  const getPriorityStatus = (dateStr: string, record: any) => {
+    const isSun = isSunday(parseISO(dateStr));
+    const holiday = (holidays || []).find(h => h.date === dateStr);
+    
+    if (record) {
+      if (holiday) return "Present on Holiday";
+      if (isSun) return "Present on Weekly Off";
+      return record.status;
+    } else {
+      if (holiday) return `Holiday (${holiday.name})`;
+      if (isSun) return "Weekly Off";
+      return "Absent";
+    }
+  };
 
   const pendingAttendanceList = useMemo(() => {
     if (!isMounted) return [];
@@ -109,13 +117,14 @@ export default function ApprovalsPage() {
       .filter(rec => !rec.approved && !rec.remark && rec.date >= PROJECT_START_DATE_STR)
       .map(rec => {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
-        let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
+        const displayStatus = getPriorityStatus(rec.date, rec);
+        let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
         
         if (!rec.outTime) {
           const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
           const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
           if (diffHours >= 16) {
-            const autoOutDT = addHours(inDT, 8);
+            const autoOutDT = addHours(inDT, 16);
             processedRec = {
               ...processedRec,
               outTime: format(autoOutDT, "HH:mm"),
@@ -133,12 +142,14 @@ export default function ApprovalsPage() {
       (employees || []).filter(e => e.active).forEach(emp => {
         const hasRecord = (attendanceRecords || []).some(r => r.employeeId === emp.employeeId && r.date === todayStr);
         if (!hasRecord) {
+          const displayStatus = getPriorityStatus(todayStr, null);
           missingRecords.push({ 
             id: `v-abs-${emp.employeeId}-${todayStr}`, 
             employeeId: emp.employeeId, 
             employeeName: emp.name, 
             date: todayStr, 
             status: 'ABSENT', 
+            displayStatus,
             attendanceType: 'ABSENT', 
             approved: false, 
             dept: emp.department, 
@@ -154,45 +165,26 @@ export default function ApprovalsPage() {
     return [...actualPending, ...missingRecords]
       .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [attendanceRecords, employees, searchTerm, isMounted]);
-
-  const pendingLeavesList = useMemo(() => {
-    const search = searchTerm.toLowerCase();
-    return (leaveRequests || [])
-      .filter(l => l.status === 'UNDER_PROCESS' && l.fromDate >= PROJECT_START_DATE_STR)
-      .filter(l => (l.employeeName || "").toLowerCase().includes(search) || (l.employeeId || "").toLowerCase().includes(search))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [leaveRequests, searchTerm]);
+  }, [attendanceRecords, employees, searchTerm, isMounted, holidays]);
 
   const historyAttendanceList = useMemo(() => {
     const search = searchTerm.toLowerCase();
-    let list = (attendanceRecords || [])
+    return (attendanceRecords || [])
       .filter(rec => (rec.approved || !!rec.remark) && rec.date >= PROJECT_START_DATE_STR)
       .map(rec => {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
-        return { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
+        const displayStatus = getPriorityStatus(rec.date, rec);
+        return { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
       })
-      .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search));
-    if (fromDate) list = list.filter(r => r.date >= fromDate);
-    if (toDate) list = list.filter(r => r.date <= toDate);
-    return list.sort((a, b) => b.date.localeCompare(a.date));
-  }, [attendanceRecords, employees, searchTerm, fromDate, toDate]);
-
-  const historyLeavesList = useMemo(() => {
-    const search = searchTerm.toLowerCase();
-    let list = (leaveRequests || [])
-      .filter(l => l.status !== 'UNDER_PROCESS' && l.fromDate >= PROJECT_START_DATE_STR)
-      .filter(l => (l.employeeName || "").toLowerCase().includes(search) || (l.employeeId || "").toLowerCase().includes(search));
-    if (fromDate) list = list.filter(l => l.fromDate >= fromDate);
-    if (toDate) list = list.filter(l => l.toDate <= toDate);
-    return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [leaveRequests, searchTerm, fromDate, toDate]);
+      .filter(rec => (rec.employeeName || "").toLowerCase().includes(search) || (rec.employeeId || "").toLowerCase().includes(search))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [attendanceRecords, employees, searchTerm, holidays]);
 
   const currentData = useMemo(() => {
-    const list = viewMode === 'pending' ? (pendingType === 'attendance' ? pendingAttendanceList : pendingLeavesList) : (historyType === 'attendance' ? historyAttendanceList : historyLeavesList);
+    const list = viewMode === 'pending' ? (pendingType === 'attendance' ? pendingAttendanceList : leaveRequests.filter(l => l.status === 'UNDER_PROCESS')) : (historyType === 'attendance' ? historyAttendanceList : leaveRequests.filter(l => l.status !== 'UNDER_PROCESS'));
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return { items: list.slice(start, start + ITEMS_PER_PAGE), total: list.length, totalPages: Math.ceil(list.length / ITEMS_PER_PAGE) };
-  }, [viewMode, pendingType, historyType, pendingAttendanceList, pendingLeavesList, historyAttendanceList, historyLeavesList, currentPage]);
+  }, [viewMode, pendingType, historyType, pendingAttendanceList, historyAttendanceList, leaveRequests, currentPage]);
 
   const handleApproveAttendance = (rec: any) => {
     if (isProcessing) return;
@@ -208,15 +200,8 @@ export default function ApprovalsPage() {
     } finally { setIsProcessing(false); }
   };
 
-  const handleOpenAttendanceEdit = (rec: any) => {
-    setSelectedAttendance(rec);
-    setAttendanceEditData({ date: rec.date, inTime: rec.inTime || "", outTime: rec.outTime || "" });
-    setIsAttendanceEditOpen(true);
-  };
-
   const handlePostAttendanceEdit = () => {
     if (!selectedAttendance || isProcessing) return;
-    if (attendanceEditData.date < PROJECT_START_DATE_STR) { toast({ variant: "destructive", title: "Invalid Date" }); return; }
     setIsProcessing(true);
     try {
       let finalHours = 0;
@@ -227,7 +212,6 @@ export default function ApprovalsPage() {
         if (outDT < inDT) { outDT = addDays(outDT, 1); effectiveOutDate = format(outDT, "yyyy-MM-dd"); }
         finalHours = parseFloat(((outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60)).toFixed(2));
       }
-      if (isNaN(finalHours)) finalHours = 0;
       if (selectedAttendance.isVirtual) {
         addRecord('attendance', { employeeId: selectedAttendance.employeeId, employeeName: selectedAttendance.employeeName, date: attendanceEditData.date, inDate: attendanceEditData.date, outDate: effectiveOutDate, status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT', attendanceType: 'FIELD', inTime: attendanceEditData.inTime, outTime: attendanceEditData.outTime, hours: finalHours, approved: false, address: 'Manual Entry', unapprovedOutDuration: 0 });
       } else {
@@ -254,40 +238,7 @@ export default function ApprovalsPage() {
     } finally { setIsProcessing(false); }
   };
 
-  const handleRestoreAttendance = () => {
-    if (!attendanceToRestore || isProcessing) return;
-    setIsProcessing(true);
-    try {
-      updateRecord('attendance', attendanceToRestore.id, { approved: false, remark: "" });
-      toast({ title: "Record Restored", description: "Log moved to Pending section." });
-      setIsRestoreConfirmOpen(false);
-      setAttendanceToRestore(null);
-    } finally { setIsProcessing(false); }
-  };
-
-  const handleApproveLeave = (leave: any) => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    try {
-      updateRecord('leaveRequests', leave.id, { status: 'APPROVED', approvedBy: currentUser?.fullName || "HR_ADMIN" });
-      toast({ title: "Leave Approved" });
-    } finally { setIsProcessing(false); }
-  };
-
-  const handlePostLeaveReject = () => {
-    if (!selectedLeave || !leaveRejectReason.trim() || isProcessing) return;
-    setIsProcessing(true);
-    try {
-      updateRecord('leaveRequests', selectedLeave.id, { status: 'REJECTED', rejectReason: leaveRejectReason, approvedBy: currentUser?.fullName || "HR_ADMIN" });
-      toast({ variant: "destructive", title: "Leave Rejected" });
-      setIsLeaveRejectOpen(false);
-      setLeaveRejectReason("");
-    } finally { setIsProcessing(false); }
-  };
-
   if (!isMounted) return null;
-
-  const currentTab = viewMode === 'pending' ? pendingType : historyType;
 
   return (
     <div className="space-y-8 pb-12">
@@ -299,14 +250,11 @@ export default function ApprovalsPage() {
         <Tabs value={viewMode} onValueChange={setViewMode} className="w-full md:w-auto"><TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[240px]"><TabsTrigger value="pending" className="text-xs font-black">Pending</TabsTrigger><TabsTrigger value="history" className="text-xs font-black">History</TabsTrigger></TabsList></Tabs>
       </div>
 
-      <Tabs value={currentTab} onValueChange={viewMode === 'pending' ? setPendingType : setHistoryType} className="w-full">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
-          <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg w-fit">
-            <TabsTrigger value="attendance" className="text-[10px] font-black uppercase px-6 h-7">Attendance {viewMode === 'pending' && `(${pendingAttendanceList.length})`}</TabsTrigger>
-            <TabsTrigger value="leave" className="text-[10px] font-black uppercase px-6 h-7">Leave Requests {viewMode === 'pending' && `(${pendingLeavesList.length})`}</TabsTrigger>
-          </TabsList>
-          {viewMode === 'history' && (<Button variant="outline" size="sm" className="h-9 gap-2 font-bold text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"><FileSpreadsheet className="w-4 h-4" /> Export Excel</Button>)}
-        </div>
+      <Tabs value={viewMode === 'pending' ? pendingType : historyType} onValueChange={viewMode === 'pending' ? setPendingType : setHistoryType} className="w-full">
+        <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg w-fit mb-4">
+          <TabsTrigger value="attendance" className="text-[10px] font-black uppercase px-6 h-7">Attendance</TabsTrigger>
+          <TabsTrigger value="leave" className="text-[10px] font-black uppercase px-6 h-7">Leave Requests</TabsTrigger>
+        </TabsList>
 
         <Card className="border-slate-200 shadow-sm overflow-hidden">
           <CardContent className="p-0">
@@ -316,120 +264,57 @@ export default function ApprovalsPage() {
                   <TableRow>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
-                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">{currentTab === 'leave' ? 'From Date' : 'IN Date Time'}</TableHead>
-                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">{currentTab === 'leave' ? 'To Date' : 'OUT Date Time'}</TableHead>
-                    
-                    {currentTab === 'attendance' && (
-                      <>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN Plant</TableHead>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">OUT Plant</TableHead>
-                        <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Out Hour</TableHead>
-                      </>
-                    )}
-
-                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">{currentTab === 'leave' ? 'Days' : 'Working Hour'}</TableHead>
-                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Type</TableHead>
+                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Date/Time</TableHead>
+                    <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
                     <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
-                    
-                    {!(viewMode === 'history' && currentTab === 'leave') && (
-                      <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
-                    )}
+                    <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {currentData.items.map((rec: any) => {
-                    const isHolidayDate = (holidays || []).some(hol => hol.date === rec.date) || isSunday(parseISO(rec.date));
-                    const isActuallyPresent = ['PRESENT', 'FIELD', 'WFH', 'HALF_DAY'].includes(rec.status);
-                    const displayStatus = (isActuallyPresent && isHolidayDate) ? "PRESENT ON HOLIDAY" : (rec.autoCheckout ? "AUTO_OUT" : rec.status);
-                    
-                    return (
-                      <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
-                        <TableCell className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
-                            <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-slate-600">{rec.dept || rec.department}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase">{rec.desig || rec.designation}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date || rec.fromDate)}</span>
-                            <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.outDate || rec.date || rec.toDate)}</span>
-                            <span className={cn("text-xs font-mono font-bold", rec.autoCheckout && "text-rose-600")}>{rec.outTime || (rec.isVirtual ? "--:--" : "Shift In-Progress")}</span>
-                          </div>
-                        </TableCell>
-
-                        {currentTab === 'attendance' && (
-                          <>
-                            <TableCell><span className="text-xs font-bold text-slate-600">{rec.inPlant || "--"}</span></TableCell>
-                            <TableCell><span className="text-xs font-bold text-slate-600">{rec.outPlant || "--"}</span></TableCell>
-                            <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}</span></TableCell>
-                          </>
-                        )}
-
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>
-                            {rec.leaveType ? `${rec.days}d` : formatHoursToHHMM(rec.hours)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center"><Badge variant="outline" className="font-black text-[9px] uppercase">{rec.attendanceType || "LEAVE"}</Badge></TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={cn("text-[9px] font-black uppercase px-3", isActuallyPresent || rec.status === 'APPROVED' ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>
-                            {displayStatus}
-                          </Badge>
-                        </TableCell>
-                        
-                        {!(viewMode === 'history' && currentTab === 'leave') && (
-                          <TableCell className="text-right pr-6">
-                            <div className="flex justify-end gap-1">
-                              {viewMode === 'pending' ? (
-                                <>
-                                  {currentTab === 'attendance' && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenAttendanceEdit(rec)}><Pencil className="w-3.5 h-3.5" /></Button>
-                                  )}
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-8 w-8 text-rose-600 hover:bg-rose-50" 
-                                    onClick={() => {
-                                      if (currentTab === 'attendance') { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }
-                                      else { setSelectedLeave(rec); setIsLeaveRejectOpen(true); }
-                                    }}
-                                  >
-                                    <XCircle className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    className="h-8 font-black text-[10px] uppercase px-4 bg-emerald-600" 
-                                    onClick={() => currentTab === 'attendance' ? handleApproveAttendance(rec) : handleApproveLeave(rec)} 
-                                    disabled={isProcessing || (currentTab === 'attendance' && !rec.outTime && rec.status !== 'ABSENT')}
-                                  >
-                                    Approve
-                                  </Button>
-                                </>
-                              ) : (
-                                currentTab === 'attendance' && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }}>
-                                    <RotateCcw className="w-3.5 h-3.5" />
-                                  </Button>
-                                )
-                              )}
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
+                  {currentData.items.map((rec: any) => (
+                    <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
+                      <TableCell className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
+                          <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-600">{rec.dept || rec.department}</span>
+                          <span className="text-[10px] text-muted-foreground uppercase">{rec.desig || rec.designation}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date)}</span>
+                          <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"} - {rec.outTime || "--:--"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>
+                          {formatHoursToHHMM(rec.hours)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={cn("text-[9px] font-black uppercase px-3", rec.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>
+                          {rec.displayStatus}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <div className="flex justify-end gap-1">
+                          {viewMode === 'pending' ? (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
+                              <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveAttendance(rec)}>Approve</Button>
+                            </>
+                          ) : (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }}><RotateCcw className="w-3.5 h-3.5" /></Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
               <ScrollBar orientation="horizontal" />
@@ -438,90 +323,16 @@ export default function ApprovalsPage() {
         </Card>
       </Tabs>
 
-      {/* Attendance Edit Dialog */}
-      <Dialog open={isAttendanceEditOpen} onOpenChange={setIsAttendanceEditOpen}>
-        <DialogContent className="p-0 overflow-hidden rounded-2xl">
-          <DialogHeader className="p-6 bg-slate-900 text-white">
-            <DialogTitle>Edit Attendance Log</DialogTitle>
-          </DialogHeader>
-          <div className="p-8 space-y-6">
-            <div className="space-y-2"><Label>Date</Label><Input type="date" value={attendanceEditData.date} onChange={(e) => setAttendanceEditData(p => ({...p, date: e.target.value}))} /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>IN</Label><Input type="time" value={attendanceEditData.inTime} onChange={(e) => setAttendanceEditData(p => ({...p, inTime: e.target.value}))} /></div>
-              <div><Label>OUT</Label><Input type="time" value={attendanceEditData.outTime} onChange={(e) => setAttendanceEditData(p => ({...p, outTime: e.target.value}))} /></div>
-            </div>
-          </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
-            <Button variant="ghost" onClick={() => setIsAttendanceEditOpen(false)}>Cancel</Button>
-            <Button onClick={handlePostAttendanceEdit} disabled={isProcessing}>Save Adjustments</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Attendance Reject Reason Dialog */}
       <Dialog open={isAttendanceRejectOpen} onOpenChange={setIsAttendanceRejectOpen}>
         <DialogContent className="p-0 overflow-hidden rounded-2xl">
-          <DialogHeader className="p-6 bg-rose-600 text-white">
-            <DialogTitle>Reject Attendance Log</DialogTitle>
-            <DialogDescription className="text-rose-100">Reason is mandatory before rejection.</DialogDescription>
-          </DialogHeader>
+          <DialogHeader className="p-6 bg-rose-600 text-white"><DialogTitle>Reject Attendance Log</DialogTitle></DialogHeader>
           <div className="p-8 space-y-4">
             <Label className="font-bold">Rejection Reason *</Label>
-            <Textarea 
-              placeholder="e.g. IN location mismatched, Shift not completed..." 
-              value={attendanceRejectReason} 
-              onChange={(e) => setAttendanceRejectReason(e.target.value)} 
-              className="min-h-[120px]"
-            />
+            <Textarea placeholder="Reason for rejection..." value={attendanceRejectReason} onChange={(e) => setAttendanceRejectReason(e.target.value)} className="min-h-[120px]" />
           </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
-            <Button variant="ghost" onClick={() => setIsAttendanceRejectOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handlePostAttendanceReject} disabled={!attendanceRejectReason.trim() || isProcessing}>Confirm Rejection</Button>
-          </DialogFooter>
+          <DialogFooter className="p-6 bg-slate-50 border-t gap-3"><Button variant="ghost" onClick={() => setIsAttendanceRejectOpen(false)}>Cancel</Button><Button variant="destructive" onClick={handlePostAttendanceReject} disabled={!attendanceRejectReason.trim() || isProcessing}>Confirm Rejection</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Leave Reject Reason Dialog */}
-      <Dialog open={isLeaveRejectOpen} onOpenChange={setIsLeaveRejectOpen}>
-        <DialogContent className="p-0 overflow-hidden rounded-2xl">
-          <DialogHeader className="p-6 bg-rose-600 text-white">
-            <DialogTitle>Reject Leave Request</DialogTitle>
-            <DialogDescription className="text-rose-100">Please provide a reason for the employee.</DialogDescription>
-          </DialogHeader>
-          <div className="p-8 space-y-4">
-            <Label className="font-bold">Rejection Reason *</Label>
-            <Textarea 
-              placeholder="e.g. Shortage of staff on requested dates..." 
-              value={leaveRejectReason} 
-              onChange={(e) => setLeaveRejectReason(e.target.value)} 
-              className="min-h-[120px]"
-            />
-          </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t gap-3">
-            <Button variant="ghost" onClick={() => setIsLeaveRejectOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handlePostLeaveReject} disabled={!leaveRejectReason.trim() || isProcessing}>Reject Request</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Restore Confirmation */}
-      <AlertDialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
-        <AlertDialogContent className="rounded-2xl">
-          <AlertDialogHeader>
-            <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-              <RotateCcw className="w-6 h-6 text-primary" />
-            </div>
-            <AlertDialogTitle className="text-center text-xl font-black">Restore Attendance?</AlertDialogTitle>
-            <AlertDialogDescription className="text-center">
-              This record will be moved back to the **Pending** section for re-approval. Any existing remarks will be cleared.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center gap-3 pt-4">
-            <AlertDialogCancel className="font-bold rounded-xl h-11 px-8">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRestoreAttendance} className="bg-primary hover:bg-primary/90 font-black rounded-xl h-11 px-8">Confirm Restore</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

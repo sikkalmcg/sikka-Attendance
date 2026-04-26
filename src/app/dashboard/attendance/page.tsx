@@ -110,11 +110,6 @@ export default function AttendancePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 15;
 
-  // Notification Reminder States
-  const [reminderReadAt, setReminderReadAt] = useState<number | null>(null);
-  const [isReminderPopoverOpen, setIsReminderPopoverOpen] = useState(false);
-  const [hasAutoOpened, setHasAutoOpened] = useState(false);
-
   const { toast } = useToast();
   const trackingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -188,7 +183,7 @@ export default function AttendancePage() {
     return (attendanceRecords || []).filter(r => r.employeeId === effectiveEmployeeId && r.date >= PROJECT_START_DATE_STR);
   }, [attendanceRecords, effectiveEmployeeId]);
 
-  // AUTO-OUT DETECTION LOGIC (MANDATORY RULE 3)
+  // AUTO-OUT DETECTION LOGIC
   const { activeRecord, staleRecord } = useMemo(() => {
     const rec = (employeeRecords || []).find(r => !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
@@ -223,7 +218,6 @@ export default function AttendancePage() {
       const diffHours = (nowTime.getTime() - inDT.getTime()) / (1000 * 60 * 60);
       if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
       
-      // If active record > 16h, it will be treated as auto-completed for locking purposes
       const autoOutDT = addHours(inDT, 16);
       effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
       effectiveOutTime = format(autoOutDT, "HH:mm");
@@ -239,7 +233,7 @@ export default function AttendancePage() {
     return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
   }, [employeeRecords, currentTime]);
 
-  // Perform Auto-OUT closure (Rule 3)
+  // Perform Auto-OUT closure
   useEffect(() => {
     if (staleRecord && isMounted && currentUser?.username === staleRecord.employeeId) {
       const inTimeStr = staleRecord.inTime || "00:00";
@@ -253,7 +247,7 @@ export default function AttendancePage() {
         updateRecord('attendance', staleRecord.id, {
           outTime: autoOutTimeStr,
           outDate: autoOutDateStr,
-          hours: 8, // Fixed 8 hours for Auto OUT (Rule 3)
+          hours: 8,
           status: 'PRESENT',
           autoCheckout: true,
           addressOut: 'System Auto OUT (16h Limit)',
@@ -272,70 +266,6 @@ export default function AttendancePage() {
       }
     }
   }, [staleRecord, isMounted, currentUser, updateRecord, addRecord, triggerNotification]);
-
-  // MOVEMENT TRACKER
-  useEffect(() => {
-    if (!isMounted || !activeRecord || !isAccessAllowed) {
-      if (trackingTimerRef.current) clearInterval(trackingTimerRef.current);
-      return;
-    }
-
-    const performBackgroundCheck = () => {
-      if (!activeRecord) return;
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        const assignedPlant = plants.find(p => p.name === activeRecord.inPlant);
-        
-        if (assignedPlant) {
-          const distance = calculateDistance(lat, lng, assignedPlant.lat, assignedPlant.lng);
-          const isOutside = distance > 700;
-          const now = new Date();
-          const timestamp = format(now, "HH:mm");
-
-          if (isOutside && !activeRecord.lastDetectedOutAt) {
-            updateRecord('attendance', activeRecord.id, { 
-              lastDetectedOutAt: now.toISOString(),
-              lastOutCheckTime: now.toISOString()
-            });
-            addRecord('notifications', {
-              message: `${effectiveEmployeeName} detected outside plant area at ${timestamp}`,
-              timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-              read: false,
-              type: 'MOVEMENT_ALERT',
-              employeeId: effectiveEmployeeId
-            });
-          } else if (!isOutside && activeRecord.lastDetectedOutAt) {
-            const outAt = new Date(activeRecord.lastDetectedOutAt);
-            const diffMins = Math.round((now.getTime() - outAt.getTime()) / (1000 * 60));
-            const newTotalOut = (activeRecord.unapprovedOutDuration || 0) + diffMins;
-
-            updateRecord('attendance', activeRecord.id, {
-              unapprovedOutDuration: newTotalOut,
-              lastDetectedOutAt: null,
-              lastOutCheckTime: now.toISOString()
-            });
-
-            addRecord('notifications', {
-              message: `${effectiveEmployeeName} returned to plant at ${timestamp}. Spent ${diffMins} mins outside.`,
-              timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-              read: false,
-              type: 'MOVEMENT_ALERT',
-              employeeId: effectiveEmployeeId
-            });
-          } else {
-            updateRecord('attendance', activeRecord.id, { lastOutCheckTime: now.toISOString() });
-          }
-        }
-      }, () => {}, { enableHighAccuracy: true });
-    };
-
-    trackingTimerRef.current = setInterval(performBackgroundCheck, TRACKING_INTERVAL_MS);
-    performBackgroundCheck();
-
-    return () => {
-      if (trackingTimerRef.current) clearInterval(trackingTimerRef.current);
-    };
-  }, [activeRecord?.id, isMounted, isAccessAllowed, plants, effectiveEmployeeName, effectiveEmployeeId]);
 
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
@@ -415,7 +345,6 @@ export default function AttendancePage() {
     const now = getISTTime();
     const timeHHMM = format(now, "HH:mm");
     const todayStrLocal = format(now, "yyyy-MM-dd");
-    const timestamp = format(now, "dd-MMM-yyyy HH:mm");
     
     const inTimeStr = activeRecord.inTime || "00:00";
     const inDateTime = new Date(`${activeRecord.inDate || activeRecord.date}T${inTimeStr}`);
@@ -438,7 +367,7 @@ export default function AttendancePage() {
       outPlant: detectedPlant?.name || "Remote"
     });
 
-    const notifyMsg = `${effectiveEmployeeName} – OUT: ${timestamp} | Work: ${formatHoursToHHMM(finalHours)} Hrs`;
+    const notifyMsg = `${effectiveEmployeeName} – OUT: ${format(now, "dd-MMM HH:mm")} | Work: ${formatHoursToHHMM(finalHours)} Hrs`;
     addRecord('notifications', {
       message: notifyMsg,
       timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
@@ -451,40 +380,54 @@ export default function AttendancePage() {
     toast({ title: "Check-Out Success" });
   };
 
-  const myLeaveRequests = useMemo(() => {
-    if (!effectiveEmployeeId || !isMounted) return [];
-    return (leaveRequests || [])
-      .filter(l => l.employeeId === effectiveEmployeeId && l.fromDate >= PROJECT_START_DATE_STR)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [leaveRequests, effectiveEmployeeId, isMounted]);
-
   const history = useMemo(() => {
     if (!currentUser || !isMounted) return [];
     const now = getISTTime();
     const todayStrLocal = format(now, "yyyy-MM-dd");
 
+    const getPriorityStatus = (dateStr: string, record: any) => {
+      const isSun = isSunday(parseISO(dateStr));
+      const holiday = (holidays || []).find(h => h.date === dateStr);
+      
+      if (record) {
+        if (holiday) return "Present on Holiday";
+        if (isSun) return "Present on Weekly Off";
+        return record.status;
+      } else {
+        if (holiday) return `Holiday (${holiday.name})`;
+        if (isSun) return "Weekly Off";
+        return "Absent";
+      }
+    };
+
     let baseList = [];
     if (isAdminRole) {
       const rawRecords = (attendanceRecords || []).filter(r => r.date >= PROJECT_START_DATE_STR);
       const processedActual = rawRecords.map(r => {
+        const displayStatus = getPriorityStatus(r.date, r);
+        let finalRec = { ...r, displayStatus };
+        
         if (!r.outTime) {
           const inDT = new Date(`${r.inDate || r.date}T${r.inTime || "00:00"}`);
           if (isValid(inDT)) {
             const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
             if (diff >= 16) {
               const autoOutDT = addHours(inDT, 16);
-              return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+              finalRec = { ...finalRec, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
             }
           }
         }
-        return r;
+        return finalRec;
       });
 
       const virtualTodayRecords: any[] = [];
       if (todayStrLocal >= PROJECT_START_DATE_STR) {
         employees.filter(e => e.active).forEach(emp => {
           const hasRecord = processedActual.some(r => r.employeeId === emp.employeeId && r.date === todayStrLocal);
-          if (!hasRecord) virtualTodayRecords.push({ id: `v-today-${emp.employeeId}`, employeeId: emp.employeeId, employeeName: emp.name, date: todayStrLocal, status: 'ABSENT', approved: true, hours: 0, isVirtual: true });
+          if (!hasRecord) {
+            const displayStatus = getPriorityStatus(todayStrLocal, null);
+            virtualTodayRecords.push({ id: `v-today-${emp.employeeId}`, employeeId: emp.employeeId, employeeName: emp.name, date: todayStrLocal, status: 'ABSENT', displayStatus, approved: true, hours: 0, isVirtual: true });
+          }
         });
       }
       baseList = [...processedActual, ...virtualTodayRecords].sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
@@ -493,23 +436,26 @@ export default function AttendancePage() {
       baseList = dateRange.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const existing = employeeRecords.filter(r => r.date === dateStr).map(r => {
+          const displayStatus = getPriorityStatus(dateStr, r);
+          let finalRec = { ...r, displayStatus };
           if (!r.outTime) {
             const inDT = new Date(`${r.inDate || r.date}T${r.inTime || "00:00"}`);
             if (isValid(inDT)) {
               const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
               if (diff >= 16) {
                 const autoOutDT = addHours(inDT, 16);
-                return { ...r, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+                finalRec = { ...finalRec, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
               }
             }
           }
-          return r;
+          return finalRec;
         });
-        const sun = isSunday(date);
-        const hol = (holidays || []).find(h => h.date === dateStr);
+        
         if (existing.length > 0) return existing;
         if (isSameDay(date, now)) return null;
-        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: sun ? "WEEKLY OFF" : (hol ? "HOLIDAY" : "ABSENT"), approved: true, hours: 0, isVirtual: true }];
+        
+        const displayStatus = getPriorityStatus(dateStr, null);
+        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', displayStatus, approved: true, hours: 0, isVirtual: true }];
       }).filter(Boolean).flat().reverse();
     }
     return baseList;
@@ -547,7 +493,7 @@ export default function AttendancePage() {
           </Card>
           <Card className="shadow-xl border-none overflow-hidden bg-white h-full">
             <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4"><CardTitle className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Leave Requests</CardTitle><Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={() => setActiveDialog("LEAVE")} disabled={!isAccessAllowed}><Plus className="w-3 h-3" /> Create Request</Button></CardHeader>
-            <CardContent className="p-0"><ScrollArea className="h-[240px]">{myLeaveRequests.length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground">No active records from April-2026.</div>) : (<div className="divide-y divide-slate-100">{myLeaveRequests.map((l) => (<div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors"><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div><Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge></div>))}</div>)}</ScrollArea></CardContent>
+            <CardContent className="p-0"><ScrollArea className="h-[240px]">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground">No active records.</div>) : (<div className="divide-y divide-slate-100">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).map((l) => (<div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors"><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p></div><Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge></div>))}</div>)}</ScrollArea></CardContent>
           </Card>
         </div>
 
@@ -569,50 +515,39 @@ export default function AttendancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedHistory.map((h: any) => {
-                    const isHolidayDate = (holidays || []).some(hol => hol.date === h.date);
-                    const isSundayDate = isSunday(parseISO(h.date));
-                    const isActuallyPresent = ['PRESENT', 'FIELD', 'WFH', 'HALF_DAY'].includes(h.status);
-                    
-                    let displayStatus = h.status;
-                    if (isActuallyPresent && isSundayDate) displayStatus = "PRESENT ON WEEKLY OFF";
-                    else if (isActuallyPresent && isHolidayDate) displayStatus = "PRESENT ON HOLIDAY";
-                    else if (h.autoCheckout) displayStatus = "System Auto OUT";
-
-                    return (
-                      <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
-                        <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
-                        <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
-                            <span>{h.inTime || "--:--"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
-                            <span className={cn(h.autoCheckout && "text-rose-600 font-bold")}>{h.outTime || (h.isVirtual ? "--:--" : "Shift In-Progress")}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={cn(
-                            "text-[9px] font-black uppercase tracking-widest", 
-                            isActuallyPresent ? "bg-emerald-50 text-emerald-700" : h.status === 'ABSENT' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"
-                          )}>
-                            {displayStatus}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(h.unapprovedOutDuration || 0)}</span></TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
-                            {formatHoursToHHMM(h.hours || 0)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {paginatedHistory.map((h: any) => (
+                    <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
+                      <TableCell className="text-sm font-bold uppercase">{h.employeeName}</TableCell>
+                      <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
+                          <span>{h.inTime || "--:--"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
+                          <span className={cn(h.autoCheckout && "text-rose-600 font-bold")}>{h.outTime || (h.isVirtual ? "--:--" : "Shift In-Progress")}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={cn(
+                          "text-[9px] font-black uppercase tracking-widest", 
+                          h.displayStatus.includes("Present") ? "bg-emerald-50 text-emerald-700" : h.displayStatus === 'Absent' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"
+                        )}>
+                          {h.displayStatus}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(h.unapprovedOutDuration || 0)}</span></TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
+                          {formatHoursToHHMM(h.hours || 0)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </ScrollArea>
@@ -634,10 +569,7 @@ export default function AttendancePage() {
         <Dialog open={activeDialog === "LEAVE"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
           <DialogContent className="sm:max-w-lg rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-6 bg-primary text-white shrink-0">
-              <DialogTitle className="flex items-center gap-2 font-black text-xl">
-                <CalendarDays className="w-5 h-5 text-white" /> Create Leave Request
-              </DialogTitle>
-              <DialogDescription className="text-primary-foreground/80 mt-1">Submit your request for leave approval (Since April-2026).</DialogDescription>
+              <DialogTitle className="flex items-center gap-2 font-black text-xl"><CalendarDays className="w-5 h-5 text-white" /> Create Leave Request</DialogTitle>
             </DialogHeader>
             <div className="p-8 space-y-6">
               <div className="space-y-4">
