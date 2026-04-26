@@ -44,7 +44,10 @@ import {
   Filter,
   ShieldCheck,
   Building2,
-  UserCheck
+  UserCheck,
+  CalendarDays,
+  Briefcase,
+  FileCheck
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -215,22 +218,34 @@ export default function ApprovalsPage() {
 
   // LEAVE APPROVAL ACCESS
   const filteredLeaveRequests = useMemo(() => {
-    if (!userAssignedPlantIds) return leaveRequests;
+    const list = userAssignedPlantIds 
+      ? leaveRequests.filter(req => {
+          const emp = employees.find(e => e.employeeId === req.employeeId);
+          const empPlantIds = emp?.unitIds || [];
+          return empPlantIds.some(id => userAssignedPlantIds.includes(id));
+        })
+      : leaveRequests;
 
-    return leaveRequests.filter(req => {
-      const emp = employees.find(e => e.employeeId === req.employeeId);
-      const empPlantIds = emp?.unitIds || [];
-      return empPlantIds.some(id => userAssignedPlantIds.includes(id));
-    });
-  }, [leaveRequests, employees, userAssignedPlantIds]);
+    const search = searchTerm.toLowerCase();
+    return list.filter(l => 
+      (l.employeeName || "").toLowerCase().includes(search) || 
+      (l.employeeId || "").toLowerCase().includes(search)
+    );
+  }, [leaveRequests, employees, userAssignedPlantIds, searchTerm]);
 
   const currentData = useMemo(() => {
+    const isLeave = (viewMode === 'pending' ? pendingType : historyType) === 'leave';
     const list = viewMode === 'pending' 
       ? (pendingType === 'attendance' ? pendingAttendanceList : filteredLeaveRequests.filter(l => l.status === 'UNDER_PROCESS')) 
       : (historyType === 'attendance' ? historyAttendanceList : filteredLeaveRequests.filter(l => l.status !== 'UNDER_PROCESS'));
     
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return { items: list.slice(start, start + ITEMS_PER_PAGE), total: list.length, totalPages: Math.ceil(list.length / ITEMS_PER_PAGE) };
+    return { 
+      items: list.slice(start, start + ITEMS_PER_PAGE), 
+      total: list.length, 
+      totalPages: Math.ceil(list.length / ITEMS_PER_PAGE),
+      isLeaveView: isLeave
+    };
   }, [viewMode, pendingType, historyType, pendingAttendanceList, historyAttendanceList, filteredLeaveRequests, currentPage]);
 
   const handleApproveAttendance = (rec: any) => {
@@ -287,7 +302,6 @@ export default function ApprovalsPage() {
   };
 
   const handleRejectLeave = (leave: any) => {
-    // Basic prompt for rejection reason
     const reason = prompt("Enter rejection reason:");
     if (!reason) return;
 
@@ -341,22 +355,25 @@ export default function ApprovalsPage() {
 
         <Card className="border-slate-200 shadow-sm overflow-hidden">
           <CardContent className="p-0">
-            {viewMode === 'pending' && pendingType === 'leave' ? (
+            {currentData.isLeaveView ? (
               <ScrollArea className="w-full">
-                <Table className="min-w-[1200px]">
+                <Table className="min-w-[1500px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Period</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Days</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Purpose</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee / ID</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Leave Type</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">From Date</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">To Date</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Leave Days</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentData.items.map((l: any) => (
-                      <TableRow key={l.id} className="hover:bg-slate-50/50">
+                      <TableRow key={l.id} className="hover:bg-slate-50/50 transition-colors">
                         <TableCell className="px-6 py-4">
                           <div className="flex flex-col">
                             <span className="font-bold uppercase text-slate-700 text-sm">{l.employeeName}</span>
@@ -364,21 +381,42 @@ export default function ApprovalsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                           <span className="text-xs font-bold text-slate-600">{l.department}</span>
+                           <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-700">{l.department}</span>
+                              <span className="text-[9px] text-muted-foreground uppercase font-medium">{l.designation}</span>
+                           </div>
                         </TableCell>
                         <TableCell>
-                           <span className="text-xs font-bold text-slate-700">{formatDate(l.fromDate)} - {formatDate(l.toDate)}</span>
+                           <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2.5", l.leaveType === 'DAYS' ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700")}>
+                             {l.leaveType === 'DAYS' ? 'Full Days' : 'Half Day'}
+                           </Badge>
+                        </TableCell>
+                        <TableCell><span className="text-xs font-bold text-slate-600">{formatDate(l.fromDate)}</span></TableCell>
+                        <TableCell><span className="text-xs font-bold text-slate-600">{formatDate(l.toDate)}</span></TableCell>
+                        <TableCell className="text-center">
+                           <Badge variant="secondary" className="font-black text-xs px-3">{l.days}</Badge>
+                        </TableCell>
+                        <TableCell>
+                           <div className="flex items-center gap-1.5">
+                              <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{l.approvedBy || "--"}</span>
+                           </div>
                         </TableCell>
                         <TableCell className="text-center">
-                           <Badge variant="secondary" className="font-black">{l.days}</Badge>
-                        </TableCell>
-                        <TableCell>
-                           <span className="text-xs font-medium text-slate-600 italic">"{l.purpose}"</span>
+                           <Badge className={cn("text-[9px] font-black uppercase px-2.5", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-700" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700")}>
+                              {l.status?.replace('_', ' ')}
+                           </Badge>
                         </TableCell>
                         <TableCell className="text-right pr-6">
                            <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => handleRejectLeave(l)}><XCircle className="w-3.5 h-3.5" /></Button>
-                              <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveLeave(l)}>Approve</Button>
+                              {viewMode === 'pending' ? (
+                                <>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => handleRejectLeave(l)}><XCircle className="w-3.5 h-3.5" /></Button>
+                                  <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveLeave(l)}>Approve</Button>
+                                </>
+                              ) : (
+                                <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">Finalized</Badge>
+                              )}
                            </div>
                         </TableCell>
                       </TableRow>
@@ -393,7 +431,7 @@ export default function ApprovalsPage() {
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Plant</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Plant</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Date/Time</TableHead>
@@ -417,7 +455,7 @@ export default function ApprovalsPage() {
                         <TableCell>
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-slate-600">{rec.dept || rec.department}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase">{rec.desig || rec.designation}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase font-medium">{rec.desig || rec.designation}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -447,7 +485,7 @@ export default function ApprovalsPage() {
                         </TableCell>
                         <TableCell>
                            <div className="flex items-center gap-1.5">
-                              <UserCheck className="w-3 h-3 text-slate-400" />
+                              <UserCheck className="w-3.5 h-3.5 text-slate-400" />
                               <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || "--"}</span>
                            </div>
                         </TableCell>
