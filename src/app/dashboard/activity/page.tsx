@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -30,7 +29,8 @@ import {
   Calendar,
   Clock,
   ArrowRightCircle,
-  SmartphoneNfc
+  SmartphoneNfc,
+  CheckCircle2
 } from "lucide-react";
 import { useData } from "@/context/data-context";
 import { formatDate, cn } from "@/lib/utils";
@@ -53,9 +53,9 @@ export default function ActivityPage() {
     return (employees || [])
       .filter(emp => emp.active)
       .filter(emp => 
-        emp.name.toLowerCase().includes(search) || 
-        emp.employeeId.toLowerCase().includes(search) || 
-        emp.deviceId?.toLowerCase().includes(search)
+        (emp.name || "").toLowerCase().includes(search) || 
+        (emp.employeeId || "").toLowerCase().includes(search) || 
+        (emp.deviceId || "").toLowerCase().includes(search)
       );
   }, [employees, searchTerm]);
 
@@ -63,9 +63,8 @@ export default function ActivityPage() {
   const generateHistory = (emp: any) => {
     if (!emp) return [];
     const today = new Date();
-    const ninetyDaysAgo = subDays(today, 90);
     
-    // For demo purposes, we simulate 3 random device login periods in last 90 days
+    // For demo purposes, we simulate random device login periods in last 90 days
     // In a real system, this would come from a 'loginSessions' collection
     return [
       { 
