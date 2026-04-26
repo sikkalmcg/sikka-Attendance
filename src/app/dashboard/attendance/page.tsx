@@ -163,38 +163,33 @@ export default function AttendancePage() {
     });
   }, [currentUser, employees]);
 
+  // MANDATORY RULE: ONLY EMPLOYEES CAN ACCESS ACTIONABLE BUTTONS
   const isAccessAllowed = useMemo(() => {
     if (!isMounted || !currentUser) return false;
     
-    // Core Role Checks
     const isEmployee = currentUser.role === 'EMPLOYEE';
-    const isManager = ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
     
-    // Managers always have access for testing/oversight
-    if (isManager) return true;
-    
-    // Employees need to be active
+    // STRICT: Only employees can mark attendance. Admin/HR role cannot.
     if (isEmployee) {
       if (registeredEmployee) {
         return registeredEmployee.active;
       }
-      // If employee record isn't loaded yet but session is valid, allow access to prevent gray-out
-      return true;
+      return true; // Allow while session is fresh
     }
 
     return false;
   }, [currentUser, registeredEmployee, isMounted]);
 
   const effectiveEmployeeId = useMemo(() => {
-    return registeredEmployee?.employeeId || currentUser?.username || "N/A";
+    return registeredEmployee?.employeeId || (currentUser?.role === 'EMPLOYEE' ? currentUser?.username : "N/A");
   }, [registeredEmployee, currentUser]);
 
   const effectiveEmployeeName = useMemo(() => {
-    return registeredEmployee?.name || currentUser?.fullName || "Employee Name";
+    return registeredEmployee?.name || (currentUser?.role === 'EMPLOYEE' ? currentUser?.fullName : "N/A");
   }, [registeredEmployee, currentUser]);
 
   const employeeRecords = useMemo(() => {
-    if (!effectiveEmployeeId) return [];
+    if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") return [];
     return (attendanceRecords || []).filter(r => r.employeeId === effectiveEmployeeId && r.date >= PROJECT_START_DATE_STR);
   }, [attendanceRecords, effectiveEmployeeId]);
 
@@ -250,7 +245,7 @@ export default function AttendancePage() {
 
   // Perform Auto-OUT closure
   useEffect(() => {
-    if (staleRecord && isMounted && currentUser?.username === staleRecord.employeeId) {
+    if (staleRecord && isMounted && currentUser?.role === 'EMPLOYEE' && currentUser?.username === staleRecord.employeeId) {
       const inTimeStr = staleRecord.inTime || "00:00";
       const inDateTime = new Date(`${staleRecord.inDate || staleRecord.date}T${inTimeStr}`);
       
@@ -284,7 +279,7 @@ export default function AttendancePage() {
 
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "Authorization Check Failed." });
+      toast({ variant: "destructive", title: "Access Denied", description: "Only Employees can mark attendance." });
       return;
     }
     if (todayStr < PROJECT_START_DATE_STR) {
@@ -496,19 +491,84 @@ export default function AttendancePage() {
                 {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMM-yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
               </div>
               <div className="flex gap-4">
-                <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary hover:bg-primary/90" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || (lockState.isLocked && lockState.unlockTime !== 'Shift Active')} onClick={() => requestLocation("IN")}>Mark IN</Button>
-                <Button className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg", isAccessAllowed && activeRecord ? "bg-rose-500 hover:bg-rose-600" : "bg-slate-100 text-slate-400 cursor-not-allowed")} disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} onClick={() => requestLocation("OUT")}>Mark OUT</Button>
+                <Button 
+                  className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg transition-all", 
+                    isAccessAllowed && !lockState.isLocked && !activeRecord 
+                      ? "bg-primary hover:bg-primary/90 text-white" 
+                      : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                  )} 
+                  disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || (lockState.isLocked && lockState.unlockTime !== 'Shift Active')} 
+                  onClick={() => requestLocation("IN")}
+                >
+                  Mark IN
+                </Button>
+                <Button 
+                  className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg transition-all", 
+                    isAccessAllowed && activeRecord 
+                      ? "bg-rose-500 hover:bg-rose-600 text-white" 
+                      : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                  )} 
+                  disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} 
+                  onClick={() => requestLocation("OUT")}
+                >
+                  Mark OUT
+                </Button>
               </div>
-              {lockState.isLocked && lockState.unlockTime !== 'Shift Active' && (
+              {lockState.isLocked && lockState.unlockTime !== 'Shift Active' && isAccessAllowed && (
                 <p className="text-[10px] font-black text-rose-500 text-center uppercase tracking-widest bg-rose-50 py-2 rounded-lg border border-rose-100 animate-pulse">
                    Mandatory 8h Rest Period. Next IN Allowed at {lockState.unlockTime}
                 </p>
               )}
+              {!isAccessAllowed && currentUser?.role !== 'EMPLOYEE' && (
+                <div className="flex items-center gap-2 justify-center py-2 px-4 bg-amber-50 rounded-xl border border-amber-100">
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Employee Login Required for Attendance</p>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card className="shadow-xl border-none overflow-hidden bg-white h-full">
-            <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4"><CardTitle className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Leave Requests</CardTitle><Button size="sm" className="h-8 gap-1 font-bold text-[10px] uppercase" onClick={() => setActiveDialog("LEAVE")} disabled={!isAccessAllowed}><Plus className="w-3 h-3" /> Create Request</Button></CardHeader>
-            <CardContent className="p-0"><ScrollArea className="h-[240px]">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).length === 0 ? (<div className="p-10 text-center text-xs text-muted-foreground">No active records.</div>) : (<div className="divide-y divide-slate-100">{leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).map((l) => (<div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors"><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p><p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p><p className="text-[9px] font-black text-primary uppercase">{l.plantName}</p></div><Badge className={cn("text-[9px] font-black uppercase rounded-full", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : "bg-blue-100 text-blue-600")}>{l.status}</Badge></div>))}</div>)}</ScrollArea></CardContent>
+            <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" /> Leave Requests
+              </CardTitle>
+              <Button 
+                size="sm" 
+                className={cn("h-8 gap-1 font-bold text-[10px] uppercase transition-all",
+                  isAccessAllowed ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                )} 
+                onClick={() => setActiveDialog("LEAVE")} 
+                disabled={!isAccessAllowed}
+              >
+                <Plus className="w-3 h-3" /> Create Request
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[240px]">
+                {leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).length === 0 ? (
+                  <div className="p-10 text-center text-xs text-muted-foreground font-bold">No active records.</div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).map((l) => (
+                      <div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors">
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p>
+                          <p className="text-[9px] font-black text-primary uppercase">{l.plantName}</p>
+                        </div>
+                        <Badge className={cn("text-[9px] font-black uppercase rounded-full shadow-none", 
+                          l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : 
+                          l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : 
+                          "bg-blue-100 text-blue-600"
+                        )}>
+                          {l.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
           </Card>
         </div>
 
@@ -549,7 +609,7 @@ export default function AttendancePage() {
                       <TableCell className="text-center">
                         <Badge className={cn(
                           "text-[9px] font-black uppercase tracking-widest", 
-                          h.displayStatus.includes("Present") ? "bg-emerald-50 text-emerald-700" : h.displayStatus === 'Absent' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"
+                          h.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : h.displayStatus === 'Absent' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"
                         )}>
                           {h.displayStatus}
                         </Badge>
