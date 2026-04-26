@@ -43,7 +43,8 @@ import {
   Navigation,
   Filter,
   ShieldCheck,
-  Building2
+  Building2,
+  UserCheck
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -388,7 +389,7 @@ export default function ApprovalsPage() {
               </ScrollArea>
             ) : (
               <ScrollArea className="w-full">
-                <Table className="min-w-[1800px]">
+                <Table className="min-w-[2000px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
@@ -399,6 +400,7 @@ export default function ApprovalsPage() {
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Out Hour</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
+                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>
                       <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / Out Location</TableHead>
                       <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
                     </TableRow>
@@ -442,6 +444,12 @@ export default function ApprovalsPage() {
                           <Badge className={cn("text-[9px] font-black uppercase px-3", rec.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>
                             {rec.displayStatus}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                           <div className="flex items-center gap-1.5">
+                              <UserCheck className="w-3 h-3 text-slate-400" />
+                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || "--"}</span>
+                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col max-w-[300px]">
