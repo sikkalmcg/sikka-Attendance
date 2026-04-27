@@ -47,15 +47,34 @@ import {
   UserCheck,
   CalendarDays,
   Briefcase,
-  FileCheck
+  FileCheck,
+  Pencil,
+  Download,
+  ArrowRightCircle,
+  ChevronLeft,
+  ChevronRight,
+  FileSpreadsheet
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, isSunday } from "date-fns";
+import { parseISO, format, addHours, isSunday, isBefore, startOfMonth } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
 const PROJECT_START_DATE_STR = "2026-04-01";
+
+const generateFilterMonths = () => {
+  const options = [];
+  const date = new Date();
+  for (let i = -6; i < 12; i++) {
+    const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+    if (isBefore(d, startOfMonth(parseISO(PROJECT_START_DATE_STR)))) continue;
+    const mmm = d.toLocaleString('en-US', { month: 'short' });
+    const yy = d.getFullYear().toString().slice(-2);
+    options.push(`${mmm}-${yy}`);
+  }
+  return options;
+};
 
 export default function ApprovalsPage() {
   const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord, verifiedUser, holidays, plants } = useData();
@@ -64,28 +83,40 @@ export default function ApprovalsPage() {
   const [viewMode, setViewMode] = useState("pending");
   const [pendingType, setPendingType] = useState("attendance");
   const [historyType, setHistoryType] = useState("attendance");
-  const [currentPage, setCurrentPage] = useState(1);
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("ALL_ASSIGNED");
+
+  // History Controls
+  const [historyMonthFilter, setHistoryMonthFilter] = useState("");
+  const [pendingPage, setPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
 
   // Attendance Reject/Edit/Restore States
   const [selectedAttendance, setSelectedAttendance] = useState<any>(null);
   const [isAttendanceRejectOpen, setIsAttendanceRejectOpen] = useState(false);
   const [attendanceRejectReason, setAttendanceRejectReason] = useState("");
-  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
-  const [attendanceToRestore, setAttendanceToRestore] = useState<any>(null);
+  
+  // Manual Edit State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editData, setEditData] = useState({ inTime: "", outTime: "", remark: "" });
 
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
+  const filterMonths = useMemo(() => generateFilterMonths(), []);
+
   useEffect(() => {
     setIsMounted(true);
+    const now = new Date();
+    const mmm = now.toLocaleString('en-US', { month: 'short' });
+    const yy = now.getFullYear().toString().slice(-2);
+    setHistoryMonthFilter(`${mmm}-${yy}`);
   }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [viewMode, pendingType, historyType, selectedPlantFilter]);
+    setPendingPage(1);
+    setHistoryPage(1);
+  }, [viewMode, pendingType, historyType, selectedPlantFilter, historyMonthFilter]);
 
-  // PLANT-WISE ACCESS LOGIC
   const userAssignedPlantIds = useMemo(() => {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
     return verifiedUser.plantIds || [];
@@ -96,14 +127,11 @@ export default function ApprovalsPage() {
     return plants.filter(p => userAssignedPlantIds.includes(p.id));
   }, [userAssignedPlantIds, plants]);
 
-  const authorizedPlantNames = useMemo(() => {
-    return authorizedPlants.map(p => p.name);
-  }, [authorizedPlants]);
+  const authorizedPlantNames = useMemo(() => authorizedPlants.map(p => p.name), [authorizedPlants]);
 
   const getPriorityStatus = (dateStr: string, record: any) => {
     const isSun = isSunday(parseISO(dateStr));
     const holiday = (holidays || []).find(h => h.date === dateStr);
-    
     if (record) {
       if (holiday) return "Present on Holiday";
       if (isSun) return "Present on Weekly Off";
@@ -115,157 +143,94 @@ export default function ApprovalsPage() {
     }
   };
 
-  const filteredAttendance = useMemo(() => {
+  const allAttendanceList = useMemo(() => {
     if (!isMounted) return [];
     const now = new Date();
     const todayStr = format(new Date(), "yyyy-MM-dd");
 
-    // 1. Process Actual Logs
     const actual = (attendanceRecords || []).map(rec => {
       const emp = employees.find(e => e.employeeId === rec.employeeId);
       const displayStatus = getPriorityStatus(rec.date, rec);
       let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
-      
       if (!rec.outTime) {
         const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
-        const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-        if (diffHours >= 16) {
+        if ((now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
           const autoOutDT = addHours(inDT, 16);
-          processedRec = {
-            ...processedRec,
-            outTime: format(autoOutDT, "HH:mm"),
-            outDate: format(autoOutDT, "yyyy-MM-dd"),
-            hours: 8,
-            autoCheckout: true
-          };
+          processedRec = { ...processedRec, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
         }
       }
       return processedRec;
     });
 
-    // 2. Generate Missing Records (Absent)
     const missing: any[] = [];
     if (todayStr >= PROJECT_START_DATE_STR) {
       employees.filter(e => e.active).forEach(emp => {
         const hasRecord = attendanceRecords.some(r => r.employeeId === emp.employeeId && r.date === todayStr);
         if (!hasRecord) {
           const displayStatus = getPriorityStatus(todayStr, null);
-          missing.push({ 
-            id: `v-abs-${emp.employeeId}-${todayStr}`, 
-            employeeId: emp.employeeId, 
-            employeeName: emp.name, 
-            date: todayStr, 
-            status: 'ABSENT', 
-            displayStatus,
-            attendanceType: 'ABSENT', 
-            approved: false, 
-            dept: emp.department, 
-            desig: emp.designation, 
-            isVirtual: true, 
-            hours: 0,
-            unapprovedOutDuration: 0 
-          });
+          missing.push({ id: `v-abs-${emp.employeeId}-${todayStr}`, employeeId: emp.employeeId, employeeName: emp.name, date: todayStr, status: 'ABSENT', displayStatus, attendanceType: 'ABSENT', approved: false, dept: emp.department, desig: emp.designation, isVirtual: true, hours: 0, unapprovedOutDuration: 0 });
         }
       });
     }
 
-    const all = [...actual, ...missing].filter(rec => rec.date >= PROJECT_START_DATE_STR);
+    let filtered = [...actual, ...missing].filter(rec => rec.date >= PROJECT_START_DATE_STR);
 
-    // 3. Apply Strict Security Scoping (Plant-wise)
-    return all.filter(rec => {
-      // Super admin sees everything
-      if (!userAssignedPlantIds) return true;
-
-      // For actual logs, check the IN plant name against user's authorized plant list
-      if (!rec.isVirtual) {
-        return authorizedPlantNames.includes(rec.inPlant);
-      }
-
-      // For virtual records (Absent), check if any of the employee's registered plants match user's access
-      const emp = employees.find(e => e.employeeId === rec.employeeId);
-      const empPlantIds = emp?.unitIds || [];
-      return empPlantIds.some(id => userAssignedPlantIds.includes(id));
-    });
-  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, authorizedPlantNames]);
-
-  // Further filter for the Search and UI Plant Filter
-  const listAttendance = useMemo(() => {
-    let list = filteredAttendance;
-
-    if (selectedPlantFilter !== "ALL_ASSIGNED") {
-      list = list.filter(rec => {
-        if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
+    // Apply plant access
+    if (userAssignedPlantIds) {
+      filtered = filtered.filter(rec => {
+        if (!rec.isVirtual) return authorizedPlantNames.includes(rec.inPlant);
         const emp = employees.find(e => e.employeeId === rec.employeeId);
-        const targetPlant = plants.find(p => p.name === selectedPlantFilter);
-        return emp?.unitIds?.includes(targetPlant?.id || "");
+        return (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id));
       });
     }
 
-    const search = searchTerm.toLowerCase();
-    return list.filter(rec => 
-      (rec.employeeName || "").toLowerCase().includes(search) || 
-      (rec.employeeId || "").toLowerCase().includes(search)
-    );
-  }, [filteredAttendance, searchTerm, selectedPlantFilter, employees, plants]);
+    // Apply manual UI plant filter
+    if (selectedPlantFilter !== "ALL_ASSIGNED") {
+      filtered = filtered.filter(rec => {
+        if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
+        const emp = employees.find(e => e.employeeId === rec.employeeId);
+        const targetPlant = plants.find(p => p.name === selectedPlantFilter);
+        return (emp?.unitIds || []).includes(targetPlant?.id || "");
+      });
+    }
+
+    // Apply Search
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      filtered = filtered.filter(rec => 
+        (rec.employeeName || "").toLowerCase().includes(s) || 
+        (rec.employeeId || "").toLowerCase().includes(s)
+      );
+    }
+
+    return filtered;
+  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, authorizedPlantNames, selectedPlantFilter, searchTerm, plants]);
 
   const pendingAttendanceList = useMemo(() => {
-    return listAttendance.filter(rec => {
-      // Must not be already approved or rejected
-      if (rec.approved || !!rec.remark) return false;
-      
-      // REQUIREMENT: Only approve once complete Mark IN and OUT
-      // Physical records must have an OUT time to appear in the Pending queue
-      if (!rec.isVirtual && !rec.outTime) return false;
-      
-      return true;
-    }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [listAttendance]);
+    return allAttendanceList.filter(rec => !rec.approved && !rec.remark && (rec.isVirtual || rec.outTime))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [allAttendanceList]);
 
   const historyAttendanceList = useMemo(() => {
-    return listAttendance.filter(rec => rec.approved || !!rec.remark).sort((a, b) => b.date.localeCompare(a.date));
-  }, [listAttendance]);
-
-  // LEAVE APPROVAL ACCESS
-  const filteredLeaveRequests = useMemo(() => {
-    const list = userAssignedPlantIds 
-      ? leaveRequests.filter(req => {
-          const emp = employees.find(e => e.employeeId === req.employeeId);
-          const empPlantIds = emp?.unitIds || [];
-          return empPlantIds.some(id => userAssignedPlantIds.includes(id));
-        })
-      : leaveRequests;
-
-    const search = searchTerm.toLowerCase();
-    return list.filter(l => 
-      (l.employeeName || "").toLowerCase().includes(search) || 
-      (l.employeeId || "").toLowerCase().includes(search)
-    );
-  }, [leaveRequests, employees, userAssignedPlantIds, searchTerm]);
+    return allAttendanceList.filter(rec => {
+      if (!rec.approved && !rec.remark) return false;
+      if (!historyMonthFilter || historyMonthFilter === 'all') return true;
+      const d = parseISO(rec.date);
+      const mmm = d.toLocaleString('en-US', { month: 'short' });
+      const yy = d.getFullYear().toString().slice(-2);
+      return `${mmm}-${yy}` === historyMonthFilter;
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [allAttendanceList, historyMonthFilter]);
 
   const currentData = useMemo(() => {
-    const isLeave = (viewMode === 'pending' ? pendingType : historyType) === 'leave';
-    const list = viewMode === 'pending' 
-      ? (pendingType === 'attendance' ? pendingAttendanceList : filteredLeaveRequests.filter(l => l.status === 'UNDER_PROCESS')) 
-      : (historyType === 'attendance' ? historyAttendanceList : filteredLeaveRequests.filter(l => l.status !== 'UNDER_PROCESS'));
-    
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return { 
-      items: list.slice(start, start + ITEMS_PER_PAGE), 
-      total: list.length, 
-      totalPages: Math.ceil(list.length / ITEMS_PER_PAGE),
-      isLeaveView: isLeave
-    };
-  }, [viewMode, pendingType, historyType, pendingAttendanceList, historyAttendanceList, filteredLeaveRequests, currentPage]);
+    const list = viewMode === 'pending' ? pendingAttendanceList : historyAttendanceList;
+    const page = viewMode === 'pending' ? pendingPage : historyPage;
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    return { items: list.slice(start, start + ITEMS_PER_PAGE), total: list.length, totalPages: Math.ceil(list.length / ITEMS_PER_PAGE) };
+  }, [viewMode, pendingAttendanceList, historyAttendanceList, pendingPage, historyPage]);
 
   const handleApproveAttendance = (rec: any) => {
     if (isProcessing) return;
-    
-    // Final Security Validation
-    if (userAssignedPlantIds && !rec.isVirtual && !authorizedPlantNames.includes(rec.inPlant)) {
-      toast({ variant: "destructive", title: "Unauthorized", description: "Plant Access Denied." });
-      return;
-    }
-
     setIsProcessing(true);
     try {
       const approverName = verifiedUser?.fullName || "HR_ADMIN";
@@ -280,13 +245,6 @@ export default function ApprovalsPage() {
 
   const handlePostAttendanceReject = () => {
     if (!selectedAttendance || !attendanceRejectReason.trim() || isProcessing) return;
-    
-    // Final Security Validation
-    if (userAssignedPlantIds && !selectedAttendance.isVirtual && !authorizedPlantNames.includes(selectedAttendance.inPlant)) {
-      toast({ variant: "destructive", title: "Unauthorized", description: "Plant Access Denied." });
-      return;
-    }
-
     setIsProcessing(true);
     try {
       const approver = verifiedUser?.fullName || "HR_ADMIN";
@@ -301,25 +259,69 @@ export default function ApprovalsPage() {
     } finally { setIsProcessing(false); }
   };
 
-  const handleApproveLeave = (leave: any) => {
-    if (isProcessing) return;
+  const handleManualEdit = () => {
+    if (!selectedAttendance || !editData.remark.trim() || isProcessing) return;
     setIsProcessing(true);
     try {
-      updateRecord('leaveRequests', leave.id, { status: 'APPROVED', approvedBy: verifiedUser?.fullName || "Manager" });
-      toast({ title: "Leave Request Approved" });
+      const inDT = new Date(`${selectedAttendance.inDate || selectedAttendance.date}T${editData.inTime}`);
+      const outDT = new Date(`${selectedAttendance.outDate || selectedAttendance.date}T${editData.outTime}`);
+      let hours = 0;
+      if (isValid(inDT) && isValid(outDT)) {
+        hours = parseFloat(((outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60)).toFixed(2));
+      }
+      updateRecord('attendance', selectedAttendance.id, { 
+        inTime: editData.inTime, 
+        outTime: editData.outTime, 
+        hours, 
+        status: hours >= 1.0 ? 'PRESENT' : 'ABSENT',
+        remark: `Edited: ${editData.remark}`,
+        editedBy: verifiedUser?.fullName || "Admin"
+      });
+      toast({ title: "Record Updated" });
+      setIsEditModalOpen(false);
+      setEditData({ inTime: "", outTime: "", remark: "" });
     } finally { setIsProcessing(false); }
   };
 
-  const handleRejectLeave = (leave: any) => {
-    const reason = prompt("Enter rejection reason:");
-    if (!reason) return;
-
-    setIsProcessing(true);
-    try {
-      updateRecord('leaveRequests', leave.id, { status: 'REJECTED', rejectReason: reason, approvedBy: verifiedUser?.fullName || "Manager" });
-      toast({ variant: "destructive", title: "Leave Request Rejected" });
-    } finally { setIsProcessing(false); }
+  const handleExportHistory = () => {
+    if (historyAttendanceList.length === 0) {
+      toast({ variant: "destructive", title: "No Data", description: "No records found for the selected month." });
+      return;
+    }
+    const headers = ["Employee ID", "Name", "Date", "In Plant", "Out Plant", "In Time", "Out Time", "Work Hours", "Status", "Approved By", "Location IN", "Location OUT"];
+    const csv = [
+      headers.join(","),
+      ...historyAttendanceList.map(r => [
+        `"${r.employeeId}"`, `"${r.employeeName}"`, `"${formatDate(r.date)}"`, `"${r.inPlant || ''}"`, `"${r.outPlant || ''}"`, `"${r.inTime || ''}"`, `"${r.outTime || ''}"`, r.hours, `"${r.displayStatus}"`, `"${r.approvedBy || ''}"`, `"${r.address || ''}"`, `"${r.addressOut || ''}"`
+      ].join(","))
+    ].join("\n");
+    const link = document.createElement("a");
+    link.setAttribute("href", URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })));
+    link.setAttribute("download", `Attendance_History_${historyMonthFilter}.csv`);
+    link.click();
+    toast({ title: "Export Success" });
   };
+
+  function StandardPaginationFooter({ current, total, onPageChange }: any) {
+    return (
+      <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)} className="font-bold h-9"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
+          <Button variant="outline" size="sm" disabled={current === total || total === 0} onClick={() => onPageChange(current + 1)} className="font-bold h-9">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {current} of {total || 1}</span>
+          <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
+            <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
+            <div className="flex gap-1">
+              <Input type="number" className="w-14 h-9 text-center font-bold" value={current} onChange={(e) => { const p = parseInt(e.target.value); if (p >= 1 && p <= total) onPageChange(p); }} />
+              <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white"><ArrowRightCircle className="w-4 h-4" /></div>
+            </div>
+          </div>
+        </div>
+      </CardFooter>
+    );
+  }
 
   if (!isMounted) return null;
 
@@ -333,7 +335,7 @@ export default function ApprovalsPage() {
              <p className="text-muted-foreground text-sm font-medium">Facility Scoped Oversight System</p>
           </div>
         </div>
-        {userAssignedPlantIds && authorizedPlants.length > 0 && (
+        {authorizedPlants.length > 0 && (
           <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border shadow-sm border-slate-200">
              <Building2 className="w-4 h-4 text-primary ml-2" />
              <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
@@ -352,194 +354,145 @@ export default function ApprovalsPage() {
       </div>
 
       <div className="flex flex-col md:flex-row items-center gap-4">
-        <div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by ID or Name..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+        <div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Global search by Name or ID..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
         <Tabs value={viewMode} onValueChange={setViewMode} className="w-full md:w-auto"><TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[240px]"><TabsTrigger value="pending" className="text-xs font-black">Pending</TabsTrigger><TabsTrigger value="history" className="text-xs font-black">History</TabsTrigger></TabsList></Tabs>
       </div>
 
-      <Tabs value={viewMode === 'pending' ? pendingType : historyType} onValueChange={viewMode === 'pending' ? setPendingType : setHistoryType} className="w-full">
-        <TabsList className="bg-slate-50 border p-1 h-9 rounded-lg w-fit mb-4">
-          <TabsTrigger value="attendance" className="text-[10px] font-black uppercase px-6 h-7">Attendance</TabsTrigger>
-          <TabsTrigger value="leave" className="text-[10px] font-black uppercase px-6 h-7">Leave Requests</TabsTrigger>
-        </TabsList>
+      {viewMode === 'history' && (
+        <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+           <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-400" />
+                <Label className="text-[10px] font-black uppercase text-slate-400">Analysis Month</Label>
+                <Select value={historyMonthFilter} onValueChange={setHistoryMonthFilter}>
+                   <SelectTrigger className="h-9 w-[150px] font-black text-xs uppercase bg-slate-50 border-slate-200">
+                      <SelectValue placeholder="Select Month" />
+                   </SelectTrigger>
+                   <SelectContent>
+                      <SelectItem value="all" className="font-bold text-xs">All History</SelectItem>
+                      {filterMonths.map(m => <SelectItem key={m} value={m} className="font-bold text-xs">{m}</SelectItem>)}
+                   </SelectContent>
+                </Select>
+              </div>
+           </div>
+           <Button onClick={handleExportHistory} variant="outline" className="h-10 font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 px-6">
+              <FileSpreadsheet className="w-4 h-4" /> Export Filtered History
+           </Button>
+        </div>
+      )}
 
-        <Card className="border-slate-200 shadow-sm overflow-hidden">
-          <CardContent className="p-0">
-            {currentData.isLeaveView ? (
-              <ScrollArea className="w-full">
-                <Table className="min-w-[1900px]">
-                  <TableHeader className="bg-slate-50/50">
-                    <TableRow>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee / ID</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Department</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Designation</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-primary">Plant</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Leave Type</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">From Date</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">To Date</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Leave Days</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Purpose</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
-                      <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {currentData.items.map((l: any) => (
-                      <TableRow key={l.id} className="hover:bg-slate-50/50 transition-colors">
-                        <TableCell className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="font-bold uppercase text-slate-700 text-sm">{l.employeeName}</span>
-                            <span className="text-[10px] font-mono font-black text-primary uppercase">{l.employeeId}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell><span className="text-xs font-bold text-slate-700">{l.department}</span></TableCell>
-                        <TableCell><span className="text-[9px] text-muted-foreground uppercase font-medium">{l.designation}</span></TableCell>
-                        <TableCell><Badge variant="outline" className="text-[9px] font-black uppercase text-primary border-primary/20 bg-primary/5">{l.plantName || "N/A"}</Badge></TableCell>
-                        <TableCell>
-                           <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2.5", l.leaveType === 'DAYS' ? "bg-blue-50 text-blue-700" : "bg-orange-50 text-orange-700")}>
-                             {l.leaveType === 'DAYS' ? 'Full Days' : 'Half Day'}
-                           </Badge>
-                        </TableCell>
-                        <TableCell><span className="text-xs font-bold text-slate-600">{formatDate(l.fromDate)}</span></TableCell>
-                        <TableCell><span className="text-xs font-bold text-slate-600">{formatDate(l.toDate)}</span></TableCell>
-                        <TableCell className="text-center">
-                           <Badge variant="secondary" className="font-black text-xs px-3">{l.days}</Badge>
-                        </TableCell>
-                        <TableCell>
-                           <span className="text-xs font-bold text-slate-600 truncate max-w-[150px] block" title={l.purpose}>{l.purpose || "--"}</span>
-                        </TableCell>
+      <Card className="border-slate-200 shadow-sm overflow-hidden">
+        <CardContent className="p-0">
+          <ScrollArea className="w-full">
+            <Table className="min-w-[2200px]">
+              <TableHeader className="bg-slate-50/50">
+                <TableRow>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Plant</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Plant</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Date & Time</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Date / Time</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Out Hour</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
+                  {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / Out Location</TableHead>
+                  <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {currentData.items.length === 0 ? (
+                  <TableRow><TableCell colSpan={viewMode === 'history' ? 12 : 11} className="text-center py-20 text-muted-foreground font-bold italic">No records matching your criteria.</TableCell></TableRow>
+                ) : (
+                  currentData.items.map((rec: any) => (
+                    <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
+                      <TableCell className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
+                          <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-600">{rec.dept || rec.department}</span>
+                          <span className="text-[10px] text-muted-foreground uppercase font-medium">{rec.desig || rec.designation}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell><span className="text-xs font-bold text-slate-700">{rec.inPlant || "--"}</span></TableCell>
+                      <TableCell><span className="text-xs font-bold text-slate-700">{rec.outPlant || "--"}</span></TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date)}</span>
+                          <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.outDate || rec.date)}</span>
+                          <span className={cn("text-xs font-mono font-bold", rec.autoCheckout && "text-rose-600")}>{rec.outTime || "--:--"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}</span></TableCell>
+                      <TableCell className="text-center"><Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>{formatHoursToHHMM(rec.hours)}</Badge></TableCell>
+                      <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase px-3", rec.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>{rec.displayStatus}</Badge></TableCell>
+                      {viewMode === 'history' && (
                         <TableCell>
                            <div className="flex items-center gap-1.5">
                               <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{l.approvedBy || "--"}</span>
+                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || "--"}</span>
                            </div>
                         </TableCell>
-                        <TableCell className="text-center">
-                           <Badge className={cn("text-[9px] font-black uppercase px-2.5", l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-700" : l.status === 'REJECTED' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700")}>
-                              {l.status?.replace('_', ' ')}
-                           </Badge>
-                        </TableCell>
-                        <TableCell className="text-right pr-6">
-                           <div className="flex justify-end gap-2">
-                              {viewMode === 'pending' ? (
-                                <>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => handleRejectLeave(l)}><XCircle className="w-3.5 h-3.5" /></Button>
-                                  <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveLeave(l)}>Approve</Button>
-                                </>
-                              ) : (
-                                <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">Finalized</Badge>
-                              )}
-                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-            ) : (
-              <ScrollArea className="w-full">
-                <Table className="min-w-[2200px]">
-                  <TableHeader className="bg-slate-50/50">
-                    <TableRow>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Designation</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Plant</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Plant</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Date & Time</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Date / Time</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Out Hour</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
-                      {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
-                      <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / Out Location</TableHead>
-                      <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
+                      )}
+                      <TableCell>
+                        <div className="flex flex-col max-w-[400px]">
+                          <span className="text-[10px] font-bold text-slate-500 truncate" title={rec.address}><MapPin className="w-2.5 h-2.5 inline mr-1" />{rec.address || "N/A"}</span>
+                          <span className="text-[10px] font-bold text-slate-400 truncate" title={rec.addressOut}><Navigation className="w-2.5 h-2.5 inline mr-1" />{rec.addressOut || "N/A"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <div className="flex justify-end gap-1">
+                          {viewMode === 'pending' ? (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => { setSelectedAttendance(rec); setEditData({ inTime: rec.inTime || "", outTime: rec.outTime || "", remark: "" }); setIsEditModalOpen(true); }}><Pencil className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
+                              <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveAttendance(rec)}>Approve</Button>
+                            </>
+                          ) : (
+                            <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">Finalized</Badge>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {currentData.items.map((rec: any) => (
-                      <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
-                        <TableCell className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="font-bold uppercase text-slate-700 text-sm">{rec.employeeName}</span>
-                            <span className="text-[10px] font-mono font-black text-primary uppercase">{rec.employeeId}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-slate-600">{rec.dept || rec.department}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase font-medium">{rec.desig || rec.designation}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs font-bold text-slate-700">{rec.inPlant || "--"}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs font-bold text-slate-700">{rec.outPlant || "--"}</span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.inDate || rec.date)}</span>
-                            <span className="text-xs font-mono font-bold">{rec.inTime || "--:--"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase">{formatDate(rec.outDate || rec.date)}</span>
-                            <span className={cn("text-xs font-mono font-bold", rec.autoCheckout && "text-rose-600")}>
-                              {rec.outTime || "--:--"}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}</span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>
-                            {formatHoursToHHMM(rec.hours)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={cn("text-[9px] font-black uppercase px-3", rec.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>
-                            {rec.displayStatus}
-                          </Badge>
-                        </TableCell>
-                        {viewMode === 'history' && (
-                          <TableCell>
-                             <div className="flex items-center gap-1.5">
-                                <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || "--"}</span>
-                             </div>
-                          </TableCell>
-                        )}
-                        <TableCell>
-                          <div className="flex flex-col max-w-[400px]">
-                            <span className="text-[10px] font-bold text-slate-500 truncate" title={rec.address}><MapPin className="w-2.5 h-2.5 inline mr-1" />{rec.address || "N/A"}</span>
-                            <span className="text-[10px] font-bold text-slate-400 truncate" title={rec.addressOut}><Navigation className="w-2.5 h-2.5 inline mr-1" />{rec.addressOut || "N/A"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right pr-6">
-                          <div className="flex justify-end gap-1">
-                            {viewMode === 'pending' ? (
-                              <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
-                                <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveAttendance(rec)}>Approve</Button>
-                              </>
-                            ) : (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary" onClick={() => { setAttendanceToRestore(rec); setIsRestoreConfirmOpen(true); }}><RotateCcw className="w-3.5 h-3.5" /></Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
-      </Tabs>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </CardContent>
+        <StandardPaginationFooter current={viewMode === 'pending' ? pendingPage : historyPage} total={currentData.totalPages} onPageChange={viewMode === 'pending' ? setPendingPage : setHistoryPage} />
+      </Card>
+
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+             <DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5 text-primary" /> Edit Shift Boundary</DialogTitle>
+             <p className="text-[10px] text-primary font-black uppercase mt-2">{selectedAttendance?.employeeName} • {formatDate(selectedAttendance?.date)}</p>
+          </DialogHeader>
+          <div className="p-8 space-y-6">
+             <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">IN Time</Label><Input type="time" value={editData.inTime} onChange={(e) => setEditData({...editData, inTime: e.target.value})} className="h-12 font-bold" /></div>
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">OUT Time</Label><Input type="time" value={editData.outTime} onChange={(e) => setEditData({...editData, outTime: e.target.value})} className="h-12 font-bold" /></div>
+             </div>
+             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Audit Remark * (Mandatory)</Label><Textarea placeholder="Reason for manual adjustment..." value={editData.remark} onChange={(e) => setEditData({...editData, remark: e.target.value})} className="min-h-[100px] bg-slate-50" /></div>
+          </div>
+          <DialogFooter className="p-6 bg-slate-50 border-t gap-3 flex-row">
+             <Button variant="ghost" onClick={() => setIsEditModalOpen(false)} className="flex-1 rounded-xl font-bold">Cancel</Button>
+             <Button className="flex-1 bg-primary font-black rounded-xl" onClick={handleManualEdit} disabled={!editData.remark.trim() || isProcessing}>Save Adjustment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isAttendanceRejectOpen} onOpenChange={setIsAttendanceRejectOpen}>
         <DialogContent className="p-0 overflow-hidden rounded-2xl">
