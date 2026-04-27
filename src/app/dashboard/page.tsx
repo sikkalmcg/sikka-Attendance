@@ -107,7 +107,11 @@ export default function DashboardHome() {
     const todayLogs = attendanceRecords.filter(r => {
       if (r.date !== todayStr) return false;
       if (!r.outTime) {
+        // FIX: Only consider active records that have an inTime. 
+        // Absence records with null inTime are ignored for "active shifts".
+        if (!r.inTime) return false;
         const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
+        if (!isValid(inDT)) return false;
         const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
         if (diff >= 16) return false;
       }
@@ -171,9 +175,10 @@ export default function DashboardHome() {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         const displayStatus = getPriorityStatus(rec.date, rec);
         let processed = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
-        if (!rec.outTime) {
+        // FIX: Safe check for inTime before auto-calculating 16:00 logout
+        if (!rec.outTime && rec.inTime) {
           const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
-          if ((now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
+          if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
             const autoOutDT = addHours(inDT, 16);
             processed = { ...processed, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
           }

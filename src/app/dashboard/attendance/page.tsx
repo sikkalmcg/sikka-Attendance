@@ -360,8 +360,9 @@ export default function AttendancePage() {
       baseList = baseList.map(r => {
         const displayStatus = getPriorityStatus(r.date, r);
         let finalRec = { ...r, displayStatus };
-        if (!r.outTime) {
-          const inDT = new Date(`${r.inDate || r.date}T${r.inTime || "00:00"}`);
+        // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
+        if (!r.outTime && r.inTime) {
+          const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
           if (isValid(inDT)) {
             const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
             if (diff >= 16) {
@@ -380,8 +381,9 @@ export default function AttendancePage() {
         const existing = employeeRecords.filter(r => r.date === dateStr).map(r => {
           const displayStatus = getPriorityStatus(dateStr, r);
           let finalRec = { ...r, displayStatus };
-          if (!r.outTime) {
-            const inDT = new Date(`${r.inDate || r.date}T${r.inTime || "00:00"}`);
+          // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
+          if (!r.outTime && r.inTime) {
+            const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
             if (isValid(inDT)) {
               const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
               if (diff >= 16) {
@@ -644,7 +646,6 @@ export default function AttendancePage() {
           </Card>
         </div>
 
-        {/* Dialogs for IN, OUT, LEAVE remain same */}
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
           <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-6 bg-slate-900 text-white shrink-0"><DialogTitle className="flex items-center gap-2 font-black text-xl"><Navigation className="w-5 h-5 text-primary" /> Confirm Attendance</DialogTitle><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">{detectedAddress || "Locating..."}</p></DialogHeader>

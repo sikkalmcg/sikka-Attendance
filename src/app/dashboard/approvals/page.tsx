@@ -163,11 +163,18 @@ export default function ApprovalsPage() {
       let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
       
       // Auto-out calculation (16h rule)
-      if (!rec.outTime) {
-        const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}`);
+      // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
+      if (!rec.outTime && rec.inTime) {
+        const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
         if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
           const autoOutDT = addHours(inDT, 16);
-          processedRec = { ...processedRec, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+          processedRec = { 
+            ...processedRec, 
+            outTime: format(autoOutDT, "HH:mm"), 
+            outDate: format(autoOutDT, "yyyy-MM-dd"), 
+            hours: 8, 
+            autoCheckout: true 
+          };
         }
       }
       
@@ -231,7 +238,7 @@ export default function ApprovalsPage() {
     if (selectedPlantFilter !== "ALL_ASSIGNED") {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
-        const emp = employees.find(e => e.employeeId === rec.employeeId);
+        const emp = employees.find(e => e.employeeId === emp.employeeId);
         const targetPlant = plants.find(p => p.name === selectedPlantFilter);
         return (emp?.unitIds || []).includes(targetPlant?.id || "");
       });
