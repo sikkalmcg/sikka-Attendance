@@ -34,7 +34,8 @@ import {
   Upload,
   ShieldAlert,
   ArrowLeft,
-  Smartphone
+  Smartphone,
+  ClipboardCheck
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -174,7 +175,7 @@ function HeaderActions() {
                     )}>
                       <div className={cn(
                         "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-                        isSuccessEvent ? "bg-emerald-100 text-emerald-600" : "bg-primary/10 text-primary"
+                        isSuccessEvent ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />
                       )}>
                         {isSuccessEvent ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                       </div>
@@ -372,6 +373,7 @@ function SidebarNav() {
     { title: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Dashboard" },
     { title: "Mark Attendance", icon: UserCheck, path: "/dashboard/attendance", roles: ["EMPLOYEE", "SUPER_ADMIN", "ADMIN", "HR"], permission: "Attendance" },
     { title: "Approvals", icon: FileText, path: "/dashboard/approvals", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Approvals" },
+    { title: "Leave Approvals", icon: ClipboardCheck, path: "/dashboard/leave-approvals", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Leave Approvals" },
     { title: "Employees", icon: UsersIcon, path: "/dashboard/employees", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Employees" },
     { title: "Payroll", icon: CreditCard, path: "/dashboard/payroll", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Payroll" },
     { title: "Vouchers", icon: FileText, path: "/dashboard/vouchers", roles: ["SUPER_ADMIN", "ADMIN", "HR"], permission: "Vouchers" },
@@ -448,6 +450,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
       "/dashboard": "Dashboard",
       "/dashboard/attendance": "Attendance",
       "/dashboard/approvals": "Approvals",
+      "/dashboard/leave-approvals": "Leave Approvals",
       "/dashboard/employees": "Employees",
       "/dashboard/payroll": "Payroll",
       "/dashboard/vouchers": "Vouchers",

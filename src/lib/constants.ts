@@ -76,6 +76,7 @@ export const DESIGNATIONS: Record<string, string[]> = {
 export const APP_PERMISSIONS = [
   "Attendance",
   "Approvals",
+  "Leave Approvals",
   "Employees",
   "Payroll",
   "Vouchers",
