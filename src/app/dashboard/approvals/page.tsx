@@ -164,7 +164,7 @@ export default function ApprovalsPage() {
       
       // Auto-out calculation (16h rule)
       // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
-      if (!rec.outTime && rec.inTime) {
+      if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
         const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
         if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
           const autoOutDT = addHours(inDT, 16);
@@ -216,7 +216,9 @@ export default function ApprovalsPage() {
               desig: emp.designation, 
               isVirtual: true, 
               hours: 0, 
-              unapprovedOutDuration: 0 
+              unapprovedOutDuration: 0,
+              inTime: null,
+              outTime: null
             });
           }
         });
@@ -238,7 +240,7 @@ export default function ApprovalsPage() {
     if (selectedPlantFilter !== "ALL_ASSIGNED") {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
-        const emp = employees.find(e => e.employeeId === emp.employeeId);
+        const emp = employees.find(e => e.employeeId === rec.employeeId);
         const targetPlant = plants.find(p => p.name === selectedPlantFilter);
         return (emp?.unitIds || []).includes(targetPlant?.id || "");
       });

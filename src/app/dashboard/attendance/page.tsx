@@ -361,7 +361,7 @@ export default function AttendancePage() {
         const displayStatus = getPriorityStatus(r.date, r);
         let finalRec = { ...r, displayStatus };
         // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
-        if (!r.outTime && r.inTime) {
+        if (!r.outTime && r.inTime && r.inTime.trim() !== "") {
           const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
           if (isValid(inDT)) {
             const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
@@ -382,7 +382,7 @@ export default function AttendancePage() {
           const displayStatus = getPriorityStatus(dateStr, r);
           let finalRec = { ...r, displayStatus };
           // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
-          if (!r.outTime && r.inTime) {
+          if (!r.outTime && r.inTime && r.inTime.trim() !== "") {
             const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
             if (isValid(inDT)) {
               const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
@@ -397,7 +397,7 @@ export default function AttendancePage() {
         if (existing.length > 0) return existing;
         if (isSameDay(date, now)) return null;
         const displayStatus = getPriorityStatus(dateStr, null);
-        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', displayStatus, approved: true, hours: 0, isVirtual: true }];
+        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', displayStatus, approved: true, hours: 0, isVirtual: true, inTime: null, outTime: null }];
       }).filter(Boolean).flat().reverse();
     }
     return baseList;

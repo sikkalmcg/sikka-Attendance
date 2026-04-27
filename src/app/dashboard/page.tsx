@@ -108,8 +108,7 @@ export default function DashboardHome() {
       if (r.date !== todayStr) return false;
       if (!r.outTime) {
         // FIX: Only consider active records that have an inTime. 
-        // Absence records with null inTime are ignored for "active shifts".
-        if (!r.inTime) return false;
+        if (!r.inTime || r.inTime.trim() === "") return false;
         const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
         if (!isValid(inDT)) return false;
         const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
@@ -175,8 +174,9 @@ export default function DashboardHome() {
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         const displayStatus = getPriorityStatus(rec.date, rec);
         let processed = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
-        // FIX: Safe check for inTime before auto-calculating 16:00 logout
-        if (!rec.outTime && rec.inTime) {
+        
+        // FIX: Only trigger auto-out if inTime exists.
+        if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
           const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
           if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
             const autoOutDT = addHours(inDT, 16);
