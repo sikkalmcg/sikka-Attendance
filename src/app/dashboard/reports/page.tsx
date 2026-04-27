@@ -107,7 +107,6 @@ export default function ReportsPage() {
     const end = parseISO(toDate);
 
     if (type === "ATTENDANCE") {
-      // DATA FETCHING SYNC: Fetch only from "History" (Approved or with Remark)
       return attendanceRecords
         .filter(r => {
           const d = parseISO(r.date);
@@ -137,12 +136,12 @@ export default function ReportsPage() {
             "Out Hour": formatMinutesToHHMM(r.unapprovedOutDuration || 0),
             "Working Hour": formatHoursToHHMM(r.hours),
             "Attendance Type": r.attendanceType,
-            "Status": r.remark ? "REJECTED" : r.status
+            "Status": r.remark ? "REJECTED" : r.status,
+            "Remark": r.remark || "N/A"
           };
         });
     }
 
-    // PAYROLL Report Logic
     return payrollRecords
       .filter(p => {
         const emp = employees.find(e => e.employeeId === p.employeeId);
@@ -212,7 +211,7 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1800px]">
+                <Table className="min-w-[2000px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       {viewData[0] && Object.keys(viewData[0]).map(h => (

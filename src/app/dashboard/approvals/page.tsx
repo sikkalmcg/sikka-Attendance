@@ -53,7 +53,8 @@ import {
   ArrowRightCircle,
   ChevronLeft,
   ChevronRight,
-  FileSpreadsheet
+  FileSpreadsheet,
+  MessageSquare
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -128,10 +129,6 @@ export default function ApprovalsPage() {
 
   const authorizedPlantNames = useMemo(() => authorizedPlants.map(p => p.name), [authorizedPlants]);
 
-  /**
-   * REFINED ATTENDANCE STATUS LOGIC
-   * Rule 1-6 threshold = 02:00 Hours
-   */
   const getCalculatedStatus = (dateStr: string, record: any) => {
     const isHoliday = (holidays || []).some(h => h.date === dateStr) || isSunday(parseISO(dateStr));
     const hours = record?.hours || 0;
@@ -146,7 +143,6 @@ export default function ApprovalsPage() {
       if (isHoliday) return `Present on Holiday${typeLabel}`;
       return `Present${typeLabel}`;
     } else {
-      // Rule 2 & 3: Hours < 2.0 (Threshold not met or no entry)
       if (isHoliday) return "Holiday";
       return "Absent";
     }
@@ -155,15 +151,11 @@ export default function ApprovalsPage() {
   const allAttendanceList = useMemo(() => {
     if (!isMounted) return [];
     const now = new Date();
-    const todayStr = format(now, "yyyy-MM-dd");
 
-    // 1. Process Physical Records
     const actual = (attendanceRecords || []).map(rec => {
       const emp = employees.find(e => e.employeeId === rec.employeeId);
       let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
       
-      // Auto-out calculation (16h rule)
-      // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
       if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
         const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
         if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
@@ -178,19 +170,15 @@ export default function ApprovalsPage() {
         }
       }
       
-      // Apply new status rules
       processedRec.displayStatus = getCalculatedStatus(rec.date, processedRec);
       return processedRec;
     });
 
-    // 2. Generate Missing Virtual Records (After Day End - Dates < todayStr)
     const missing: any[] = [];
     const yesterday = subDays(now, 1);
     const startDate = parseISO(PROJECT_START_DATE_STR);
     
-    // Only generate absences/holidays for dates in the past (After day end)
     if (isBefore(startDate, now)) {
-      // Get all dates from project start to yesterday
       const intervalDates = eachDayOfInterval({ 
         start: startDate, 
         end: yesterday 
@@ -218,7 +206,8 @@ export default function ApprovalsPage() {
               hours: 0, 
               unapprovedOutDuration: 0,
               inTime: null,
-              outTime: null
+              outTime: null,
+              remark: null
             });
           }
         });
@@ -227,7 +216,6 @@ export default function ApprovalsPage() {
 
     let filtered = [...actual, ...missing].filter(rec => rec.date >= PROJECT_START_DATE_STR);
 
-    // Apply plant access security
     if (userAssignedPlantIds) {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return authorizedPlantNames.includes(rec.inPlant);
@@ -236,7 +224,6 @@ export default function ApprovalsPage() {
       });
     }
 
-    // Apply manual UI plant filter
     if (selectedPlantFilter !== "ALL_ASSIGNED") {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
@@ -246,7 +233,6 @@ export default function ApprovalsPage() {
       });
     }
 
-    // Apply Global Search
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       filtered = filtered.filter(rec => 
@@ -259,7 +245,6 @@ export default function ApprovalsPage() {
   }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, authorizedPlantNames, selectedPlantFilter, searchTerm, plants]);
 
   const pendingAttendanceList = useMemo(() => {
-    // Only include completed shift cycles (outTime present) or virtual records (day end passed)
     return allAttendanceList.filter(rec => !rec.approved && !rec.remark && (rec.isVirtual || rec.outTime))
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [allAttendanceList]);
@@ -307,7 +292,6 @@ export default function ApprovalsPage() {
       } else {
         updateRecord('attendance', rec.id, { 
           approved: true, 
-          remark: "", 
           approvedBy: approverName, 
           ...(rec.autoCheckout && { outTime: rec.outTime, outDate: rec.outDate, hours: 8 }) 
         });
@@ -377,11 +361,11 @@ export default function ApprovalsPage() {
       toast({ variant: "destructive", title: "No Data", description: "No records found for the selected month." });
       return;
     }
-    const headers = ["Employee ID", "Name", "Date", "In Plant", "Out Plant", "In Time", "Out Time", "Work Hours", "Status", "Approved By", "Location IN", "Location OUT"];
+    const headers = ["Employee ID", "Name", "Date", "In Plant", "Out Plant", "In Time", "Out Time", "Work Hours", "Status", "Remark", "Approved By", "Location IN", "Location OUT"];
     const csv = [
       headers.join(","),
       ...historyAttendanceList.map(r => [
-        `"${r.employeeId}"`, `"${r.employeeName}"`, `"${formatDate(r.date)}"`, `"${r.inPlant || ''}"`, `"${r.outPlant || ''}"`, `"${r.inTime || ''}"`, `"${r.outTime || ''}"`, r.hours, `"${r.displayStatus}"`, `"${r.approvedBy || ''}"`, `"${r.address || ''}"`, `"${r.addressOut || ''}"`
+        `"${r.employeeId}"`, `"${r.employeeName}"`, `"${formatDate(r.date)}"`, `"${r.inPlant || ''}"`, `"${r.outPlant || ''}"`, `"${r.inTime || ''}"`, `"${r.outTime || ''}"`, r.hours, `"${r.displayStatus}"`, `"${r.remark || ''}"`, `"${r.approvedBy || ''}"`, `"${r.address || ''}"`, `"${r.addressOut || ''}"`
       ].join(","))
     ].join("\n");
     const link = document.createElement("a");
@@ -473,7 +457,7 @@ export default function ApprovalsPage() {
       <Card className="border-slate-200 shadow-sm overflow-hidden">
         <CardContent className="p-0">
           <ScrollArea className="w-full">
-            <Table className="min-w-[2200px]">
+            <Table className="min-w-[2400px]">
               <TableHeader className="bg-slate-50/50">
                 <TableRow>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee/ID</TableHead>
@@ -485,6 +469,7 @@ export default function ApprovalsPage() {
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Out Hour</TableHead>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Work Hour</TableHead>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Status</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Remark</TableHead>
                   {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">IN / Out Location</TableHead>
                   <TableHead className="text-right font-bold text-[11px] uppercase tracking-widest text-slate-500 pr-6">Action</TableHead>
@@ -492,7 +477,7 @@ export default function ApprovalsPage() {
               </TableHeader>
               <TableBody>
                 {currentData.items.length === 0 ? (
-                  <TableRow><TableCell colSpan={viewMode === 'history' ? 12 : 11} className="text-center py-20 text-muted-foreground font-bold italic">No records matching your criteria.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={viewMode === 'history' ? 13 : 12} className="text-center py-20 text-muted-foreground font-bold italic">No records matching your criteria.</TableCell></TableRow>
                 ) : (
                   currentData.items.map((rec: any) => (
                     <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
@@ -531,6 +516,14 @@ export default function ApprovalsPage() {
                         )}>
                           {rec.displayStatus}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 max-w-[200px]">
+                           <MessageSquare className="w-3 h-3 text-slate-400 shrink-0" />
+                           <span className="text-[10px] font-medium text-slate-500 italic truncate block" title={rec.remark || "No remark provided"}>
+                              {rec.remark || "--"}
+                           </span>
+                        </div>
                       </TableCell>
                       {viewMode === 'history' && (
                         <TableCell>
