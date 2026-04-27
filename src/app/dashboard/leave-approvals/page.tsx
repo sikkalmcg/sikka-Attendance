@@ -74,6 +74,8 @@ export default function LeaveApprovalPage() {
   const filteredLeaves = useMemo(() => {
     if (!isMounted) return [];
     const search = searchTerm.toLowerCase();
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+
     return (leaveRequests || []).filter(req => {
       const matchesSearch = 
         req.employeeName.toLowerCase().includes(search) ||
@@ -83,8 +85,11 @@ export default function LeaveApprovalPage() {
         req.purpose.toLowerCase().includes(search);
       
       if (activeTab === 'pending') {
-        return matchesSearch && req.status === 'UNDER_PROCESS';
+        // AUTO-REMOVAL Rule for Admin Pending: Hide if leave.toDate < current_date
+        const isFutureOrCurrent = req.toDate >= todayStr;
+        return matchesSearch && req.status === 'UNDER_PROCESS' && isFutureOrCurrent;
       } else {
+        // History Tab: Approved/Rejected records always remain visible
         return matchesSearch && (req.status === 'APPROVED' || req.status === 'REJECTED');
       }
     }).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));

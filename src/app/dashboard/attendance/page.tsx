@@ -401,6 +401,14 @@ export default function AttendancePage() {
     return baseList;
   }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth]);
 
+  // LEAVE AUTO-REMOVAL LOGIC: Hide if current_date > leave.to_date
+  const filteredEmployeeLeaves = useMemo(() => {
+    if (!isMounted || !todayStr) return [];
+    return leaveRequests
+      .filter(l => l.employeeId === effectiveEmployeeId)
+      .filter(l => l.toDate >= todayStr); // AUTO-REMOVAL: Keep only current or future leaves
+  }, [leaveRequests, effectiveEmployeeId, isMounted, todayStr]);
+
   const totalPages = Math.ceil(history.length / ROWS_PER_PAGE);
   const paginatedHistory = useMemo(() => history.slice((oversightPage - 1) * ROWS_PER_PAGE, oversightPage * ROWS_PER_PAGE), [history, oversightPage]);
 
@@ -408,7 +416,7 @@ export default function AttendancePage() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4">
+      <div className="space-y-8 pb-12 px-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
           <Card className="shadow-2xl border-none overflow-hidden bg-white">
             <div className="h-1 bg-primary" />
@@ -477,11 +485,11 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[240px]">
-                {leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).length === 0 ? (
-                  <div className="p-10 text-center text-xs text-muted-foreground font-bold">No active records.</div>
+                {filteredEmployeeLeaves.length === 0 ? (
+                  <div className="p-10 text-center text-xs text-muted-foreground font-bold">No current or upcoming records.</div>
                 ) : (
                   <div className="divide-y divide-slate-100">
-                    {leaveRequests.filter(l => l.employeeId === effectiveEmployeeId).map((l) => (
+                    {filteredEmployeeLeaves.map((l) => (
                       <div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors">
                         <div className="space-y-0.5">
                           <p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p>
@@ -636,7 +644,7 @@ export default function AttendancePage() {
           </Card>
         </div>
 
-        {/* Dialogs for IN, OUT, LEAVE remain same but with projected start date restrictions */}
+        {/* Dialogs for IN, OUT, LEAVE remain same */}
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
           <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
             <DialogHeader className="p-6 bg-slate-900 text-white shrink-0"><DialogTitle className="flex items-center gap-2 font-black text-xl"><Navigation className="w-5 h-5 text-primary" /> Confirm Attendance</DialogTitle><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">{detectedAddress || "Locating..."}</p></DialogHeader>
