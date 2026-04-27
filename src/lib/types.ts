@@ -10,6 +10,7 @@ export interface User {
   plantIds?: string[]; // Added for granular plant-level access
   status: 'Active' | 'Inactive';
   avatar?: string;
+  sessionId?: string; // Track active session for auto-logout
 }
 
 export interface Plant {
@@ -110,6 +111,7 @@ export interface Employee {
   deviceId?: string; // Security binding for attendance
   deviceName?: string; // Human readable device name
   deviceHistory?: DeviceHistoryEntry[];
+  sessionId?: string; // Track active session for auto-logout
 }
 
 export interface Holiday {
@@ -196,6 +198,8 @@ export interface AppNotification {
   message: string;
   timestamp: string;
   read: boolean;
+  type?: string;
+  employeeId?: string;
 }
 
 export interface SalaryPaymentRecord {

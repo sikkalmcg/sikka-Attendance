@@ -8,7 +8,7 @@ import { SUPER_ADMIN_USER } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Loader2, Eye, EyeOff, ShieldAlert } from "lucide-react";
 import Image from "next/image";
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc, addDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import Cookies from 'js-cookie';
 import { getDeviceId, getDeviceName } from "@/lib/utils";
@@ -25,7 +25,6 @@ export default function LoginPage() {
   const db = getFirestore();
 
   useEffect(() => {
-    // Check if user is already logged in via cookies on mount
     const session = Cookies.get('sikka_session');
     if (session) {
       router.push('/dashboard');
@@ -34,7 +33,6 @@ export default function LoginPage() {
 
   const persistSession = (userData: any) => {
     const sessionData = JSON.stringify(userData);
-    // Persistent for 365 days as per requirement
     Cookies.set('sikka_session', sessionData, { expires: 365, path: '/' });
     localStorage.setItem("user", sessionData);
   };
@@ -45,15 +43,17 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      // Sign in anonymously to satisfy Firebase Security Rules
       const auth = getAuth();
       if (!auth.currentUser) {
         await signInAnonymously(auth);
       }
 
-      // 1. Check Super Admin Hardcoded Fallback
+      const currentDeviceId = getDeviceId();
+      const currentDeviceName = getDeviceName();
+      const newSessionId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+
       if (username === SUPER_ADMIN_USER.username && password === SUPER_ADMIN_USER.password) {
-        const userData = { ...SUPER_ADMIN_USER, id: "super-1" };
+        const userData = { ...SUPER_ADMIN_USER, id: "super-1", sessionId: newSessionId };
         persistSession(userData);
         router.push("/dashboard");
         toast({ title: "Welcome back, Admin", description: "Login successful." });
@@ -61,18 +61,17 @@ export default function LoginPage() {
         return;
       }
 
-      // 2. Check Firestore Users Collection (Created Users)
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where("username", "==", username.toLowerCase()), where("password", "==", password));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
-        const userData = { id: userDoc.id, ...userDoc.data() };
+        const userData = { id: userDoc.id, ...userDoc.data(), sessionId: newSessionId };
         
+        await updateDoc(doc(db, 'users', userDoc.id), { sessionId: newSessionId });
         persistSession(userData);
         
-        // Redirect based on permissions/role
         if (userData.role === 'EMPLOYEE') {
           router.push("/dashboard/attendance");
         } else {
@@ -84,7 +83,6 @@ export default function LoginPage() {
         return;
       }
 
-      // 3. Employee Directory Lookup (Aadhaar/Mobile)
       if ((username.length === 12 || username.length === 10) && password.length >= 8) {
         const employeesRef = collection(db, 'employees');
         const cleanUsername = username.replace(/\s/g, '');
@@ -98,18 +96,12 @@ export default function LoginPage() {
         if (registeredEmpDoc) {
           const empData = registeredEmpDoc.data();
           
-          // --- ACCOUNT STATUS CHECK ---
           if (empData.active === false) {
             setError("Access Denied: Your account has been deactivated by the administrator.");
             setLoading(false);
             return;
           }
 
-          // --- DEVICE BINDING & HISTORY LOGIC ---
-          const currentDeviceId = getDeviceId();
-          const currentDeviceName = getDeviceName();
-          
-          // Check if this device is already registered with another employee
           const deviceTakenByOther = empSnapshot.docs.find(d => {
             const data = d.data();
             return data.deviceId === currentDeviceId && 
@@ -122,7 +114,17 @@ export default function LoginPage() {
             return;
           }
 
-          // Update Device History Ledger
+          if (empData.deviceId && empData.deviceId !== currentDeviceId) {
+            const switchMsg = `${empData.name} ${empData.department}/${empData.designation} login in Device ID ${currentDeviceId} on ${new Date().toLocaleString('en-IN')}`;
+            await addDoc(collection(db, 'notifications'), {
+              message: switchMsg,
+              timestamp: new Date().toISOString(),
+              read: false,
+              type: 'DEVICE_SWITCH',
+              employeeId: empData.employeeId
+            });
+          }
+
           let history: DeviceHistoryEntry[] = empData.deviceHistory || [];
           const nowIso = new Date().toISOString();
 
@@ -137,7 +139,6 @@ export default function LoginPage() {
           } else {
             const lastEntry = history[history.length - 1];
             if (lastEntry.deviceId !== currentDeviceId) {
-              // Hardware Switch Detected: Close old session, start new one
               lastEntry.to = nowIso;
               history.push({
                 id: "h-" + Date.now(),
@@ -149,12 +150,12 @@ export default function LoginPage() {
             }
           }
 
-          // Automatically bind/update current device ID and Name for this employee
           const empDocRef = doc(db, 'employees', registeredEmpDoc.id);
           await updateDoc(empDocRef, { 
             deviceId: currentDeviceId, 
             deviceName: currentDeviceName,
-            deviceHistory: history 
+            deviceHistory: history,
+            sessionId: newSessionId
           });
 
           const userData = {
@@ -162,7 +163,8 @@ export default function LoginPage() {
             username: cleanUsername,
             fullName: empData.name, 
             role: "EMPLOYEE",
-            permissions: ["Attendance"]
+            permissions: ["Attendance"],
+            sessionId: newSessionId
           };
           persistSession(userData);
           router.push("/dashboard/attendance");

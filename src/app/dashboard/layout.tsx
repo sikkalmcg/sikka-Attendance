@@ -77,7 +77,6 @@ function HeaderActions() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // REQUIREMENT: Restricted Notifications Only (No Attendance Reminders)
   const filteredNotifications = useMemo(() => {
     return notifications.filter(n => (n as any).type !== 'ATTENDANCE_REMINDER');
   }, [notifications]);
@@ -175,7 +174,7 @@ function HeaderActions() {
                     )}>
                       <div className={cn(
                         "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm",
-                        isSuccessEvent ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />
+                        isSuccessEvent ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
                       )}>
                         {isSuccessEvent ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                       </div>
@@ -435,8 +434,36 @@ function SidebarNav() {
 function AuthorizedContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { verifiedUser, isLoading } = useData();
+  const { verifiedUser, isLoading, employees, users } = useData();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+
+  // SESSION SECURITY CHECK: Auto Logout if Multi-Device Login Detected
+  useEffect(() => {
+    if (isLoading || !verifiedUser) return;
+
+    const handleLogout = () => {
+      Cookies.remove('sikka_session', { path: '/' });
+      localStorage.removeItem("user");
+      router.push("/login");
+    };
+
+    if (verifiedUser.role === 'EMPLOYEE') {
+      const loginIdent = verifiedUser.username?.replace(/\s/g, '');
+      const dbEmp = employees.find(e => {
+        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
+        const empMobile = e.mobile?.replace(/\s/g, '');
+        return empAadhaar === loginIdent || empMobile === loginIdent;
+      });
+      if (dbEmp && dbEmp.sessionId && verifiedUser.sessionId && dbEmp.sessionId !== verifiedUser.sessionId) {
+        handleLogout();
+      }
+    } else {
+      const dbUser = users.find(u => u.id === verifiedUser.id);
+      if (dbUser && dbUser.sessionId && verifiedUser.sessionId && dbUser.sessionId !== verifiedUser.sessionId) {
+        handleLogout();
+      }
+    }
+  }, [verifiedUser, isLoading, employees, users, router]);
 
   useEffect(() => {
     if (isLoading) return;
