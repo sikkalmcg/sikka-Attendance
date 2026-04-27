@@ -57,11 +57,12 @@ import {
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, isSunday, isBefore, startOfMonth } from "date-fns";
+import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, subDays, isValid } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
 const PROJECT_START_DATE_STR = "2026-04-01";
+const MIN_PRESENT_HOURS = 2.0;
 
 const generateFilterMonths = () => {
   const options = [];
@@ -81,8 +82,6 @@ export default function ApprovalsPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
-  const [pendingType, setPendingType] = useState("attendance");
-  const [historyType, setHistoryType] = useState("attendance");
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("ALL_ASSIGNED");
 
   // History Controls
@@ -115,7 +114,7 @@ export default function ApprovalsPage() {
   useEffect(() => {
     setPendingPage(1);
     setHistoryPage(1);
-  }, [viewMode, pendingType, historyType, selectedPlantFilter, historyMonthFilter]);
+  }, [viewMode, selectedPlantFilter, historyMonthFilter]);
 
   const userAssignedPlantIds = useMemo(() => {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
@@ -129,16 +128,26 @@ export default function ApprovalsPage() {
 
   const authorizedPlantNames = useMemo(() => authorizedPlants.map(p => p.name), [authorizedPlants]);
 
-  const getPriorityStatus = (dateStr: string, record: any) => {
-    const isSun = isSunday(parseISO(dateStr));
-    const holiday = (holidays || []).find(h => h.date === dateStr);
-    if (record) {
-      if (holiday) return "Present on Holiday";
-      if (isSun) return "Present on Weekly Off";
-      return record.status;
+  /**
+   * REFINED ATTENDANCE STATUS LOGIC
+   * Rule 1-6 threshold = 02:00 Hours
+   */
+  const getCalculatedStatus = (dateStr: string, record: any) => {
+    const isHoliday = (holidays || []).some(h => h.date === dateStr) || isSunday(parseISO(dateStr));
+    const hours = record?.hours || 0;
+    const isPresent = hours >= MIN_PRESENT_HOURS;
+    const type = record?.attendanceType;
+    
+    let typeLabel = "";
+    if (type === 'FIELD') typeLabel = " – Field";
+    else if (type === 'WFH') typeLabel = " – Work at Home";
+
+    if (isPresent) {
+      if (isHoliday) return `Present on Holiday${typeLabel}`;
+      return `Present${typeLabel}`;
     } else {
-      if (holiday) return `Holiday (${holiday.name})`;
-      if (isSun) return "Weekly Off";
+      // Rule 2 & 3: Hours < 2.0 (Threshold not met or no entry)
+      if (isHoliday) return "Holiday";
       return "Absent";
     }
   };
@@ -146,36 +155,70 @@ export default function ApprovalsPage() {
   const allAttendanceList = useMemo(() => {
     if (!isMounted) return [];
     const now = new Date();
-    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const todayStr = format(now, "yyyy-MM-dd");
 
+    // 1. Process Physical Records
     const actual = (attendanceRecords || []).map(rec => {
       const emp = employees.find(e => e.employeeId === rec.employeeId);
-      const displayStatus = getPriorityStatus(rec.date, rec);
-      let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
+      let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
+      
+      // Auto-out calculation (16h rule)
       if (!rec.outTime) {
-        const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
-        if ((now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
+        const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}`);
+        if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
           const autoOutDT = addHours(inDT, 16);
           processedRec = { ...processedRec, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
         }
       }
+      
+      // Apply new status rules
+      processedRec.displayStatus = getCalculatedStatus(rec.date, processedRec);
       return processedRec;
     });
 
+    // 2. Generate Missing Virtual Records (After Day End - Dates < todayStr)
     const missing: any[] = [];
-    if (todayStr >= PROJECT_START_DATE_STR) {
+    const yesterday = subDays(now, 1);
+    const startDate = parseISO(PROJECT_START_DATE_STR);
+    
+    // Only generate absences/holidays for dates in the past (After day end)
+    if (isBefore(startDate, now)) {
+      // Get all dates from project start to yesterday
+      const intervalDates = eachDayOfInterval({ 
+        start: startDate, 
+        end: yesterday 
+      });
+      
       employees.filter(e => e.active).forEach(emp => {
-        const hasRecord = attendanceRecords.some(r => r.employeeId === emp.employeeId && r.date === todayStr);
-        if (!hasRecord) {
-          const displayStatus = getPriorityStatus(todayStr, null);
-          missing.push({ id: `v-abs-${emp.employeeId}-${todayStr}`, employeeId: emp.employeeId, employeeName: emp.name, date: todayStr, status: 'ABSENT', displayStatus, attendanceType: 'ABSENT', approved: false, dept: emp.department, desig: emp.designation, isVirtual: true, hours: 0, unapprovedOutDuration: 0 });
-        }
+        intervalDates.forEach(date => {
+          const dStr = format(date, "yyyy-MM-dd");
+          const hasRecord = attendanceRecords.some(r => r.employeeId === emp.employeeId && r.date === dStr);
+          
+          if (!hasRecord) {
+            const displayStatus = getCalculatedStatus(dStr, null);
+            missing.push({ 
+              id: `v-abs-${emp.employeeId}-${dStr}`, 
+              employeeId: emp.employeeId, 
+              employeeName: emp.name, 
+              date: dStr, 
+              status: displayStatus === 'Holiday' ? 'HOLIDAY' : 'ABSENT', 
+              displayStatus, 
+              attendanceType: 'ABSENT', 
+              approved: false, 
+              dept: emp.department, 
+              desig: emp.designation, 
+              isVirtual: true, 
+              hours: 0, 
+              unapprovedOutDuration: 0 
+            });
+          }
+        });
       });
     }
 
     let filtered = [...actual, ...missing].filter(rec => rec.date >= PROJECT_START_DATE_STR);
 
-    // Apply plant access
+    // Apply plant access security
     if (userAssignedPlantIds) {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return authorizedPlantNames.includes(rec.inPlant);
@@ -194,7 +237,7 @@ export default function ApprovalsPage() {
       });
     }
 
-    // Apply Search
+    // Apply Global Search
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       filtered = filtered.filter(rec => 
@@ -207,6 +250,7 @@ export default function ApprovalsPage() {
   }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, authorizedPlantNames, selectedPlantFilter, searchTerm, plants]);
 
   const pendingAttendanceList = useMemo(() => {
+    // Only include completed shift cycles (outTime present) or virtual records (day end passed)
     return allAttendanceList.filter(rec => !rec.approved && !rec.remark && (rec.isVirtual || rec.outTime))
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [allAttendanceList]);
@@ -234,10 +278,30 @@ export default function ApprovalsPage() {
     setIsProcessing(true);
     try {
       const approverName = verifiedUser?.fullName || "HR_ADMIN";
+      
       if (rec.isVirtual) {
-        addRecord('attendance', { employeeId: rec.employeeId, employeeName: rec.employeeName, date: rec.date, inDate: rec.date, status: 'ABSENT', attendanceType: 'FIELD', approved: true, approvedBy: approverName, hours: 0, inTime: null, outTime: null, address: 'System Generated Absence', unapprovedOutDuration: 0 });
+        addRecord('attendance', { 
+          employeeId: rec.employeeId, 
+          employeeName: rec.employeeName, 
+          date: rec.date, 
+          inDate: rec.date, 
+          status: rec.displayStatus.includes('Holiday') ? 'HOLIDAY' : 'ABSENT', 
+          attendanceType: 'FIELD', 
+          approved: true, 
+          approvedBy: approverName, 
+          hours: 0, 
+          inTime: null, 
+          outTime: null, 
+          address: 'System Generated Absence', 
+          unapprovedOutDuration: 0 
+        });
       } else {
-        updateRecord('attendance', rec.id, { approved: true, remark: "", approvedBy: approverName, ...(rec.autoCheckout && { outTime: rec.outTime, outDate: rec.outDate, hours: 8, status: 'PRESENT' }) });
+        updateRecord('attendance', rec.id, { 
+          approved: true, 
+          remark: "", 
+          approvedBy: approverName, 
+          ...(rec.autoCheckout && { outTime: rec.outTime, outDate: rec.outDate, hours: 8 }) 
+        });
       }
       toast({ title: "Attendance Approved" });
     } finally { setIsProcessing(false); }
@@ -249,9 +313,25 @@ export default function ApprovalsPage() {
     try {
       const approver = verifiedUser?.fullName || "HR_ADMIN";
       if (selectedAttendance.isVirtual) {
-        addRecord('attendance', { employeeId: selectedAttendance.employeeId, employeeName: selectedAttendance.employeeName, date: selectedAttendance.date, inDate: selectedAttendance.date, status: 'ABSENT', attendanceType: 'FIELD', remark: attendanceRejectReason, approved: false, unapprovedOutDuration: 0, approvedBy: approver });
+        addRecord('attendance', { 
+          employeeId: selectedAttendance.employeeId, 
+          employeeName: selectedAttendance.employeeName, 
+          date: selectedAttendance.date, 
+          inDate: selectedAttendance.date, 
+          status: 'ABSENT', 
+          attendanceType: 'FIELD', 
+          remark: attendanceRejectReason, 
+          approved: false, 
+          unapprovedOutDuration: 0, 
+          approvedBy: approver 
+        });
       } else {
-        updateRecord('attendance', selectedAttendance.id, { approved: false, remark: attendanceRejectReason, status: 'ABSENT', approvedBy: approver });
+        updateRecord('attendance', selectedAttendance.id, { 
+          approved: false, 
+          remark: attendanceRejectReason, 
+          status: 'ABSENT', 
+          approvedBy: approver 
+        });
       }
       toast({ variant: "destructive", title: "Log Rejected" });
       setIsAttendanceRejectOpen(false);
@@ -273,7 +353,7 @@ export default function ApprovalsPage() {
         inTime: editData.inTime, 
         outTime: editData.outTime, 
         hours, 
-        status: hours >= 1.0 ? 'PRESENT' : 'ABSENT',
+        status: hours >= MIN_PRESENT_HOURS ? 'PRESENT' : 'ABSENT',
         remark: `Edited: ${editData.remark}`,
         editedBy: verifiedUser?.fullName || "Admin"
       });
@@ -435,7 +515,14 @@ export default function ApprovalsPage() {
                       </TableCell>
                       <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(rec.unapprovedOutDuration || 0)}</span></TableCell>
                       <TableCell className="text-center"><Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>{formatHoursToHHMM(rec.hours)}</Badge></TableCell>
-                      <TableCell className="text-center"><Badge className={cn("text-[9px] font-black uppercase px-3", rec.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700")}>{rec.displayStatus}</Badge></TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={cn(
+                          "text-[9px] font-black uppercase px-3", 
+                          (rec.displayStatus?.includes("Present") && !rec.displayStatus?.includes("Absent")) ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"
+                        )}>
+                          {rec.displayStatus}
+                        </Badge>
+                      </TableCell>
                       {viewMode === 'history' && (
                         <TableCell>
                            <div className="flex items-center gap-1.5">
