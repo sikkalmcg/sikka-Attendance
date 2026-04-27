@@ -34,7 +34,8 @@ import {
   ArrowRightCircle,
   Search,
   CalendarDays,
-  Filter
+  Filter,
+  Separator
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM, formatMinutesToHHMM } from "@/lib/utils";
 import { 
@@ -77,7 +78,6 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 
 const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
 const PROJECT_START_DATE_STR = "2026-04-01";
@@ -86,7 +86,6 @@ const ROWS_PER_PAGE = 15;
 const generateFilterMonths = () => {
   const options = [];
   const date = new Date();
-  // Show 12 months back and 6 months forward for flexibility
   for (let i = -6; i < 12; i++) {
     const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
     if (isBefore(d, startOfMonth(parseISO(PROJECT_START_DATE_STR)))) continue;
@@ -102,8 +101,7 @@ const getISTTime = () => {
 };
 
 export default function AttendancePage() {
-  const { attendanceRecords, leaveRequests, addRecord, updateRecord, plants, holidays, employees, notifications } = useData();
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { attendanceRecords, leaveRequests, addRecord, updateRecord, plants, holidays, employees, notifications, verifiedUser, isLoading } = useData();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
@@ -130,18 +128,11 @@ export default function AttendancePage() {
   const [selectedLeavePlantId, setSelectedLeavePlantId] = useState("");
 
   const { toast } = useToast();
-  const trackingTimerRef = useRef<NodeJS.Timeout | null>(null);
-
   const filterMonths = useMemo(() => generateFilterMonths(), []);
 
   useEffect(() => {
     setIsMounted(true);
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) setCurrentUser(JSON.parse(savedUser));
-    
-    const did = getDeviceId();
-    setCurrentDeviceId(did);
-    
+    setCurrentDeviceId(getDeviceId());
     setCurrentTime(getISTTime());
     const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
 
@@ -153,82 +144,62 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
-  const todayStr = useMemo(() => {
-    if (!isMounted) return "";
-    return format(getISTTime(), "yyyy-MM-dd");
-  }, [isMounted]);
+  const todayStr = useMemo(() => isMounted ? format(getISTTime(), "yyyy-MM-dd") : "", [isMounted]);
+  const isAdminRole = useMemo(() => verifiedUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(verifiedUser.role), [verifiedUser]);
+  const isAccessAllowed = useMemo(() => isMounted && verifiedUser?.role === 'EMPLOYEE', [verifiedUser, isMounted]);
 
-  const isAdminRole = useMemo(() => {
-    return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
-  }, [currentUser]);
-
-  const triggerNotification = useCallback((title: string, body: string) => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "granted") {
-        new Notification(title, { body, icon: "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG" });
-      }
-    }
-  }, []);
-
-  const registeredEmployee = useMemo(() => {
-    if (!currentUser || !employees || employees.length === 0) return null;
-    const loginIdent = (currentUser.username || "").replace(/\s/g, '');
-    if (!loginIdent) return null;
-    return employees.find(e => {
-      const empAadhaar = (e.aadhaar || "").replace(/\s/g, '');
-      const empMobile = (e.mobile || "").replace(/\s/g, '');
-      return empAadhaar === loginIdent || empMobile === loginIdent;
-    });
-  }, [currentUser, employees]);
-
-  const isAccessAllowed = useMemo(() => {
-    if (!isMounted || !currentUser) return false;
-    return currentUser.role === 'EMPLOYEE';
-  }, [currentUser, isMounted]);
-
-  const effectiveEmployeeId = useMemo(() => {
-    return registeredEmployee?.employeeId || (currentUser?.role === 'EMPLOYEE' ? currentUser?.username : "N/A");
-  }, [registeredEmployee, currentUser]);
-
-  const effectiveEmployeeName = useMemo(() => {
-    return registeredEmployee?.name || (currentUser?.role === 'EMPLOYEE' ? currentUser?.fullName : "N/A");
-  }, [registeredEmployee, currentUser]);
+  const effectiveEmployeeId = useMemo(() => verifiedUser?.employeeId || verifiedUser?.username || "N/A", [verifiedUser]);
+  const effectiveEmployeeName = useMemo(() => verifiedUser?.fullName || "N/A", [verifiedUser]);
 
   const employeeRecords = useMemo(() => {
     if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") return [];
-    return (attendanceRecords || []).filter(r => r.employeeId === effectiveEmployeeId && r.date >= PROJECT_START_DATE_STR);
+    return (attendanceRecords || [])
+      .filter(r => r.employeeId === effectiveEmployeeId && r.date >= PROJECT_START_DATE_STR)
+      .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
   }, [attendanceRecords, effectiveEmployeeId]);
 
   const { activeRecord, staleRecord } = useMemo(() => {
+    // Find the latest record that doesn't have an outTime
     const rec = (employeeRecords || []).find(r => !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
+    
     const inTimeStr = rec.inTime || "00:00";
     const inDateTime = new Date(`${rec.inDate || rec.date}T${inTimeStr}`);
     if (!isValid(inDateTime)) return { activeRecord: rec, staleRecord: null };
+    
     const now = getISTTime();
     const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
+    
+    // Shift Expiry (16-Hour Rule)
     if (diffHours >= 16) return { activeRecord: null, staleRecord: rec };
     return { activeRecord: rec, staleRecord: null };
   }, [employeeRecords, currentTime]);
 
   const lockState = useMemo(() => {
-    const latestRec = [...employeeRecords].sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""))[0];
+    const latestRec = employeeRecords[0]; // Already sorted newest first
     if (!latestRec) return { isLocked: false, unlockTime: null };
+    
     let effectiveOutDate = latestRec.outDate || latestRec.date;
     let effectiveOutTime = latestRec.outTime;
+    
     if (!latestRec.outTime) {
       if (!latestRec.inTime) return { isLocked: false, unlockTime: null };
       const inDT = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
-      const nowTime = getISTTime();
       if (!isValid(inDT)) return { isLocked: false, unlockTime: null };
+      
+      const nowTime = getISTTime();
       const diffHours = (nowTime.getTime() - inDT.getTime()) / (1000 * 60 * 60);
       if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
+      
+      // Auto-calc rest period end based on virtual 16h logout
       const autoOutDT = addHours(inDT, 16);
       effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
       effectiveOutTime = format(autoOutDT, "HH:mm");
     }
+    
     const lastOutDateTime = new Date(`${effectiveOutDate}T${effectiveOutTime}`);
     if (!isValid(lastOutDateTime)) return { isLocked: false, unlockTime: null };
+    
     const allowedDateTime = addHours(lastOutDateTime, 8);
     const nowCheck = getISTTime();
     const isLocked = isAfter(allowedDateTime, nowCheck);
@@ -236,10 +207,7 @@ export default function AttendancePage() {
   }, [employeeRecords, currentTime]);
 
   const requestLocation = (type: "IN" | "OUT") => {
-    if (!isAccessAllowed) {
-      toast({ variant: "destructive", title: "Access Denied", description: "Only Employees can mark attendance." });
-      return;
-    }
+    if (!isAccessAllowed) return;
     setIsLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -266,7 +234,7 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckIn = () => {
-    if (!currentUser || !currentGPS || !isAccessAllowed) return;
+    if (!verifiedUser || !currentGPS || !isAccessAllowed) return;
     const now = getISTTime();
     const today = format(now, "yyyy-MM-dd");
     addRecord('attendance', {
@@ -306,7 +274,7 @@ export default function AttendancePage() {
       outTime: timeHHMM, 
       outDate: todayStrLocal,
       hours: finalHours,
-      status: finalHours >= 1.0 ? 'PRESENT' : 'ABSENT',
+      status: finalHours >= 2.0 ? 'PRESENT' : 'ABSENT',
       latOut: currentGPS.lat,
       lngOut: currentGPS.lng,
       addressOut: detectedAddress,
@@ -317,7 +285,7 @@ export default function AttendancePage() {
   };
 
   const history = useMemo(() => {
-    if (!currentUser || !isMounted) return [];
+    if (!verifiedUser || !isMounted) return [];
     const now = getISTTime();
 
     const getPriorityStatus = (dateStr: string, record: any) => {
@@ -337,17 +305,14 @@ export default function AttendancePage() {
     let baseList = [];
     if (isAdminRole) {
       const rawRecords = (attendanceRecords || []).filter(r => r.date >= PROJECT_START_DATE_STR);
-      
-      // Filter by Month if selected
       baseList = rawRecords.filter(r => {
-        if (!oversightMonth) return true;
+        if (!oversightMonth || oversightMonth === 'all') return true;
         const d = parseISO(r.date);
         const mmm = d.toLocaleString('en-US', { month: 'short' });
         const yy = d.getFullYear().toString().slice(-2);
         return `${mmm}-${yy}` === oversightMonth;
       });
 
-      // Global Search
       if (oversightSearch) {
         const s = oversightSearch.toLowerCase();
         baseList = baseList.filter(r => 
@@ -360,7 +325,6 @@ export default function AttendancePage() {
       baseList = baseList.map(r => {
         const displayStatus = getPriorityStatus(r.date, r);
         let finalRec = { ...r, displayStatus };
-        // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
         if (!r.outTime && r.inTime && r.inTime.trim() !== "") {
           const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
           if (isValid(inDT)) {
@@ -374,14 +338,12 @@ export default function AttendancePage() {
         return finalRec;
       }).sort((a, b) => b.date.localeCompare(a.date));
     } else {
-      // Employee view logic remains same as per requirements
       const dateRange = eachDayOfInterval({ start: parseISO(PROJECT_START_DATE_STR), end: startOfDay(new Date()) });
       baseList = dateRange.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const existing = employeeRecords.filter(r => r.date === dateStr).map(r => {
           const displayStatus = getPriorityStatus(dateStr, r);
           let finalRec = { ...r, displayStatus };
-          // FIX: Only trigger auto-out if inTime exists. Prevents "16:00" for absences.
           if (!r.outTime && r.inTime && r.inTime.trim() !== "") {
             const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
             if (isValid(inDT)) {
@@ -401,14 +363,13 @@ export default function AttendancePage() {
       }).filter(Boolean).flat().reverse();
     }
     return baseList;
-  }, [currentUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth]);
+  }, [verifiedUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth]);
 
-  // LEAVE AUTO-REMOVAL LOGIC: Hide if current_date > leave.to_date
   const filteredEmployeeLeaves = useMemo(() => {
     if (!isMounted || !todayStr) return [];
     return leaveRequests
       .filter(l => l.employeeId === effectiveEmployeeId)
-      .filter(l => l.toDate >= todayStr); // AUTO-REMOVAL: Keep only current or future leaves
+      .filter(l => l.toDate >= todayStr); 
   }, [leaveRequests, effectiveEmployeeId, isMounted, todayStr]);
 
   const totalPages = Math.ceil(history.length / ROWS_PER_PAGE);
@@ -429,27 +390,34 @@ export default function AttendancePage() {
             </CardHeader>
             <CardContent className="space-y-6 px-6 pb-8">
               <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto">
-                {currentTime ? (<div className="text-center"><h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2><p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMM-yyyy")}</p></div>) : (<Loader2 className="w-8 h-8 text-sky-300 animate-spin" />)}
+                {currentTime ? (
+                  <div className="text-center">
+                    <h2 className="text-5xl font-black tracking-tighter font-mono leading-none">{format(currentTime, "HH:mm")}</h2>
+                    <p className="text-[11px] font-black text-sky-600/80 mt-2 flex items-center justify-center gap-1.5 uppercase tracking-widest"><Calendar className="w-3.5 h-3.5" /> {format(currentTime, "dd-MMM-yyyy")}</p>
+                  </div>
+                ) : (
+                  <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
+                )}
               </div>
               <div className="flex gap-4">
                 <Button 
                   className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg transition-all", 
-                    isAccessAllowed && !lockState.isLocked && !activeRecord 
+                    !isLoading && isAccessAllowed && !lockState.isLocked && !activeRecord 
                       ? "bg-primary hover:bg-primary/90 text-white" 
                       : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                   )} 
-                  disabled={!isAccessAllowed || isLoadingLocation || !!activeRecord || (lockState.isLocked && lockState.unlockTime !== 'Shift Active')} 
+                  disabled={isLoading || !isAccessAllowed || isLoadingLocation || !!activeRecord || (lockState.isLocked && lockState.unlockTime !== 'Shift Active')} 
                   onClick={() => requestLocation("IN")}
                 >
                   Mark IN
                 </Button>
                 <Button 
                   className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg transition-all", 
-                    isAccessAllowed && activeRecord 
+                    !isLoading && isAccessAllowed && activeRecord 
                       ? "bg-rose-500 hover:bg-rose-600 text-white" 
                       : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                   )} 
-                  disabled={!isAccessAllowed || isLoadingLocation || !activeRecord} 
+                  disabled={isLoading || !isAccessAllowed || isLoadingLocation || !activeRecord} 
                   onClick={() => requestLocation("OUT")}
                 >
                   Mark OUT
@@ -460,10 +428,16 @@ export default function AttendancePage() {
                    Mandatory 8h Rest Period. Next IN Allowed at {lockState.unlockTime}
                 </p>
               )}
-              {!isAccessAllowed && (
+              {!isAccessAllowed && !isLoading && (
                 <div className="flex items-center gap-2 justify-center py-2 px-4 bg-amber-50 rounded-xl border border-amber-100">
                   <Lock className="w-3.5 h-3.5 text-amber-600" />
                   <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Employee Login Required</p>
+                </div>
+              )}
+              {isLoading && (
+                <div className="flex items-center gap-2 justify-center py-2">
+                  <Loader2 className="w-3 h-3 text-primary animate-spin" />
+                  <span className="text-[9px] font-black text-slate-400 uppercase">Synchronizing Gateway...</span>
                 </div>
               )}
             </CardContent>
@@ -477,10 +451,10 @@ export default function AttendancePage() {
               <Button 
                 size="sm" 
                 className={cn("h-8 gap-1 font-bold text-[10px] uppercase transition-all",
-                  isAccessAllowed ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                  !isLoading && isAccessAllowed ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
                 )} 
                 onClick={() => setActiveDialog("LEAVE")} 
-                disabled={!isAccessAllowed}
+                disabled={isLoading || !isAccessAllowed}
               >
                 <Plus className="w-3 h-3" /> Create Request
               </Button>
@@ -725,8 +699,8 @@ export default function AttendancePage() {
                   addRecord('leaveRequests', {
                     employeeId: effectiveEmployeeId,
                     employeeName: effectiveEmployeeName,
-                    department: registeredEmployee?.department || "N/A",
-                    designation: registeredEmployee?.designation || "N/A",
+                    department: verifiedUser?.department || "N/A",
+                    designation: verifiedUser?.designation || "N/A",
                     plantName: targetPlant?.name || "N/A",
                     fromDate: leaveFromDate,
                     toDate: leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate,

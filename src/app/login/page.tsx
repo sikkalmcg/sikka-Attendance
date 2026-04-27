@@ -162,6 +162,7 @@ export default function LoginPage() {
             id: registeredEmpDoc.id,
             username: cleanUsername,
             fullName: empData.name, 
+            employeeId: empData.employeeId,
             role: "EMPLOYEE",
             permissions: ["Attendance"],
             sessionId: newSessionId

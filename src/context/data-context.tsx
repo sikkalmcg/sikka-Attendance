@@ -137,11 +137,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const empMobile = e.mobile?.replace(/\s/g, '');
         return empAadhaar === loginIdent || empMobile === loginIdent;
       });
-      return dbEmp ? { ...currentUser, fullName: dbEmp.name, avatar: dbEmp.avatar } : currentUser;
+      // CRITICAL: Merge all employee fields (like official employeeId) into session
+      return dbEmp ? { ...currentUser, ...dbEmp, fullName: dbEmp.name, avatar: dbEmp.avatar } : currentUser;
     }
 
     if (currentUser.role !== 'SUPER_ADMIN') {
-      // FIX: Ensure all user record fields (plantIds, permissions) are merged for proper filtering
       const dbUser = (users || []).find(u => u.id === currentUser.id);
       return dbUser ? { ...currentUser, ...dbUser } : currentUser;
     }
