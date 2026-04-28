@@ -160,23 +160,27 @@ export default function AttendancePage() {
   }, [attendanceRecords, effectiveEmployeeId]);
 
   const { activeRecord, staleRecord } = useMemo(() => {
-    const rec = (employeeRecords || []).find(r => !r.outTime);
+    // FIX: An active record must have an inTime and no outTime.
+    // Absence records (status ABSENT) in the DB typically have no inTime/outTime.
+    const rec = (employeeRecords || []).find(r => r.inTime && !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
     
-    const inTimeStr = rec.inTime || "";
-    if (!inTimeStr || inTimeStr.trim() === "") return { activeRecord: rec, staleRecord: null };
-    
+    const inTimeStr = rec.inTime;
     const inDateTime = new Date(`${rec.inDate || rec.date}T${inTimeStr}`);
-    if (!isValid(inDateTime)) return { activeRecord: rec, staleRecord: null };
+    
+    if (!isValid(inDateTime)) return { activeRecord: null, staleRecord: null };
     
     const now = getISTTime();
     const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
+    // Auto-expiry rule: 16 hours
     if (diffHours >= 16) return { activeRecord: null, staleRecord: rec };
+    
     return { activeRecord: rec, staleRecord: null };
   }, [employeeRecords, currentTime]);
 
   const lockState = useMemo(() => {
+    // The lock state should look at the most recent record that was actually marked
     const latestRec = employeeRecords[0];
     if (!latestRec) return { isLocked: false, unlockTime: null };
     
@@ -184,19 +188,25 @@ export default function AttendancePage() {
     let effectiveOutTime = latestRec.outTime;
     
     if (!latestRec.outTime) {
+      // If the record has no IN time (e.g. an absence), it doesn't create a rest-period lock
       if (!latestRec.inTime || latestRec.inTime.trim() === "") return { isLocked: false, unlockTime: null };
+      
       const inDT = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
       if (!isValid(inDT)) return { isLocked: false, unlockTime: null };
       
       const nowTime = getISTTime();
       const diffHours = (nowTime.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+      
+      // If shift is currently active (less than 16h), we consider it "locked" from a new IN
       if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
       
+      // If it hit the 16h mark, calculate the lock from that point
       const autoOutDT = addHours(inDT, 16);
       effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
       effectiveOutTime = format(autoOutDT, "HH:mm");
     }
     
+    // Mandatory 8-hour rest period from last checkout
     const lastOutDateTime = new Date(`${effectiveOutDate}T${effectiveOutTime}`);
     if (!isValid(lastOutDateTime)) return { isLocked: false, unlockTime: null };
     
