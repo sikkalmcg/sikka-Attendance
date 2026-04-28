@@ -65,7 +65,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export default function DashboardHome() {
   const { employees, attendanceRecords, vouchers, holidays, leaveRequests } = useData();
   const [isMounted, setIsMounted] = useState(false);
-  const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh' | 'leave'>(null);
+  const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh' | 'leave' | 'employees'>(null);
   const [todayStr, setTodayStr] = useState("");
   
   // Leaderboard States
@@ -189,6 +189,49 @@ export default function DashboardHome() {
 
   if (!isMounted) return null;
 
+  if (viewMode === 'employees') {
+    const activeData = employees.filter(e => e.active);
+    return (
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
+          <div className="p-8 bg-slate-900 text-white shrink-0 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center"><Users className="w-7 h-7 text-primary" /></div>
+              <div><h2 className="text-2xl font-black uppercase">Active Staff Registry</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Total Registered Workforce</p></div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setViewMode(null)} className="text-white"><X className="w-6 h-6" /></Button>
+          </div>
+          <ScrollArea className="flex-1 bg-white">
+            <Table className="min-w-[1000px]">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="px-8 py-5 font-black uppercase text-[11px] tracking-widest text-slate-500">Employee Name</TableHead>
+                  <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Department</TableHead>
+                  <TableHead className="font-black uppercase text-[11px] tracking-widest text-slate-500">Designation</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activeData.map((emp, idx) => (
+                  <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
+                    <TableCell className="px-8 py-6">
+                      <div className="flex flex-col">
+                        <span className="font-black text-slate-900 uppercase text-sm">{emp.name}</span>
+                        <span className="text-[10px] font-mono text-primary font-black uppercase tracking-tight">{emp.employeeId}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs font-bold text-slate-700 uppercase tracking-tight">{emp.department}</TableCell>
+                    <TableCell className="text-xs font-bold text-slate-600 uppercase tracking-tight">{emp.designation}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </div>
+      </div>
+    );
+  }
+
   if (viewMode === 'absent') {
     const absentData = employees.filter(e => e.active && !attendanceRecords.some(r => r.employeeId === e.employeeId && r.date === todayStr)).map(e => ({ ...e, displayStatus: getPriorityStatus(todayStr, null) }));
     return (
@@ -294,7 +337,15 @@ export default function DashboardHome() {
     <div className="space-y-6 pb-12">
       {/* Primary Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="Total Employees" value={stats.totalEmployees} icon={Users} trend="+1" trendUp={true} description="Active manpower" />
+        <StatCard 
+          title="Total Employees" 
+          value={stats.totalEmployees} 
+          icon={Users} 
+          trend="+1" 
+          trendUp={true} 
+          description="Active manpower" 
+          onClick={() => setViewMode('employees')}
+        />
         <StatCard title="Present Today" value={stats.presentToday} icon={CalendarCheck} trend={`${stats.attendancePct}%`} trendUp={true} description="Across units" onClick={() => setViewMode('present')} />
         <StatCard title="Absent Today" value={stats.absentToday} icon={UserX} trend="0" trendUp={false} description="Missing logs" onClick={() => setViewMode('absent')} />
       </div>
