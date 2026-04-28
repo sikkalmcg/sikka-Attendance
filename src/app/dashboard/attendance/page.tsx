@@ -161,7 +161,6 @@ export default function AttendancePage() {
 
   const { activeRecord, staleRecord } = useMemo(() => {
     // FIX: An active record must have an inTime and no outTime.
-    // Absence records (status ABSENT) in the DB typically have no inTime/outTime.
     const rec = (employeeRecords || []).find(r => r.inTime && !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
     
@@ -180,7 +179,6 @@ export default function AttendancePage() {
   }, [employeeRecords, currentTime]);
 
   const lockState = useMemo(() => {
-    // The lock state should look at the most recent record that was actually marked
     const latestRec = employeeRecords[0];
     if (!latestRec) return { isLocked: false, unlockTime: null };
     
@@ -188,7 +186,6 @@ export default function AttendancePage() {
     let effectiveOutTime = latestRec.outTime;
     
     if (!latestRec.outTime) {
-      // If the record has no IN time (e.g. an absence), it doesn't create a rest-period lock
       if (!latestRec.inTime || latestRec.inTime.trim() === "") return { isLocked: false, unlockTime: null };
       
       const inDT = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
@@ -197,16 +194,13 @@ export default function AttendancePage() {
       const nowTime = getISTTime();
       const diffHours = (nowTime.getTime() - inDT.getTime()) / (1000 * 60 * 60);
       
-      // If shift is currently active (less than 16h), we consider it "locked" from a new IN
       if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
       
-      // If it hit the 16h mark, calculate the lock from that point
       const autoOutDT = addHours(inDT, 16);
       effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
       effectiveOutTime = format(autoOutDT, "HH:mm");
     }
     
-    // Mandatory 8-hour rest period from last checkout
     const lastOutDateTime = new Date(`${effectiveOutDate}T${effectiveOutTime}`);
     if (!isValid(lastOutDateTime)) return { isLocked: false, unlockTime: null };
     
@@ -340,7 +334,6 @@ export default function AttendancePage() {
       
       toast({ title: "Request Submitted", description: "Your leave request is under review." });
       setActiveDialog("NONE");
-      // Reset form
       setLeaveFromDate("");
       setLeaveToDate("");
       setLeavePurpose("");
