@@ -126,6 +126,7 @@ export default function AttendancePage() {
   const [leaveTypeReq, setLeaveTypeReq] = useState<'DAYS' | 'HALF_DAY'>('DAYS');
   const [leaveReachTime, setLeaveReachTime] = useState("");
   const [selectedLeavePlantId, setSelectedLeavePlantId] = useState("");
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
 
   const { toast } = useToast();
   const filterMonths = useMemo(() => generateFilterMonths(), []);
@@ -159,31 +160,31 @@ export default function AttendancePage() {
   }, [attendanceRecords, effectiveEmployeeId]);
 
   const { activeRecord, staleRecord } = useMemo(() => {
-    // Find the latest record that doesn't have an outTime
     const rec = (employeeRecords || []).find(r => !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
     
-    const inTimeStr = rec.inTime || "00:00";
+    const inTimeStr = rec.inTime || "";
+    if (!inTimeStr || inTimeStr.trim() === "") return { activeRecord: rec, staleRecord: null };
+    
     const inDateTime = new Date(`${rec.inDate || rec.date}T${inTimeStr}`);
     if (!isValid(inDateTime)) return { activeRecord: rec, staleRecord: null };
     
     const now = getISTTime();
     const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
-    // Shift Expiry (16-Hour Rule)
     if (diffHours >= 16) return { activeRecord: null, staleRecord: rec };
     return { activeRecord: rec, staleRecord: null };
   }, [employeeRecords, currentTime]);
 
   const lockState = useMemo(() => {
-    const latestRec = employeeRecords[0]; // Already sorted newest first
+    const latestRec = employeeRecords[0];
     if (!latestRec) return { isLocked: false, unlockTime: null };
     
     let effectiveOutDate = latestRec.outDate || latestRec.date;
     let effectiveOutTime = latestRec.outTime;
     
     if (!latestRec.outTime) {
-      if (!latestRec.inTime) return { isLocked: false, unlockTime: null };
+      if (!latestRec.inTime || latestRec.inTime.trim() === "") return { isLocked: false, unlockTime: null };
       const inDT = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
       if (!isValid(inDT)) return { isLocked: false, unlockTime: null };
       
@@ -191,7 +192,6 @@ export default function AttendancePage() {
       const diffHours = (nowTime.getTime() - inDT.getTime()) / (1000 * 60 * 60);
       if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
       
-      // Auto-calc rest period end based on virtual 16h logout
       const autoOutDT = addHours(inDT, 16);
       effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
       effectiveOutTime = format(autoOutDT, "HH:mm");
@@ -282,6 +282,65 @@ export default function AttendancePage() {
     });
     setActiveDialog("NONE");
     toast({ title: "Check-Out Success" });
+  };
+
+  const handleLeaveSubmit = async () => {
+    if (!selectedLeavePlantId || !leaveFromDate || (leaveTypeReq === 'DAYS' && !leaveToDate) || isSubmittingLeave) {
+      return;
+    }
+
+    setIsSubmittingLeave(true);
+    try {
+      const start = startOfDay(parseISO(leaveFromDate));
+      const end = startOfDay(parseISO(leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate));
+      
+      if (!isValid(start) || !isValid(end)) {
+        throw new Error("Invalid dates selected.");
+      }
+
+      const diff = differenceInDays(end, start);
+      const daysCount = leaveTypeReq === 'HALF_DAY' ? 0.5 : (isNaN(diff) ? 1 : diff + 1);
+      
+      if (leaveTypeReq === 'DAYS' && daysCount <= 0) {
+        throw new Error("End date must be after or same as start date.");
+      }
+
+      const targetPlant = plants.find(p => p.id === selectedLeavePlantId);
+      
+      const leaveData: any = {
+        employeeId: effectiveEmployeeId,
+        employeeName: effectiveEmployeeName,
+        department: verifiedUser?.department || "N/A",
+        designation: verifiedUser?.designation || "N/A",
+        plantName: targetPlant?.name || "N/A",
+        fromDate: leaveFromDate,
+        toDate: leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate,
+        days: daysCount,
+        purpose: leavePurpose || "Personal Leave",
+        status: 'UNDER_PROCESS',
+        leaveType: leaveTypeReq,
+        createdAt: new Date().toISOString()
+      };
+
+      if (leaveTypeReq === 'HALF_DAY' && leaveReachTime) {
+        leaveData.reachTime = leaveReachTime;
+      }
+
+      await addRecord('leaveRequests', leaveData);
+      
+      toast({ title: "Request Submitted", description: "Your leave request is under review." });
+      setActiveDialog("NONE");
+      // Reset form
+      setLeaveFromDate("");
+      setLeaveToDate("");
+      setLeavePurpose("");
+      setSelectedLeavePlantId("");
+      setLeaveReachTime("");
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Submission Error", description: err.message || "Could not save your request." });
+    } finally {
+      setIsSubmittingLeave(false);
+    }
   };
 
   const history = useMemo(() => {
@@ -687,35 +746,17 @@ export default function AttendancePage() {
               </div>
             </div>
             <DialogFooter className="p-6 bg-slate-50 border-t">
-              <Button variant="ghost" onClick={() => setActiveDialog("NONE")} className="font-bold">Cancel</Button>
+              <Button variant="ghost" onClick={() => setActiveDialog("NONE")} className="font-bold" disabled={isSubmittingLeave}>Cancel</Button>
               <Button 
-                className="h-12 px-10 rounded-xl font-black bg-primary" 
-                disabled={!selectedLeavePlantId || !leaveFromDate || (leaveTypeReq === 'DAYS' && !leaveToDate)}
-                onClick={() => {
-                  const start = parseISO(leaveFromDate);
-                  const end = parseISO(leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate);
-                  const days = leaveTypeReq === 'HALF_DAY' ? 0.5 : differenceInDays(end, start) + 1;
-                  const targetPlant = plants.find(p => p.id === selectedLeavePlantId);
-                  addRecord('leaveRequests', {
-                    employeeId: effectiveEmployeeId,
-                    employeeName: effectiveEmployeeName,
-                    department: verifiedUser?.department || "N/A",
-                    designation: verifiedUser?.designation || "N/A",
-                    plantName: targetPlant?.name || "N/A",
-                    fromDate: leaveFromDate,
-                    toDate: leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate,
-                    days,
-                    purpose: leavePurpose,
-                    status: 'UNDER_PROCESS',
-                    createdAt: new Date().toISOString(),
-                    leaveType: leaveTypeReq,
-                    reachTime: leaveTypeReq === 'HALF_DAY' ? leaveReachTime : undefined
-                  });
-                  setActiveDialog("NONE");
-                  toast({ title: "Request Submitted" });
-                }}
+                className="h-12 px-10 rounded-xl font-black bg-primary gap-2" 
+                disabled={!selectedLeavePlantId || !leaveFromDate || (leaveTypeReq === 'DAYS' && !leaveToDate) || isSubmittingLeave}
+                onClick={handleLeaveSubmit}
               >
-                Submit Request
+                {isSubmittingLeave ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+                ) : (
+                  "Submit Request"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
