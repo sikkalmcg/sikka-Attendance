@@ -182,7 +182,6 @@ export default function ApprovalsPage() {
     const yesterday = subDays(now, 1);
     const startDate = parseISO(PROJECT_START_DATE_STR);
     
-    // Performance Optimization: Use a Set for record lookups
     const existingRecordsKeySet = new Set(attendanceRecords.map(r => `${r.employeeId}:${r.date}`));
 
     if (isBefore(startDate, now)) {
@@ -225,6 +224,7 @@ export default function ApprovalsPage() {
 
     let filtered = [...actual, ...missing].filter(rec => rec.date >= PROJECT_START_DATE_STR);
 
+    // SECURITY: Filter by assigned plants
     if (userAssignedPlantIds) {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return authorizedPlantNames.has(rec.inPlant);
@@ -277,7 +277,6 @@ export default function ApprovalsPage() {
   }, [viewMode, pendingAttendanceList, historyAttendanceList, pendingPage, historyPage]);
 
   const handleApproveAttendance = (rec: any) => {
-    // Optimization: One-click responsiveness by making it immediate
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
     
     if (rec.isVirtual) {

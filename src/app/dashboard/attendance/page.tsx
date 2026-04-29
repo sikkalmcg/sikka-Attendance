@@ -76,7 +76,6 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 
 const GOOGLE_API_KEY = "AIzaSyC_G7Iog7OdQvs2owQ8IBDSIZwF2l8Mnjk";
@@ -149,6 +148,11 @@ export default function AttendancePage() {
   const isAdminRole = useMemo(() => verifiedUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(verifiedUser.role), [verifiedUser]);
   const isAccessAllowed = useMemo(() => isMounted && verifiedUser?.role === 'EMPLOYEE', [verifiedUser, isMounted]);
 
+  const userAssignedPlantIds = useMemo(() => {
+    if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
+    return verifiedUser.plantIds || [];
+  }, [verifiedUser]);
+
   const effectiveEmployeeId = useMemo(() => verifiedUser?.employeeId || verifiedUser?.username || "N/A", [verifiedUser]);
   const effectiveEmployeeName = useMemo(() => verifiedUser?.fullName || "N/A", [verifiedUser]);
 
@@ -171,7 +175,6 @@ export default function AttendancePage() {
     const now = getISTTime();
     const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
     
-    // Auto-expiry rule: 16 hours
     if (diffHours >= 16) return { activeRecord: null, staleRecord: rec };
     
     return { activeRecord: rec, staleRecord: null };
@@ -278,7 +281,7 @@ export default function AttendancePage() {
       outDate: todayStrLocal,
       hours: finalHours,
       status: finalHours >= 2.0 ? 'PRESENT' : 'ABSENT',
-      latOut: currentGPS.lat,
+      latOut: currentGPS.lat, 
       lngOut: currentGPS.lng,
       addressOut: detectedAddress,
       outPlant: detectedPlant?.name || "Remote"
@@ -297,16 +300,12 @@ export default function AttendancePage() {
       const start = startOfDay(parseISO(leaveFromDate));
       const end = startOfDay(parseISO(leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate));
       
-      if (!isValid(start) || !isValid(end)) {
-        throw new Error("Invalid dates selected.");
-      }
+      if (!isValid(start) || !isValid(end)) throw new Error("Invalid dates selected.");
 
       const diff = differenceInDays(end, start);
       const daysCount = leaveTypeReq === 'HALF_DAY' ? 0.5 : (isNaN(diff) ? 1 : diff + 1);
       
-      if (leaveTypeReq === 'DAYS' && daysCount <= 0) {
-        throw new Error("End date must be after or same as start date.");
-      }
+      if (leaveTypeReq === 'DAYS' && daysCount <= 0) throw new Error("End date must be after or same as start date.");
 
       const targetPlant = plants.find(p => p.id === selectedLeavePlantId);
       
@@ -319,27 +318,15 @@ export default function AttendancePage() {
         fromDate: leaveFromDate,
         toDate: leaveTypeReq === 'HALF_DAY' ? leaveFromDate : leaveToDate,
         days: daysCount,
-        purpose: leavePurpose || "Personal Leave",
         status: 'UNDER_PROCESS',
         leaveType: leaveTypeReq,
+        purpose: leavePurpose || "Personal Leave",
         createdAt: new Date().toISOString()
       };
 
-      if (leaveTypeReq === 'HALF_DAY' && leaveReachTime) {
-        leaveData.reachTime = leaveReachTime;
-      }
-
       await addRecord('leaveRequests', leaveData);
-      
-      toast({ title: "Request Submitted", description: "Your leave request is under review." });
+      toast({ title: "Request Submitted" });
       setActiveDialog("NONE");
-      setLeaveFromDate("");
-      setLeaveToDate("");
-      setLeavePurpose("");
-      setSelectedLeavePlantId("");
-      setLeaveReachTime("");
-    } catch (err: any) {
-      toast({ variant: "destructive", title: "Submission Error", description: err.message || "Could not save your request." });
     } finally {
       setIsSubmittingLeave(false);
     }
@@ -354,94 +341,56 @@ export default function AttendancePage() {
     const getPriorityStatus = (dateStr: string, record: any) => {
       const isSun = isSunday(parseISO(dateStr));
       const holiday = holidaySet.has(dateStr);
-      if (record) {
-        if (holiday) return "Present on Holiday";
-        if (isSun) return "Present on Weekly Off";
-        return record.status;
-      } else {
-        if (holiday) {
-          const h = (holidays || []).find(x => x.date === dateStr);
-          return `Holiday (${h?.name || 'Festival'})`;
-        }
-        if (isSun) return "Weekly Off";
-        return "Absent";
-      }
+      if (record) return holiday ? "Present on Holiday" : isSun ? "Present on Weekly Off" : record.status;
+      return holiday ? "Holiday" : isSun ? "Weekly Off" : "Absent";
     };
 
     let baseList = [];
     if (isAdminRole) {
-      const rawRecords = (attendanceRecords || []).filter(r => r.date >= PROJECT_START_DATE_STR);
-      baseList = rawRecords.filter(r => {
-        if (!oversightMonth || oversightMonth === 'all') return true;
-        const d = parseISO(r.date);
-        const mmm = d.toLocaleString('en-US', { month: 'short' });
-        const yy = d.getFullYear().toString().slice(-2);
-        return `${mmm}-${yy}` === oversightMonth;
+      baseList = (attendanceRecords || []).filter(r => {
+        if (r.date < PROJECT_START_DATE_STR) return false;
+        
+        // SECURITY: Filter history by plant access for managers
+        if (userAssignedPlantIds) {
+          const emp = employees.find(e => e.employeeId === r.employeeId);
+          const hasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(r.inPlantId);
+          if (!hasAccess) return false;
+        }
+
+        if (oversightMonth && oversightMonth !== 'all') {
+          const d = parseISO(r.date);
+          const mmm = d.toLocaleString('en-US', { month: 'short' });
+          const yy = d.getFullYear().toString().slice(-2);
+          if (`${mmm}-${yy}` !== oversightMonth) return false;
+        }
+
+        if (oversightSearch) {
+          const s = oversightSearch.toLowerCase();
+          return r.employeeName.toLowerCase().includes(s) || r.employeeId.toLowerCase().includes(s);
+        }
+
+        return true;
       });
 
-      if (oversightSearch) {
-        const s = oversightSearch.toLowerCase();
-        baseList = baseList.filter(r => 
-          r.employeeName.toLowerCase().includes(s) || 
-          r.employeeId.toLowerCase().includes(s) || 
-          (r.inPlant || "").toLowerCase().includes(s)
-        );
-      }
-
-      baseList = baseList.map(r => {
-        const displayStatus = getPriorityStatus(r.date, r);
-        let finalRec = { ...r, displayStatus };
-        if (!r.outTime && r.inTime && r.inTime.trim() !== "") {
-          const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
-          if (isValid(inDT)) {
-            const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-            if (diff >= 16) {
-              const autoOutDT = addHours(inDT, 16);
-              finalRec = { ...finalRec, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
-            }
-          }
-        }
-        return finalRec;
-      }).sort((a, b) => b.date.localeCompare(a.date));
+      baseList = baseList.map(r => ({ ...r, displayStatus: getPriorityStatus(r.date, r) }));
     } else {
-      // For Employee: Pre-cache existing records for fast O(1) access
       const empRecordMap = new Map();
       employeeRecords.forEach(r => empRecordMap.set(r.date, r));
-
       const dateRange = eachDayOfInterval({ start: parseISO(PROJECT_START_DATE_STR), end: startOfDay(new Date()) });
       baseList = dateRange.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const existing = empRecordMap.get(dateStr);
-        
-        if (existing) {
-          const displayStatus = getPriorityStatus(dateStr, existing);
-          let finalRec = { ...existing, displayStatus };
-          if (!existing.outTime && existing.inTime && existing.inTime.trim() !== "") {
-            const inDT = new Date(`${existing.inDate || existing.date}T${existing.inTime}`);
-            if (isValid(inDT)) {
-              const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-              if (diff >= 16) {
-                const autoOutDT = addHours(inDT, 16);
-                finalRec = { ...finalRec, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
-              }
-            }
-          }
-          return [finalRec];
-        }
-
+        if (existing) return { ...existing, displayStatus: getPriorityStatus(dateStr, existing) };
         if (isSameDay(date, now)) return null;
-        const displayStatus = getPriorityStatus(dateStr, null);
-        return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', displayStatus, approved: true, hours: 0, isVirtual: true, inTime: null, outTime: null }];
-      }).filter(Boolean).flat().reverse();
+        return { id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', displayStatus: getPriorityStatus(dateStr, null), approved: true, hours: 0, isVirtual: true };
+      }).filter(Boolean).reverse();
     }
     return baseList;
-  }, [verifiedUser, attendanceRecords, holidays, holidaySet, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth]);
+  }, [verifiedUser, attendanceRecords, holidays, holidaySet, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth, userAssignedPlantIds, employees]);
 
   const filteredEmployeeLeaves = useMemo(() => {
     if (!isMounted || !todayStr) return [];
-    return leaveRequests
-      .filter(l => l.employeeId === effectiveEmployeeId)
-      .filter(l => l.toDate >= todayStr); 
+    return leaveRequests.filter(l => l.employeeId === effectiveEmployeeId && l.toDate >= todayStr); 
   }, [leaveRequests, effectiveEmployeeId, isMounted, todayStr]);
 
   const totalPages = Math.ceil(history.length / ROWS_PER_PAGE);
@@ -474,9 +423,7 @@ export default function AttendancePage() {
               <div className="flex gap-4">
                 <Button 
                   className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg transition-all", 
-                    !isLoading && isAccessAllowed && !lockState.isLocked && !activeRecord 
-                      ? "bg-primary hover:bg-primary/90 text-white" 
-                      : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                    !isLoading && isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary text-white" : "bg-slate-100 text-slate-400 cursor-not-allowed"
                   )} 
                   disabled={isLoading || !isAccessAllowed || isLoadingLocation || !!activeRecord || (lockState.isLocked && lockState.unlockTime !== 'Shift Active')} 
                   onClick={() => requestLocation("IN")}
@@ -485,9 +432,7 @@ export default function AttendancePage() {
                 </Button>
                 <Button 
                   className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg transition-all", 
-                    !isLoading && isAccessAllowed && activeRecord 
-                      ? "bg-rose-500 hover:bg-rose-600 text-white" 
-                      : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                    !isLoading && isAccessAllowed && activeRecord ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-400 cursor-not-allowed"
                   )} 
                   disabled={isLoading || !isAccessAllowed || isLoadingLocation || !activeRecord} 
                   onClick={() => requestLocation("OUT")}
@@ -495,62 +440,27 @@ export default function AttendancePage() {
                   Mark OUT
                 </Button>
               </div>
-              {lockState.isLocked && lockState.unlockTime !== 'Shift Active' && isAccessAllowed && (
-                <p className="text-[10px] font-black text-rose-500 text-center uppercase tracking-widest bg-rose-50 py-2 rounded-lg border border-rose-100 animate-pulse">
-                   Mandatory 8h Rest Period. Next IN Allowed at {lockState.unlockTime}
-                </p>
-              )}
-              {!isAccessAllowed && !isLoading && (
-                <div className="flex items-center gap-2 justify-center py-2 px-4 bg-amber-50 rounded-xl border border-amber-100">
-                  <Lock className="w-3.5 h-3.5 text-amber-600" />
-                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Employee Login Required</p>
-                </div>
-              )}
-              {isLoading && (
-                <div className="flex items-center gap-2 justify-center py-2">
-                  <Loader2 className="w-3 h-3 text-primary animate-spin" />
-                  <span className="text-[9px] font-black text-slate-400 uppercase">Synchronizing Gateway...</span>
-                </div>
-              )}
             </CardContent>
           </Card>
           
           <Card className="shadow-xl border-none overflow-hidden bg-white h-full">
             <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between py-4">
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary" /> Leave Requests
-              </CardTitle>
-              <Button 
-                size="sm" 
-                className={cn("h-8 gap-1 font-bold text-[10px] uppercase transition-all",
-                  !isLoading && isAccessAllowed ? "bg-primary text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                )} 
-                onClick={() => setActiveDialog("LEAVE")} 
-                disabled={isLoading || !isAccessAllowed}
-              >
-                <Plus className="w-3.5 h-3.5" /> Create Request
-              </Button>
+              <CardTitle className="text-sm font-bold">Leave Requests</CardTitle>
+              <Button size="sm" onClick={() => setActiveDialog("LEAVE")} disabled={!isAccessAllowed}>Create Request</Button>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="h-[240px]">
                 {filteredEmployeeLeaves.length === 0 ? (
-                  <div className="p-10 text-center text-xs text-muted-foreground font-bold">No current or upcoming records.</div>
+                  <div className="p-10 text-center text-xs font-bold text-slate-400">No active records.</div>
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {filteredEmployeeLeaves.map((l) => (
-                      <div key={l.id} className="p-4 flex justify-between items-start hover:bg-slate-50 transition-colors">
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-bold text-slate-700">{format(parseISO(l.fromDate), 'dd MMM')} - {format(parseISO(l.toDate), 'dd MMM')}</p>
-                          <p className="text-[10px] text-muted-foreground font-medium uppercase">{l.days} Day(s) • {l.purpose}</p>
-                          <p className="text-[9px] font-black text-primary uppercase">{l.plantName}</p>
+                      <div key={l.id} className="p-4 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold">{formatDate(l.fromDate)} - {formatDate(l.toDate)}</p>
+                          <p className="text-[10px] uppercase text-muted-foreground">{l.days} Day(s) • {l.plantName}</p>
                         </div>
-                        <Badge className={cn("text-[9px] font-black uppercase rounded-full shadow-none", 
-                          l.status === 'APPROVED' ? "bg-emerald-100 text-emerald-600" : 
-                          l.status === 'REJECTED' ? "bg-rose-100 text-rose-600" : 
-                          "bg-blue-100 text-blue-600"
-                        )}>
-                          {l.status}
-                        </Badge>
+                        <Badge className="text-[9px] uppercase">{l.status}</Badge>
                       </div>
                     ))}
                   </div>
@@ -561,35 +471,24 @@ export default function AttendancePage() {
         </div>
 
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
              <h3 className="font-black text-xl flex items-center gap-2 text-slate-700">
-               <History className="w-6 h-6 text-primary" /> 
-               {isAdminRole ? 'Staff Attendance Oversight' : 'My Attendance History'}
+               <History className="w-6 h-6 text-primary" /> {isAdminRole ? 'Staff Attendance Oversight' : 'Attendance History'}
              </h3>
              {isAdminRole && (
-               <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border shadow-sm border-slate-200">
+               <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border shadow-sm">
                   <div className="relative w-64">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="Search name, ID or plant..." 
-                      className="pl-10 h-10 border-none bg-slate-50 font-medium text-xs focus-visible:ring-0"
-                      value={oversightSearch}
-                      onChange={(e) => { setOversightSearch(e.target.value); setOversightPage(1); }}
-                    />
+                    <Input placeholder="Search staff..." className="pl-10 h-10 border-none bg-slate-50 text-xs" value={oversightSearch} onChange={(e) => setOversightSearch(e.target.value)} />
                   </div>
                   <Separator orientation="vertical" className="h-6" />
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-3.5 h-3.5 text-slate-400" />
-                    <Select value={oversightMonth} onValueChange={(v) => { setOversightMonth(v); setOversightPage(1); }}>
-                       <SelectTrigger className="h-9 w-[130px] border-none font-black text-xs uppercase focus:ring-0">
-                          <SelectValue placeholder="All Time" />
-                       </SelectTrigger>
-                       <SelectContent>
-                          <SelectItem value="all" className="font-bold text-xs uppercase">All Time</SelectItem>
-                          {filterMonths.map(m => <SelectItem key={m} value={m} className="font-bold text-xs uppercase">{m}</SelectItem>)}
-                       </SelectContent>
-                    </Select>
-                  </div>
+                  <Select value={oversightMonth} onValueChange={setOversightMonth}>
+                     <SelectTrigger className="h-9 w-[130px] border-none font-black text-xs uppercase"><SelectValue placeholder="All Time" /></SelectTrigger>
+                     <SelectContent>
+                        <SelectItem value="all">All Time</SelectItem>
+                        {filterMonths.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                     </SelectContent>
+                  </Select>
                </div>
              )}
           </div>
@@ -599,179 +498,86 @@ export default function AttendancePage() {
               <Table className="min-w-[1200px]">
                 <TableHeader className="bg-slate-50">
                   <TableRow>
-                    <TableHead className="font-bold">Employee Name</TableHead>
-                    <TableHead className="font-bold">In Plant</TableHead>
-                    <TableHead className="font-bold">In Date & Time</TableHead>
-                    <TableHead className="font-bold">Out Date & Time</TableHead>
+                    <TableHead className="font-bold">Employee</TableHead>
+                    <TableHead className="font-bold">Plant</TableHead>
+                    <TableHead className="font-bold">In Time</TableHead>
+                    <TableHead className="font-bold">Out Time</TableHead>
                     <TableHead className="font-bold text-center">Status</TableHead>
-                    <TableHead className="font-bold text-center">Out Hour</TableHead>
-                    <TableHead className="font-bold text-center">Working Hour</TableHead>
+                    <TableHead className="font-bold text-center">Work Hour</TableHead>
                     <TableHead className="font-bold">Approval</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedHistory.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground font-bold italic">No attendance records found.</TableCell></TableRow>
-                  ) : (
-                    paginatedHistory.map((h: any) => (
-                      <TableRow key={h.id} className={cn("hover:bg-slate-50/50", h.isVirtual && "bg-rose-50/20")}>
-                        <TableCell className="text-sm font-bold uppercase">
-                          <div className="flex flex-col">
-                            <span>{h.employeeName}</span>
-                            <span className="text-[9px] font-mono text-primary font-black uppercase tracking-tighter">{h.employeeId}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm font-bold text-slate-700">{h.inPlant || "--"}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.inDate || h.date)}</span>
-                            <span>{h.inTime || "--:--"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{formatDate(h.outDate || h.date)}</span>
-                            <span className={cn(h.autoCheckout && "text-rose-600 font-bold")}>{h.outTime || (h.isVirtual ? "--:--" : "Shift In-Progress")}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={cn(
-                            "text-[9px] font-black uppercase tracking-widest", 
-                            h.displayStatus?.includes("Present") ? "bg-emerald-50 text-emerald-700" : h.displayStatus === 'Absent' ? "bg-rose-50 text-rose-700" : "bg-slate-50 text-slate-700"
-                          )}>
-                            {h.displayStatus}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center"><span className="text-xs font-mono font-bold text-rose-600">{formatMinutesToHHMM(h.unapprovedOutDuration || 0)}</span></TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className={cn("font-black text-xs px-2.5 py-0.5", getWorkingHoursColor(h.hours || 0))}>
-                            {formatHoursToHHMM(h.hours || 0)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px] rounded-full">Approved</Badge> : <Badge variant="secondary" className="bg-amber-50 text-amber-600 uppercase text-[9px] rounded-full">Pending</Badge>}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                  {paginatedHistory.map((h: any) => (
+                    <TableRow key={h.id} className="hover:bg-slate-50/50">
+                      <TableCell className="text-sm font-bold uppercase">
+                        <div className="flex flex-col">
+                          <span>{h.employeeName}</span>
+                          <span className="text-[9px] font-mono text-primary">{h.employeeId}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs font-bold">{h.inPlant || "--"}</TableCell>
+                      <TableCell className="font-mono text-xs">{formatDate(h.inDate || h.date)} {h.inTime || "--:--"}</TableCell>
+                      <TableCell className="font-mono text-xs">{formatDate(h.outDate || h.date)} {h.outTime || "--:--"}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge className="text-[9px] font-black uppercase">{h.displayStatus}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className={cn("font-black text-xs", getWorkingHoursColor(h.hours || 0))}>
+                          {formatHoursToHHMM(h.hours || 0)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{h.approved ? <Badge className="bg-emerald-600 uppercase text-[9px]">Approved</Badge> : <Badge className="bg-amber-400 uppercase text-[9px]">Pending</Badge>}</TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </ScrollArea>
-            {totalPages > 1 && (
-              <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={oversightPage === 1} onClick={() => setOversightPage(p => p - 1)} className="font-bold h-9">
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Previous
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={oversightPage === totalPages} onClick={() => setOversightPage(p => p + 1)} className="font-bold h-9">
-                    Next <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                    Page {oversightPage} of {totalPages}
-                  </span>
-                  <div className="flex items-center gap-2 border-l pl-4 border-slate-200">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Jump To</Label>
-                    <div className="flex gap-1">
-                      <Input 
-                        type="number" 
-                        className="w-14 h-9 text-center font-bold" 
-                        value={oversightPage} 
-                        onChange={(e) => {
-                          const p = parseInt(e.target.value);
-                          if (p >= 1 && p <= totalPages) setOversightPage(p);
-                        }} 
-                      />
-                      <div className="w-9 h-9 bg-slate-900 rounded-lg flex items-center justify-center text-white">
-                        <ArrowRightCircle className="w-4 h-4" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardFooter>
-            )}
           </Card>
         </div>
 
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
-            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0"><DialogTitle className="flex items-center gap-2 font-black text-xl"><Navigation className="w-5 h-5 text-primary" /> Confirm Attendance</DialogTitle><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">{detectedAddress || "Locating..."}</p></DialogHeader>
-            <div className="p-8 space-y-8">{detectedPlant ? (<div className="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-3xl flex items-center gap-4 shadow-sm"><div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-emerald-200"><Factory className="w-6 h-6 text-white" /></div><div><p className="text-[10px] font-black uppercase text-emerald-600 tracking-[0.2em] mb-1">Plant Detected</p><p className="text-lg font-black text-emerald-900">{detectedPlant.name}</p></div></div>) : (<RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4"><div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('FIELD')}><RadioGroupItem value="FIELD" id="field" className="absolute right-3 top-3" /><Briefcase className={cn("w-6 h-6 mb-2", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} /><Label htmlFor="field" className="font-black text-sm block cursor-pointer">FIELD WORK</Label></div><div className={cn("relative rounded-2xl border-2 transition-all p-4 cursor-pointer", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setSelectedType('WFH')}><RadioGroupItem value="WFH" id="wfh" className="absolute right-3 top-3" /><Home className={cn("w-6 h-6 mb-2", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} /><Label htmlFor="wfh" className="font-black text-sm block cursor-pointer">W.F.H</Label></div></RadioGroup>)}</div>
-            <DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-primary" onClick={handleConfirmCheckIn}>Confirm Mark IN</Button></DialogFooter>
+          <DialogContent className="sm:max-w-md rounded-2xl overflow-hidden p-0">
+            <DialogHeader className="p-6 bg-slate-900 text-white"><DialogTitle>Confirm Attendance</DialogTitle><p className="text-xs font-bold text-slate-400 mt-2">{detectedAddress}</p></DialogHeader>
+            <div className="p-8 space-y-6">
+              {detectedPlant ? (
+                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-4">
+                  <Factory className="w-6 h-6 text-emerald-600" />
+                  <div><p className="text-[10px] font-black uppercase text-emerald-600">Plant Detected</p><p className="font-black">{detectedPlant.name}</p></div>
+                </div>
+              ) : (
+                <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
+                  <div className={cn("p-4 border-2 rounded-xl cursor-pointer", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100")} onClick={() => setSelectedType('FIELD')}>
+                    <Briefcase className="w-5 h-5 mb-2" /><Label className="font-bold">FIELD</Label>
+                  </div>
+                  <div className={cn("p-4 border-2 rounded-xl cursor-pointer", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100")} onClick={() => setSelectedType('WFH')}>
+                    <Home className="w-5 h-5 mb-2" /><Label className="font-bold">W.F.H</Label>
+                  </div>
+                </RadioGroup>
+              )}
+            </div>
+            <DialogFooter className="p-6 bg-slate-50"><Button className="w-full h-12 font-black bg-primary" onClick={handleConfirmCheckIn}>Confirm Check-In</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden"><DialogHeader className="p-6 bg-rose-600 text-white shrink-0"><DialogTitle className="flex items-center gap-2 font-black text-xl">Confirm Check-Out</DialogTitle></DialogHeader><div className="p-8 space-y-6 text-center"><p className="text-sm font-black text-slate-700">{detectedPlant ? `Marking OUT from ${detectedPlant.name}` : "Marking OUT from Remote Site"}</p></div><DialogFooter className="p-6 bg-slate-50 border-t"><Button className="w-full h-14 rounded-2xl font-black text-lg bg-rose-500 hover:bg-rose-600" onClick={handleConfirmCheckOut}>Confirm Mark OUT</Button></DialogFooter></DialogContent>
-        </Dialog>
-
         <Dialog open={activeDialog === "LEAVE"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-lg rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
-            <DialogHeader className="p-6 bg-primary text-white shrink-0">
-              <DialogTitle className="flex items-center gap-2 font-black text-xl"><CalendarDays className="w-5 h-5 text-white" /> Create Leave Request</DialogTitle>
-            </DialogHeader>
-            <div className="p-8 space-y-6">
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader><DialogTitle>Create Leave Request</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Target Plant *</Label>
+                <Label className="text-[10px] font-black uppercase">Facility *</Label>
                 <Select value={selectedLeavePlantId} onValueChange={setSelectedLeavePlantId}>
-                  <SelectTrigger className="h-12 bg-slate-50 font-bold border-slate-200">
-                    <SelectValue placeholder="Choose Facility for Leave" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {plants.map(p => (
-                      <SelectItem key={p.id} value={p.id} className="font-bold">{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectTrigger><SelectValue placeholder="Choose Facility" /></SelectTrigger>
+                  <SelectContent>{plants.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-4">
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Select Leave Type</Label>
-                <RadioGroup value={leaveTypeReq} onValueChange={(v: any) => setLeaveTypeReq(v)} className="grid grid-cols-2 gap-4">
-                  <div className={cn("relative rounded-xl border-2 transition-all p-3 cursor-pointer", leaveTypeReq === 'DAYS' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setLeaveTypeReq('DAYS')}>
-                    <RadioGroupItem value="DAYS" id="l-days" className="absolute right-2 top-2" />
-                    <Label htmlFor="l-days" className="font-bold text-sm block cursor-pointer">Full Day(s)</Label>
-                  </div>
-                  <div className={cn("relative rounded-xl border-2 transition-all p-3 cursor-pointer", leaveTypeReq === 'HALF_DAY' ? "border-primary bg-primary/5" : "border-slate-100 bg-slate-50")} onClick={() => setLeaveTypeReq('HALF_DAY')}>
-                    <RadioGroupItem value="HALF_DAY" id="l-half" className="absolute right-2 top-2" />
-                    <Label htmlFor="l-half" className="font-bold text-sm block cursor-pointer">Half Day</Label>
-                  </div>
-                </RadioGroup>
-              </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">From Date</Label>
-                  <Input type="date" min={PROJECT_START_DATE_STR} value={leaveFromDate} onChange={(e) => setLeaveFromDate(e.target.value)} className="h-12 font-bold" />
-                </div>
-                {leaveTypeReq === 'DAYS' ? (
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">To Date</Label>
-                    <Input type="date" min={leaveFromDate || PROJECT_START_DATE_STR} value={leaveToDate} onChange={(e) => setLeaveToDate(e.target.value)} className="h-12 font-bold" />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Reporting Time</Label>
-                    <Input type="time" value={leaveReachTime} onChange={(e) => setLeaveReachTime(e.target.value)} className="h-12 font-bold" />
-                  </div>
-                )}
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">From</Label><Input type="date" value={leaveFromDate} onChange={(e) => setLeaveFromDate(e.target.value)} /></div>
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">To</Label><Input type="date" value={leaveToDate} onChange={(e) => setLeaveToDate(e.target.value)} /></div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Purpose / Reason</Label>
-                <Textarea placeholder="Reason for leave request..." value={leavePurpose} onChange={(e) => setLeavePurpose(e.target.value)} className="min-h-[100px] bg-slate-50" />
-              </div>
+              <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Purpose</Label><Textarea value={leavePurpose} onChange={(e) => setLeavePurpose(e.target.value)} placeholder="Reason for leave..." /></div>
             </div>
-            <DialogFooter className="p-6 bg-slate-50 border-t">
-              <Button variant="ghost" onClick={() => setActiveDialog("NONE")} className="font-bold" disabled={isSubmittingLeave}>Cancel</Button>
-              <Button 
-                className="h-12 px-10 rounded-xl font-black bg-primary gap-2" 
-                disabled={!selectedLeavePlantId || !leaveFromDate || (leaveTypeReq === 'DAYS' && !leaveToDate) || isSubmittingLeave}
-                onClick={handleLeaveSubmit}
-              >
-                {isSubmittingLeave ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
-                ) : (
-                  "Submit Request"
-                )}
-              </Button>
-            </DialogFooter>
+            <DialogFooter><Button className="w-full h-12 font-black" disabled={isSubmittingLeave} onClick={handleLeaveSubmit}>Submit Request</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
