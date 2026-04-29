@@ -106,7 +106,7 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 };
 
 export default function EmployeesPage() {
-  const { employees, firms, addRecord, updateRecord, currentUser } = useData();
+  const { employees, firms, plants, addRecord, updateRecord, currentUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -197,6 +197,7 @@ export default function EmployeesPage() {
       "Join Date",
       "Address",
       "Employer Firm",
+      "Primary Plant",
       "Department",
       "Designation",
       "Bank Name",
@@ -223,6 +224,7 @@ export default function EmployeesPage() {
       headers.join(","),
       ...filtered.map(emp => {
         const firmName = firms.find(f => f.id === emp.firmId)?.name || "N/A";
+        const plantName = plants.find(p => p.id === (emp.unitIds?.[0] || emp.unitId))?.name || "N/A";
         return [
           `"${emp.employeeId}"`,
           `"${emp.firstName}"`,
@@ -234,6 +236,7 @@ export default function EmployeesPage() {
           `"${emp.joinDate || ''}"`,
           `"${emp.address || ''}"`,
           `"${firmName}"`,
+          `"${plantName}"`,
           `"${emp.department}"`,
           `"${emp.designation}"`,
           `"${emp.bankName || ''}"`,
@@ -303,10 +306,10 @@ export default function EmployeesPage() {
   };
 
   const validate = () => {
-    const { firstName, employeeId, aadhaar, department, salary, accountNo, ifscCode, pan } = formData;
+    const { firstName, employeeId, aadhaar, department, salary, accountNo, ifscCode, pan, unitIds } = formData;
     
-    if (!employeeId || !firstName || !aadhaar || !department || !salary?.basic) {
-      toast({ variant: "destructive", title: "Missing Mandatory Fields", description: "Emp ID, First Name, Aadhaar, Dept, and Basic Salary are required." });
+    if (!employeeId || !firstName || !aadhaar || !department || !salary?.basic || !unitIds || unitIds.length === 0) {
+      toast({ variant: "destructive", title: "Missing Mandatory Fields", description: "Emp ID, First Name, Aadhaar, Dept, Plant, and Basic Salary are required." });
       return false;
     }
 
@@ -467,9 +470,26 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">Employer Firm *</Label>
-                    <Select value={formData.firmId} onValueChange={(v) => setFormData(p => ({...p, firmId: v}))}>
+                    <Select value={formData.firmId} onValueChange={(v) => setFormData(p => ({...p, firmId: v, unitIds: []}))}>
                       <SelectTrigger className="h-12 bg-slate-50 font-bold shadow-sm"><SelectValue placeholder="Select Firm" /></SelectTrigger>
                       <SelectContent>{firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-500">Assigned Plant *</Label>
+                    <Select 
+                      value={formData.unitIds?.[0] || ""} 
+                      onValueChange={(v) => setFormData(p => ({...p, unitIds: [v]}))}
+                      disabled={!formData.firmId}
+                    >
+                      <SelectTrigger className="h-12 bg-slate-50 font-bold shadow-sm">
+                        <SelectValue placeholder={formData.firmId ? "Select Plant" : "Select Firm First"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {plants.filter(p => p.firmId === formData.firmId).map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
@@ -486,7 +506,7 @@ export default function EmployeesPage() {
                       <SelectContent>{(DESIGNATIONS[formData.department!] || []).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 h-12 mt-6">
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 h-12">
                     <Label className="text-[10px] font-black uppercase text-slate-600">Active Status</Label>
                     <Switch checked={formData.active} onCheckedChange={(v) => setFormData(p => ({...p, active: v}))} />
                   </div>
@@ -622,11 +642,22 @@ export default function EmployeesPage() {
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="w-full">
-            <Table className="min-w-[1200px]">
-              <TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold px-6">Name / Employee ID</TableHead><TableHead className="font-bold">Aadhaar (ID)</TableHead><TableHead className="font-bold">Dept / Designation</TableHead><TableHead className="font-bold">Mobile</TableHead><TableHead className="font-bold text-right">Monthly CTC</TableHead><TableHead className="font-bold text-center">Status</TableHead><TableHead className="text-right font-bold pr-6">Actions</TableHead></TableRow></TableHeader>
+            <Table className="min-w-[1300px]">
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="font-bold px-6">Name / Employee ID</TableHead>
+                  <TableHead className="font-bold">Plant</TableHead>
+                  <TableHead className="font-bold">Aadhaar (ID)</TableHead>
+                  <TableHead className="font-bold">Dept / Designation</TableHead>
+                  <TableHead className="font-bold">Mobile</TableHead>
+                  <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                  <TableHead className="font-bold text-center">Status</TableHead>
+                  <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {paginatedEmployees.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground">No records found matching your search.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No records found matching your search.</TableCell></TableRow>
                 ) : (
                   paginatedEmployees.map((emp) => (
                     <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
@@ -635,6 +666,11 @@ export default function EmployeesPage() {
                           <span className="font-black text-slate-900 uppercase text-xs sm:text-sm">{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
                           <span className="text-[10px] font-mono text-primary font-black uppercase tracking-tight">{emp.employeeId}</span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-slate-200">
+                          {plants.find(p => p.id === (emp.unitIds?.[0] || emp.unitId))?.name || "---"}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-xs font-mono font-medium">{emp.aadhaar}</TableCell>
                       <TableCell><div className="flex flex-col"><span className="text-xs font-bold text-slate-700">{emp.department}</span><span className="text-[9px] text-muted-foreground uppercase">{emp.designation}</span></div></TableCell>
