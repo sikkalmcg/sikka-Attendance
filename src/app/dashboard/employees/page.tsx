@@ -123,12 +123,20 @@ export default function EmployeesPage() {
   }, []);
 
   const generateAutoId = useCallback(() => {
-    if (!employees || employees.length === 0) return "S-0001";
+    if (!employees || employees.length === 0) return "EMP-S0001";
+    
+    // Scan all existing IDs to find the maximum numeric serial
     const numericIds = employees
-      .map(e => parseInt(e.employeeId?.split("-")[1]))
-      .filter(n => !isNaN(n));
+      .map(e => {
+        const id = e.employeeId || "";
+        // Extract all digits found in the ID (handles EMP-S0001, S-0001, etc.)
+        const match = id.match(/\d+/);
+        return match ? parseInt(match[0]) : 0;
+      })
+      .filter(n => !isNaN(n) && n > 0);
+      
     const nextVal = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
-    return `S-${nextVal.toString().padStart(4, "0")}`;
+    return `EMP-S${nextVal.toString().padStart(4, "0")}`;
   }, [employees]);
 
   const userAssignedPlantIds = useMemo(() => {
