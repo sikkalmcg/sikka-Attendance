@@ -357,7 +357,8 @@ export default function ApprovalsPage() {
       updateRecord('attendance', rec.id, { 
         approved: false, 
         remark: null, 
-        approvedBy: null 
+        approvedBy: null,
+        editedBy: null 
       });
       toast({ title: "Record Restored", description: "Moved back to Pending queue." });
     } finally {
@@ -375,13 +376,18 @@ export default function ApprovalsPage() {
       if (isValid(inDT) && isValid(outDT)) {
         hours = parseFloat(((outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60)).toFixed(2));
       }
+      
+      const editorName = verifiedUser?.fullName || "Admin";
+      
       updateRecord('attendance', selectedAttendance.id, { 
         inTime: editData.inTime, 
         outTime: editData.outTime, 
         hours, 
         status: hours >= MIN_PRESENT_HOURS ? 'PRESENT' : 'ABSENT',
         remark: `Edited: ${editData.remark}`,
-        editedBy: verifiedUser?.fullName || "Admin"
+        editedBy: editorName,
+        approvedBy: editorName, // Ensure the editor is shown as the approver in history
+        approved: true // Manual edit implies final approval
       });
       toast({ title: "Record Updated" });
       setIsEditModalOpen(false);
@@ -398,7 +404,7 @@ export default function ApprovalsPage() {
     const csv = [
       headers.join(","),
       ...historyAttendanceList.map(r => [
-        `"${r.employeeId}"`, `"${r.employeeName}"`, `"${formatDate(r.date)}"`, `"${r.inPlant || ''}"`, `"${r.outPlant || ''}"`, `"${r.inTime || ''}"`, `"${r.outTime || ''}"`, r.hours, `"${r.displayStatus}"`, `"${r.remark || ''}"`, `"${r.approvedBy || ''}"`, `"${r.address || ''}"`, `"${r.addressOut || ''}"`
+        `"${r.employeeId}"`, `"${r.employeeName}"`, `"${formatDate(r.date)}"`, `"${r.inPlant || ''}"`, `"${r.outPlant || ''}"`, `"${r.inTime || ''}"`, `"${r.outTime || ''}"`, r.hours, `"${r.displayStatus}"`, `"${r.remark || ''}"`, `"${r.approvedBy || r.editedBy || ''}"`, `"${r.address || ''}"`, `"${r.addressOut || ''}"`
       ].join(","))
     ].join("\n");
     const link = document.createElement("a");
@@ -584,7 +590,7 @@ export default function ApprovalsPage() {
                         <TableCell>
                            <div className="flex items-center gap-1.5">
                               <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || "--"}</span>
+                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">{rec.approvedBy || rec.editedBy || "--"}</span>
                            </div>
                         </TableCell>
                       )}
