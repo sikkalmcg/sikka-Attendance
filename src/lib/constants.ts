@@ -19,60 +19,63 @@ export const ATTENDANCE_RULES = {
 };
 
 export const STATUTORY_RATES = {
-  PF_EMPLOYEE_RATE: 0.12,
-  PF_EMPLOYER_RATE: 0.13,
-  ESIC_EMPLOYEE_RATE: 0.0075,
-  ESIC_EMPLOYER_RATE: 0.0325,
-  ESIC_THRESHOLD: 21000,
+  PF_EMPLOYEE_RATE: 12,
+  PF_EMPLOYER_RATE: 13,
+  ESIC_EMPLOYEE_RATE: 0.75,
+  ESIC_EMPLOYER_RATE: 3.25,
 };
 
 export const DEPARTMENTS = [
-  'Warehousing',
-  'Production',
-  'Logistics',
-  'HR'
+  'HR Department',
+  'Logistics Department',
+  'Warehouse Department',
+  'Maintenance Department',
+  'Security Department'
 ];
 
 export const DESIGNATIONS: Record<string, string[]> = {
-  'Warehousing': [
-    'Warehouse Manager', 
-    'Assistant Warehouse Manager', 
-    'Store Keeper', 
-    'Inventory Manager', 
-    'Inventory Executive', 
-    'Warehouse Supervisor', 
-    'Data Entry Operator'
+  'HR Department': [
+    'HR Executive', 
+    'HR Coordinator', 
+    'Payroll Executive'
   ],
-  'Production': [
-    'Production Manager', 
+  'Logistics Department': [
+    'Route Planner', 
+    'Logistics Executive', 
+    'Dispatch Executive', 
+    'Booking Executive', 
+    'Tracking Executive'
+  ],
+  'Warehouse Department': [
     'Warehouse Manager', 
+    'Dispatch Planner', 
+    'Safety Officer', 
     'Supervisor', 
-    'Shift In charge', 
-    'Machine Operator', 
+    'Invoice Executive', 
+    'Inventory Executive', 
+    'Operator', 
     'Senior Operator', 
     'Technician', 
     'Quality Inspector', 
     'Quality Analyst', 
     'Helper', 
-    'Packing Staff', 
-    'Security Guard'
+    'Packing Staff'
   ],
-  'Logistics': [
-    'Fleet Maintainer', 
-    'Fleet Planner', 
-    'Driver', 
-    'Fleet Helper'
+  'Maintenance Department': [
+    'Maintenance Manager', 
+    'Maintenance Supervisor', 
+    'Technician', 
+    'Electrician', 
+    'Mechanic', 
+    'Helper'
   ],
-  'HR': [
-    'HR Manager', 
-    'Accountant'
+  'Security Department': [
+    'Security Manager', 
+    'Security Guard', 
+    'Gate Keeper'
   ]
 };
 
-/**
- * List of all modules that can be toggled as permissions for users.
- * Future modules added here will auto-appear in the User Management UI.
- */
 export const APP_PERMISSIONS = [
   "Attendance",
   "Approvals",

@@ -7,10 +7,10 @@ export interface User {
   role: Role;
   password?: string;
   permissions: string[];
-  plantIds?: string[]; // Added for granular plant-level access
+  plantIds?: string[]; 
   status: 'Active' | 'Inactive';
   avatar?: string;
-  sessionId?: string; // Track active session for auto-logout
+  sessionId?: string; 
 }
 
 export interface Plant {
@@ -18,7 +18,7 @@ export interface Plant {
   name: string;
   lat: number;
   lng: number;
-  radius: number; // In meters
+  radius: number; 
   firmId: string;
   active: boolean;
 }
@@ -49,8 +49,8 @@ export interface Firm {
 }
 
 export interface SalaryHistoryEntry {
-  fromMonth: string; // MMM-YYYY
-  toMonth: string;   // MMM-YYYY or "Present"
+  fromMonth: string; 
+  toMonth: string;   
   monthlyCTC: number;
 }
 
@@ -74,8 +74,8 @@ export interface SalaryStructure {
 
 export interface DeviceHistoryEntry {
   id: string;
-  from: string; // ISO String
-  to: string;   // ISO String or "Present"
+  from: string; 
+  to: string;   
   deviceId: string;
   deviceName: string;
 }
@@ -85,7 +85,7 @@ export interface Employee {
   employeeId: string;
   firstName: string;
   lastName: string;
-  name: string; // Derived or combined for legacy
+  name: string; 
   fatherName: string;
   aadhaar: string;
   pan: string;
@@ -95,8 +95,8 @@ export interface Employee {
   designation: string;
   joinDate: string;
   firmId: string;
-  unitId?: string; // Legacy
-  unitIds: string[]; // Support multiple plants
+  unitId?: string; 
+  unitIds: string[]; 
   bankName: string;
   accountNo: string;
   ifscCode: string;
@@ -108,10 +108,10 @@ export interface Employee {
   active: boolean;
   advanceLeaveBalance?: number;
   avatar?: string;
-  deviceId?: string; // Security binding for attendance
-  deviceName?: string; // Human readable device name
+  deviceId?: string; 
+  deviceName?: string; 
   deviceHistory?: DeviceHistoryEntry[];
-  sessionId?: string; // Track active session for auto-logout
+  sessionId?: string; 
 }
 
 export interface Holiday {
@@ -144,7 +144,7 @@ export interface AttendanceRecord {
   id: string;
   employeeId: string;
   employeeName: string;
-  date: string; // This is the logical date of the shift start
+  date: string; 
   inTime: string | null;
   outTime: string | null;
   inDate?: string;
@@ -168,10 +168,9 @@ export interface AttendanceRecord {
   autoOut?: boolean;
   autoCheckout?: boolean; 
   
-  // Unapproved movement tracking
-  unapprovedOutDuration?: number; // In minutes
-  lastDetectedOutAt?: string | null; // HH:mm
-  lastOutCheckTime?: string; // ISO string
+  unapprovedOutDuration?: number; 
+  lastDetectedOutAt?: string | null; 
+  lastOutCheckTime?: string; 
 }
 
 export interface LeaveRequest {
@@ -180,7 +179,7 @@ export interface LeaveRequest {
   employeeName: string;
   department: string;
   designation: string;
-  plantName: string; // Added: Mandatory plant context
+  plantName: string; 
   fromDate: string;
   toDate: string;
   days: number;
@@ -220,11 +219,11 @@ export interface PayrollRecord {
   id: string;
   employeeId: string;
   employeeName: string;
-  month: string; // MMM-YY
+  month: string; 
   attendance: number;
   absent: number;
   adjustLeave: number;
-  addedLeave?: number; // Added to balance (from holiday work banking)
+  addedLeave?: number; 
   totalEarningDays: number;
   incentivePct: number;
   incentiveAmt: number;
@@ -237,13 +236,11 @@ export interface PayrollRecord {
   slipNo?: string;
   slipDate?: string;
 
-  // Statutory Liabilties at time of generation
   pfAmountEmployee: number;
   pfAmountEmployer: number;
   esicAmountEmployee: number;
   esicAmountEmployer: number;
 
-  // Payment Tracking
   salaryPaidAmount: number;
   salaryPaidDate?: string;
   salaryHistory: SalaryPaymentRecord[];
