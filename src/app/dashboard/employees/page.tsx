@@ -43,7 +43,9 @@ import {
   ArrowLeft,
   ShieldCheck,
   CreditCard,
-  Factory
+  Factory,
+  ChevronDown,
+  Check
 } from "lucide-react";
 import { 
   Select, 
@@ -52,6 +54,11 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { 
   Tooltip,
   TooltipContent,
@@ -120,6 +127,7 @@ export default function EmployeesPage() {
   const [formData, setFormData] = useState<Partial<Employee>>({ ...INITIAL_FORM_DATA });
   const [revisionData, setRevisionData] = useState<SalaryStructure>({ ...INITIAL_SALARY_STRUCTURE });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPlantPopoverOpen, setIsPlantPopoverOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -129,7 +137,6 @@ export default function EmployeesPage() {
   useEffect(() => {
     if (view === 'form' && !editEmployee && isMounted) {
       const generateNextId = () => {
-        // Detect existing prefix (Default to SIL if none found)
         let prefix = "SIL";
         if (employees.length > 0) {
           const lastId = employees[employees.length - 1].employeeId || "";
@@ -155,7 +162,6 @@ export default function EmployeesPage() {
   }, [view, editEmployee, employees, isMounted]);
 
   const filtered = useMemo(() => {
-    // A-Z SEQUENTIAL SORTING
     const sorted = [...(employees || [])].sort((a, b) => {
       const nameA = (a.name || `${a.firstName} ${a.lastName}`).toLowerCase().trim();
       const nameB = (b.name || `${b.firstName} ${b.lastName}`).toLowerCase().trim();
@@ -197,7 +203,7 @@ export default function EmployeesPage() {
       "Join Date",
       "Address",
       "Employer Firm",
-      "Primary Plant",
+      "Assigned Plants",
       "Department",
       "Designation",
       "Bank Name",
@@ -213,10 +219,6 @@ export default function EmployeesPage() {
       "Gross Salary",
       "Net Payable",
       "Monthly CTC",
-      "PF Emp Rate %",
-      "PF Ex Rate %",
-      "ESIC Emp Rate %",
-      "ESIC Ex Rate %",
       "Status"
     ];
 
@@ -224,7 +226,11 @@ export default function EmployeesPage() {
       headers.join(","),
       ...filtered.map(emp => {
         const firmName = firms.find(f => f.id === emp.firmId)?.name || "N/A";
-        const plantName = plants.find(p => p.id === (emp.unitIds?.[0] || emp.unitId))?.name || "N/A";
+        const plantNames = (emp.unitIds || [])
+          .map(id => plants.find(p => p.id === id)?.name)
+          .filter(Boolean)
+          .join(" | ") || "N/A";
+          
         return [
           `"${emp.employeeId}"`,
           `"${emp.firstName}"`,
@@ -236,7 +242,7 @@ export default function EmployeesPage() {
           `"${emp.joinDate || ''}"`,
           `"${emp.address || ''}"`,
           `"${firmName}"`,
-          `"${plantName}"`,
+          `"${plantNames}"`,
           `"${emp.department}"`,
           `"${emp.designation}"`,
           `"${emp.bankName || ''}"`,
@@ -252,10 +258,6 @@ export default function EmployeesPage() {
           emp.salary?.grossSalary || 0,
           emp.salary?.netSalary || 0,
           emp.salary?.monthlyCTC || 0,
-          emp.salary?.pfRateEmp || 12,
-          emp.salary?.pfRateEx || 13,
-          emp.salary?.esicRateEmp || 0.75,
-          emp.salary?.esicRateEx || 3.25,
           `"${emp.active ? 'Active' : 'Inactive'}"`
         ].join(",");
       })
@@ -305,11 +307,21 @@ export default function EmployeesPage() {
     });
   };
 
+  const togglePlantSelection = (plantId: string) => {
+    setFormData(prev => {
+      const current = prev.unitIds || [];
+      const updated = current.includes(plantId)
+        ? current.filter(id => id !== plantId)
+        : [...current, plantId];
+      return { ...prev, unitIds: updated };
+    });
+  };
+
   const validate = () => {
-    const { firstName, employeeId, aadhaar, department, salary, accountNo, ifscCode, pan, unitIds } = formData;
+    const { firstName, employeeId, aadhaar, department, salary, unitIds } = formData;
     
     if (!employeeId || !firstName || !aadhaar || !department || !salary?.basic || !unitIds || unitIds.length === 0) {
-      toast({ variant: "destructive", title: "Missing Mandatory Fields", description: "Emp ID, First Name, Aadhaar, Dept, Plant, and Basic Salary are required." });
+      toast({ variant: "destructive", title: "Missing Mandatory Fields", description: "Emp ID, First Name, Aadhaar, Dept, at least one Plant, and Basic Salary are required." });
       return false;
     }
 
@@ -318,38 +330,9 @@ export default function EmployeesPage() {
       return false;
     }
 
-    const aadhaarExists = employees.find(e => e.aadhaar === aadhaar && e.id !== editEmployee?.id);
-    if (aadhaarExists) {
-      toast({ variant: "destructive", title: "Duplicate Aadhaar", description: "This Aadhaar number is already registered." });
-      return false;
-    }
-
     const idExists = employees.find(e => e.employeeId === employeeId && e.id !== editEmployee?.id);
     if (idExists) {
       toast({ variant: "destructive", title: "Duplicate ID", description: "This Employee ID is already assigned to another staff member." });
-      return false;
-    }
-
-    if (pan && pan.length > 0 && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan.toUpperCase())) {
-      toast({ variant: "destructive", title: "Invalid PAN Format", description: "PAN must follow standard format (e.g., ABCDE1234F)." });
-      return false;
-    }
-
-    if (pan) {
-      const panExists = employees.find(e => e.pan?.toUpperCase() === pan.toUpperCase() && e.id !== editEmployee?.id);
-      if (panExists) {
-        toast({ variant: "destructive", title: "Duplicate PAN", description: "This PAN number is already registered." });
-        return false;
-      }
-    }
-
-    if (accountNo && isNaN(Number(accountNo))) {
-      toast({ variant: "destructive", title: "Invalid Bank Account", description: "Account number must be numeric." });
-      return false;
-    }
-
-    if (ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode.toUpperCase())) {
-      toast({ variant: "destructive", title: "Invalid IFSC", description: "Please enter a valid Bank IFSC code." });
       return false;
     }
 
@@ -392,6 +375,11 @@ export default function EmployeesPage() {
   if (!isMounted) return null;
 
   if (view === 'form') {
+    const availablePlants = plants.filter(p => p.firmId === formData.firmId);
+    const selectedPlantNames = (formData.unitIds || [])
+      .map(id => plants.find(p => p.id === id)?.name)
+      .filter(Boolean);
+
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
@@ -412,7 +400,6 @@ export default function EmployeesPage() {
 
           <ScrollArea className="flex-1 bg-white">
             <div className="p-10 space-y-12 pb-32">
-              {/* SECTION 1: IDENTITY */}
               <div className="space-y-8">
                 <h3 className="text-xs font-black uppercase text-slate-400 tracking-[0.3em] flex items-center gap-3 border-b pb-4">
                   <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">1</span> Identity Records
@@ -420,12 +407,7 @@ export default function EmployeesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">Employee ID * (Auto)</Label>
-                    <Input 
-                      value={formData.employeeId || ""} 
-                      readOnly
-                      className="h-12 bg-slate-100 font-black border-slate-200 text-primary cursor-not-allowed select-none focus-visible:ring-0" 
-                      placeholder="Generating..." 
-                    />
+                    <Input value={formData.employeeId || ""} readOnly className="h-12 bg-slate-100 font-black border-slate-200 text-primary cursor-not-allowed select-none" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">First Name *</Label>
@@ -440,8 +422,8 @@ export default function EmployeesPage() {
                     <Input value={formData.fatherName || ""} onChange={(e) => setFormData(p => ({...p, fatherName: e.target.value}))} className="h-12 bg-slate-50 font-bold border-slate-200" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">Aadhaar Number * (12 Digit)</Label>
-                    <Input value={formData.aadhaar || ""} onChange={(e) => setFormData(p => ({...p, aadhaar: e.target.value}))} className="h-12 bg-slate-50 font-mono text-sm" maxLength={12} />
+                    <Label className="text-[10px] font-black uppercase text-slate-500">Aadhaar Number *</Label>
+                    <Input value={formData.aadhaar || ""} onChange={(e) => setFormData(p => ({...p, aadhaar: e.target.value}))} className="h-12 bg-slate-50 font-mono" maxLength={12} />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">PAN Number</Label>
@@ -451,18 +433,17 @@ export default function EmployeesPage() {
                     <Label className="text-[10px] font-black uppercase text-slate-500">Mobile No</Label>
                     <Input value={formData.mobile || ""} onChange={(e) => setFormData(p => ({...p, mobile: e.target.value}))} className="h-12 bg-slate-50 font-bold" />
                   </div>
-                  <div className="space-y-2 md:col-span-2 lg:col-span-1">
+                  <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">Join Date</Label>
                     <Input type="date" value={formData.joinDate || ""} onChange={(e) => setFormData(p => ({...p, joinDate: e.target.value}))} className="h-12 bg-slate-50 font-bold" />
                   </div>
-                  <div className="space-y-2 md:col-span-3">
+                  <div className="space-y-2 md:col-span-4">
                     <Label className="text-[10px] font-black uppercase text-slate-500">Address</Label>
-                    <Input value={formData.address || ""} onChange={(e) => setFormData(p => ({...p, address: e.target.value}))} className="h-12 bg-slate-50 font-medium" />
+                    <Input value={formData.address || ""} onChange={(e) => setFormData(p => ({...p, address: e.target.value}))} className="h-12 bg-slate-50" />
                   </div>
                 </div>
               </div>
 
-              {/* SECTION 2: PROFESSIONAL */}
               <div className="space-y-8">
                 <h3 className="text-xs font-black uppercase text-slate-400 tracking-[0.3em] flex items-center gap-3 border-b pb-4">
                   <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">2</span> Professional Assignment
@@ -475,23 +456,63 @@ export default function EmployeesPage() {
                       <SelectContent>{firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
+                  
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">Assigned Plant *</Label>
-                    <Select 
-                      value={formData.unitIds?.[0] || ""} 
-                      onValueChange={(v) => setFormData(p => ({...p, unitIds: [v]}))}
-                      disabled={!formData.firmId}
-                    >
-                      <SelectTrigger className="h-12 bg-slate-50 font-bold shadow-sm">
-                        <SelectValue placeholder={formData.firmId ? "Select Plant" : "Select Firm First"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {plants.filter(p => p.firmId === formData.firmId).map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-[10px] font-black uppercase text-slate-500">Assigned Plants * (Multiple)</Label>
+                    <Popover open={isPlantPopoverOpen} onOpenChange={setIsPlantPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          role="combobox" 
+                          disabled={!formData.firmId}
+                          className="h-12 w-full justify-between bg-slate-50 font-bold shadow-sm border-input"
+                        >
+                          <span className="truncate">
+                            {selectedPlantNames.length > 0 
+                              ? `${selectedPlantNames.length} Plant(s) Selected` 
+                              : (formData.firmId ? "Select Plant(s)" : "Select Firm First")
+                            }
+                          </span>
+                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0 rounded-xl" align="start">
+                        <div className="p-3 border-b bg-slate-50">
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Facility Access</p>
+                        </div>
+                        <ScrollArea className="h-[200px]">
+                          <div className="p-2 space-y-1">
+                            {availablePlants.length === 0 ? (
+                              <p className="p-4 text-center text-xs text-muted-foreground font-bold">No plants found for this firm.</p>
+                            ) : (
+                              availablePlants.map((p) => (
+                                <div 
+                                  key={p.id} 
+                                  className={cn(
+                                    "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-slate-50",
+                                    formData.unitIds?.includes(p.id) && "bg-primary/5"
+                                  )}
+                                  onClick={() => togglePlantSelection(p.id)}
+                                >
+                                  <Checkbox 
+                                    checked={formData.unitIds?.includes(p.id)} 
+                                    onCheckedChange={() => togglePlantSelection(p.id)}
+                                    className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="text-xs font-bold text-slate-700">{p.name}</p>
+                                    <p className="text-[9px] text-slate-400 uppercase font-medium">Logistics Unit</p>
+                                  </div>
+                                  {formData.unitIds?.includes(p.id) && <Check className="w-3.5 h-3.5 text-primary" />}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </PopoverContent>
+                    </Popover>
                   </div>
+
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">Department *</Label>
                     <Select value={formData.department} onValueChange={(v) => setFormData(p => ({...p, department: v, designation: ''}))}>
@@ -506,14 +527,13 @@ export default function EmployeesPage() {
                       <SelectContent>{(DESIGNATIONS[formData.department!] || []).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 h-12">
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100 h-12 lg:mt-6">
                     <Label className="text-[10px] font-black uppercase text-slate-600">Active Status</Label>
                     <Switch checked={formData.active} onCheckedChange={(v) => setFormData(p => ({...p, active: v}))} />
                   </div>
                 </div>
               </div>
 
-              {/* SECTION 3: BANKING */}
               <div className="space-y-8">
                 <h3 className="text-xs font-black uppercase text-slate-400 tracking-[0.3em] flex items-center gap-3 border-b pb-4">
                   <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">3</span> Banking Details
@@ -524,7 +544,7 @@ export default function EmployeesPage() {
                     <Input value={formData.bankName || ""} onChange={(e) => setFormData(p => ({...p, bankName: e.target.value}))} className="h-12 bg-slate-50 font-bold" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">Account Number (Numeric Only)</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-500">Account Number</Label>
                     <Input value={formData.accountNo || ""} onChange={(e) => setFormData(p => ({...p, accountNo: e.target.value.replace(/[^0-9]/g, '')}))} className="h-12 bg-slate-50 font-mono font-bold" />
                   </div>
                   <div className="space-y-2">
@@ -534,7 +554,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* SECTION 4: SALARY STRUCTURE */}
               <div className="space-y-8">
                 <h3 className="text-xs font-black uppercase text-slate-400 tracking-[0.3em] flex items-center gap-3 border-b pb-4">
                   <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">4</span> Salary Structure
@@ -549,64 +568,27 @@ export default function EmployeesPage() {
                     <Input type="number" value={formData.salary?.hra || ""} onChange={(e) => updateFormSalary('hra', e.target.value)} className="h-12 bg-slate-50 font-bold" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">DA (Dearness Allowance)</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-500">DA</Label>
                     <Input type="number" value={formData.salary?.da || ""} onChange={(e) => updateFormSalary('da', e.target.value)} className="h-12 bg-slate-50 font-bold" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">Other Allowance</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-500">Allowance</Label>
                     <Input type="number" value={formData.salary?.allowance || ""} onChange={(e) => updateFormSalary('allowance', e.target.value)} className="h-12 bg-slate-50 font-bold" />
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="p-6 bg-slate-900 rounded-3xl text-white shadow-xl">
+                  <div className="p-6 bg-slate-900 rounded-3xl text-white">
                     <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Monthly Gross Salary</p>
                     <p className="text-3xl font-black text-primary">{formatCurrency(formData.salary?.grossSalary || 0)}</p>
                   </div>
-                  <div className="p-6 bg-slate-900 rounded-3xl text-white shadow-xl border-b-4 border-primary">
+                  <div className="p-6 bg-slate-900 rounded-3xl text-white border-b-4 border-primary">
                     <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Monthly Net Payable</p>
                     <p className="text-3xl font-black text-emerald-400">{formatCurrency(formData.salary?.netSalary || 0)}</p>
                   </div>
-                  <div className="p-6 bg-slate-900 rounded-3xl text-white shadow-xl">
-                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Monthly CTC (Cost to Co.)</p>
+                  <div className="p-6 bg-slate-900 rounded-3xl text-white">
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Monthly CTC</p>
                     <p className="text-3xl font-black text-white">{formatCurrency(formData.salary?.monthlyCTC || 0)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 5: COMPLIANCE */}
-              <div className="space-y-8">
-                <h3 className="text-xs font-black uppercase text-slate-400 tracking-[0.3em] flex items-center gap-3 border-b pb-4">
-                  <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">5</span> Compliance (PF & ESIC)
-                </h3>
-                <div className="flex items-center gap-4 mb-6">
-                  <Label className="text-xs font-bold text-slate-600">Enable Statutory Deductions</Label>
-                  <Switch checked={formData.isGovComplianceEnabled} onCheckedChange={(v) => { setFormData(p => ({...p, isGovComplianceEnabled: v})); updateFormSalary('basic', formData.salary?.basic || 0); }} />
-                </div>
-                
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                  {/* PF Section */}
-                  <div className="p-8 rounded-3xl bg-blue-50/50 border border-blue-100 space-y-6">
-                    <div className="flex items-center gap-2 mb-2"><ShieldCheck className="w-5 h-5 text-blue-600" /><h4 className="text-sm font-black text-blue-900 uppercase">Provident Fund (PF)</h4></div>
-                    <div className="space-y-2"><Label className="text-[9px] font-bold text-blue-600 uppercase">PF Number</Label><Input value={formData.pfNumber || ""} onChange={(e) => setFormData(p => ({...p, pfNumber: e.target.value.toUpperCase()}))} className="bg-white border-blue-100 font-bold" /></div>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employee PF %</Label><Input type="number" value={formData.salary?.pfRateEmp} onChange={(e) => updateFormSalary('pfRateEmp', e.target.value)} className="bg-white" /></div>
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employee PF Amt</Label><div className="h-10 px-3 flex items-center bg-white rounded-md border border-slate-100 font-black text-slate-700">{formatCurrency(formData.salary?.employeePF || 0)}</div></div>
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employer PF %</Label><Input type="number" value={formData.salary?.pfRateEx} onChange={(e) => updateFormSalary('pfRateEx', e.target.value)} className="bg-white" /></div>
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employer PF Amt</Label><div className="h-10 px-3 flex items-center bg-white rounded-md border border-slate-100 font-black text-slate-700">{formatCurrency(formData.salary?.employerPF || 0)}</div></div>
-                    </div>
-                  </div>
-                  
-                  {/* ESIC Section */}
-                  <div className="p-8 rounded-3xl bg-orange-50/50 border border-orange-100 space-y-6">
-                    <div className="flex items-center gap-2 mb-2"><CreditCard className="w-5 h-5 text-orange-600" /><h4 className="text-sm font-black text-orange-900 uppercase">ESIC Contribution</h4></div>
-                    <div className="space-y-2"><Label className="text-[9px] font-bold text-orange-600 uppercase">ESIC Number</Label><Input value={formData.esicNumber || ""} onChange={(e) => setFormData(p => ({...p, esicNumber: e.target.value.toUpperCase()}))} className="bg-white border-orange-100 font-bold" /></div>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employee ESIC %</Label><Input type="number" step="any" value={formData.salary?.esicRateEmp} onChange={(e) => updateFormSalary('esicRateEmp', e.target.value)} className="bg-white" /></div>
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employee ESIC Amt</Label><div className="h-10 px-3 flex items-center bg-white rounded-md border border-slate-100 font-black text-slate-700">{formatCurrency(formData.salary?.employeeESIC || 0)}</div></div>
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employer ESIC %</Label><Input type="number" step="any" value={formData.salary?.esicRateEx} onChange={(e) => updateFormSalary('esicRateEx', e.target.value)} className="bg-white" /></div>
-                      <div className="space-y-2"><Label className="text-[9px] font-bold text-slate-500 uppercase">Employer ESIC Amt</Label><div className="h-10 px-3 flex items-center bg-white rounded-md border border-slate-100 font-black text-slate-700">{formatCurrency(formData.salary?.employerESIC || 0)}</div></div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -614,7 +596,7 @@ export default function EmployeesPage() {
           </ScrollArea>
           
           <div className="p-4 bg-slate-50 border-t flex justify-end items-center gap-4 shrink-0 z-20">
-            <Button variant="ghost" onClick={handleClose} className="rounded-xl font-black text-[11px] uppercase tracking-widest px-10 h-12 text-slate-600 hover:bg-slate-200">Cancel</Button>
+            <Button variant="ghost" onClick={handleClose} className="rounded-xl font-black text-[11px] uppercase tracking-widest px-10 h-12">Cancel</Button>
             <Button className="bg-primary hover:bg-primary/90 rounded-xl font-black text-[11px] uppercase tracking-widest px-12 h-12 shadow-xl shadow-primary/20" onClick={handlePost} disabled={isProcessing}>
               {isProcessing ? "Finalizing Entry..." : (editEmployee ? "Update Profile" : "Onboard Staff")}
             </Button>
@@ -642,11 +624,11 @@ export default function EmployeesPage() {
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="w-full">
-            <Table className="min-w-[1300px]">
+            <Table className="min-w-[1400px]">
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead className="font-bold px-6">Name / Employee ID</TableHead>
-                  <TableHead className="font-bold">Plant</TableHead>
+                  <TableHead className="font-bold">Authorized Plants</TableHead>
                   <TableHead className="font-bold">Aadhaar (ID)</TableHead>
                   <TableHead className="font-bold">Dept / Designation</TableHead>
                   <TableHead className="font-bold">Mobile</TableHead>
@@ -659,33 +641,60 @@ export default function EmployeesPage() {
                 {paginatedEmployees.length === 0 ? (
                   <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">No records found matching your search.</TableCell></TableRow>
                 ) : (
-                  paginatedEmployees.map((emp) => (
-                    <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
-                      <TableCell className="px-6">
-                        <div className="flex flex-col">
-                          <span className="font-black text-slate-900 uppercase text-xs sm:text-sm">{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
-                          <span className="text-[10px] font-mono text-primary font-black uppercase tracking-tight">{emp.employeeId}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="font-black text-[10px] uppercase bg-white border-slate-200">
-                          {plants.find(p => p.id === (emp.unitIds?.[0] || emp.unitId))?.name || "---"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs font-mono font-medium">{emp.aadhaar}</TableCell>
-                      <TableCell><div className="flex flex-col"><span className="text-xs font-bold text-slate-700">{emp.department}</span><span className="text-[9px] text-muted-foreground uppercase">{emp.designation}</span></div></TableCell>
-                      <TableCell className="text-xs font-bold">{emp.mobile || "---"}</TableCell>
-                      <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(emp.salary?.monthlyCTC || 0)}</TableCell>
-                      <TableCell className="text-center"><Badge variant="outline" className={cn("px-3 py-0.5 text-[9px] uppercase font-black", emp.active ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>{emp.active ? "Active" : "De-active"}</Badge></TableCell>
-                      <TableCell className="text-right pr-6">
-                        <div className="flex justify-end items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-primary" onClick={() => { setEditEmployee(emp); setFormData({ ...emp }); setView('form'); }}><Pencil className="w-4 h-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSalaryRevision(emp); setRevisionData({ ...emp.salary }); }}><TrendingUp className="w-4 h-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => setViewHistoryEmployee(emp)}><History className="w-4 h-4" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  paginatedEmployees.map((emp) => {
+                    const firstPlantId = emp.unitIds?.[0] || emp.unitId;
+                    const firstPlant = plants.find(p => p.id === firstPlantId);
+                    const othersCount = (emp.unitIds?.length || 0) - (firstPlant ? 1 : 0);
+
+                    return (
+                      <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
+                        <TableCell className="px-6">
+                          <div className="flex flex-col">
+                            <span className="font-black text-slate-900 uppercase text-xs sm:text-sm">{emp.name || `${emp.firstName} ${emp.lastName}`}</span>
+                            <span className="text-[10px] font-mono text-primary font-black uppercase tracking-tight">{emp.employeeId}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant="outline" className="font-black text-[9px] uppercase bg-white border-slate-200">
+                              {firstPlant?.name || "---"}
+                            </Badge>
+                            {othersCount > 0 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge className="bg-primary/10 text-primary border-none text-[8px] font-black cursor-help">+{othersCount} MORE</Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="p-3 rounded-xl border-none shadow-xl bg-slate-900 text-white">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-2">Authorized Access List</p>
+                                    <ul className="space-y-1">
+                                      {emp.unitIds?.slice(1).map(id => (
+                                        <li key={id} className="text-[10px] font-bold flex items-center gap-2">
+                                          <Check className="w-2.5 h-2.5 text-emerald-500" /> {plants.find(p => p.id === id)?.name}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs font-mono font-medium">{emp.aadhaar}</TableCell>
+                        <TableCell><div className="flex flex-col"><span className="text-xs font-bold text-slate-700">{emp.department}</span><span className="text-[9px] text-muted-foreground uppercase">{emp.designation}</span></div></TableCell>
+                        <TableCell className="text-xs font-bold">{emp.mobile || "---"}</TableCell>
+                        <TableCell className="text-right font-black text-slate-900 text-xs sm:text-sm">{formatCurrency(emp.salary?.monthlyCTC || 0)}</TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className={cn("px-3 py-0.5 text-[9px] uppercase font-black", emp.active ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700")}>{emp.active ? "Active" : "De-active"}</Badge></TableCell>
+                        <TableCell className="text-right pr-6">
+                          <div className="flex justify-end items-center gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-primary" onClick={() => { setEditEmployee(emp); setFormData({ ...emp }); setView('form'); }}><Pencil className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600" onClick={() => { setSalaryRevision(emp); setRevisionData({ ...emp.salary }); }}><TrendingUp className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => setViewHistoryEmployee(emp)}><History className="w-4 h-4" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -695,7 +704,6 @@ export default function EmployeesPage() {
         {totalPages > 1 && <StandardPaginationFooter current={currentPage} total={totalPages} onPageChange={setCurrentPage} />}
       </Card>
 
-      {/* Salary Revision Dialog */}
       <Dialog open={!!salaryRevision} onOpenChange={(o) => !o && setSalaryRevision(null)}>
         <DialogContent className="sm:max-w-xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
@@ -721,7 +729,6 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
       
-      {/* Career Ledger Dialog */}
       <Dialog open={!!viewHistoryEmployee} onOpenChange={(o) => !o && setViewHistoryEmployee(null)}>
         <DialogContent className="sm:max-w-3xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
            <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
