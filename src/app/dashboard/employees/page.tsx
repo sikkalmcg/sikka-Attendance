@@ -118,6 +118,7 @@ export default function EmployeesPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedPlantFilter, setSelectedPlantFilter] = useState("all");
   const { toast } = useToast();
 
   const [view, setView] = useState<'list' | 'form'>('list');
@@ -139,6 +140,11 @@ export default function EmployeesPage() {
     return verifiedUser.plantIds || [];
   }, [verifiedUser]);
 
+  const authorizedPlants = useMemo(() => {
+    if (!userAssignedPlantIds) return plants;
+    return plants.filter(p => userAssignedPlantIds.includes(p.id));
+  }, [userAssignedPlantIds, plants]);
+
   const filtered = useMemo(() => {
     let sorted = [...(employees || [])];
     
@@ -148,6 +154,11 @@ export default function EmployeesPage() {
         (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || 
         userAssignedPlantIds.includes(emp.unitId)
       );
+    }
+
+    // Plant specific filter from dropdown
+    if (selectedPlantFilter !== "all") {
+      sorted = sorted.filter(emp => (emp.unitIds || []).includes(selectedPlantFilter));
     }
 
     sorted.sort((a, b) => {
@@ -161,7 +172,7 @@ export default function EmployeesPage() {
       const fullName = (emp.name || `${emp.firstName} ${emp.lastName}`).toLowerCase();
       return fullName.includes(search) || emp.employeeId?.toLowerCase().includes(search) || emp.aadhaar?.includes(search);
     });
-  }, [employees, searchTerm, userAssignedPlantIds]);
+  }, [employees, searchTerm, userAssignedPlantIds, selectedPlantFilter]);
 
   const paginatedEmployees = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -266,7 +277,26 @@ export default function EmployeesPage() {
       </div>
 
       <Card className="border-slate-200 overflow-hidden">
-        <CardHeader className="bg-slate-50/50"><div className="relative max-w-md"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/><Input placeholder="Search name or ID..." className="pl-10 h-10" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div></CardHeader>
+        <CardHeader className="bg-slate-50/50 border-b flex flex-col md:flex-row items-center gap-4">
+          <div className="relative flex-1 w-full md:w-auto">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/>
+            <Input placeholder="Search name or ID..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <Factory className="w-4 h-4 text-slate-400" />
+            <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
+              <SelectTrigger className="w-full md:w-64 h-10 font-bold text-xs uppercase bg-white">
+                <SelectValue placeholder="All Plants" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-bold uppercase">All Authorized Plants</SelectItem>
+                {authorizedPlants.map(p => (
+                  <SelectItem key={p.id} value={p.id} className="text-xs font-bold uppercase">{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="w-full">
             <Table className="min-w-[1200px]">
@@ -281,21 +311,25 @@ export default function EmployeesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedEmployees.map(emp => (
-                  <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                    <TableCell className="px-6 font-bold">{emp.name}<p className="text-[10px] text-primary font-mono">{emp.employeeId}</p></TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {(emp.unitIds || []).slice(0, 1).map(id => <Badge key={id} variant="outline" className="text-[9px]">{plants.find(p => p.id === id)?.name || '---'}</Badge>)}
-                        {(emp.unitIds?.length || 0) > 1 && <Badge variant="secondary" className="text-[9px]">+{emp.unitIds!.length - 1} more</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                    <TableCell className="text-xs">{emp.department}<p className="text-[10px] text-muted-foreground uppercase">{emp.designation}</p></TableCell>
-                    <TableCell className="text-right font-black text-emerald-600">{formatCurrency(emp.salary?.netSalary || 0)}</TableCell>
-                    <TableCell className="text-right pr-6"><Button variant="ghost" size="icon" onClick={() => { setEditEmployee(emp); setFormData(emp); setView('form'); }}><Pencil className="w-4 h-4"/></Button></TableCell>
-                  </TableRow>
-                ))}
+                {paginatedEmployees.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-bold italic">No records found matching criteria.</TableCell></TableRow>
+                ) : (
+                  paginatedEmployees.map(emp => (
+                    <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                      <TableCell className="px-6 font-bold">{emp.name}<p className="text-[10px] text-primary font-mono">{emp.employeeId}</p></TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {(emp.unitIds || []).slice(0, 1).map(id => <Badge key={id} variant="outline" className="text-[9px]">{plants.find(p => p.id === id)?.name || '---'}</Badge>)}
+                          {(emp.unitIds?.length || 0) > 1 && <Badge variant="secondary" className="text-[9px]">+{emp.unitIds!.length - 1} more</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
+                      <TableCell className="text-xs">{emp.department}<p className="text-[10px] text-muted-foreground uppercase">{emp.designation}</p></TableCell>
+                      <TableCell className="text-right font-black text-emerald-600">{formatCurrency(emp.salary?.netSalary || 0)}</TableCell>
+                      <TableCell className="text-right pr-6"><Button variant="ghost" size="icon" onClick={() => { setEditEmployee(emp); setFormData(emp); setView('form'); }}><Pencil className="w-4 h-4"/></Button></TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
             <ScrollBar orientation="horizontal" />
