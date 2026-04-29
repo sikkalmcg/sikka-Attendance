@@ -163,53 +163,69 @@ export default function AttendancePage() {
       .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
   }, [attendanceRecords, effectiveEmployeeId]);
 
-  const { activeRecord, staleRecord } = useMemo(() => {
-    const rec = (employeeRecords || []).find(r => r.inTime && !r.outTime);
-    if (!rec) return { activeRecord: null, staleRecord: null };
-    
-    const inTimeStr = rec.inTime;
-    const inDateTime = new Date(`${rec.inDate || rec.date}T${inTimeStr}`);
-    
-    if (!isValid(inDateTime)) return { activeRecord: null, staleRecord: null };
-    
+  /**
+   * BUSINESS LOGIC: SHIFT & REST PERIOD ENFORCEMENT
+   * 1. Max Shift: 16 hours.
+   * 2. Min Rest: 8 hours between shifts.
+   * 3. Sequence: IN must happen before OUT. IN disabled while active.
+   */
+  const { activeRecord, lockState } = useMemo(() => {
     const now = getISTTime();
-    const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
-    
-    if (diffHours >= 16) return { activeRecord: null, staleRecord: rec };
-    
-    return { activeRecord: rec, staleRecord: null };
-  }, [employeeRecords, currentTime]);
-
-  const lockState = useMemo(() => {
     const latestRec = employeeRecords[0];
-    if (!latestRec) return { isLocked: false, unlockTime: null };
-    
-    let effectiveOutDate = latestRec.outDate || latestRec.date;
-    let effectiveOutTime = latestRec.outTime;
-    
-    if (!latestRec.outTime) {
-      if (!latestRec.inTime || latestRec.inTime.trim() === "") return { isLocked: false, unlockTime: null };
+
+    // Case 1: No history or latest is completed
+    if (!latestRec || latestRec.outTime) {
+      if (!latestRec) return { activeRecord: null, lockState: { isLocked: false, unlockTime: null } };
+
+      // Check for 8-hour rest rule
+      const effectiveOutDate = latestRec.outDate || latestRec.date;
+      const lastOutDateTime = new Date(`${effectiveOutDate}T${latestRec.outTime}`);
       
-      const inDT = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
-      if (!isValid(inDT)) return { isLocked: false, unlockTime: null };
-      
-      const nowTime = getISTTime();
-      const diffHours = (nowTime.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-      
-      if (diffHours < 16) return { isLocked: true, unlockTime: 'Shift Active' };
-      
-      const autoOutDT = addHours(inDT, 16);
-      effectiveOutDate = format(autoOutDT, "yyyy-MM-dd");
-      effectiveOutTime = format(autoOutDT, "HH:mm");
+      if (isValid(lastOutDateTime)) {
+        const allowedDateTime = addHours(lastOutDateTime, 8);
+        const isResting = isAfter(allowedDateTime, now);
+        return { 
+          activeRecord: null, 
+          lockState: { 
+            isLocked: isResting, 
+            unlockTime: isResting ? format(allowedDateTime, "HH:mm") : null 
+          } 
+        };
+      }
+      return { activeRecord: null, lockState: { isLocked: false, unlockTime: null } };
     }
+
+    // Case 2: Latest is an active shift (IN recorded, no OUT)
+    const inDateTime = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
     
-    const lastOutDateTime = new Date(`${effectiveOutDate}T${effectiveOutTime}`);
-    if (!isValid(lastOutDateTime)) return { isLocked: false, unlockTime: null };
-    
-    const allowedDateTime = addHours(lastOutDateTime, 8);
-    const nowCheck = getISTTime();
-    const isLocked = isAfter(allowedDateTime, nowCheck);
-    return { isLocked, unlockTime: isLocked ? format(allowedDateTime, "HH:mm") : null };
+    if (isValid(inDateTime)) {
+      const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
+      
+      // Check for 16-hour shift limit
+      if (diffHours >= 16) {
+        // Shift is "stale" (expired). Rest period starts from inTime + 16h
+        const autoOutTime = addHours(inDateTime, 16);
+        const nextAllowedIn = addHours(autoOutTime, 8);
+        const isResting = isAfter(nextAllowedIn, now);
+
+        return {
+          activeRecord: null,
+          lockState: {
+            isLocked: isResting,
+            unlockTime: isResting ? format(nextAllowedIn, "HH:mm") : null,
+            isStale: true
+          }
+        };
+      }
+
+      // Valid Active Shift
+      return {
+        activeRecord: latestRec,
+        lockState: { isLocked: true, unlockTime: 'Shift Active' }
+      };
+    }
+
+    return { activeRecord: null, lockState: { isLocked: false, unlockTime: null } };
   }, [employeeRecords, currentTime]);
 
   const requestLocation = (type: "IN" | "OUT") => {
@@ -350,7 +366,6 @@ export default function AttendancePage() {
       baseList = (attendanceRecords || []).filter(r => {
         if (r.date < PROJECT_START_DATE_STR) return false;
         
-        // SECURITY: Filter history by plant access for managers
         if (userAssignedPlantIds) {
           const emp = employees.find(e => e.employeeId === r.employeeId);
           const hasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(r.inPlantId);
@@ -420,12 +435,23 @@ export default function AttendancePage() {
                   <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
                 )}
               </div>
+
+              {/* Status Message Overlay */}
+              {lockState.isLocked && lockState.unlockTime !== 'Shift Active' && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                  <p className="text-[10px] font-black uppercase text-amber-800 tracking-tight">
+                    Rest period active. Gateway unlocks at <span className="text-sm">{lockState.unlockTime}</span>
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-4">
                 <Button 
                   className={cn("flex-1 h-14 text-sm font-black rounded-2xl shadow-lg transition-all", 
                     !isLoading && isAccessAllowed && !lockState.isLocked && !activeRecord ? "bg-primary text-white" : "bg-slate-100 text-slate-400 cursor-not-allowed"
                   )} 
-                  disabled={isLoading || !isAccessAllowed || isLoadingLocation || !!activeRecord || (lockState.isLocked && lockState.unlockTime !== 'Shift Active')} 
+                  disabled={isLoading || !isAccessAllowed || isLoadingLocation || !!activeRecord || lockState.isLocked} 
                   onClick={() => requestLocation("IN")}
                 >
                   Mark IN
@@ -557,6 +583,23 @@ export default function AttendancePage() {
               )}
             </div>
             <DialogFooter className="p-6 bg-slate-50"><Button className="w-full h-12 font-black bg-primary" onClick={handleConfirmCheckIn}>Confirm Check-In</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
+          <DialogContent className="sm:max-w-md rounded-2xl overflow-hidden p-0">
+            <DialogHeader className="p-6 bg-rose-600 text-white"><DialogTitle>Close Active Shift</DialogTitle><p className="text-xs font-bold text-rose-100 mt-2">{detectedAddress}</p></DialogHeader>
+            <div className="p-8 space-y-4">
+               <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Shift Start</span>
+                  <span className="font-mono font-bold text-slate-700">{activeRecord?.inTime}</span>
+               </div>
+               <div className="flex justify-between items-center bg-slate-900 p-4 rounded-xl text-white">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Marking OUT at</span>
+                  <span className="font-mono font-bold text-primary">{format(getISTTime(), "HH:mm")}</span>
+               </div>
+            </div>
+            <DialogFooter className="p-6 bg-slate-50"><Button className="w-full h-12 font-black bg-rose-600 hover:bg-rose-700 text-white" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button></DialogFooter>
           </DialogContent>
         </Dialog>
 
