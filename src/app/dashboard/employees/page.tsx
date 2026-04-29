@@ -125,11 +125,9 @@ export default function EmployeesPage() {
   const generateAutoId = useCallback(() => {
     if (!employees || employees.length === 0) return "EMP-S0001";
     
-    // Scan all existing IDs to find the maximum numeric serial
     const numericIds = employees
       .map(e => {
         const id = e.employeeId || "";
-        // Extract all digits found in the ID (handles EMP-S0001, S-0001, etc.)
         const match = id.match(/\d+/);
         return match ? parseInt(match[0]) : 0;
       })
@@ -215,7 +213,9 @@ export default function EmployeesPage() {
   const togglePlantSelection = (plantId: string) => {
     setFormData(prev => {
       const current = prev.unitIds || [];
-      const updated = current.includes(plantId) ? current.filter(id => id !== plantId) : [...current, plantId];
+      const updated = current.includes(plantId) 
+        ? current.filter(id => id !== plantId) 
+        : [...current, plantId];
       return { ...prev, unitIds: updated };
     });
   };
@@ -223,7 +223,6 @@ export default function EmployeesPage() {
   const handlePost = async () => {
     if (isProcessing) return;
 
-    // VALIDATION RULES
     const { firstName, employeeId, aadhaar, department, salary, pan, accountNo, ifscCode, unitIds } = formData;
     
     if (!employeeId || !firstName || !aadhaar || !department || !salary?.basic || (unitIds?.length || 0) === 0) {
@@ -251,7 +250,6 @@ export default function EmployeesPage() {
       return;
     }
 
-    // UNIQUENESS CHECKS
     const duplicateAadhaar = employees.find(e => e.aadhaar === aadhaar && e.id !== editEmployee?.id);
     if (duplicateAadhaar) {
       toast({ variant: "destructive", title: "Duplicate Aadhaar", description: "An employee with this Aadhaar number already exists." });
@@ -439,7 +437,6 @@ export default function EmployeesPage() {
 
           <ScrollArea className="flex-1 bg-slate-50/50">
             <div className="p-10 space-y-12 pb-24">
-              {/* SECTION 1: IDENTITY */}
               <div className="space-y-6">
                 <div className="flex items-center gap-2 mb-2">
                   <IdCard className="w-5 h-5 text-primary" />
@@ -485,7 +482,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* SECTION 2: PROFESSIONAL */}
               <div className="space-y-6 pt-6 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-2">
                   <Briefcase className="w-5 h-5 text-primary" />
@@ -511,15 +507,32 @@ export default function EmployeesPage() {
                       <PopoverContent className="w-[320px] p-2 rounded-2xl shadow-2xl" align="start">
                         <ScrollArea className="h-[250px] pr-2">
                           <div className="space-y-1">
-                            {plants.filter(p => p.firmId === formData.firmId).map(p => (
-                              <div key={p.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors" onClick={() => togglePlantSelection(p.id)}>
-                                <Checkbox checked={formData.unitIds?.includes(p.id)} onCheckedChange={() => togglePlantSelection(p.id)} className="rounded-md" />
-                                <div>
-                                  <p className="text-sm font-black text-slate-900">{p.name}</p>
-                                  <p className="text-[10px] text-slate-400 font-bold uppercase">Infrastructure Node</p>
+                            {plants.filter(p => p.firmId === formData.firmId).map(p => {
+                              const isChecked = formData.unitIds?.includes(p.id);
+                              return (
+                                <div 
+                                  key={p.id} 
+                                  className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors" 
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    togglePlantSelection(p.id);
+                                  }}
+                                >
+                                  <Checkbox 
+                                    checked={isChecked} 
+                                    onCheckedChange={() => {}} // Controlled by row click
+                                    className="rounded-md pointer-events-none" 
+                                  />
+                                  <div className="flex-1">
+                                    <p className="text-sm font-black text-slate-900">{p.name}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase">Infrastructure Node</p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
+                            {plants.filter(p => p.firmId === formData.firmId).length === 0 && (
+                              <p className="p-4 text-center text-xs font-bold text-slate-400 italic">No plants found for selected firm.</p>
+                            )}
                           </div>
                         </ScrollArea>
                       </PopoverContent>
@@ -542,7 +555,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* SECTION 3: BANKING */}
               <div className="space-y-6 pt-6 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-2">
                   <Banknote className="w-5 h-5 text-primary" />
@@ -564,7 +576,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* SECTION 4: SALARY STRUCTURE */}
               <div className="space-y-6 pt-6 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-2">
                   <CreditCard className="w-5 h-5 text-primary" />
@@ -606,7 +617,6 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* SECTION 5: COMPLIANCE */}
               <div className="space-y-6 pt-6 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-2">
                   <ShieldCheck className="w-5 h-5 text-primary" />
