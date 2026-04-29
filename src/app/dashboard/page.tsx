@@ -27,7 +27,9 @@ import {
   Filter,
   ChevronLeft,
   CalendarDays,
-  FileText
+  FileText,
+  Factory,
+  ShieldCheck
 } from "lucide-react";
 import { useData } from "@/context/data-context";
 import {
@@ -50,6 +52,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { cn, formatDate, formatHoursToHHMM } from "@/lib/utils";
 import { format, addHours, parseISO, isValid, isBefore, startOfMonth, setMonth, setYear, isAfter, isSunday } from "date-fns";
 
@@ -63,11 +66,14 @@ const getISTTime = () => {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function DashboardHome() {
-  const { employees, attendanceRecords, vouchers, holidays, leaveRequests } = useData();
+  const { employees, attendanceRecords, vouchers, holidays, leaveRequests, plants, verifiedUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh' | 'leave' | 'employees'>(null);
   const [todayStr, setTodayStr] = useState("");
   
+  // Plant Filter
+  const [selectedPlantFilter, setSelectedPlantFilter] = useState("all");
+
   // Leaderboard States
   const [selectedLeaderboardMonth, setSelectedLeaderboardMonth] = useState("");
   const [pickerYear, setPickerYear] = useState(2026);
@@ -82,6 +88,16 @@ export default function DashboardHome() {
     setSelectedLeaderboardMonth(`${mmm}-${yy}`);
     setPickerYear(now.getFullYear());
   }, []);
+
+  const userAssignedPlantIds = useMemo(() => {
+    if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
+    return verifiedUser.plantIds || [];
+  }, [verifiedUser]);
+
+  const authorizedPlants = useMemo(() => {
+    if (!userAssignedPlantIds) return plants;
+    return plants.filter(p => userAssignedPlantIds.includes(p.id));
+  }, [userAssignedPlantIds, plants]);
 
   const getPriorityStatus = (dateStr: string, record: any) => {
     const isSun = isSunday(parseISO(dateStr));
@@ -98,16 +114,28 @@ export default function DashboardHome() {
     }
   };
 
+  const filteredEmployees = useMemo(() => {
+    let list = employees.filter(e => e.active);
+    if (selectedPlantFilter !== "all") {
+      list = list.filter(e => (e.unitIds || []).includes(selectedPlantFilter));
+    }
+    if (userAssignedPlantIds) {
+      list = list.filter(e => (e.unitIds || []).some(id => userAssignedPlantIds.includes(id)));
+    }
+    return list;
+  }, [employees, selectedPlantFilter, userAssignedPlantIds]);
+
   const stats = useMemo(() => {
     if (!isMounted || !todayStr) return { totalEmployees: 0, presentToday: 0, absentToday: 0, fieldWorkToday: 0, wfhToday: 0, pendingApprovals: 0, attendancePct: "0", pendingLeaves: 0 };
     
     const now = getISTTime();
-    const activeEmployees = employees.filter(e => e.active);
+    const activeEmployees = filteredEmployees;
+    const activeEmpIds = new Set(activeEmployees.map(e => e.employeeId));
     
     const todayLogs = attendanceRecords.filter(r => {
       if (r.date !== todayStr) return false;
+      if (!activeEmpIds.has(r.employeeId)) return false;
       if (!r.outTime) {
-        // FIX: Only consider active records that have an inTime. 
         if (!r.inTime || r.inTime.trim() === "") return false;
         const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
         if (!isValid(inDT)) return false;
@@ -122,8 +150,18 @@ export default function DashboardHome() {
     const wfhToday = presentToday.filter(r => r.attendanceType === 'WFH');
     
     const absentToday = Math.max(0, activeEmployees.length - presentToday.length);
-    const pendingApprovals = attendanceRecords.filter(r => !r.approved).length + vouchers.filter(v => v.status === 'PENDING').length;
-    const pendingLeaves = (leaveRequests || []).filter(l => l.status === 'UNDER_PROCESS').length;
+    
+    const pendingApprovals = attendanceRecords.filter(r => {
+      if (r.approved) return false;
+      if (!activeEmpIds.has(r.employeeId)) return false;
+      return true;
+    }).length;
+
+    const pendingLeaves = (leaveRequests || []).filter(l => {
+      if (l.status !== 'UNDER_PROCESS') return false;
+      if (!activeEmpIds.has(l.employeeId)) return false;
+      return true;
+    }).length;
 
     return {
       totalEmployees: activeEmployees.length,
@@ -135,47 +173,53 @@ export default function DashboardHome() {
       pendingLeaves: pendingLeaves,
       attendancePct: activeEmployees.length > 0 ? ((presentToday.length / activeEmployees.length) * 100).toFixed(1) : "0"
     };
-  }, [employees, attendanceRecords, vouchers, isMounted, todayStr, leaveRequests]);
+  }, [filteredEmployees, attendanceRecords, vouchers, isMounted, todayStr, leaveRequests]);
 
   const leaderboardData = useMemo(() => {
-    if (!isMounted || !selectedLeaderboardMonth || !employees.length) return { top: [], bottom: [] };
+    if (!isMounted || !selectedLeaderboardMonth || !filteredEmployees.length) return { top: [], bottom: [] };
     const [mmm, yy] = selectedLeaderboardMonth.split('-');
     const mIndex = MONTHS.indexOf(mmm);
     const year = 2000 + parseInt(yy);
     const hourMap: Record<string, number> = {};
+    const activeEmpIds = new Set(filteredEmployees.map(e => e.employeeId));
 
     attendanceRecords.forEach(r => {
+      if (!activeEmpIds.has(r.employeeId)) return;
       const d = parseISO(r.date);
       if (isValid(d) && d.getMonth() === mIndex && d.getFullYear() === year) {
         hourMap[r.employeeId] = (hourMap[r.employeeId] || 0) + (r.hours || 0);
       }
     });
 
-    const activeList = employees.filter(e => e.active).map(e => ({
+    const activeList = filteredEmployees.map(e => ({
       name: e.name, id: e.employeeId, dept: e.department, desig: e.designation, hours: hourMap[e.employeeId] || 0
     }));
 
     const sorted = [...activeList].sort((a, b) => b.hours - a.hours);
-    return { top: sorted.slice(0, 3), bottom: [...activeList].sort((a, b) => a.hours - b.hours).slice(0, 3) };
-  }, [attendanceRecords, employees, selectedLeaderboardMonth, isMounted]);
+    return { 
+      top: sorted.slice(0, 3), 
+      bottom: [...activeList].sort((a, b) => a.hours - b.hours).slice(0, 3) 
+    };
+  }, [attendanceRecords, filteredEmployees, selectedLeaderboardMonth, isMounted]);
 
   const getCategorizedData = (type?: 'FIELD' | 'WFH' | 'PRESENT') => {
     if (!isMounted || !todayStr) return [];
     const now = getISTTime();
+    const activeEmpIds = new Set(filteredEmployees.map(e => e.employeeId));
 
     return attendanceRecords
       .filter(r => {
         if (r.date !== todayStr || !PRESENT_STATUSES.includes(r.status)) return false;
+        if (!activeEmpIds.has(r.employeeId)) return false;
         if (type === 'FIELD') return r.attendanceType === 'FIELD';
         if (type === 'WFH') return r.attendanceType === 'WFH';
         return true; 
       })
       .map(rec => {
-        const emp = employees.find(e => e.employeeId === rec.employeeId);
+        const emp = filteredEmployees.find(e => e.employeeId === rec.employeeId);
         const displayStatus = getPriorityStatus(rec.date, rec);
         let processed = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
         
-        // FIX: Only trigger auto-out if inTime exists.
         if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
           const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
           if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
@@ -190,14 +234,13 @@ export default function DashboardHome() {
   if (!isMounted) return null;
 
   if (viewMode === 'employees') {
-    const activeData = employees.filter(e => e.active);
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
           <div className="p-8 bg-slate-900 text-white shrink-0 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center"><Users className="w-7 h-7 text-primary" /></div>
-              <div><h2 className="text-2xl font-black uppercase">Active Staff Registry</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Total Registered Workforce</p></div>
+              <div><h2 className="text-2xl font-black uppercase">Active Staff Registry</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">{selectedPlantFilter === 'all' ? 'Total Registered Workforce' : 'Facility Scoped Registry'}</p></div>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setViewMode(null)} className="text-white"><X className="w-6 h-6" /></Button>
           </div>
@@ -211,7 +254,7 @@ export default function DashboardHome() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activeData.map((emp, idx) => (
+                {filteredEmployees.map((emp, idx) => (
                   <TableRow key={idx} className="hover:bg-slate-50 transition-colors">
                     <TableCell className="px-8 py-6">
                       <div className="flex flex-col">
@@ -233,7 +276,7 @@ export default function DashboardHome() {
   }
 
   if (viewMode === 'absent') {
-    const absentData = employees.filter(e => e.active && !attendanceRecords.some(r => r.employeeId === e.employeeId && r.date === todayStr)).map(e => ({ ...e, displayStatus: getPriorityStatus(todayStr, null) }));
+    const absentData = filteredEmployees.filter(e => !attendanceRecords.some(r => r.employeeId === e.employeeId && r.date === todayStr)).map(e => ({ ...e, displayStatus: getPriorityStatus(todayStr, null) }));
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
@@ -254,7 +297,8 @@ export default function DashboardHome() {
   }
 
   if (viewMode === 'leave') {
-    const pendingLeaves = (leaveRequests || []).filter(l => l.status === 'UNDER_PROCESS');
+    const activeEmpIds = new Set(filteredEmployees.map(e => e.employeeId));
+    const pendingLeaves = (leaveRequests || []).filter(l => l.status === 'UNDER_PROCESS' && activeEmpIds.has(l.employeeId));
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
@@ -335,43 +379,81 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-6 pb-12">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border shadow-sm mb-6">
+        <div>
+           <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+              <LayoutDashboard className="w-7 h-7 text-primary" /> Executive Overview
+           </h1>
+           <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest mt-1">Real-time Performance Metrics</p>
+        </div>
+        <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+           <Factory className="w-4 h-4 text-primary ml-2" />
+           <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
+              <SelectTrigger className="h-9 w-[220px] border-none font-black text-xs uppercase focus:ring-0 bg-transparent">
+                 <SelectValue placeholder="All Authorized Plants" />
+              </SelectTrigger>
+              <SelectContent>
+                 <SelectItem value="all" className="font-bold text-xs uppercase">All Authorized Plants</SelectItem>
+                 {authorizedPlants.map(p => (
+                   <SelectItem key={p.id} value={p.id} className="font-bold text-xs uppercase">{p.name}</SelectItem>
+                 ))}
+              </SelectContent>
+           </Select>
+        </div>
+      </div>
+
       {/* Primary Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard 
           title="Total Employees" 
           value={stats.totalEmployees} 
           icon={Users} 
-          trend="+1" 
-          trendUp={true} 
-          description="Active manpower" 
+          description="Active workforce headcount" 
           onClick={() => setViewMode('employees')}
         />
-        <StatCard title="Present Today" value={stats.presentToday} icon={CalendarCheck} trend={`${stats.attendancePct}%`} trendUp={true} description="Across units" onClick={() => setViewMode('present')} />
-        <StatCard title="Absent Today" value={stats.absentToday} icon={UserX} trend="0" trendUp={false} description="Missing logs" onClick={() => setViewMode('absent')} />
+        <StatCard 
+          title="Present Today" 
+          value={stats.presentToday} 
+          icon={CalendarCheck} 
+          trend={`${stats.attendancePct}%`} 
+          trendUp={true} 
+          description="Clocked-in attendance" 
+          onClick={() => setViewMode('present')} 
+        />
+        <StatCard 
+          title="Absent Today" 
+          value={stats.absentToday} 
+          icon={UserX} 
+          description="Unmarked staff exception" 
+          onClick={() => setViewMode('absent')} 
+        />
       </div>
 
       {/* Missing Widgets Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="Field Work Today" value={stats.fieldWorkToday} icon={Briefcase} trend="Active" trendUp={true} description="On-site logs" onClick={() => setViewMode('field')} />
-        <StatCard title="Work at Home" value={stats.wfhToday} icon={Home} trend="Remote" trendUp={true} description="WFH shift logs" onClick={() => setViewMode('wfh')} />
-        <StatCard title="Leave Requests" value={stats.pendingLeaves} icon={FileText} trend="Pending" trendUp={false} description="Awaiting process" onClick={() => setViewMode('leave')} />
+        <StatCard title="Field Work Today" value={stats.fieldWorkToday} icon={Briefcase} description="Authorized on-site logs" onClick={() => setViewMode('field')} />
+        <StatCard title="Work at Home" value={stats.wfhToday} icon={Home} description="Remote authorized shifts" onClick={() => setViewMode('wfh')} />
+        <StatCard title="Leave Requests" value={stats.pendingLeaves} icon={FileText} description="Awaiting HR approval" onClick={() => setViewMode('leave')} />
       </div>
 
       <div className="space-y-6 mt-10">
-        <div className="flex justify-between items-center bg-white p-6 rounded-3xl border shadow-sm">
-          <h3 className="text-xl font-black">Performance Insights</h3>
+        <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-6 rounded-3xl border shadow-sm gap-4">
+          <div className="flex items-center gap-3">
+             <Trophy className="w-6 h-6 text-amber-500" />
+             <h3 className="text-xl font-black">Facility Efficiency Metrics</h3>
+          </div>
           <div className="flex items-center gap-3">
              <Label className="text-[10px] font-black uppercase text-slate-400">Analysis Month</Label>
              <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-                <PopoverTrigger asChild><Button variant="outline" className="h-11 font-black">{selectedLeaderboardMonth}</Button></PopoverTrigger>
-                <PopoverContent className="w-72 p-0 rounded-2xl overflow-hidden" align="end">
-                   <div className="p-4 bg-slate-900 text-white flex justify-between"><Button variant="ghost" onClick={() => setPickerYear(p => p - 1)} disabled={pickerYear <= 2026}><ChevronLeft className="w-4 h-4"/></Button><span className="font-black">{pickerYear}</span><Button variant="ghost" onClick={() => setPickerYear(p => p + 1)} disabled={pickerYear >= getISTTime().getFullYear()}><ChevronRight className="w-4 h-4"/></Button></div>
-                   <div className="p-3 grid grid-cols-3 gap-2">{MONTHS.map((m, idx) => {
+                <PopoverTrigger asChild><Button variant="outline" className="h-11 font-black rounded-xl px-6">{selectedLeaderboardMonth}</Button></PopoverTrigger>
+                <PopoverContent className="w-72 p-0 rounded-2xl overflow-hidden border-none shadow-2xl" align="end">
+                   <div className="p-4 bg-slate-900 text-white flex justify-between items-center"><Button variant="ghost" size="icon" onClick={() => setPickerYear(p => p - 1)} disabled={pickerYear <= 2026} className="h-8 w-8 text-white"><ChevronLeft className="w-4 h-4"/></Button><span className="font-black">{pickerYear}</span><Button variant="ghost" size="icon" onClick={() => setPickerYear(p => p + 1)} disabled={pickerYear >= getISTTime().getFullYear()} className="h-8 w-8 text-white"><ChevronRight className="w-4 h-4"/></Button></div>
+                   <div className="p-4 grid grid-cols-3 gap-2 bg-white">{MONTHS.map((m, idx) => {
                       const sel = selectedLeaderboardMonth === `${m}-${pickerYear.toString().slice(-2)}`;
                       const d = new Date(pickerYear, idx, 1);
                       const future = isAfter(d, startOfMonth(getISTTime()));
                       const pre = isBefore(d, startOfMonth(PROJECT_START_DATE));
-                      return <Button key={m} variant={sel ? "default" : "ghost"} disabled={future || pre} onClick={() => { setSelectedLeaderboardMonth(`${m}-${pickerYear.toString().slice(-2)}`); setIsPickerOpen(false); }} className={cn("h-12", sel && "bg-primary")}>{m}</Button>;
+                      return <Button key={m} variant={sel ? "default" : "ghost"} disabled={future || pre} onClick={() => { setSelectedLeaderboardMonth(`${m}-${pickerYear.toString().slice(-2)}`); setIsPickerOpen(false); }} className={cn("h-11 font-bold rounded-lg", sel && "bg-primary")}>{m}</Button>;
                    })}</div>
                 </PopoverContent>
              </Popover>
@@ -379,13 +461,14 @@ export default function DashboardHome() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card className="rounded-[32px] overflow-hidden shadow-xl border-none"><CardHeader className="bg-emerald-50"><CardTitle className="text-lg font-black text-emerald-900">TOP EFFICIENT STAFF</CardTitle></CardHeader>
+          <Card className="rounded-[32px] overflow-hidden shadow-xl border-none"><CardHeader className="bg-emerald-50 py-6"><CardTitle className="text-lg font-black text-emerald-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5" /> TOP PERFORMANCE</CardTitle></CardHeader>
           <CardContent className="p-0 divide-y">{leaderboardData.top.map((e, idx) => (
-            <div key={idx} className="p-6 flex justify-between items-center hover:bg-slate-50"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center font-black text-emerald-600">{idx+1}</div><div><p className="font-black uppercase text-sm">{e.name}</p><p className="text-[10px] text-muted-foreground font-bold">{e.dept} • {e.desig}</p></div></div><p className="text-xl font-black text-emerald-600">{formatHoursToHHMM(e.hours)}</p></div>
+            <div key={idx} className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center font-black text-emerald-600 shadow-sm border border-emerald-200">{idx+1}</div><div><p className="font-black uppercase text-sm tracking-tight">{e.name}</p><p className="text-[10px] text-muted-foreground font-bold">{e.dept} • {e.desig}</p></div></div><p className="text-xl font-black text-emerald-600 font-mono">{formatHoursToHHMM(e.hours)}</p></div>
           ))}</CardContent></Card>
-          <Card className="rounded-[32px] overflow-hidden shadow-xl border-none"><CardHeader className="bg-rose-50"><CardTitle className="text-lg font-black text-rose-900">ATTENTION REQUIRED</CardTitle></CardHeader>
+          
+          <Card className="rounded-[32px] overflow-hidden shadow-xl border-none"><CardHeader className="bg-rose-50 py-6"><CardTitle className="text-lg font-black text-rose-900 flex items-center gap-2"><AlertCircle className="w-5 h-5" /> ATTENTION REQUIRED</CardTitle></CardHeader>
           <CardContent className="p-0 divide-y">{leaderboardData.bottom.map((e, idx) => (
-            <div key={idx} className="p-6 flex justify-between items-center hover:bg-slate-50"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center font-black text-rose-600">{idx+1}</div><div><p className="font-black uppercase text-sm">{e.name}</p><p className="text-[10px] text-muted-foreground font-bold">{e.dept} • {e.desig}</p></div></div><p className="text-xl font-black text-rose-600">{formatHoursToHHMM(e.hours)}</p></div>
+            <div key={idx} className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center font-black text-rose-600 shadow-sm border border-rose-200">{idx+1}</div><div><p className="font-black uppercase text-sm tracking-tight">{e.name}</p><p className="text-[10px] text-muted-foreground font-bold">{e.dept} • {e.desig}</p></div></div><p className="text-xl font-black text-rose-600 font-mono">{formatHoursToHHMM(e.hours)}</p></div>
           ))}</CardContent></Card>
         </div>
       </div>
@@ -394,5 +477,36 @@ export default function DashboardHome() {
 }
 
 function StatCard({ title, value, icon: Icon, trend, trendUp, description, onClick }: any) {
-  return (<Card className={cn("shadow-sm cursor-pointer hover:shadow-md transition-all border-slate-100", onClick && "group")} onClick={onClick}><CardContent className="p-6 flex justify-between items-center"><div className="space-y-1"><div><p className="text-xs font-bold text-muted-foreground uppercase tracking-tight">{title}</p><h3 className="text-3xl font-black mt-1 text-slate-900">{value}</h3></div><p className="text-[10px] text-muted-foreground font-medium">{description}</p></div><div className="p-4 rounded-2xl bg-slate-50 group-hover:bg-primary/10 transition-colors"><Icon className="w-6 h-6 text-slate-400 group-hover:text-primary transition-colors" /></div></CardContent></Card>);
+  return (
+    <Card 
+      className={cn(
+        "shadow-sm cursor-pointer hover:shadow-md transition-all border-slate-100 relative group overflow-hidden rounded-[2rem]",
+        onClick && "hover:border-primary/20 active:scale-[0.98]"
+      )} 
+      onClick={onClick}
+    >
+      <CardContent className="p-7 flex justify-between items-center">
+        <div className="space-y-1.5">
+          <div>
+            <div className="flex items-center gap-2">
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
+               {trend && (
+                 <Badge className={cn("text-[9px] font-black px-1.5 py-0", trendUp ? "bg-emerald-500" : "bg-rose-500")}>
+                   {trend}
+                 </Badge>
+               )}
+            </div>
+            <h3 className="text-4xl font-black mt-1 text-slate-900 tracking-tighter">{value}</h3>
+          </div>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight flex items-center gap-1.5">
+             <div className="w-1 h-1 rounded-full bg-primary" /> {description}
+          </p>
+        </div>
+        <div className="p-5 rounded-3xl bg-slate-50 group-hover:bg-primary/10 transition-colors shadow-inner border border-slate-100/50">
+          <Icon className="w-7 h-7 text-slate-400 group-hover:text-primary transition-colors" />
+        </div>
+      </CardContent>
+      <div className="absolute bottom-0 left-0 h-1 w-0 bg-primary group-hover:w-full transition-all duration-500" />
+    </Card>
+  );
 }
