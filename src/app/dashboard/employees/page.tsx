@@ -39,7 +39,8 @@ import {
   User as UserIcon,
   Phone,
   MapPin,
-  Loader2
+  Loader2,
+  CheckCircle2
 } from "lucide-react";
 import { 
   Select, 
@@ -184,12 +185,14 @@ export default function EmployeesPage() {
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
 
-  const calculateFullSalary = (s: SalaryStructure) => {
+  const calculateFullSalary = (s: SalaryStructure, isComplianceEnabled: boolean) => {
     const gross = (Number(s.basic) || 0) + (Number(s.hra) || 0) + (Number(s.da) || 0) + (Number(s.allowance) || 0);
-    const epf = Math.round(Number(s.basic) * (Number(s.pfRateEmp) / 100));
-    const erpf = Math.round(Number(s.basic) * (Number(s.pfRateEx) / 100));
-    const eesic = Math.round(gross * (Number(s.esicRateEmp) / 100));
-    const eresic = Math.round(gross * (Number(s.esicRateEx) / 100));
+    
+    // PF & ESIC Calculations - Set to 0 if Not Applicable
+    const epf = isComplianceEnabled ? Math.round(Number(s.basic) * (Number(s.pfRateEmp) / 100)) : 0;
+    const erpf = isComplianceEnabled ? Math.round(Number(s.basic) * (Number(s.pfRateEx) / 100)) : 0;
+    const eesic = isComplianceEnabled ? Math.round(gross * (Number(s.esicRateEmp) / 100)) : 0;
+    const eresic = isComplianceEnabled ? Math.round(gross * (Number(s.esicRateEx) / 100)) : 0;
     
     return { 
       ...s, 
@@ -206,7 +209,14 @@ export default function EmployeesPage() {
   const updateFormSalary = (field: string, val: any) => {
     setFormData(prev => {
       const updatedSalary = { ...prev.salary, [field]: val } as SalaryStructure;
-      return { ...prev, salary: calculateFullSalary(updatedSalary) };
+      return { ...prev, salary: calculateFullSalary(updatedSalary, !!prev.isGovComplianceEnabled) };
+    });
+  };
+
+  const toggleComplianceStatus = (enabled: boolean) => {
+    setFormData(prev => {
+      const updatedSalary = calculateFullSalary(prev.salary as SalaryStructure, enabled);
+      return { ...prev, isGovComplianceEnabled: enabled, salary: updatedSalary };
     });
   };
 
@@ -618,11 +628,40 @@ export default function EmployeesPage() {
               </div>
 
               <div className="space-y-6 pt-6 border-t border-slate-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <ShieldCheck className="w-5 h-5 text-primary" />
-                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">5. Statutory Compliance (PF/ESIC)</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">5. Statutory Compliance (PF/ESIC)</h3>
+                  </div>
+                  <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className={cn(
+                        "h-9 px-6 text-[10px] font-black uppercase rounded-lg transition-all",
+                        formData.isGovComplianceEnabled ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                      )}
+                      onClick={() => toggleComplianceStatus(true)}
+                    >
+                      <CheckCircle2 className={cn("w-3.5 h-3.5 mr-2", formData.isGovComplianceEnabled ? "text-emerald-500" : "text-slate-300")} />
+                      Applicable
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className={cn(
+                        "h-9 px-6 text-[10px] font-black uppercase rounded-lg transition-all",
+                        !formData.isGovComplianceEnabled ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                      )}
+                      onClick={() => toggleComplianceStatus(false)}
+                    >
+                      <X className={cn("w-3.5 h-3.5 mr-2", !formData.isGovComplianceEnabled ? "text-rose-500" : "text-slate-300")} />
+                      Not Applicable
+                    </Button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+                <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 transition-opacity", !formData.isGovComplianceEnabled && "opacity-50 pointer-events-none")}>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">PF Number</Label>
                     <Input value={formData.pfNumber} onChange={e => setFormData(p => ({...p, pfNumber: e.target.value}))} className="h-12 font-mono" />
