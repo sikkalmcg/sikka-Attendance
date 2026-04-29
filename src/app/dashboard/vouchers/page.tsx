@@ -37,7 +37,8 @@ import {
   ShieldCheck,
   FileText,
   Navigation,
-  FileX
+  FileX,
+  Factory
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -90,11 +91,12 @@ const generateVoucherMonths = () => {
 const VOUCHER_MONTHS = generateVoucherMonths();
 
 export default function VouchersPage() {
-  const { employees, firms, vouchers, addRecord, updateRecord, currentUser } = useData();
+  const { employees, firms, plants, vouchers, addRecord, updateRecord, currentUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("create");
   const [searchTerm, setSearchTerm] = useState("");
   const [voucherDate, setVoucherDate] = useState("");
+  const [selectedPlantId, setSelectedPlantId] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("Advance Salary");
@@ -150,6 +152,11 @@ export default function VouchersPage() {
     const nextSerial = sameFY.length > 0 ? Math.max(...sameFY.map(v => parseInt(v.voucherNo.split('-')[2]) || 0)) + 1 : 1;
     return `${fyFullPrefix}${nextSerial.toString().padStart(5, '0')}`;
   }, [voucherDate, vouchers]);
+
+  const filteredEmployeesForSelection = useMemo(() => {
+    if (!selectedPlantId) return employees;
+    return employees.filter(emp => (emp.unitIds || []).includes(selectedPlantId) || emp.unitId === selectedPlantId);
+  }, [employees, selectedPlantId]);
 
   const filteredPendingVouchers = useMemo(() => {
     const search = searchTerm.toLowerCase();
@@ -305,6 +312,7 @@ export default function VouchersPage() {
     toast({ title: "Voucher Created" });
     setAmount("");
     setPurpose("Advance Salary");
+    setSelectedEmployeeId("");
     setActiveTab("approve");
   };
 
@@ -456,21 +464,37 @@ export default function VouchersPage() {
                 <CardContent className="p-4 sm:p-8 space-y-6 sm:space-y-8">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                     <div className="space-y-2">
-                      <Label className="font-bold text-xs">Voucher Number</Label>
+                      <Label className="font-bold text-xs uppercase text-slate-500">Voucher Number</Label>
                       <Input value={voucherNo} disabled className="h-11 sm:h-12 font-bold bg-slate-50 text-sm" />
                     </div>
                     <div className="space-y-2">
-                      <Label className="font-bold text-xs">Date *</Label>
+                      <Label className="font-bold text-xs uppercase text-slate-500">Date *</Label>
                       <Input type="date" value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} className="h-11 sm:h-12 text-sm" min={PROJECT_START_DATE_STR} />
                     </div>
+                    
+                    {/* NEW PLANT SELECTOR */}
                     <div className="space-y-2">
-                      <Label className="font-bold text-xs">Select Employee *</Label>
-                      <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                      <Label className="font-bold text-xs uppercase text-slate-500">Select Plant *</Label>
+                      <Select value={selectedPlantId} onValueChange={(v) => { setSelectedPlantId(v); setSelectedEmployeeId(""); }}>
                         <SelectTrigger className="h-11 sm:h-12 text-sm">
-                          <SelectValue placeholder="Select Employee" />
+                          <SelectValue placeholder="Select Plant to Filter Staff" />
                         </SelectTrigger>
                         <SelectContent>
-                          {employees.map(emp => (
+                          {plants.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="font-bold text-xs uppercase text-slate-500">Select Employee *</Label>
+                      <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId} disabled={!selectedPlantId}>
+                        <SelectTrigger className="h-11 sm:h-12 text-sm">
+                          <SelectValue placeholder={selectedPlantId ? "Select Employee" : "Choose Plant First"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {filteredEmployeesForSelection.map(emp => (
                             <SelectItem key={emp.id} value={emp.id} className="text-sm">
                               {emp.name} ({emp.employeeId})
                             </SelectItem>
@@ -478,13 +502,14 @@ export default function VouchersPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    
                     <div className="space-y-2">
-                      <Label className="font-bold text-xs">Amount (INR) *</Label>
+                      <Label className="font-bold text-xs uppercase text-slate-500">Amount (INR) *</Label>
                       <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-11 sm:h-12 text-sm" placeholder="Enter amount" />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="font-bold text-xs">Purpose *</Label>
+                    <Label className="font-bold text-xs uppercase text-slate-500">Purpose *</Label>
                     <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-11 sm:h-12 text-sm" placeholder="Specify reason for advance..." />
                   </div>
                 </CardContent>
@@ -506,10 +531,11 @@ export default function VouchersPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="w-full">
-                  <Table className="min-w-[800px]">
+                  <Table className="min-w-[1000px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-bold">Voucher No</TableHead>
+                        <TableHead className="font-bold">Plant</TableHead>
                         <TableHead className="font-bold">Name</TableHead>
                         <TableHead className="font-bold text-center">Dept / Desig</TableHead>
                         <TableHead className="font-bold">Date</TableHead>
@@ -519,13 +545,17 @@ export default function VouchersPage() {
                     </TableHeader>
                     <TableBody>
                       {paginatedPending.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-medium">No pending vouchers found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground font-medium">No pending vouchers found.</TableCell></TableRow>
                       ) : (
                         paginatedPending.map(v => {
                           const emp = employees.find(e => e.id === v.employeeId);
+                          const plantName = plants.find(p => (emp?.unitIds || []).includes(p.id) || emp?.unitId === p.id)?.name || "---";
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
                               <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-white border-slate-200">{plantName}</Badge>
+                              </TableCell>
                               <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col text-center">
@@ -572,6 +602,7 @@ export default function VouchersPage() {
                         <TableHeader className="bg-slate-50">
                           <TableRow>
                             <TableHead className="font-bold">Voucher No</TableHead>
+                            <TableHead className="font-bold">Plant</TableHead>
                             <TableHead className="font-bold">Voucher Date</TableHead>
                             <TableHead className="font-bold">Employee Name/ID</TableHead>
                             <TableHead className="font-bold">Department/Designation</TableHead>
@@ -584,13 +615,17 @@ export default function VouchersPage() {
                         </TableHeader>
                         <TableBody>
                           {paginatedRejected.length === 0 ? (
-                            <TableRow><TableCell colSpan={9} className="text-center py-20 text-muted-foreground font-medium">No rejected records found.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground font-medium">No rejected records found.</TableCell></TableRow>
                           ) : (
                             paginatedRejected.map(v => {
                               const emp = employees.find(e => e.id === v.employeeId);
+                              const plantName = plants.find(p => (emp?.unitIds || []).includes(p.id) || emp?.unitId === p.id)?.name || "---";
                               return (
                                 <TableRow key={v.id} className="hover:bg-slate-50/50">
                                   <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-[9px] font-black uppercase bg-white border-slate-200">{plantName}</Badge>
+                                  </TableCell>
                                   <TableCell className="text-xs font-medium">{formatDate(v.date)}</TableCell>
                                   <TableCell className="font-bold uppercase text-slate-700 text-xs">
                                     <div className="flex flex-col">
@@ -634,10 +669,11 @@ export default function VouchersPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="w-full">
-                  <Table className="min-w-[800px]">
+                  <Table className="min-w-[1000px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
                         <TableHead className="font-bold">Voucher No</TableHead>
+                        <TableHead className="font-bold">Plant</TableHead>
                         <TableHead className="font-bold">Name</TableHead>
                         <TableHead className="font-bold text-center">Dept / Desig</TableHead>
                         <TableHead className="font-bold">Date</TableHead>
@@ -647,13 +683,17 @@ export default function VouchersPage() {
                     </TableHeader>
                     <TableBody>
                       {paginatedPayable.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No approved vouchers awaiting payment.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="text-center py-20 text-muted-foreground">No approved vouchers awaiting payment.</TableCell></TableRow>
                       ) : (
                         paginatedPayable.map(v => {
                           const emp = employees.find(e => e.id === v.employeeId);
+                          const plantName = plants.find(p => (emp?.unitIds || []).includes(p.id) || emp?.unitId === p.id)?.name || "---";
                           return (
                             <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
                               <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[9px] font-black uppercase bg-white border-slate-200">{plantName}</Badge>
+                              </TableCell>
                               <TableCell className="font-bold uppercase text-slate-700 text-xs sm:text-sm">{emp?.name}</TableCell>
                               <TableCell>
                                 <div className="flex flex-col text-center">
@@ -712,10 +752,11 @@ export default function VouchersPage() {
               <Card className="shadow-sm border-slate-200 overflow-hidden">
                 <CardContent className="p-0">
                   <ScrollArea className="w-full">
-                    <Table className="min-w-[1600px]">
+                    <Table className="min-w-[1800px]">
                       <TableHeader className="bg-slate-50">
                         <TableRow>
                           <TableHead className="font-bold">Voucher No</TableHead>
+                          <TableHead className="font-bold">Plant</TableHead>
                           <TableHead className="font-bold">Voucher Date</TableHead>
                           <TableHead className="font-bold">Employee Name</TableHead>
                           <TableHead className="font-bold">Department</TableHead>
@@ -731,13 +772,17 @@ export default function VouchersPage() {
                       </TableHeader>
                       <TableBody>
                         {paginatedPaid.length === 0 ? (
-                          <TableRow><TableCell colSpan={12} className="text-center py-20 text-muted-foreground font-medium">No paid vouchers found for the selected criteria.</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={13} className="text-center py-20 text-muted-foreground font-medium">No paid vouchers found for the selected criteria.</TableCell></TableRow>
                         ) : (
                           paginatedPaid.map(v => {
                             const emp = employees.find(e => e.id === v.employeeId);
+                            const plantName = plants.find(p => (emp?.unitIds || []).includes(p.id) || emp?.unitId === p.id)?.name || "---";
                             return (
                               <TableRow key={v.id} className="hover:bg-slate-50/50 transition-colors">
                                 <TableCell className="font-mono font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => handleVoucherClick(v)}>{v.voucherNo}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-[9px] font-black uppercase bg-white border-slate-200">{plantName}</Badge>
+                                </TableCell>
                                 <TableCell className="text-xs font-medium">{formatDate(v.date)}</TableCell>
                                 <TableCell className="font-bold uppercase text-slate-700 text-xs">{emp?.name}</TableCell>
                                 <TableCell className="text-xs text-slate-600">{emp?.department}</TableCell>
