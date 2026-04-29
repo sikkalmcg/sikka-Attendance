@@ -337,6 +337,21 @@ export default function ApprovalsPage() {
     } finally { setIsProcessing(false); }
   };
 
+  const handleRestoreAttendance = (rec: any) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      updateRecord('attendance', rec.id, { 
+        approved: false, 
+        remark: null, 
+        approvedBy: null 
+      });
+      toast({ title: "Record Restored", description: "Moved back to Pending queue." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleManualEdit = () => {
     if (!selectedAttendance || !editData.remark.trim() || isProcessing) return;
     setIsProcessing(true);
@@ -553,7 +568,15 @@ export default function ApprovalsPage() {
                               <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveAttendance(rec)}>Approve</Button>
                             </>
                           ) : (
-                            <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">Finalized</Badge>
+                            <Button 
+                              variant="secondary" 
+                              size="sm" 
+                              disabled={isProcessing}
+                              className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg"
+                              onClick={() => handleRestoreAttendance(rec)}
+                            >
+                              <RotateCcw className="w-3 h-3" /> Restore
+                            </Button>
                           )}
                         </div>
                       </TableCell>
