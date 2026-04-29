@@ -272,11 +272,13 @@ export default function EmployeesPage() {
   return (
     <div className="space-y-6 pb-12">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Employee Registry</h1>
-        <Button className="bg-primary" onClick={() => { setFormData({ ...INITIAL_FORM_DATA }); setView('form'); }}>Add Staff</Button>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Employee Registry</h1>
+        <Button className="bg-primary font-bold shadow-lg shadow-primary/20" onClick={() => { setFormData({ ...INITIAL_FORM_DATA }); setView('form'); }}>
+          <UserPlus className="w-4 h-4 mr-2" /> Add Staff
+        </Button>
       </div>
 
-      <Card className="border-slate-200 overflow-hidden">
+      <Card className="border-slate-200 overflow-hidden shadow-sm">
         <CardHeader className="bg-slate-50/50 border-b flex flex-col md:flex-row items-center gap-4">
           <div className="relative flex-1 w-full md:w-auto">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400"/>
@@ -302,12 +304,12 @@ export default function EmployeesPage() {
             <Table className="min-w-[1200px]">
               <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead className="font-bold px-6">Name / ID</TableHead>
-                  <TableHead className="font-bold">Assigned Plants</TableHead>
-                  <TableHead className="font-bold">Aadhaar</TableHead>
-                  <TableHead className="font-bold">Dept/Desig</TableHead>
-                  <TableHead className="font-bold text-right">Net Payable</TableHead>
-                  <TableHead className="text-right pr-6">Actions</TableHead>
+                  <TableHead className="font-bold px-6 py-4 text-[11px] uppercase tracking-widest text-slate-500">Name / ID</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Assigned Plants</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Aadhaar</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Dept / Desig</TableHead>
+                  <TableHead className="font-bold text-right text-[11px] uppercase tracking-widest text-slate-500">Net Payable</TableHead>
+                  <TableHead className="text-right pr-6 font-bold text-[11px] uppercase tracking-widest text-slate-500">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -315,18 +317,54 @@ export default function EmployeesPage() {
                   <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-bold italic">No records found matching criteria.</TableCell></TableRow>
                 ) : (
                   paginatedEmployees.map(emp => (
-                    <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                      <TableCell className="px-6 font-bold">{emp.name}<p className="text-[10px] text-primary font-mono">{emp.employeeId}</p></TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {(emp.unitIds || []).slice(0, 1).map(id => <Badge key={id} variant="outline" className="text-[9px]">{plants.find(p => p.id === id)?.name || '---'}</Badge>)}
-                          {(emp.unitIds?.length || 0) > 1 && <Badge variant="secondary" className="text-[9px]">+{emp.unitIds!.length - 1} more</Badge>}
+                    <TableRow key={emp.id} className="hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-black text-slate-900 uppercase text-sm">{emp.name}</span>
+                          <span className="text-[10px] text-primary font-mono font-bold uppercase tracking-tight">{emp.employeeId}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs font-mono">{emp.aadhaar}</TableCell>
-                      <TableCell className="text-xs">{emp.department}<p className="text-[10px] text-muted-foreground uppercase">{emp.designation}</p></TableCell>
-                      <TableCell className="text-right font-black text-emerald-600">{formatCurrency(emp.salary?.netSalary || 0)}</TableCell>
-                      <TableCell className="text-right pr-6"><Button variant="ghost" size="icon" onClick={() => { setEditEmployee(emp); setFormData(emp); setView('form'); }}><Pencil className="w-4 h-4"/></Button></TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1.5 max-w-[250px]">
+                          {(emp.unitIds || []).length === 0 ? (
+                            <span className="text-[10px] text-slate-400 font-bold italic">No Plant Assigned</span>
+                          ) : (
+                            (emp.unitIds || []).map(id => {
+                              const plantName = plants.find(p => p.id === id)?.name;
+                              if (!plantName) return null;
+                              return (
+                                <Badge 
+                                  key={id} 
+                                  variant="outline" 
+                                  className="text-[9px] font-black uppercase border-primary/20 text-primary bg-primary/5 px-2 py-0.5"
+                                >
+                                  {plantName}
+                                </Badge>
+                              );
+                            })
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs font-mono font-bold text-slate-600">{emp.aadhaar}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-700">{emp.department}</span>
+                          <span className="text-[10px] text-muted-foreground uppercase font-medium">{emp.designation}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className="font-black text-emerald-600 text-sm">{formatCurrency(emp.salary?.netSalary || 0)}</span>
+                      </TableCell>
+                      <TableCell className="text-right pr-6">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-slate-400 hover:text-primary transition-colors"
+                          onClick={() => { setEditEmployee(emp); setFormData(emp); setView('form'); }}
+                        >
+                          <Pencil className="w-4 h-4"/>
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -344,9 +382,15 @@ export default function EmployeesPage() {
 function StandardPaginationFooter({ current, total, onPageChange }: any) {
   return (
     <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-      <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)}>Prev</Button>
-      <span className="text-xs font-bold text-slate-500">Page {current} of {total || 1}</span>
-      <Button variant="outline" size="sm" disabled={current === total || total === 0} onClick={() => onPageChange(current + 1)}>Next</Button>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)} className="font-bold">
+          <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+        </Button>
+        <Button variant="outline" size="sm" disabled={current === total || total === 0} onClick={() => onPageChange(current + 1)} className="font-bold">
+          Next <ChevronRight className="w-4 h-4 ml-1" />
+        </Button>
+      </div>
+      <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {current} of {total || 1}</span>
     </CardFooter>
   );
 }
