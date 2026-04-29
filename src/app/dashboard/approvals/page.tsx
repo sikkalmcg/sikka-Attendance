@@ -54,7 +54,9 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  MessageSquare
+  MessageSquare,
+  UserX,
+  CheckCircle
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -83,6 +85,7 @@ export default function ApprovalsPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
+  const [pendingSubMode, setPendingSubMode] = useState<"present" | "absent">("present");
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("ALL_ASSIGNED");
 
   // History Controls
@@ -115,7 +118,7 @@ export default function ApprovalsPage() {
   useEffect(() => {
     setPendingPage(1);
     setHistoryPage(1);
-  }, [viewMode, selectedPlantFilter, historyMonthFilter]);
+  }, [viewMode, pendingSubMode, selectedPlantFilter, historyMonthFilter]);
 
   const userAssignedPlantIds = useMemo(() => {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
@@ -254,9 +257,19 @@ export default function ApprovalsPage() {
   }, [attendanceRecords, employees, isMounted, holidaySet, userAssignedPlantIds, authorizedPlantNames, selectedPlantFilter, searchTerm, plants]);
 
   const pendingAttendanceList = useMemo(() => {
-    return allAttendanceList.filter(rec => !rec.approved && !rec.remark && (rec.isVirtual || rec.outTime))
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [allAttendanceList]);
+    return allAttendanceList.filter(rec => {
+      const isBasePending = !rec.approved && !rec.remark;
+      if (!isBasePending) return false;
+
+      if (pendingSubMode === 'present') {
+        // Show actual clock-ins that have finished (either by user or auto-out)
+        return !rec.isVirtual && (rec.outTime || rec.autoCheckout);
+      } else {
+        // Show virtual absent records
+        return rec.isVirtual;
+      }
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [allAttendanceList, pendingSubMode]);
 
   const historyAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
@@ -448,7 +461,29 @@ export default function ApprovalsPage() {
 
       <div className="flex flex-col md:flex-row items-center gap-4">
         <div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Global search by Name or ID..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-        <Tabs value={viewMode} onValueChange={setViewMode} className="w-full md:w-auto"><TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[240px]"><TabsTrigger value="pending" className="text-xs font-black">Pending</TabsTrigger><TabsTrigger value="history" className="text-xs font-black">History</TabsTrigger></TabsList></Tabs>
+        <div className="flex flex-col md:flex-row gap-4 items-center">
+          {viewMode === 'pending' && (
+            <div className="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200">
+               <Button 
+                variant={pendingSubMode === 'present' ? 'default' : 'ghost'} 
+                size="sm" 
+                className={cn("h-8 text-[10px] font-black uppercase rounded-lg px-4", pendingSubMode === 'present' ? "bg-white text-slate-900 shadow-sm hover:bg-white" : "text-slate-500")}
+                onClick={() => setPendingSubMode('present')}
+               >
+                 <CheckCircle className="w-3 h-3 mr-2" /> Present
+               </Button>
+               <Button 
+                variant={pendingSubMode === 'absent' ? 'default' : 'ghost'} 
+                size="sm" 
+                className={cn("h-8 text-[10px] font-black uppercase rounded-lg px-4", pendingSubMode === 'absent' ? "bg-white text-slate-900 shadow-sm hover:bg-white" : "text-slate-500")}
+                onClick={() => setPendingSubMode('absent')}
+               >
+                 <UserX className="w-3 h-3 mr-2" /> Absent
+               </Button>
+            </div>
+          )}
+          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v)} className="w-full md:w-auto"><TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[240px]"><TabsTrigger value="pending" className="text-xs font-black">Pending</TabsTrigger><TabsTrigger value="history" className="text-xs font-black">History</TabsTrigger></TabsList></Tabs>
+        </div>
       </div>
 
       {viewMode === 'history' && (
@@ -497,7 +532,7 @@ export default function ApprovalsPage() {
               </TableHeader>
               <TableBody>
                 {currentData.items.length === 0 ? (
-                  <TableRow><TableCell colSpan={viewMode === 'history' ? 13 : 12} className="text-center py-20 text-muted-foreground font-bold italic">No records matching your criteria.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={viewMode === 'history' ? 13 : 12} className="text-center py-20 text-muted-foreground font-bold italic">No {pendingSubMode} records matching your criteria.</TableCell></TableRow>
                 ) : (
                   currentData.items.map((rec: any) => (
                     <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
@@ -563,9 +598,11 @@ export default function ApprovalsPage() {
                         <div className="flex justify-end gap-1">
                           {viewMode === 'pending' ? (
                             <>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => { setSelectedAttendance(rec); setEditData({ inTime: rec.inTime || "", outTime: rec.outTime || "", remark: "" }); setIsEditModalOpen(true); }}><Pencil className="w-3.5 h-3.5" /></Button>
+                              {!rec.isVirtual && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => { setSelectedAttendance(rec); setEditData({ inTime: rec.inTime || "", outTime: rec.outTime || "", remark: "" }); setIsEditModalOpen(true); }}><Pencil className="w-3.5 h-3.5" /></Button>
+                              )}
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
-                              <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600" onClick={() => handleApproveAttendance(rec)}>Approve</Button>
+                              <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApproveAttendance(rec)}>Approve</Button>
                             </>
                           ) : (
                             <Button 
