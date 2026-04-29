@@ -163,6 +163,21 @@ export default function AttendancePage() {
       .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
   }, [attendanceRecords, effectiveEmployeeId]);
 
+  // Greeting Logic based on IST time
+  const greetingMessage = useMemo(() => {
+    if (!currentTime || !verifiedUser) return "";
+    const hours = currentTime.getHours();
+    const name = verifiedUser.fullName || "User";
+    
+    if (hours < 12) {
+      return `Good Morning ${name}, Have a good Day !`;
+    } else if (hours < 17) {
+      return `Good Afternoon ${name}`;
+    } else {
+      return `Good Evening ${name}`;
+    }
+  }, [currentTime, verifiedUser]);
+
   /**
    * BUSINESS LOGIC: SHIFT & REST PERIOD ENFORCEMENT
    * 1. Max Shift: 16 hours.
@@ -419,10 +434,15 @@ export default function AttendancePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
           <Card className="shadow-2xl border-none overflow-hidden bg-white">
             <div className="h-1 bg-primary" />
-            <CardHeader className="text-center py-4">
+            <CardHeader className="text-center py-4 space-y-1">
               <CardTitle className="text-lg font-black flex items-center justify-center gap-2 text-slate-800">
                 <ShieldCheck className="text-primary w-5 h-5" /> Gateway Portal
               </CardTitle>
+              {greetingMessage && (
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">
+                  {greetingMessage}
+                </p>
+              )}
             </CardHeader>
             <CardContent className="space-y-6 px-6 pb-8">
               <div className="py-6 px-8 rounded-3xl bg-sky-50 text-sky-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-sky-100 max-w-[280px] mx-auto">
