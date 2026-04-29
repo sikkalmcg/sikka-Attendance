@@ -20,8 +20,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter,
-  DialogDescription
+  DialogFooter
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -35,21 +34,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Search, 
-  CheckCircle2, 
   XCircle, 
   RotateCcw,
-  Clock,
   MapPin,
   Navigation,
   Filter,
   ShieldCheck,
   Building2,
   UserCheck,
-  CalendarDays,
-  Briefcase,
-  FileCheck,
   Pencil,
-  Download,
   ArrowRightCircle,
   ChevronLeft,
   ChevronRight,
@@ -81,24 +74,21 @@ const generateFilterMonths = () => {
 };
 
 export default function ApprovalsPage() {
-  const { attendanceRecords, leaveRequests, employees, updateRecord, addRecord, verifiedUser, holidays, plants } = useData();
+  const { attendanceRecords, employees, updateRecord, addRecord, verifiedUser, holidays, plants } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
   const [pendingSubMode, setPendingSubMode] = useState<"present" | "absent">("present");
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("ALL_ASSIGNED");
 
-  // History Controls
   const [historyMonthFilter, setHistoryMonthFilter] = useState("");
   const [pendingPage, setPendingPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
 
-  // Attendance Reject/Edit/Restore States
   const [selectedAttendance, setSelectedAttendance] = useState<any>(null);
   const [isAttendanceRejectOpen, setIsAttendanceRejectOpen] = useState(false);
   const [attendanceRejectReason, setAttendanceRejectReason] = useState("");
   
-  // Manual Edit State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editData, setEditData] = useState({ inTime: "", outTime: "", remark: "" });
 
@@ -158,9 +148,10 @@ export default function ApprovalsPage() {
   const allAttendanceList = useMemo(() => {
     if (!isMounted) return [];
     const now = new Date();
-
+    const employeeMap = new Map(employees.map(e => [e.employeeId, e]));
+    
     const actual = (attendanceRecords || []).map(rec => {
-      const emp = employees.find(e => e.employeeId === rec.employeeId);
+      const emp = employeeMap.get(rec.employeeId);
       let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
       
       if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
@@ -191,15 +182,19 @@ export default function ApprovalsPage() {
       const intervalDates = eachDayOfInterval({ 
         start: startDate, 
         end: yesterday 
-      });
+      }).map(d => format(d, "yyyy-MM-dd"));
       
       const activeEmployees = employees.filter(e => e.active);
       
       activeEmployees.forEach(emp => {
-        intervalDates.forEach(date => {
-          const dStr = format(date, "yyyy-MM-dd");
+        // SECURITY: If user has assigned plants, only check employees in those plants
+        if (userAssignedPlantIds) {
+          const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+          if (!hasAccess) return;
+        }
+
+        intervalDates.forEach(dStr => {
           const key = `${emp.employeeId}:${dStr}`;
-          
           if (!existingRecordsKeySet.has(key)) {
             const displayStatus = getCalculatedStatus(dStr, null);
             missing.push({ 
@@ -225,26 +220,9 @@ export default function ApprovalsPage() {
       });
     }
 
-    let filtered = [...actual, ...missing].filter(rec => rec.date >= PROJECT_START_DATE_STR);
+    let filtered = [...actual, ...missing];
 
-    // SECURITY: Filter by assigned plants
-    if (userAssignedPlantIds) {
-      filtered = filtered.filter(rec => {
-        if (!rec.isVirtual) return authorizedPlantNames.has(rec.inPlant);
-        const emp = employees.find(e => e.employeeId === rec.employeeId);
-        return (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id));
-      });
-    }
-
-    if (selectedPlantFilter !== "ALL_ASSIGNED") {
-      filtered = filtered.filter(rec => {
-        if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
-        const emp = employees.find(e => e.employeeId === rec.employeeId);
-        const targetPlant = plants.find(p => p.name === selectedPlantFilter);
-        return (emp?.unitIds || []).includes(targetPlant?.id || "");
-      });
-    }
-
+    // SEARCH FILTER
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       filtered = filtered.filter(rec => 
@@ -253,8 +231,18 @@ export default function ApprovalsPage() {
       );
     }
 
+    // PLANT FILTER
+    if (selectedPlantFilter !== "ALL_ASSIGNED") {
+      filtered = filtered.filter(rec => {
+        if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
+        const emp = employeeMap.get(rec.employeeId);
+        const targetPlant = plants.find(p => p.name === selectedPlantFilter);
+        return (emp?.unitIds || []).includes(targetPlant?.id || "");
+      });
+    }
+
     return filtered;
-  }, [attendanceRecords, employees, isMounted, holidaySet, userAssignedPlantIds, authorizedPlantNames, selectedPlantFilter, searchTerm, plants]);
+  }, [attendanceRecords, employees, isMounted, holidaySet, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants]);
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
@@ -262,10 +250,8 @@ export default function ApprovalsPage() {
       if (!isBasePending) return false;
 
       if (pendingSubMode === 'present') {
-        // Show actual clock-ins that have finished (either by user or auto-out)
         return !rec.isVirtual && (rec.outTime || rec.autoCheckout);
       } else {
-        // Show virtual absent records
         return rec.isVirtual;
       }
     }).sort((a, b) => b.date.localeCompare(a.date));
@@ -286,7 +272,11 @@ export default function ApprovalsPage() {
     const list = viewMode === 'pending' ? pendingAttendanceList : historyAttendanceList;
     const page = viewMode === 'pending' ? pendingPage : historyPage;
     const start = (page - 1) * ITEMS_PER_PAGE;
-    return { items: list.slice(start, start + ITEMS_PER_PAGE), total: list.length, totalPages: Math.ceil(list.length / ITEMS_PER_PAGE) };
+    return { 
+      items: list.slice(start, start + ITEMS_PER_PAGE), 
+      total: list.length, 
+      totalPages: Math.ceil(list.length / ITEMS_PER_PAGE) 
+    };
   }, [viewMode, pendingAttendanceList, historyAttendanceList, pendingPage, historyPage]);
 
   const handleApproveAttendance = (rec: any) => {
@@ -351,19 +341,13 @@ export default function ApprovalsPage() {
   };
 
   const handleRestoreAttendance = (rec: any) => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    try {
-      updateRecord('attendance', rec.id, { 
-        approved: false, 
-        remark: null, 
-        approvedBy: null,
-        editedBy: null 
-      });
-      toast({ title: "Record Restored", description: "Moved back to Pending queue." });
-    } finally {
-      setIsProcessing(false);
-    }
+    updateRecord('attendance', rec.id, { 
+      approved: false, 
+      remark: null, 
+      approvedBy: null,
+      editedBy: null 
+    });
+    toast({ title: "Record Restored", description: "Moved back to Pending queue." });
   };
 
   const handleManualEdit = () => {
@@ -386,8 +370,8 @@ export default function ApprovalsPage() {
         status: hours >= MIN_PRESENT_HOURS ? 'PRESENT' : 'ABSENT',
         remark: `Edited: ${editData.remark}`,
         editedBy: editorName,
-        approvedBy: editorName, // Ensure the editor is shown as the approver in history
-        approved: true // Manual edit implies final approval
+        approvedBy: editorName, 
+        approved: true 
       });
       toast({ title: "Record Updated" });
       setIsEditModalOpen(false);
@@ -614,7 +598,6 @@ export default function ApprovalsPage() {
                             <Button 
                               variant="secondary" 
                               size="sm" 
-                              disabled={isProcessing}
                               className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg"
                               onClick={() => handleRestoreAttendance(rec)}
                             >
