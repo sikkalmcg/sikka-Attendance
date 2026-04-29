@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
 import { 
   Card, 
   CardHeader, 
@@ -61,7 +60,8 @@ import {
   CalendarClock,
   Wallet,
   CalendarDays,
-  Eye
+  Eye,
+  Factory
 } from "lucide-react";
 import { formatCurrency, numberToIndianWords, cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -91,14 +91,14 @@ const PAYROLL_MONTHS_12M_GEN = generatePayrollMonths(13, true);
 
 export default function PayrollPage() {
   const router = useRouter();
-  const { employees, attendanceRecords, payrollRecords, vouchers, firms, updateRecord, addRecord, currentUser } = useData();
+  const { employees, attendanceRecords, payrollRecords, vouchers, firms, plants, updateRecord, addRecord, verifiedUser } = useData();
   const { toast } = useToast();
 
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
-  const [selectedFirmId, setSelectedFirmId] = useState("all");
+  const [selectedPlantId, setSelectedPlantId] = useState("all");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [paySalaryRec, setPaySalaryRec] = useState<PayrollRecord | null>(null);
@@ -122,6 +122,16 @@ export default function PayrollPage() {
     setSelectedMonth(initialMonth);
     setPaymentDate(new Date().toISOString().split('T')[0]);
   }, []);
+
+  const userAssignedPlantIds = useMemo(() => {
+    if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
+    return verifiedUser.plantIds || [];
+  }, [verifiedUser]);
+
+  const authorizedPlants = useMemo(() => {
+    if (!userAssignedPlantIds) return plants;
+    return plants.filter(p => userAssignedPlantIds.includes(p.id));
+  }, [userAssignedPlantIds, plants]);
 
   const handlePostPayment = () => {
     if (!paySalaryRec || isProcessing) return;
@@ -171,30 +181,30 @@ export default function PayrollPage() {
     const search = searchTerm.toLowerCase();
     return employees.filter(emp => {
       const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
-      const firmMatch = selectedFirmId === "all" || emp.firmId === selectedFirmId;
+      const plantMatch = selectedPlantId === "all" || (emp.unitIds || []).includes(selectedPlantId);
       const done = payrollRecords.some(p => p.employeeId === emp.employeeId && p.month === selectedMonth);
-      return match && firmMatch && !done;
+      return match && plantMatch && !done;
     }).map(emp => ({ ...emp, metrics: getAttendanceMetricsForMonth(emp.employeeId, selectedMonth) }));
-  }, [employees, searchTerm, selectedFirmId, payrollRecords, selectedMonth, attendanceRecords]);
+  }, [employees, searchTerm, selectedPlantId, payrollRecords, selectedMonth, attendanceRecords]);
 
   const paymentTabLists = useMemo(() => {
     const search = searchTerm.toLowerCase();
     const filtered = payrollRecords.filter(p => {
       const emp = employees.find(e => e.employeeId === p.employeeId);
       const match = p.employeeName.toLowerCase().includes(search) || p.employeeId.toLowerCase().includes(search);
-      const firmMatch = selectedFirmId === "all" || emp?.firmId === selectedFirmId;
-      return match && firmMatch;
+      const plantMatch = selectedPlantId === "all" || (emp?.unitIds || []).includes(selectedPlantId);
+      return match && plantMatch;
     });
     const pending = filtered.filter(p => (p.netPayable - (p.salaryPaidAmount || 0)) > 0);
     return { pending };
-  }, [payrollRecords, searchTerm, selectedFirmId, employees]);
+  }, [payrollRecords, searchTerm, selectedPlantId, employees]);
 
   const advanceSalaryData = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return employees.filter(emp => {
       const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
-      const firmMatch = selectedFirmId === "all" || emp.firmId === selectedFirmId;
-      return match && firmMatch;
+      const plantMatch = selectedPlantId === "all" || (emp.unitIds || []).includes(selectedPlantId);
+      return match && plantMatch;
     }).map(emp => {
       const empVouchers = vouchers.filter(v => v.employeeId === emp.id && v.status === 'PAID');
       const totalAdv = empVouchers.reduce((sum, v) => sum + v.amount, 0);
@@ -208,21 +218,21 @@ export default function PayrollPage() {
         remainingBalance: Math.max(0, totalAdv - totalRecovered)
       };
     }).sort((a, b) => b.remainingBalance - a.remainingBalance);
-  }, [employees, vouchers, payrollRecords, searchTerm, selectedFirmId]);
+  }, [employees, vouchers, payrollRecords, searchTerm, selectedPlantId]);
 
   const advanceLeaveData = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return employees.filter(emp => {
       const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
-      const firmMatch = selectedFirmId === "all" || emp.firmId === selectedFirmId;
-      return match && firmMatch;
+      const plantMatch = selectedPlantId === "all" || (emp.unitIds || []).includes(selectedPlantId);
+      return match && plantMatch;
     }).map(emp => {
       return {
         ...emp,
         currentBalance: emp.advanceLeaveBalance || 0
       };
     }).sort((a, b) => b.currentBalance - a.currentBalance);
-  }, [employees, searchTerm, selectedFirmId]);
+  }, [employees, searchTerm, selectedPlantId]);
 
   if (!isMounted) return null;
 
@@ -272,24 +282,174 @@ export default function PayrollPage() {
           </TabsList>
           
           <TabsContent value="generate" className="mt-8 space-y-6">
-            <Card className="border-none shadow-sm"><CardHeader className="bg-slate-50 border-b flex flex-row items-center gap-4"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search staff..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-40 font-bold"><SelectValue /></SelectTrigger><SelectContent>{PAYROLL_MONTHS_12M_GEN.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent></Select></CardHeader>
-            <CardContent className="p-0"><Table className="min-w-[1200px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold">Employee Name / ID</TableHead><TableHead className="font-bold">Dept / Designation</TableHead><TableHead className="font-bold">Month</TableHead><TableHead className="font-bold text-right">Monthly CTC</TableHead><TableHead className="text-right font-bold pr-6">Actions</TableHead></TableRow></TableHeader>
-            <TableBody>{pendingGenerationEmployees.map((emp: any) => { const adj = adjustedEmployees[emp.id]; return (
-              <TableRow key={emp.id} className="hover:bg-slate-50/50"><TableCell><div className="flex flex-col"><span className="font-bold uppercase text-sm">{emp.name}</span><span className="text-xs font-mono text-primary font-black">{emp.employeeId}</span></div></TableCell><TableCell><div className="text-sm font-medium">{emp.department}</div><div className="text-[10px] text-muted-foreground uppercase">{emp.designation}</div></TableCell><TableCell><Badge variant="outline" className="font-bold">{selectedMonth}</Badge></TableCell><TableCell className="text-right font-bold">{formatCurrency(emp.salary.monthlyCTC)}</TableCell><TableCell className="text-right pr-6"><div className="flex justify-end gap-2"><Button variant="outline" size="sm" className={cn(adj?.adjusted && "bg-emerald-50 text-emerald-700")} onClick={() => { setAdjustmentState({present: emp.metrics.presents, absent: 26 - emp.metrics.presents, holidayWork: emp.metrics.holidayWork, holidayBanked: 0, holidayPaid: 0, balanceUsed: 0, remainingBalance: emp.advanceLeaveBalance || 0, earningDays: emp.metrics.presents, isPaidAction: false, isBankedAction: false}); setAdjustLeaveEmp(emp); }}>Adjust Leave</Button><Button size="sm" className="font-black bg-primary" disabled={!adj?.adjusted} onClick={() => router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adj.earningDays}`)}>Generate</Button></div></TableCell></TableRow>
-            );})}</TableBody></Table></CardContent></Card>
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50 border-b flex flex-col md:flex-row items-center gap-4">
+                <div className="relative flex-1 w-full md:w-auto">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search staff..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <Factory className="w-4 h-4 text-slate-400" />
+                  <Select value={selectedPlantId} onValueChange={setSelectedPlantId}>
+                    <SelectTrigger className="w-full md:w-56 h-10 font-bold text-xs uppercase bg-white">
+                      <SelectValue placeholder="All Plants" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs font-bold uppercase">All Authorized Plants</SelectItem>
+                      {authorizedPlants.map(p => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs font-bold uppercase">{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-full md:w-40 h-10 font-bold text-xs bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent>{PAYROLL_MONTHS_12M_GEN.map(m => <SelectItem key={m} value={m} className="text-xs font-bold">{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1200px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold px-6">Employee Name / ID</TableHead>
+                        <TableHead className="font-bold">Dept / Designation</TableHead>
+                        <TableHead className="font-bold">Month</TableHead>
+                        <TableHead className="font-bold text-right">Monthly CTC</TableHead>
+                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingGenerationEmployees.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground font-bold italic">No staff found for selection.</TableCell></TableRow>
+                      ) : (
+                        pendingGenerationEmployees.map((emp: any) => { 
+                          const adj = adjustedEmployees[emp.id]; 
+                          return (
+                            <TableRow key={emp.id} className="hover:bg-slate-50/50">
+                              <TableCell className="px-6 py-4">
+                                <div className="flex flex-col">
+                                  <span className="font-bold uppercase text-sm">{emp.name}</span>
+                                  <span className="text-xs font-mono text-primary font-black">{emp.employeeId}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm font-medium text-slate-700">{emp.department}</div>
+                                <div className="text-[10px] text-muted-foreground uppercase">{emp.designation}</div>
+                              </TableCell>
+                              <TableCell><Badge variant="outline" className="font-bold text-xs">{selectedMonth}</Badge></TableCell>
+                              <TableCell className="text-right font-bold text-slate-900">{formatCurrency(emp.salary.monthlyCTC)}</TableCell>
+                              <TableCell className="text-right pr-6">
+                                <div className="flex justify-end gap-2">
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className={cn("h-8 text-[10px] font-black uppercase rounded-lg", adj?.adjusted && "bg-emerald-50 text-emerald-700 border-emerald-200")} 
+                                    onClick={() => { 
+                                      setAdjustmentState({
+                                        present: emp.metrics.presents, 
+                                        absent: 26 - emp.metrics.presents, 
+                                        holidayWork: emp.metrics.holidayWork, 
+                                        holidayBanked: 0, 
+                                        holidayPaid: 0, 
+                                        balanceUsed: 0, 
+                                        remainingBalance: emp.advanceLeaveBalance || 0, 
+                                        earningDays: emp.metrics.presents, 
+                                        isPaidAction: false, 
+                                        isBankedAction: false
+                                      }); 
+                                      setAdjustLeaveEmp(emp); 
+                                    }}
+                                  >
+                                    Adjust Leave
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    className="h-8 text-[10px] font-black uppercase bg-primary rounded-lg" 
+                                    disabled={!adj?.adjusted} 
+                                    onClick={() => router.push(`/dashboard/payroll/generate/${emp.id}?month=${selectedMonth}&earningDays=${adj.earningDays}`)}
+                                  >
+                                    Generate
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </TabsContent>
           
           <TabsContent value="payment" className="mt-8 space-y-6">
-            <Card className="border-none shadow-sm"><CardHeader className="bg-slate-50 border-b flex flex-row items-center gap-4"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search slips..." className="pl-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></CardHeader>
-            <CardContent className="p-0"><Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="font-bold">Slip No</TableHead><TableHead className="font-bold">Employee Name</TableHead><TableHead className="font-bold text-center">Month</TableHead><TableHead className="font-bold text-right">Net Payable</TableHead><TableHead className="text-right font-bold pr-6">Actions</TableHead></TableRow></TableHeader>
-            <TableBody>{paymentTabLists.pending.map((p) => (<TableRow key={p.id} className="hover:bg-slate-50/50"><TableCell className="font-mono font-bold text-blue-600">{p.slipNo}</TableCell><TableCell className="font-bold uppercase text-sm">{p.employeeName}</TableCell><TableCell className="text-center"><Badge variant="secondary">{p.month}</Badge></TableCell><TableCell className="text-right font-black">{formatCurrency(p.netPayable)}</TableCell><TableCell className="text-right pr-6"><Button variant="ghost" size="icon" onClick={() => { setPaySalaryRec(p); setPaymentAmount(p.netPayable - p.salaryPaidAmount); }}><CreditCard className="w-4 h-4" /></Button></TableCell></TableRow>))}</TableBody></Table></CardContent></Card>
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50 border-b flex flex-col md:flex-row items-center gap-4">
+                <div className="relative flex-1 w-full md:w-auto">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search slips..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                  <Factory className="w-4 h-4 text-slate-400" />
+                  <Select value={selectedPlantId} onValueChange={setSelectedPlantId}>
+                    <SelectTrigger className="w-full md:w-56 h-10 font-bold text-xs uppercase bg-white">
+                      <SelectValue placeholder="All Plants" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs font-bold uppercase">All Authorized Plants</SelectItem>
+                      {authorizedPlants.map(p => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs font-bold uppercase">{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="w-full">
+                  <Table className="min-w-[1000px]">
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="font-bold px-6">Slip No</TableHead>
+                        <TableHead className="font-bold">Employee Name</TableHead>
+                        <TableHead className="font-bold text-center">Month</TableHead>
+                        <TableHead className="font-bold text-right">Net Payable</TableHead>
+                        <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paymentTabLists.pending.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground font-bold italic">No pending payments found.</TableCell></TableRow>
+                      ) : (
+                        paymentTabLists.pending.map((p) => (
+                          <TableRow key={p.id} className="hover:bg-slate-50/50">
+                            <TableCell className="px-6 py-4 font-mono font-bold text-blue-600">{p.slipNo}</TableCell>
+                            <TableCell className="font-bold uppercase text-sm text-slate-700">{p.employeeName}</TableCell>
+                            <TableCell className="text-center"><Badge variant="secondary" className="font-bold">{p.month}</Badge></TableCell>
+                            <TableCell className="text-right font-black text-slate-900">{formatCurrency(p.netPayable)}</TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => { setPaySalaryRec(p); setPaymentAmount(p.netPayable - p.salaryPaidAmount); }}>
+                                <CreditCard className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                  <ScrollBar orientation="horizontal" />
+                </ScrollArea>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="advance" className="mt-8 space-y-6">
             <Card className="border-none shadow-sm">
-              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between p-4">
+              <CardHeader className="bg-slate-50 border-b flex flex-col md:flex-row items-center justify-between p-4 gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
                     <Wallet className="w-5 h-5 text-primary" />
                   </div>
                   <div>
@@ -297,9 +457,22 @@ export default function PayrollPage() {
                     <CardDescription className="text-xs">Tracking advance payments and recoveries.</CardDescription>
                   </div>
                 </div>
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search employee..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search employee..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  </div>
+                  <Select value={selectedPlantId} onValueChange={setSelectedPlantId}>
+                    <SelectTrigger className="w-full md:w-48 h-10 font-bold text-[10px] uppercase bg-white">
+                      <SelectValue placeholder="Filter Plant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs font-bold uppercase">All Plants</SelectItem>
+                      {authorizedPlants.map(p => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs font-bold uppercase">{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -307,7 +480,7 @@ export default function PayrollPage() {
                   <Table className="min-w-[1200px]">
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="font-black text-[11px] uppercase tracking-widest px-6">Employee Name / ID</TableHead>
+                        <TableHead className="font-black text-[11px] uppercase tracking-widest px-6 py-4">Employee Name / ID</TableHead>
                         <TableHead className="font-black text-[11px] uppercase tracking-widest">Dept / Designation</TableHead>
                         <TableHead className="font-black text-[11px] uppercase tracking-widest text-right">Total Advance Given</TableHead>
                         <TableHead className="font-black text-[11px] uppercase tracking-widest text-right">Total Recovered</TableHead>
@@ -317,13 +490,13 @@ export default function PayrollPage() {
                     </TableHeader>
                     <TableBody>
                       {advanceSalaryData.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground">No records found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-bold italic">No records found for current filters.</TableCell></TableRow>
                       ) : (
                         advanceSalaryData.map((emp) => (
                           <TableRow key={emp.id} className="hover:bg-slate-50/50">
-                            <TableCell className="px-6">
+                            <TableCell className="px-6 py-4">
                               <div className="flex flex-col">
-                                <span className="font-bold uppercase text-sm">{emp.name}</span>
+                                <span className="font-bold uppercase text-sm text-slate-700">{emp.name}</span>
                                 <span className="text-[10px] font-mono text-primary font-black uppercase">{emp.employeeId}</span>
                               </div>
                             </TableCell>
@@ -344,7 +517,7 @@ export default function PayrollPage() {
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className="font-black text-primary text-[10px] uppercase gap-1 hover:bg-primary/5"
+                                className="font-black text-primary text-[10px] uppercase gap-1 hover:bg-primary/5 rounded-lg"
                                 onClick={() => setViewVouchersEmp(emp)}
                               >
                                 <Eye className="w-3.5 h-3.5" /> View Details
@@ -363,9 +536,9 @@ export default function PayrollPage() {
 
           <TabsContent value="advance-leave" className="mt-8 space-y-6">
             <Card className="border-none shadow-sm">
-              <CardHeader className="bg-slate-50 border-b flex flex-row items-center justify-between p-4">
+              <CardHeader className="bg-slate-50 border-b flex flex-col md:flex-row items-center justify-between p-4 gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
                     <CalendarClock className="w-5 h-5 text-emerald-600" />
                   </div>
                   <div>
@@ -373,9 +546,22 @@ export default function PayrollPage() {
                     <CardDescription className="text-xs">Holiday/Sunday work banking summary.</CardDescription>
                   </div>
                 </div>
-                <div className="relative w-64">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search employee..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search employee..." className="pl-10 h-10" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                  </div>
+                  <Select value={selectedPlantId} onValueChange={setSelectedPlantId}>
+                    <SelectTrigger className="w-full md:w-48 h-10 font-bold text-[10px] uppercase bg-white">
+                      <SelectValue placeholder="Filter Plant" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs font-bold uppercase">All Plants</SelectItem>
+                      {authorizedPlants.map(p => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs font-bold uppercase">{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -390,13 +576,13 @@ export default function PayrollPage() {
                     </TableHeader>
                     <TableBody>
                       {advanceLeaveData.length === 0 ? (
-                        <TableRow><TableCell colSpan={3} className="text-center py-20 text-muted-foreground">No leave records found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={3} className="text-center py-20 text-muted-foreground font-bold italic">No leave records found for selection.</TableCell></TableRow>
                       ) : (
                         advanceLeaveData.map((emp) => (
                           <TableRow key={emp.id} className="hover:bg-slate-50/50">
                             <TableCell className="px-6 py-4">
                               <div className="flex flex-col">
-                                <span className="font-bold uppercase text-sm">{emp.name}</span>
+                                <span className="font-bold uppercase text-sm text-slate-700">{emp.name}</span>
                                 <span className="text-[10px] font-mono text-primary font-black uppercase">{emp.employeeId}</span>
                               </div>
                             </TableCell>
@@ -408,7 +594,7 @@ export default function PayrollPage() {
                             </TableCell>
                             <TableCell className="text-right pr-6">
                               <Badge className={cn(
-                                "font-black text-sm px-5 py-1",
+                                "font-black text-sm px-5 py-1 rounded-lg",
                                 emp.currentBalance > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-50 text-slate-400 border-slate-100"
                               )}>
                                 {emp.currentBalance} Day(s)
@@ -431,7 +617,7 @@ export default function PayrollPage() {
           <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
             <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
               <DialogTitle className="flex items-center gap-3 text-xl font-black">
-                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">
                   <Wallet className="w-6 h-6 text-primary" />
                 </div>
                 {viewVouchersEmp?.name} - Advance History
@@ -443,7 +629,7 @@ export default function PayrollPage() {
                 <Table className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="font-black text-[10px] uppercase">Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase py-3">Date</TableHead>
                       <TableHead className="font-black text-[10px] uppercase">Voucher No</TableHead>
                       <TableHead className="text-right font-black text-[10px] uppercase">Amount</TableHead>
                       <TableHead className="font-black text-[10px] uppercase">Purpose</TableHead>
@@ -452,11 +638,11 @@ export default function PayrollPage() {
                   </TableHeader>
                   <TableBody>
                     {vouchers.filter(v => v.employeeId === viewVouchersEmp?.id).length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No voucher records found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground font-bold">No voucher records found.</TableCell></TableRow>
                     ) : (
                       vouchers.filter(v => v.employeeId === viewVouchersEmp?.id).map(v => (
                         <TableRow key={v.id} className="hover:bg-slate-50/50">
-                          <TableCell className="text-xs font-bold text-slate-500">{formatDate(v.date)}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-500 py-4">{formatDate(v.date)}</TableCell>
                           <TableCell className="font-mono font-black text-xs text-blue-600">{v.voucherNo}</TableCell>
                           <TableCell className="text-right font-black text-slate-900">{formatCurrency(v.amount)}</TableCell>
                           <TableCell className="text-xs text-slate-600 font-medium">{v.purpose}</TableCell>
@@ -479,12 +665,34 @@ export default function PayrollPage() {
               </ScrollArea>
             </div>
             <DialogFooter className="p-4 bg-slate-50 border-t">
-              <Button onClick={() => setViewVouchersEmp(null)} className="rounded-xl font-bold bg-slate-900 px-8">Close Trail</Button>
+              <Button onClick={() => setViewVouchersEmp(null)} className="h-10 rounded-xl font-bold bg-slate-900 px-8 text-white hover:bg-slate-800">Close Trail</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle className="flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary" /> Record Disbursement</DialogTitle></DialogHeader><div className="p-8 space-y-6"><div className="bg-slate-50 p-4 rounded-xl border flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Amount Due</span><span className="text-lg font-black text-rose-600">{formatCurrency(paymentAmount)}</span></div><Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-11 font-bold" /><Button onClick={handlePostPayment} className="w-full h-12 font-black bg-primary">Confirm Pay</Button></div></DialogContent></Dialog>
+        <Dialog open={!!paySalaryRec} onOpenChange={(o) => !o && setPaySalaryRec(null)}>
+          <DialogContent className="sm:max-w-md rounded-2xl overflow-hidden p-0 border-none shadow-2xl">
+            <DialogHeader className="p-6 bg-slate-900 text-white">
+              <DialogTitle className="flex items-center gap-2 font-black">
+                <CreditCard className="w-5 h-5 text-primary" /> Record Disbursement
+              </DialogTitle>
+              <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">Finalizing salary payout for {paySalaryRec?.employeeName}</p>
+            </DialogHeader>
+            <div className="p-8 space-y-6">
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex justify-between items-center shadow-inner">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount Due</span>
+                <span className="text-2xl font-black text-emerald-600">{formatCurrency(paymentAmount)}</span>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Payment Date</Label>
+                <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-12 font-bold rounded-xl border-slate-200" />
+              </div>
+              <Button onClick={handlePostPayment} className="w-full h-14 font-black bg-primary text-lg rounded-xl shadow-lg shadow-primary/20" disabled={isProcessing}>
+                {isProcessing ? "Finalizing..." : "Confirm & Pay Salary"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 }
