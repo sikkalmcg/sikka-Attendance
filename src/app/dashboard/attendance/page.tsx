@@ -160,7 +160,6 @@ export default function AttendancePage() {
   }, [attendanceRecords, effectiveEmployeeId]);
 
   const { activeRecord, staleRecord } = useMemo(() => {
-    // FIX: An active record must have an inTime and no outTime.
     const rec = (employeeRecords || []).find(r => r.inTime && !r.outTime);
     if (!rec) return { activeRecord: null, staleRecord: null };
     
@@ -346,19 +345,24 @@ export default function AttendancePage() {
     }
   };
 
+  const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
+
   const history = useMemo(() => {
     if (!verifiedUser || !isMounted) return [];
     const now = getISTTime();
 
     const getPriorityStatus = (dateStr: string, record: any) => {
       const isSun = isSunday(parseISO(dateStr));
-      const holiday = (holidays || []).find(h => h.date === dateStr);
+      const holiday = holidaySet.has(dateStr);
       if (record) {
         if (holiday) return "Present on Holiday";
         if (isSun) return "Present on Weekly Off";
         return record.status;
       } else {
-        if (holiday) return `Holiday (${holiday.name})`;
+        if (holiday) {
+          const h = (holidays || []).find(x => x.date === dateStr);
+          return `Holiday (${h?.name || 'Festival'})`;
+        }
         if (isSun) return "Weekly Off";
         return "Absent";
       }
@@ -400,14 +404,20 @@ export default function AttendancePage() {
         return finalRec;
       }).sort((a, b) => b.date.localeCompare(a.date));
     } else {
+      // For Employee: Pre-cache existing records for fast O(1) access
+      const empRecordMap = new Map();
+      employeeRecords.forEach(r => empRecordMap.set(r.date, r));
+
       const dateRange = eachDayOfInterval({ start: parseISO(PROJECT_START_DATE_STR), end: startOfDay(new Date()) });
       baseList = dateRange.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        const existing = employeeRecords.filter(r => r.date === dateStr).map(r => {
-          const displayStatus = getPriorityStatus(dateStr, r);
-          let finalRec = { ...r, displayStatus };
-          if (!r.outTime && r.inTime && r.inTime.trim() !== "") {
-            const inDT = new Date(`${r.inDate || r.date}T${r.inTime}`);
+        const existing = empRecordMap.get(dateStr);
+        
+        if (existing) {
+          const displayStatus = getPriorityStatus(dateStr, existing);
+          let finalRec = { ...existing, displayStatus };
+          if (!existing.outTime && existing.inTime && existing.inTime.trim() !== "") {
+            const inDT = new Date(`${existing.inDate || existing.date}T${existing.inTime}`);
             if (isValid(inDT)) {
               const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
               if (diff >= 16) {
@@ -416,16 +426,16 @@ export default function AttendancePage() {
               }
             }
           }
-          return finalRec;
-        });
-        if (existing.length > 0) return existing;
+          return [finalRec];
+        }
+
         if (isSameDay(date, now)) return null;
         const displayStatus = getPriorityStatus(dateStr, null);
         return [{ id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', displayStatus, approved: true, hours: 0, isVirtual: true, inTime: null, outTime: null }];
       }).filter(Boolean).flat().reverse();
     }
     return baseList;
-  }, [verifiedUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth]);
+  }, [verifiedUser, attendanceRecords, holidays, holidaySet, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth]);
 
   const filteredEmployeeLeaves = useMemo(() => {
     if (!isMounted || !todayStr) return [];
@@ -518,7 +528,7 @@ export default function AttendancePage() {
                 onClick={() => setActiveDialog("LEAVE")} 
                 disabled={isLoading || !isAccessAllowed}
               >
-                <Plus className="w-3 h-3" /> Create Request
+                <Plus className="w-3.5 h-3.5" /> Create Request
               </Button>
             </CardHeader>
             <CardContent className="p-0">

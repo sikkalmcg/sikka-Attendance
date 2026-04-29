@@ -127,10 +127,14 @@ export default function ApprovalsPage() {
     return plants.filter(p => userAssignedPlantIds.includes(p.id));
   }, [userAssignedPlantIds, plants]);
 
-  const authorizedPlantNames = useMemo(() => authorizedPlants.map(p => p.name), [authorizedPlants]);
+  const authorizedPlantNames = useMemo(() => new Set(authorizedPlants.map(p => p.name)), [authorizedPlants]);
+
+  const holidaySet = useMemo(() => {
+    return new Set(holidays.map(h => h.date));
+  }, [holidays]);
 
   const getCalculatedStatus = (dateStr: string, record: any) => {
-    const isHoliday = (holidays || []).some(h => h.date === dateStr) || isSunday(parseISO(dateStr));
+    const isHoliday = holidaySet.has(dateStr) || isSunday(parseISO(dateStr));
     const hours = record?.hours || 0;
     const isPresent = hours >= MIN_PRESENT_HOURS;
     const type = record?.attendanceType;
@@ -178,18 +182,23 @@ export default function ApprovalsPage() {
     const yesterday = subDays(now, 1);
     const startDate = parseISO(PROJECT_START_DATE_STR);
     
+    // Performance Optimization: Use a Set for record lookups
+    const existingRecordsKeySet = new Set(attendanceRecords.map(r => `${r.employeeId}:${r.date}`));
+
     if (isBefore(startDate, now)) {
       const intervalDates = eachDayOfInterval({ 
         start: startDate, 
         end: yesterday 
       });
       
-      employees.filter(e => e.active).forEach(emp => {
+      const activeEmployees = employees.filter(e => e.active);
+      
+      activeEmployees.forEach(emp => {
         intervalDates.forEach(date => {
           const dStr = format(date, "yyyy-MM-dd");
-          const hasRecord = attendanceRecords.some(r => r.employeeId === emp.employeeId && r.date === dStr);
+          const key = `${emp.employeeId}:${dStr}`;
           
-          if (!hasRecord) {
+          if (!existingRecordsKeySet.has(key)) {
             const displayStatus = getCalculatedStatus(dStr, null);
             missing.push({ 
               id: `v-abs-${emp.employeeId}-${dStr}`, 
@@ -218,7 +227,7 @@ export default function ApprovalsPage() {
 
     if (userAssignedPlantIds) {
       filtered = filtered.filter(rec => {
-        if (!rec.isVirtual) return authorizedPlantNames.includes(rec.inPlant);
+        if (!rec.isVirtual) return authorizedPlantNames.has(rec.inPlant);
         const emp = employees.find(e => e.employeeId === rec.employeeId);
         return (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id));
       });
@@ -242,7 +251,7 @@ export default function ApprovalsPage() {
     }
 
     return filtered;
-  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, authorizedPlantNames, selectedPlantFilter, searchTerm, plants]);
+  }, [attendanceRecords, employees, isMounted, holidaySet, userAssignedPlantIds, authorizedPlantNames, selectedPlantFilter, searchTerm, plants]);
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => !rec.approved && !rec.remark && (rec.isVirtual || rec.outTime))
@@ -268,36 +277,33 @@ export default function ApprovalsPage() {
   }, [viewMode, pendingAttendanceList, historyAttendanceList, pendingPage, historyPage]);
 
   const handleApproveAttendance = (rec: any) => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    try {
-      const approverName = verifiedUser?.fullName || "HR_ADMIN";
-      
-      if (rec.isVirtual) {
-        addRecord('attendance', { 
-          employeeId: rec.employeeId, 
-          employeeName: rec.employeeName, 
-          date: rec.date, 
-          inDate: rec.date, 
-          status: rec.displayStatus.includes('Holiday') ? 'HOLIDAY' : 'ABSENT', 
-          attendanceType: 'FIELD', 
-          approved: true, 
-          approvedBy: approverName, 
-          hours: 0, 
-          inTime: null, 
-          outTime: null, 
-          address: 'System Generated Absence', 
-          unapprovedOutDuration: 0 
-        });
-      } else {
-        updateRecord('attendance', rec.id, { 
-          approved: true, 
-          approvedBy: approverName, 
-          ...(rec.autoCheckout && { outTime: rec.outTime, outDate: rec.outDate, hours: 8 }) 
-        });
-      }
-      toast({ title: "Attendance Approved" });
-    } finally { setIsProcessing(false); }
+    // Optimization: One-click responsiveness by making it immediate
+    const approverName = verifiedUser?.fullName || "HR_ADMIN";
+    
+    if (rec.isVirtual) {
+      addRecord('attendance', { 
+        employeeId: rec.employeeId, 
+        employeeName: rec.employeeName, 
+        date: rec.date, 
+        inDate: rec.date, 
+        status: rec.displayStatus.includes('Holiday') ? 'HOLIDAY' : 'ABSENT', 
+        attendanceType: 'FIELD', 
+        approved: true, 
+        approvedBy: approverName, 
+        hours: 0, 
+        inTime: null, 
+        outTime: null, 
+        address: 'System Generated Absence', 
+        unapprovedOutDuration: 0 
+      });
+    } else {
+      updateRecord('attendance', rec.id, { 
+        approved: true, 
+        approvedBy: approverName, 
+        ...(rec.autoCheckout && { outTime: rec.outTime, outDate: rec.outDate, hours: 8 }) 
+      });
+    }
+    toast({ title: "Attendance Approved" });
   };
 
   const handlePostAttendanceReject = () => {
