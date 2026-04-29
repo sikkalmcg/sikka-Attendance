@@ -22,6 +22,13 @@ import {
   DialogTitle, 
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
@@ -33,7 +40,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRightCircle,
-  FileCheck
+  FileCheck,
+  Factory
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -44,11 +52,12 @@ import { useToast } from "@/hooks/use-toast";
 const ITEMS_PER_PAGE = 15;
 
 export default function LeaveApprovalPage() {
-  const { leaveRequests, updateRecord, verifiedUser } = useData();
+  const { leaveRequests, plants, employees, updateRecord, verifiedUser } = useData();
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("pending");
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedPlantFilter, setSelectedPlantFilter] = useState("all");
   
   // Pagination
   const [pendingPage, setPendingPage] = useState(1);
@@ -69,7 +78,17 @@ export default function LeaveApprovalPage() {
   useEffect(() => {
     setPendingPage(1);
     setHistoryPage(1);
-  }, [activeTab, searchTerm]);
+  }, [activeTab, searchTerm, selectedPlantFilter]);
+
+  const userAssignedPlantIds = useMemo(() => {
+    if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
+    return verifiedUser.plantIds || [];
+  }, [verifiedUser]);
+
+  const authorizedPlants = useMemo(() => {
+    if (!userAssignedPlantIds) return plants;
+    return plants.filter(p => userAssignedPlantIds.includes(p.id));
+  }, [userAssignedPlantIds, plants]);
 
   const filteredLeaves = useMemo(() => {
     if (!isMounted) return [];
@@ -77,6 +96,22 @@ export default function LeaveApprovalPage() {
     const todayStr = format(new Date(), "yyyy-MM-dd");
 
     return (leaveRequests || []).filter(req => {
+      // 1. Plant Filter (Dropdown)
+      if (selectedPlantFilter !== "all" && req.plantName !== selectedPlantFilter) {
+        return false;
+      }
+
+      // 2. SECURITY Filter (Assigned Plants for Managers)
+      if (userAssignedPlantIds) {
+        const authorizedPlantNames = new Set(authorizedPlants.map(p => p.name));
+        if (!authorizedPlantNames.has(req.plantName)) {
+           // Double check if employee belongs to any assigned plant as a fallback
+           const emp = employees.find(e => e.employeeId === req.employeeId);
+           const empHasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id));
+           if (!empHasAccess) return false;
+        }
+      }
+
       const matchesSearch = 
         req.employeeName.toLowerCase().includes(search) ||
         req.department.toLowerCase().includes(search) ||
@@ -93,7 +128,7 @@ export default function LeaveApprovalPage() {
         return matchesSearch && (req.status === 'APPROVED' || req.status === 'REJECTED');
       }
     }).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-  }, [leaveRequests, searchTerm, activeTab, isMounted]);
+  }, [leaveRequests, searchTerm, activeTab, isMounted, selectedPlantFilter, userAssignedPlantIds, authorizedPlants, employees]);
 
   const currentData = useMemo(() => {
     const page = activeTab === 'pending' ? pendingPage : historyPage;
@@ -245,6 +280,22 @@ export default function LeaveApprovalPage() {
             onChange={(e) => setSearchTerm(e.target.value)} 
           />
         </div>
+
+        <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+          <Factory className="w-4 h-4 text-slate-400 ml-2" />
+          <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
+            <SelectTrigger className="w-[200px] h-8 border-none font-bold text-xs uppercase focus:ring-0">
+              <SelectValue placeholder="All Plants" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="text-xs font-bold uppercase">All Authorized Plants</SelectItem>
+              {authorizedPlants.map(p => (
+                <SelectItem key={p.id} value={p.name} className="text-xs font-bold uppercase">{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
           <TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[240px]">
             <TabsTrigger value="pending" className="text-xs font-black">Pending</TabsTrigger>
@@ -253,7 +304,7 @@ export default function LeaveApprovalPage() {
         </Tabs>
         {activeTab === 'history' && (
           <Button onClick={handleExport} variant="outline" className="h-10 font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 px-6">
-            <FileSpreadsheet className="w-4 h-4" /> Export Excel Option
+            <FileSpreadsheet className="w-4 h-4" /> Export Excel
           </Button>
         )}
       </div>
@@ -267,7 +318,7 @@ export default function LeaveApprovalPage() {
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee Name</TableHead>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Department</TableHead>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Designation</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Plant</TableHead>
+                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 text-center">Plant</TableHead>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">From Date</TableHead>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">To Date</TableHead>
                   <TableHead className="font-bold text-[11px] uppercase tracking-widest text-center">Leave Days</TableHead>
@@ -290,7 +341,7 @@ export default function LeaveApprovalPage() {
                       </TableCell>
                       <TableCell className="text-xs font-bold text-slate-600">{req.department}</TableCell>
                       <TableCell className="text-[10px] text-muted-foreground uppercase font-medium">{req.designation}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-[10px] font-black uppercase bg-white border-slate-200">{req.plantName || "---"}</Badge></TableCell>
+                      <TableCell className="text-center"><Badge variant="outline" className="text-[10px] font-black uppercase bg-white border-slate-200">{req.plantName || "---"}</Badge></TableCell>
                       <TableCell className="text-xs font-bold text-slate-700">{formatDate(req.fromDate)}</TableCell>
                       <TableCell className="text-xs font-bold text-slate-700">{formatDate(req.toDate)}</TableCell>
                       <TableCell className="text-center">
