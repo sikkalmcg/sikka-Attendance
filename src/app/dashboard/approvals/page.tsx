@@ -140,19 +140,16 @@ export default function ApprovalsPage() {
   }, [leaveRequests]);
 
   const getCalculatedStatus = (dateStr: string, record: any, empId: string) => {
-    // 1. Leave Check
     if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
     
     const isSun = isSunday(parseISO(dateStr));
     const isCustomHoliday = holidaySet.has(dateStr);
     const isHoliday = isSun || isCustomHoliday;
     
-    // 2. No Record -> Absent or Holiday
     if (!record || (!record.inTime && !record.outTime)) {
       return isHoliday ? "Holiday" : "Absent";
     }
 
-    // 3. Holiday Work Logic
     const type = record.attendanceType;
     if (isHoliday) {
       if (type === 'OFFICE') return "Present on Holiday";
@@ -161,7 +158,6 @@ export default function ApprovalsPage() {
       return "Present on Holiday";
     }
 
-    // 4. Standard Workday Logic
     if (type === 'OFFICE') return "Present";
     if (type === 'FIELD') return "Field";
     if (type === 'WFH') return "Work at Home";
@@ -274,7 +270,11 @@ export default function ApprovalsPage() {
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
       const isBasePending = !rec.approved && !rec.remark;
-      if (!isBasePending) return false;
+      if (!isBasePending) {
+         // RULE: If edited but not yet approved, it stays in pending with edited detail
+         if (!rec.approved && rec.remark?.startsWith("Edited:")) return true;
+         return false;
+      }
       if (pendingSubMode === 'present') {
         return !rec.isVirtual && (rec.outTime || rec.autoCheckout);
       } else {
@@ -285,7 +285,7 @@ export default function ApprovalsPage() {
 
   const historyAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
-      if (!rec.approved && !rec.remark) return false;
+      if (!rec.approved) return false;
       if (!historyMonthFilter || historyMonthFilter === 'all') return true;
       const d = parseISO(rec.date);
       const mmm = d.toLocaleString('en-US', { month: 'short' });
@@ -398,6 +398,7 @@ export default function ApprovalsPage() {
       
       const editorName = verifiedUser?.fullName || "Admin";
       
+      // RULE: Entries should not be auto Approved after edit.
       updateRecord('attendance', selectedAttendance.id, { 
         inDate: editData.inDate,
         inTime: editData.inTime, 
@@ -407,10 +408,9 @@ export default function ApprovalsPage() {
         status: hours >= MIN_PRESENT_HOURS ? 'PRESENT' : 'ABSENT',
         remark: `Edited: ${editData.remark}`,
         editedBy: editorName,
-        approvedBy: editorName, 
-        approved: true 
+        approved: false 
       });
-      toast({ title: "Shift Corrected Successfully" });
+      toast({ title: "Record Updated", description: "Entry updated. Please click 'Approve' to finalize." });
       setIsEditModalOpen(false);
       setEditData({ inDate: "", inTime: "", outDate: "", outTime: "", remark: "" });
     } finally { setIsProcessing(false); }

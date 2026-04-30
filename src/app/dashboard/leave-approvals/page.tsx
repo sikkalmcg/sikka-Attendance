@@ -96,16 +96,13 @@ export default function LeaveApprovalPage() {
     const todayStr = format(new Date(), "yyyy-MM-dd");
 
     return (leaveRequests || []).filter(req => {
-      // 1. Plant Filter (Dropdown)
       if (selectedPlantFilter !== "all" && req.plantName !== selectedPlantFilter) {
         return false;
       }
 
-      // 2. SECURITY Filter (Assigned Plants for Managers)
       if (userAssignedPlantIds) {
         const authorizedPlantNames = new Set(authorizedPlants.map(p => p.name));
         if (!authorizedPlantNames.has(req.plantName)) {
-           // Double check if employee belongs to any assigned plant as a fallback
            const emp = employees.find(e => e.employeeId === req.employeeId);
            const empHasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId);
            if (!empHasAccess) return false;
@@ -120,11 +117,9 @@ export default function LeaveApprovalPage() {
         req.purpose.toLowerCase().includes(search);
       
       if (activeTab === 'pending') {
-        // AUTO-REMOVAL Rule for Admin Pending: Hide if leave.toDate < current_date
         const isFutureOrCurrent = req.toDate >= todayStr;
         return matchesSearch && req.status === 'UNDER_PROCESS' && isFutureOrCurrent;
       } else {
-        // History Tab: Approved/Rejected records always remain visible
         return matchesSearch && (req.status === 'APPROVED' || req.status === 'REJECTED');
       }
     }).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
@@ -184,12 +179,14 @@ export default function LeaveApprovalPage() {
     setIsProcessing(true);
     try {
       const days = differenceInDays(end, start) + 1;
+      // RULE: Entry should not be auto Approved after edit. Stay in pending.
       updateRecord('leaveRequests', selectedLeave.id, {
         fromDate: editData.fromDate,
         toDate: editData.toDate,
-        days: days
+        days: days,
+        status: 'UNDER_PROCESS'
       });
-      toast({ title: "Request Dates Updated" });
+      toast({ title: "Dates Adjusted", description: "Dates updated. Please click 'Approve' to finalize." });
       setIsEditOpen(false);
       setSelectedLeave(null);
     } finally {
