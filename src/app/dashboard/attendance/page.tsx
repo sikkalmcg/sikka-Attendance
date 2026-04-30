@@ -34,7 +34,8 @@ import {
   ArrowRightCircle,
   Search,
   CalendarDays,
-  Filter
+  Filter,
+  CheckCircle
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, getDeviceId, formatHoursToHHMM, formatMinutesToHHMM } from "@/lib/utils";
 import { 
@@ -163,7 +164,6 @@ export default function AttendancePage() {
       .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
   }, [attendanceRecords, effectiveEmployeeId]);
 
-  // Greeting Logic based on IST time
   const greetingMessage = useMemo(() => {
     if (!currentTime || !verifiedUser) return "";
     const hours = currentTime.getHours();
@@ -178,21 +178,13 @@ export default function AttendancePage() {
     }
   }, [currentTime, verifiedUser]);
 
-  /**
-   * BUSINESS LOGIC: SHIFT & REST PERIOD ENFORCEMENT
-   * 1. Max Shift: 16 hours.
-   * 2. Min Rest: 8 hours between shifts.
-   * 3. Sequence: IN must happen before OUT. IN disabled while active.
-   */
   const { activeRecord, lockState } = useMemo(() => {
     const now = getISTTime();
     const latestRec = employeeRecords[0];
 
-    // Case 1: No history or latest is completed
     if (!latestRec || latestRec.outTime) {
       if (!latestRec) return { activeRecord: null, lockState: { isLocked: false, unlockTime: null } };
 
-      // Check for 8-hour rest rule
       const effectiveOutDate = latestRec.outDate || latestRec.date;
       const lastOutDateTime = new Date(`${effectiveOutDate}T${latestRec.outTime}`);
       
@@ -210,15 +202,12 @@ export default function AttendancePage() {
       return { activeRecord: null, lockState: { isLocked: false, unlockTime: null } };
     }
 
-    // Case 2: Latest is an active shift (IN recorded, no OUT)
     const inDateTime = new Date(`${latestRec.inDate || latestRec.date}T${latestRec.inTime}`);
     
     if (isValid(inDateTime)) {
       const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
       
-      // Check for 16-hour shift limit
       if (diffHours >= 16) {
-        // Shift is "stale" (expired). Rest period starts from inTime + 16h
         const autoOutTime = addHours(inDateTime, 16);
         const nextAllowedIn = addHours(autoOutTime, 8);
         const isResting = isAfter(nextAllowedIn, now);
@@ -233,7 +222,6 @@ export default function AttendancePage() {
         };
       }
 
-      // Valid Active Shift
       return {
         activeRecord: latestRec,
         lockState: { isLocked: true, unlockTime: 'Shift Active' }
@@ -456,7 +444,6 @@ export default function AttendancePage() {
                 )}
               </div>
 
-              {/* Status Message Overlay */}
               {lockState.isLocked && lockState.unlockTime !== 'Shift Active' && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
                   <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
@@ -583,43 +570,140 @@ export default function AttendancePage() {
         </div>
 
         <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl overflow-hidden p-0">
-            <DialogHeader className="p-6 bg-slate-900 text-white"><DialogTitle>Confirm Attendance</DialogTitle><p className="text-xs font-bold text-slate-400 mt-2">{detectedAddress}</p></DialogHeader>
-            <div className="p-8 space-y-6">
+          <DialogContent className="sm:max-w-md rounded-[2rem] overflow-hidden p-0 border-none shadow-2xl">
+            <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
+              <DialogTitle className="flex items-center gap-2 text-xl font-black">
+                <MapPin className="w-5 h-5 text-primary" /> Confirm Attendance Location
+              </DialogTitle>
+              <p className="text-xs font-bold text-slate-400 mt-2 leading-relaxed">{detectedAddress}</p>
+            </DialogHeader>
+            
+            <div className="p-8 space-y-8">
               {detectedPlant ? (
-                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-4">
-                  <Factory className="w-6 h-6 text-emerald-600" />
-                  <div><p className="text-[10px] font-black uppercase text-emerald-600">Plant Detected</p><p className="font-black">{detectedPlant.name}</p></div>
+                <div className="p-6 bg-emerald-50 rounded-[1.5rem] border-2 border-emerald-100 flex items-center gap-5">
+                  <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center border border-emerald-200">
+                    <Factory className="w-8 h-8 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest mb-0.5">Facility Detected</p>
+                    <p className="text-lg font-black text-emerald-900 uppercase tracking-tight">{detectedPlant.name}</p>
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase mt-1">Authorized Node Range (700m)</p>
+                  </div>
                 </div>
               ) : (
-                <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
-                  <div className={cn("p-4 border-2 rounded-xl cursor-pointer", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100")} onClick={() => setSelectedType('FIELD')}>
-                    <Briefcase className="w-5 h-5 mb-2" /><Label className="font-bold">FIELD</Label>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                      <Briefcase className="w-3.5 h-3.5" /> Select Attendance Type *
+                    </Label>
+                    <Badge variant="outline" className="text-[9px] font-black uppercase text-rose-500 border-rose-100 bg-rose-50 px-2 py-0.5">Selection Mandatory</Badge>
                   </div>
-                  <div className={cn("p-4 border-2 rounded-xl cursor-pointer", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100")} onClick={() => setSelectedType('WFH')}>
-                    <Home className="w-5 h-5 mb-2" /><Label className="font-bold">W.F.H</Label>
-                  </div>
-                </RadioGroup>
+                  <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
+                    <div 
+                      className={cn(
+                        "p-6 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", 
+                        selectedType === 'FIELD' ? "border-primary bg-primary/5 shadow-md shadow-primary/10" : "border-slate-100 hover:border-slate-200"
+                      )} 
+                      onClick={() => setSelectedType('FIELD')}
+                    >
+                      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center transition-colors", selectedType === 'FIELD' ? "bg-primary text-white" : "bg-slate-50 text-slate-400")}>
+                        <Briefcase className="w-6 h-6" />
+                      </div>
+                      <Label className="font-black text-xs uppercase tracking-widest cursor-pointer">FIELD WORK</Label>
+                    </div>
+                    
+                    <div 
+                      className={cn(
+                        "p-6 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", 
+                        selectedType === 'WFH' ? "border-primary bg-primary/5 shadow-md shadow-primary/10" : "border-slate-100 hover:border-slate-200"
+                      )} 
+                      onClick={() => setSelectedType('WFH')}
+                    >
+                      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center transition-colors", selectedType === 'WFH' ? "bg-primary text-white" : "bg-slate-50 text-slate-400")}>
+                        <Home className="w-6 h-6" />
+                      </div>
+                      <Label className="font-black text-xs uppercase tracking-widest cursor-pointer">WORK AT HOME</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
               )}
             </div>
-            <DialogFooter className="p-6 bg-slate-50"><Button className="w-full h-12 font-black bg-primary" onClick={handleConfirmCheckIn}>Confirm Check-In</Button></DialogFooter>
+
+            <DialogFooter className="p-6 bg-slate-50 border-t flex flex-col gap-3">
+              <Button className="w-full h-14 font-black bg-primary text-white text-lg rounded-2xl shadow-xl shadow-primary/20" onClick={handleConfirmCheckIn}>
+                <CheckCircle className="w-5 h-5 mr-2" /> Confirm Check-In
+              </Button>
+              <Button variant="ghost" className="w-full h-10 font-bold text-slate-400 hover:text-slate-600" onClick={() => setActiveDialog("NONE")}>Cancel</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
         <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-          <DialogContent className="sm:max-w-md rounded-2xl overflow-hidden p-0">
-            <DialogHeader className="p-6 bg-rose-600 text-white"><DialogTitle>Close Active Shift</DialogTitle><p className="text-xs font-bold text-rose-100 mt-2">{detectedAddress}</p></DialogHeader>
-            <div className="p-8 space-y-4">
-               <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Shift Start</span>
-                  <span className="font-mono font-bold text-slate-700">{activeRecord?.inTime}</span>
-               </div>
-               <div className="flex justify-between items-center bg-slate-900 p-4 rounded-xl text-white">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Marking OUT at</span>
-                  <span className="font-mono font-bold text-primary">{format(getISTTime(), "HH:mm")}</span>
-               </div>
+          <DialogContent className="sm:max-w-md rounded-[2rem] overflow-hidden p-0 border-none shadow-2xl">
+            <DialogHeader className="p-8 bg-rose-600 text-white shrink-0">
+              <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+                <Navigation className="w-5 h-5" /> Close Active Shift
+              </DialogTitle>
+              <p className="text-xs font-bold text-rose-100 mt-2 leading-relaxed">{detectedAddress}</p>
+            </DialogHeader>
+            
+            <div className="p-8 space-y-10">
+              <div className="space-y-4">
+                 <div className="flex items-center gap-2 mb-2">
+                    <History className="w-3.5 h-3.5 text-slate-400" />
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Shift Origin Summary</h4>
+                 </div>
+                 
+                 <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
+                    <div className="p-4 flex justify-between items-center">
+                       <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Shift Start</span>
+                       <div className="text-right">
+                          <p className="text-sm font-black text-slate-900 leading-none">{activeRecord?.inTime}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{formatDate(activeRecord?.inDate || activeRecord?.date)}</p>
+                       </div>
+                    </div>
+                    
+                    <div className="p-4 flex justify-between items-center">
+                       <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Plant</span>
+                       <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">{activeRecord?.inPlant || "Remote"}</span>
+                    </div>
+
+                    <div className="p-4 flex justify-between items-center">
+                       <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Attendance Type</span>
+                       <Badge className={cn("text-[9px] font-black uppercase px-2.5 py-0.5", activeRecord?.attendanceType === 'OFFICE' ? "bg-emerald-50 text-emerald-700" : "bg-primary/5 text-primary")}>
+                          {activeRecord?.attendanceType === 'OFFICE' ? 'Present' : activeRecord?.attendanceType?.replace(/_/g, ' ')}
+                       </Badge>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="space-y-4">
+                 <div className="flex items-center gap-2 mb-2">
+                    <ArrowRightCircle className="w-3.5 h-3.5 text-primary" />
+                    <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Finalizing Shift Boundary</h4>
+                 </div>
+
+                 <div className="bg-slate-900 rounded-2xl p-5 text-white flex justify-between items-center shadow-xl shadow-slate-200">
+                    <div>
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Shift End at</p>
+                       <p className="text-lg font-black uppercase tracking-tight text-primary">
+                          {detectedPlant?.name || "Remote Log Point"}
+                       </p>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-2xl font-black font-mono leading-none">{format(getISTTime(), "HH:mm")}</p>
+                       <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">{format(getISTTime(), "dd MMM yyyy")}</p>
+                    </div>
+                 </div>
+              </div>
             </div>
-            <DialogFooter className="p-6 bg-slate-50"><Button className="w-full h-12 font-black bg-rose-600 hover:bg-rose-700 text-white" onClick={handleConfirmCheckOut}>Confirm Check-Out</Button></DialogFooter>
+
+            <DialogFooter className="p-6 bg-slate-50 border-t flex flex-col gap-3">
+              <Button className="w-full h-14 font-black bg-rose-600 hover:bg-rose-700 text-white text-lg rounded-2xl shadow-xl shadow-rose-200 transition-all active:scale-95" onClick={handleConfirmCheckOut}>
+                Confirm Check-Out
+              </Button>
+              <Button variant="ghost" className="w-full h-10 font-bold text-slate-400 hover:text-slate-600" onClick={() => setActiveDialog("NONE")}>Stay Clocked-In</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 
