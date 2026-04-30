@@ -509,13 +509,17 @@ export default function EmployeesPage() {
                     <Label className="text-[10px] font-black uppercase text-slate-500">Assigned Plant(s) *</Label>
                     <Popover open={isPlantPopoverOpen} onOpenChange={setIsPlantPopoverOpen}>
                       <PopoverTrigger asChild>
-                        <Button className="h-12 w-full justify-between font-black bg-primary text-slate-900 hover:bg-primary/90 rounded-xl border-none shadow-lg shadow-primary/10">
+                        <Button type="button" className="h-12 w-full justify-between font-black bg-primary text-slate-900 hover:bg-primary/90 rounded-xl border-none shadow-lg shadow-primary/10">
                           {(formData.unitIds?.length || 0) > 0 ? `${formData.unitIds?.length} Plants Selected` : "Select Facility Access"}
                           <ChevronRight className="w-4 h-4 ml-2 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[320px] p-2 rounded-2xl shadow-2xl border-none" align="start">
-                        <ScrollArea className="h-[250px] pr-2">
+                      <PopoverContent className="w-[320px] p-2 rounded-2xl shadow-2xl border-none" align="start" onPointerDownOutside={(e) => {
+                        // Prevent the popover from closing when clicking internal scroll areas or logic-heavy sections
+                        const target = e.target as HTMLElement;
+                        if (target.closest('[data-plant-selector]')) e.preventDefault();
+                      }}>
+                        <ScrollArea className="h-[250px] pr-2" data-plant-selector="true">
                           <div className="space-y-1">
                             {plants.filter(p => p.firmId === formData.firmId).map(p => {
                               const isChecked = formData.unitIds?.includes(p.id);
@@ -523,7 +527,7 @@ export default function EmployeesPage() {
                                 <div 
                                   key={p.id} 
                                   className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-all group" 
-                                  onClick={(e) => {
+                                  onPointerDown={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     togglePlantSelection(p.id);
