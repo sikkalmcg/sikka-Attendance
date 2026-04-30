@@ -113,20 +113,31 @@ export default function DashboardHome() {
   }, [leaveRequests]);
 
   const getPriorityStatus = (dateStr: string, record: any, empId: string) => {
+    // 1. Leave Check
     if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
     
     const isSun = isSunday(parseISO(dateStr));
-    const holiday = (holidays || []).find(h => h.date === dateStr);
+    const isCustomHoliday = (holidays || []).some(h => h.date === dateStr);
+    const isHoliday = isSun || isCustomHoliday;
     
-    if (record) {
-      if (holiday || isSun) return "Present on Holiday";
-      if (record.attendanceType === 'FIELD') return "Field";
-      if (record.attendanceType === 'WFH') return "Work at Home";
-      return record.status === 'ABSENT' ? 'Absent' : 'Present';
-    } else {
-      if (holiday || isSun) return "Holiday";
-      return "Absent";
+    // 2. Attendance Check
+    if (record && record.inTime) {
+      const type = record.attendanceType;
+      if (isHoliday) {
+        if (type === 'OFFICE') return "Present on Holiday";
+        if (type === 'FIELD') return "Field on Holiday";
+        if (type === 'WFH') return "Work at Home on Holiday";
+        return "Present on Holiday";
+      }
+      
+      if (type === 'OFFICE') return "Present";
+      if (type === 'FIELD') return "Field";
+      if (type === 'WFH') return "Work at Home";
+      return "Present";
     }
+
+    // 3. Absence/Holiday Check
+    return isHoliday ? "Holiday" : "Absent";
   };
 
   const filteredEmployees = useMemo(() => {
@@ -321,6 +332,8 @@ export default function DashboardHome() {
                     rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
                   )}>
                     {rec.displayStatus}
@@ -421,6 +434,8 @@ export default function DashboardHome() {
                     rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
                   )}>
                     {rec.displayStatus}

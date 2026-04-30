@@ -140,22 +140,33 @@ export default function ApprovalsPage() {
   }, [leaveRequests]);
 
   const getCalculatedStatus = (dateStr: string, record: any, empId: string) => {
+    // 1. Leave Check
     if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
     
-    const isHoliday = holidaySet.has(dateStr) || isSunday(parseISO(dateStr));
-    const hours = record?.hours || 0;
-    const isPresent = hours >= MIN_PRESENT_HOURS;
-    const type = record?.attendanceType;
-
-    if (isPresent) {
-      if (isHoliday) return "Present on Holiday";
-      if (type === 'FIELD') return "Field";
-      if (type === 'WFH') return "Work at Home";
-      return "Present";
-    } else {
-      if (isHoliday) return "Holiday";
-      return "Absent";
+    const isSun = isSunday(parseISO(dateStr));
+    const isCustomHoliday = holidaySet.has(dateStr);
+    const isHoliday = isSun || isCustomHoliday;
+    
+    // 2. No Record -> Absent or Holiday
+    if (!record || (!record.inTime && !record.outTime)) {
+      return isHoliday ? "Holiday" : "Absent";
     }
+
+    // 3. Holiday Work Logic
+    const type = record.attendanceType;
+    if (isHoliday) {
+      if (type === 'OFFICE') return "Present on Holiday";
+      if (type === 'FIELD') return "Field on Holiday";
+      if (type === 'WFH') return "Work at Home on Holiday";
+      return "Present on Holiday";
+    }
+
+    // 4. Standard Workday Logic
+    if (type === 'OFFICE') return "Present";
+    if (type === 'FIELD') return "Field";
+    if (type === 'WFH') return "Work at Home";
+    
+    return "Present";
   };
 
   const allAttendanceList = useMemo(() => {
@@ -594,6 +605,8 @@ export default function ApprovalsPage() {
                           rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
                           rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none hover:bg-purple-600 shadow-sm",
                           rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
+                          rec.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm font-black",
+                          rec.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm font-black",
                           rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
                         )}>
                           {rec.displayStatus}

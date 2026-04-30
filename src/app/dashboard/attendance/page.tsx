@@ -208,9 +208,9 @@ export default function AttendancePage() {
       const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
       
       // AUTO OUT LOGIC: System trigger at IN + 16:00 + 1 minute
-      if (diffHours >= 16.0166) { // 16 hours + 1 minute (approx 1/60 hr)
+      if (diffHours >= 16.0166) { 
         return {
-          activeRecord: null, // Allow Mark IN again immediately
+          activeRecord: null, 
           lockState: {
             isLocked: false,
             unlockTime: null,
@@ -229,14 +229,13 @@ export default function AttendancePage() {
     return { activeRecord: null, lockState: { isLocked: false, unlockTime: null } };
   }, [employeeRecords, currentTime]);
 
-  // Background sync for stale records exceeding 16:01 limit
   useEffect(() => {
     if (lockState.isStale && lockState.staleRecordId) {
       const staleRec = (attendanceRecords || []).find(r => r.id === lockState.staleRecordId);
       if (staleRec && !staleRec.outTime) {
         const inDT = new Date(`${staleRec.inDate || staleRec.date}T${staleRec.inTime}`);
         if (isValid(inDT)) {
-          const autoOutDT = addHours(inDT, 8); // System rule: Set OUT at IN + 8 hours
+          const autoOutDT = addHours(inDT, 8);
           updateRecord('attendance', staleRec.id, {
             outTime: format(autoOutDT, "HH:mm"),
             outDate: format(autoOutDT, "yyyy-MM-dd"),
@@ -394,18 +393,30 @@ export default function AttendancePage() {
     const now = getISTTime();
 
     const getPriorityStatus = (dateStr: string, record: any, empId: string) => {
+      // 1. Leave Logic
       if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
       
       const isSun = isSunday(parseISO(dateStr));
-      const holiday = holidaySet.has(dateStr);
+      const isCustomHoliday = holidaySet.has(dateStr);
+      const isHoliday = isSun || isCustomHoliday;
       
-      if (record) {
-        if (holiday || isSun) return "Present on Holiday";
-        if (record.attendanceType === 'FIELD') return "Field";
-        if (record.attendanceType === 'WFH') return "Work at Home";
-        return record.status === 'ABSENT' ? 'Absent' : 'Present';
+      // 2. Attendance Presence Logic
+      if (record && record.inTime) {
+        const type = record.attendanceType;
+        if (isHoliday) {
+          if (type === 'OFFICE') return "Present on Holiday";
+          if (type === 'FIELD') return "Field on Holiday";
+          if (type === 'WFH') return "Work at Home on Holiday";
+          return "Present on Holiday";
+        }
+        if (type === 'OFFICE') return "Present";
+        if (type === 'FIELD') return "Field";
+        if (type === 'WFH') return "Work at Home";
+        return "Present";
       }
-      return (holiday || isSun) ? "Holiday" : "Absent";
+
+      // 3. Absence/Holiday Base Logic
+      return isHoliday ? "Holiday" : "Absent";
     };
 
     let baseList = [];
@@ -615,6 +626,8 @@ export default function AttendancePage() {
                           h.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
                           h.displayStatus === 'Leave' && "bg-purple-500 text-white border-none hover:bg-purple-600 shadow-sm",
                           h.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
+                          h.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm font-black",
+                          h.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm font-black",
                           h.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
                         )}>
                           {h.displayStatus}
