@@ -397,7 +397,7 @@ function SidebarNav() {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/30">
             <span className="text-white font-bold text-lg">S</span>
           </div>
-          <span className="font-black text-lg tracking-tighter group-data-[collapsible=icon]:hidden">Sikka HR</span>
+          <span className="font-black text-lg tracking-tighter group-data-[collapsible=icon]:hidden">Sikka HRMS</span>
         </div>
       </SidebarHeader>
       <SidebarContent className="px-2">

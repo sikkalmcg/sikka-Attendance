@@ -4,7 +4,7 @@ import { FirebaseClientProvider } from '@/firebase';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'SikkaTrack HR - Sikka Industries & Logistics',
+  title: 'Sikka HRMS - Sikka Industries & Logistics',
   description: 'Enterprise HRMS for Sikka Industries & Logistics',
   icons: {
     icon: '/favicon.ico',
