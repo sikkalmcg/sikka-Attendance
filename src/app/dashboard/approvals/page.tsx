@@ -50,11 +50,12 @@ import {
   MessageSquare,
   UserX,
   CheckCircle,
-  Clock
+  Clock,
+  AlertCircle
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, subDays, isValid, differenceInMinutes } from "date-fns";
+import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, subDays, isValid, differenceInMinutes, isWithinInterval, startOfDay } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -75,7 +76,7 @@ const generateFilterMonths = () => {
 };
 
 export default function ApprovalsPage() {
-  const { attendanceRecords, employees, updateRecord, addRecord, verifiedUser, holidays, plants } = useData();
+  const { attendanceRecords, employees, updateRecord, addRecord, verifiedUser, holidays, plants, leaveRequests } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
@@ -125,19 +126,32 @@ export default function ApprovalsPage() {
     return new Set(holidays.map(h => h.date));
   }, [holidays]);
 
-  const getCalculatedStatus = (dateStr: string, record: any) => {
+  const approvedLeavesMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    leaveRequests.filter(l => l.status === 'APPROVED').forEach(l => {
+      const start = startOfDay(parseISO(l.fromDate));
+      const end = startOfDay(parseISO(l.toDate));
+      if (!isValid(start) || !isValid(end)) return;
+      eachDayOfInterval({ start, end }).forEach(d => {
+        map.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, true);
+      });
+    });
+    return map;
+  }, [leaveRequests]);
+
+  const getCalculatedStatus = (dateStr: string, record: any, empId: string) => {
+    if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
+    
     const isHoliday = holidaySet.has(dateStr) || isSunday(parseISO(dateStr));
     const hours = record?.hours || 0;
     const isPresent = hours >= MIN_PRESENT_HOURS;
     const type = record?.attendanceType;
-    
-    let typeLabel = "";
-    if (type === 'FIELD') typeLabel = " – Field";
-    else if (type === 'WFH') typeLabel = " – Work at Home";
 
     if (isPresent) {
-      if (isHoliday) return `Present on Holiday${typeLabel}`;
-      return `Present${typeLabel}`;
+      if (isHoliday) return "Present on Holiday";
+      if (type === 'FIELD') return "Field";
+      if (type === 'WFH') return "Work at Home";
+      return "Present";
     } else {
       if (isHoliday) return "Holiday";
       return "Absent";
@@ -164,19 +178,17 @@ export default function ApprovalsPage() {
         outDate: rec.outDate || rec.date
       };
       
-      // AUTO CALCULATE HOURS IF STILL LIVE BUT VERY OLD (STALE CHECK)
       if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
         const inDT = new Date(`${processedRec.inDate}T${rec.inTime}`);
         if (isValid(inDT)) {
           const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
           if (diffHours >= 16) {
-             // We don't cap it at 8 anymore, we show actual or system finalized state
              processedRec.autoCheckout = true;
           }
         }
       }
       
-      processedRec.displayStatus = getCalculatedStatus(rec.date, processedRec);
+      processedRec.displayStatus = getCalculatedStatus(rec.date, processedRec, rec.employeeId);
       return processedRec;
     });
 
@@ -202,16 +214,16 @@ export default function ApprovalsPage() {
         intervalDates.forEach(dStr => {
           const key = `${emp.employeeId}:${dStr}`;
           if (!existingRecordsKeySet.has(key)) {
-            const displayStatus = getCalculatedStatus(dStr, null);
+            const displayStatus = getCalculatedStatus(dStr, null, emp.employeeId);
             missing.push({ 
               id: `v-abs-${emp.employeeId}-${dStr}`, 
               employeeId: emp.employeeId, 
               employeeName: emp.name, 
               date: dStr, 
-              status: displayStatus === 'Holiday' ? 'HOLIDAY' : 'ABSENT', 
+              status: displayStatus === 'Holiday' ? 'HOLIDAY' : displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
               displayStatus, 
-              attendanceType: 'ABSENT', 
-              approved: false, 
+              attendanceType: displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
+              approved: true, 
               dept: emp.department, 
               desig: emp.designation, 
               isVirtual: true, 
@@ -246,7 +258,7 @@ export default function ApprovalsPage() {
     }
 
     return filtered;
-  }, [attendanceRecords, employees, isMounted, holidaySet, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants]);
+  }, [attendanceRecords, employees, isMounted, holidaySet, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants, approvedLeavesMap]);
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
@@ -255,7 +267,7 @@ export default function ApprovalsPage() {
       if (pendingSubMode === 'present') {
         return !rec.isVirtual && (rec.outTime || rec.autoCheckout);
       } else {
-        return rec.isVirtual;
+        return rec.isVirtual && rec.displayStatus !== 'Leave' && rec.displayStatus !== 'Holiday';
       }
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [allAttendanceList, pendingSubMode]);
@@ -290,14 +302,14 @@ export default function ApprovalsPage() {
         employeeName: rec.employeeName, 
         date: rec.date, 
         inDate: rec.date, 
-        status: rec.displayStatus.includes('Holiday') ? 'HOLIDAY' : 'ABSENT', 
-        attendanceType: 'FIELD', 
+        status: rec.displayStatus === 'Holiday' ? 'HOLIDAY' : rec.displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
+        attendanceType: rec.displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
         approved: true, 
         approvedBy: approverName, 
         hours: 0, 
         inTime: null, 
         outTime: null, 
-        address: 'System Generated Absence', 
+        address: 'System Generated Log', 
         unapprovedOutDuration: 0 
       });
     } else {
@@ -322,7 +334,7 @@ export default function ApprovalsPage() {
           date: selectedAttendance.date, 
           inDate: selectedAttendance.date, 
           status: 'ABSENT', 
-          attendanceType: 'FIELD', 
+          attendanceType: 'ABSENT', 
           remark: attendanceRejectReason, 
           approved: false, 
           unapprovedOutDuration: 0, 
@@ -575,8 +587,14 @@ export default function ApprovalsPage() {
                       <TableCell className="text-center"><Badge variant="outline" className={cn("font-black text-xs px-3", getWorkingHoursColor(rec.hours))}>{formatHoursToHHMM(rec.hours)}</Badge></TableCell>
                       <TableCell className="text-center">
                         <Badge className={cn(
-                          "text-[9px] font-black uppercase px-3", 
-                          (rec.displayStatus?.includes("Present") && !rec.displayStatus?.includes("Absent")) ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"
+                          "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
+                          rec.displayStatus === 'Present' && "bg-emerald-500 text-white border-none hover:bg-emerald-600 shadow-sm",
+                          rec.displayStatus === 'Absent' && "bg-rose-500 text-white border-none hover:bg-rose-600 shadow-sm",
+                          rec.displayStatus === 'Field' && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
+                          rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
+                          rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none hover:bg-purple-600 shadow-sm",
+                          rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
+                          rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
                         )}>
                           {rec.displayStatus}
                         </Badge>

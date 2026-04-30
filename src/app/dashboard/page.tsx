@@ -54,7 +54,7 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatDate, formatHoursToHHMM } from "@/lib/utils";
-import { format, addHours, parseISO, isValid, isBefore, startOfMonth, setMonth, setYear, isAfter, isSunday } from "date-fns";
+import { format, addHours, parseISO, isValid, isBefore, startOfMonth, setMonth, setYear, isAfter, isSunday, startOfDay, eachDayOfInterval } from "date-fns";
 
 const PRESENT_STATUSES = ['PRESENT', 'HALF_DAY', 'FIELD', 'WFH'];
 const PROJECT_START_DATE = new Date(2026, 3, 1); // April 2026
@@ -72,7 +72,7 @@ export default function DashboardHome() {
   const [todayStr, setTodayStr] = useState("");
   
   // Plant Filter
-  const [selectedPlantFilter, setSelectedPlantFilter] = useState("all");
+  const [selectedPlantId, setSelectedPlantId] = useState("all");
 
   // Leaderboard States
   const [selectedLeaderboardMonth, setSelectedLeaderboardMonth] = useState("");
@@ -99,17 +99,32 @@ export default function DashboardHome() {
     return plants.filter(p => userAssignedPlantIds.includes(p.id));
   }, [userAssignedPlantIds, plants]);
 
-  const getPriorityStatus = (dateStr: string, record: any) => {
+  const approvedLeavesMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    leaveRequests.filter(l => l.status === 'APPROVED').forEach(l => {
+      const start = startOfDay(parseISO(l.fromDate));
+      const end = startOfDay(parseISO(l.toDate));
+      if (!isValid(start) || !isValid(end)) return;
+      eachDayOfInterval({ start, end }).forEach(d => {
+        map.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, true);
+      });
+    });
+    return map;
+  }, [leaveRequests]);
+
+  const getPriorityStatus = (dateStr: string, record: any, empId: string) => {
+    if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
+    
     const isSun = isSunday(parseISO(dateStr));
     const holiday = (holidays || []).find(h => h.date === dateStr);
     
     if (record) {
-      if (holiday) return "Present on Holiday";
-      if (isSun) return "Present on Weekly Off";
-      return record.autoCheckout ? "System Auto OUT" : record.status;
+      if (holiday || isSun) return "Present on Holiday";
+      if (record.attendanceType === 'FIELD') return "Field";
+      if (record.attendanceType === 'WFH') return "Work at Home";
+      return record.status === 'ABSENT' ? 'Absent' : 'Present';
     } else {
-      if (holiday) return `Holiday (${holiday.name})`;
-      if (isSun) return "Weekly Off";
+      if (holiday || isSun) return "Holiday";
       return "Absent";
     }
   };
@@ -117,17 +132,16 @@ export default function DashboardHome() {
   const filteredEmployees = useMemo(() => {
     let list = employees.filter(e => e.active);
     
-    // SECURITY: Scope to assigned plants
     if (userAssignedPlantIds) {
       list = list.filter(e => (e.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(e.unitId));
     }
 
-    if (selectedPlantFilter !== "all") {
-      list = list.filter(e => (e.unitIds || []).includes(selectedPlantFilter) || e.unitId === selectedPlantFilter);
+    if (selectedPlantId !== "all") {
+      list = list.filter(e => (e.unitIds || []).includes(selectedPlantId) || e.unitId === selectedPlantId);
     }
     
     return list;
-  }, [employees, selectedPlantFilter, userAssignedPlantIds]);
+  }, [employees, selectedPlantId, userAssignedPlantIds]);
 
   const stats = useMemo(() => {
     if (!isMounted || !todayStr) return { totalEmployees: 0, presentToday: 0, absentToday: 0, fieldWorkToday: 0, wfhToday: 0, pendingApprovals: 0, attendancePct: "0", pendingLeaves: 0 };
@@ -177,7 +191,7 @@ export default function DashboardHome() {
       pendingLeaves: pendingLeaves,
       attendancePct: activeEmployees.length > 0 ? ((presentToday.length / activeEmployees.length) * 100).toFixed(1) : "0"
     };
-  }, [filteredEmployees, attendanceRecords, vouchers, isMounted, todayStr, leaveRequests]);
+  }, [filteredEmployees, attendanceRecords, isMounted, todayStr, leaveRequests]);
 
   const leaderboardData = useMemo(() => {
     if (!isMounted || !selectedLeaderboardMonth || !filteredEmployees.length) return { top: [], bottom: [] };
@@ -221,7 +235,7 @@ export default function DashboardHome() {
       })
       .map(rec => {
         const emp = filteredEmployees.find(e => e.employeeId === rec.employeeId);
-        const displayStatus = getPriorityStatus(rec.date, rec);
+        const displayStatus = getPriorityStatus(rec.date, rec, rec.employeeId);
         let processed = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A", displayStatus };
         
         if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
@@ -244,7 +258,7 @@ export default function DashboardHome() {
           <div className="p-8 bg-slate-900 text-white shrink-0 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center"><Users className="w-7 h-7 text-primary" /></div>
-              <div><h2 className="text-2xl font-black uppercase">Active Staff Registry</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">{selectedPlantFilter === 'all' ? 'Total Registered Workforce' : 'Facility Scoped Registry'}</p></div>
+              <div><h2 className="text-2xl font-black uppercase">Active Staff Registry</h2><p className="text-slate-400 font-bold text-xs uppercase tracking-widest">{selectedPlantId === 'all' ? 'Total Registered Workforce' : 'Facility Scoped Registry'}</p></div>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setViewMode(null)} className="text-white"><X className="w-6 h-6" /></Button>
           </div>
@@ -280,7 +294,7 @@ export default function DashboardHome() {
   }
 
   if (viewMode === 'absent') {
-    const absentData = filteredEmployees.filter(e => !attendanceRecords.some(r => r.employeeId === e.employeeId && r.date === todayStr)).map(e => ({ ...e, displayStatus: getPriorityStatus(todayStr, null) }));
+    const absentData = filteredEmployees.filter(e => !attendanceRecords.some(r => r.employeeId === e.employeeId && r.date === todayStr)).map(e => ({ ...e, displayStatus: getPriorityStatus(todayStr, null, e.employeeId) }));
     return (
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
@@ -293,7 +307,27 @@ export default function DashboardHome() {
           </div>
           <ScrollArea className="flex-1 bg-white">
             <Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="px-8 py-5">Employee Name</TableHead><TableHead>Department</TableHead><TableHead>Designation</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-            <TableBody>{absentData.map((rec, idx) => (<TableRow key={idx}><TableCell className="px-8 py-6 font-bold">{rec.name}</TableCell><TableCell>{rec.department}</TableCell><TableCell>{rec.designation}</TableCell><TableCell><Badge variant="outline" className="bg-rose-50 text-rose-700">{rec.displayStatus}</Badge></TableCell></TableRow>))}</TableBody></Table>
+            <TableBody>{absentData.map((rec, idx) => (
+              <TableRow key={idx}>
+                <TableCell className="px-8 py-6 font-bold">{rec.name}</TableCell>
+                <TableCell>{rec.department}</TableCell>
+                <TableCell>{rec.designation}</TableCell>
+                <TableCell>
+                  <Badge className={cn(
+                    "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
+                    rec.displayStatus === 'Present' && "bg-emerald-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Absent' && "bg-rose-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Field' && "bg-amber-400 text-black border-none shadow-sm",
+                    rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
+                  )}>
+                    {rec.displayStatus}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))}</TableBody></Table>
           </ScrollArea>
         </div>
       </div>
@@ -373,7 +407,26 @@ export default function DashboardHome() {
           <ScrollArea className="flex-1 bg-white">
             <Table className="min-w-[1200px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="px-8">Employee Name</TableHead><TableHead>Dept/Desig</TableHead><TableHead>Log Time</TableHead><TableHead>Work Hour</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
             <TableBody>{data.map((rec, idx) => (
-              <TableRow key={idx}><TableCell className="px-8 py-6 font-bold">{rec.employeeName}</TableCell><TableCell>{rec.dept} / {rec.desig}</TableCell><TableCell className="font-mono text-xs">{rec.inTime} - {rec.outTime || 'Live'}</TableCell><TableCell className="text-center font-bold">{formatHoursToHHMM(rec.hours)}</TableCell><TableCell><Badge className="bg-emerald-50 text-emerald-700">{rec.displayStatus}</Badge></TableCell></TableRow>
+              <TableRow key={idx}>
+                <TableCell className="px-8 py-6 font-bold">{rec.employeeName}</TableCell>
+                <TableCell>{rec.dept} / {rec.desig}</TableCell>
+                <TableCell className="font-mono text-xs">{rec.inTime} - {rec.outTime || 'Live'}</TableCell>
+                <TableCell className="text-center font-bold">{formatHoursToHHMM(rec.hours)}</TableCell>
+                <TableCell>
+                  <Badge className={cn(
+                    "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
+                    rec.displayStatus === 'Present' && "bg-emerald-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Absent' && "bg-rose-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Field' && "bg-amber-400 text-black border-none shadow-sm",
+                    rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
+                    rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
+                  )}>
+                    {rec.displayStatus}
+                  </Badge>
+                </TableCell>
+              </TableRow>
             ))}</TableBody></Table>
           </ScrollArea>
         </div>
@@ -392,7 +445,7 @@ export default function DashboardHome() {
         </div>
         <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-100">
            <Factory className="w-4 h-4 text-primary ml-2" />
-           <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
+           <Select value={selectedPlantId} onValueChange={setSelectedPlantId}>
               <SelectTrigger className="h-9 w-[220px] border-none font-black text-xs uppercase focus:ring-0 bg-transparent">
                  <SelectValue placeholder="All Authorized Plants" />
               </SelectTrigger>

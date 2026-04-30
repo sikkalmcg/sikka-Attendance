@@ -353,15 +353,36 @@ export default function AttendancePage() {
 
   const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
 
+  const approvedLeavesMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    leaveRequests.filter(l => l.status === 'APPROVED').forEach(l => {
+      const start = startOfDay(parseISO(l.fromDate));
+      const end = startOfDay(parseISO(l.toDate));
+      if (!isValid(start) || !isValid(end)) return;
+      eachDayOfInterval({ start, end }).forEach(d => {
+        map.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, true);
+      });
+    });
+    return map;
+  }, [leaveRequests]);
+
   const history = useMemo(() => {
     if (!verifiedUser || !isMounted) return [];
     const now = getISTTime();
 
-    const getPriorityStatus = (dateStr: string, record: any) => {
+    const getPriorityStatus = (dateStr: string, record: any, empId: string) => {
+      if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
+      
       const isSun = isSunday(parseISO(dateStr));
       const holiday = holidaySet.has(dateStr);
-      if (record) return holiday ? "Present on Holiday" : isSun ? "Present on Weekly Off" : record.status;
-      return holiday ? "Holiday" : isSun ? "Weekly Off" : "Absent";
+      
+      if (record) {
+        if (holiday || isSun) return "Present on Holiday";
+        if (record.attendanceType === 'FIELD') return "Field";
+        if (record.attendanceType === 'WFH') return "Work at Home";
+        return record.status === 'ABSENT' ? 'Absent' : 'Present';
+      }
+      return (holiday || isSun) ? "Holiday" : "Absent";
     };
 
     let baseList = [];
@@ -390,7 +411,7 @@ export default function AttendancePage() {
         return true;
       });
 
-      baseList = baseList.map(r => ({ ...r, displayStatus: getPriorityStatus(r.date, r) }));
+      baseList = baseList.map(r => ({ ...r, displayStatus: getPriorityStatus(r.date, r, r.employeeId) }));
     } else {
       const empRecordMap = new Map();
       employeeRecords.forEach(r => empRecordMap.set(r.date, r));
@@ -398,13 +419,23 @@ export default function AttendancePage() {
       baseList = dateRange.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const existing = empRecordMap.get(dateStr);
-        if (existing) return { ...existing, displayStatus: getPriorityStatus(dateStr, existing) };
+        if (existing) return { ...existing, displayStatus: getPriorityStatus(dateStr, existing, effectiveEmployeeId) };
         if (isSameDay(date, now)) return null;
-        return { id: `v-${dateStr}`, employeeId: effectiveEmployeeId, employeeName: effectiveEmployeeName, date: dateStr, status: 'ABSENT', displayStatus: getPriorityStatus(dateStr, null), approved: true, hours: 0, isVirtual: true };
+        return { 
+          id: `v-${dateStr}`, 
+          employeeId: effectiveEmployeeId, 
+          employeeName: effectiveEmployeeName, 
+          date: dateStr, 
+          status: 'ABSENT', 
+          displayStatus: getPriorityStatus(dateStr, null, effectiveEmployeeId), 
+          approved: true, 
+          hours: 0, 
+          isVirtual: true 
+        };
       }).filter(Boolean).reverse();
     }
     return baseList;
-  }, [verifiedUser, attendanceRecords, holidays, holidaySet, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth, userAssignedPlantIds, employees]);
+  }, [verifiedUser, attendanceRecords, holidays, holidaySet, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth, userAssignedPlantIds, employees, approvedLeavesMap]);
 
   const filteredEmployeeLeaves = useMemo(() => {
     if (!isMounted || !todayStr) return [];
@@ -553,7 +584,18 @@ export default function AttendancePage() {
                       <TableCell className="font-mono text-xs">{formatDate(h.inDate || h.date)} {h.inTime || "--:--"}</TableCell>
                       <TableCell className="font-mono text-xs">{formatDate(h.outDate || h.date)} {h.outTime || "--:--"}</TableCell>
                       <TableCell className="text-center">
-                        <Badge className="text-[9px] font-black uppercase">{h.displayStatus}</Badge>
+                        <Badge className={cn(
+                          "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
+                          h.displayStatus === 'Present' && "bg-emerald-500 text-white border-none hover:bg-emerald-600 shadow-sm",
+                          h.displayStatus === 'Absent' && "bg-rose-500 text-white border-none hover:bg-rose-600 shadow-sm",
+                          h.displayStatus === 'Field' && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
+                          h.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
+                          h.displayStatus === 'Leave' && "bg-purple-500 text-white border-none hover:bg-purple-600 shadow-sm",
+                          h.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
+                          h.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
+                        )}>
+                          {h.displayStatus}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className={cn("font-black text-xs", getWorkingHoursColor(h.hours || 0))}>
