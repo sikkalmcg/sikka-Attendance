@@ -586,14 +586,14 @@ export function VoucherDocumentContent({ voucher, employees, firms, plants, isPr
         </div>
 
         <div className="flex-1 text-center flex flex-col items-center pt-10">
-          <div className="border-4 border-slate-900 px-8 py-3 bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-            <h1 className="text-3xl font-black tracking-tighter uppercase">PAYMENT VOUCHER</h1>
+          <div className="border-2 border-slate-900 px-4 py-1.5 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <h1 className="text-base font-black tracking-tighter uppercase">PAYMENT VOUCHER</h1>
           </div>
         </div>
 
         <div className="flex-1 flex flex-col items-end space-y-4 text-right pt-2">
            <div>
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Voucher Name</p>
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Voucher Number</p>
               <p className="text-xl font-black font-mono text-blue-600">{voucher.voucherNo}</p>
            </div>
            <div>
@@ -647,25 +647,25 @@ export function VoucherDocumentContent({ voucher, employees, firms, plants, isPr
            <div className="h-6 w-1.5 bg-slate-900 rounded-full" />
            <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">Voucher Details</h3>
         </div>
-        <table className="w-full border-collapse border-2 border-slate-900 text-left">
+        <table className="w-[40%] border-collapse border-2 border-slate-900 text-left">
           <thead>
             <tr className="bg-slate-900 text-white">
-              <th className="border-2 border-slate-900 p-4 text-[10px] font-black uppercase tracking-widest w-2/3">Description / Purpose</th>
-              <th className="border-2 border-slate-900 p-4 text-[10px] font-black uppercase tracking-widest text-right w-1/3">Amount (INR)</th>
+              <th className="border-2 border-slate-900 p-1 text-[10px] font-black uppercase tracking-widest w-2/3">Description / Purpose</th>
+              <th className="border-2 border-slate-900 p-1 text-[10px] font-black uppercase tracking-widest text-right w-1/3">Amount (INR)</th>
             </tr>
           </thead>
           <tbody>
-            <tr className="h-32">
-              <td className="border-2 border-slate-900 p-6 align-top">
+            <tr className="h-10">
+              <td className="border-2 border-slate-900 p-1.5 align-top">
                  <p className="font-black text-slate-800 text-lg uppercase leading-tight tracking-tight">{voucher.purpose}</p>
                  <p className="text-[10px] font-bold text-slate-400 mt-2 italic uppercase">Authorized Advance Payment</p>
               </td>
-              <td className="border-2 border-slate-900 p-6 align-top text-right bg-slate-50/50">
+              <td className="border-2 border-slate-900 p-1.5 align-top text-right bg-slate-50/50">
                  <p className="text-4xl font-black text-slate-900 tracking-tighter">{formatCurrency(voucher.amount)}</p>
               </td>
             </tr>
             <tr className="bg-slate-100/50">
-              <td colSpan={2} className="border-2 border-slate-900 p-6">
+              <td colSpan={2} className="border-2 border-slate-900 p-1.5">
                 <div className="flex flex-col gap-2">
                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Amount in Words</span>
                   <span className="text-lg font-black uppercase tracking-tight italic decoration-slate-300 underline underline-offset-8 leading-tight">
