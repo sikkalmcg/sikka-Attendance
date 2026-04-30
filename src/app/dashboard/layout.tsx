@@ -86,7 +86,7 @@ function HeaderActions() {
   const latestNotifications = useMemo(() => {
     return [...filteredNotifications]
       .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))
-      .slice(0, 20);
+      .slice(0, 45); // Support maximum 45 messages
   }, [filteredNotifications]);
 
   const markAllRead = () => {

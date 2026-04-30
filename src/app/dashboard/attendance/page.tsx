@@ -170,7 +170,7 @@ export default function AttendancePage() {
     const name = verifiedUser.fullName || "User";
     
     if (hours < 12) {
-      return `Good Morning ${name}, Have a good Day !`;
+      return `Good Morning ${name}, Have a good day`;
     } else if (hours < 17) {
       return `Good Afternoon ${name}`;
     } else {
@@ -284,22 +284,35 @@ export default function AttendancePage() {
     if (!verifiedUser || !currentGPS || !isAccessAllowed) return;
     const now = getISTTime();
     const today = format(now, "yyyy-MM-dd");
+    const timeStr = format(now, "HH:mm");
+    const plantName = detectedPlant?.name || "Remote";
+
     addRecord('attendance', {
       employeeId: effectiveEmployeeId,
       employeeName: effectiveEmployeeName,
       date: today,
       inDate: today,
-      inTime: format(now, "HH:mm"),
+      inTime: timeStr,
       hours: 0,
       status: 'PRESENT',
       attendanceType: detectedPlant ? 'OFFICE' : selectedType,
       lat: currentGPS.lat,
       lng: currentGPS.lng,
       address: detectedAddress,
-      inPlant: detectedPlant?.name || "Remote",
+      inPlant: plantName,
       approved: false,
       unapprovedOutDuration: 0
     });
+
+    // High-fidelity Activity Notification
+    addRecord('notifications', {
+      message: `${effectiveEmployeeName} – IN: ${format(now, "dd-MMM-yyyy HH:mm")} | ${plantName}`,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'ATTENDANCE_IN',
+      employeeId: effectiveEmployeeId
+    });
+
     setActiveDialog("NONE");
     toast({ title: "Check-In Success" });
   };
@@ -317,6 +330,9 @@ export default function AttendancePage() {
       const diffHours = (outDateTime.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
       finalHours = parseFloat(diffHours.toFixed(2));
     }
+    
+    const plantName = detectedPlant?.name || "Remote";
+
     updateRecord('attendance', activeRecord.id, { 
       outTime: timeHHMM, 
       outDate: todayStrLocal,
@@ -325,8 +341,18 @@ export default function AttendancePage() {
       latOut: currentGPS.lat, 
       lngOut: currentGPS.lng,
       addressOut: detectedAddress,
-      outPlant: detectedPlant?.name || "Remote"
+      outPlant: plantName
     });
+
+    // High-fidelity Activity Notification
+    addRecord('notifications', {
+      message: `${effectiveEmployeeName} – OUT: ${format(now, "dd-MMM-yyyy HH:mm")} | WORK: ${formatHoursToHHMM(finalHours)} HRS | ${plantName}`,
+      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+      read: false,
+      type: 'ATTENDANCE_OUT',
+      employeeId: effectiveEmployeeId
+    });
+
     setActiveDialog("NONE");
     toast({ title: "Check-Out Success" });
   };
@@ -366,6 +392,16 @@ export default function AttendancePage() {
       };
 
       await addRecord('leaveRequests', leaveData);
+
+      // High-fidelity Activity Notification
+      addRecord('notifications', {
+        message: `${effectiveEmployeeName} – Leave Req: ${formatDate(leaveFromDate)} to ${formatDate(leaveData.toDate)} | ${daysCount} Day(s)`,
+        timestamp: new Date().toISOString(),
+        read: false,
+        type: 'LEAVE_REQUEST',
+        employeeId: effectiveEmployeeId
+      });
+
       toast({ title: "Request Submitted" });
       setActiveDialog("NONE");
     } finally {
@@ -621,7 +657,7 @@ export default function AttendancePage() {
                       <TableCell className="text-center">
                         <Badge className={cn(
                           "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
-                          h.displayStatus === 'Present' && "bg-emerald-50 text-white border-none hover:bg-emerald-600 shadow-sm",
+                          h.displayStatus === 'Present' && "bg-emerald-500 text-white border-none hover:bg-emerald-600 shadow-sm",
                           h.displayStatus === 'Absent' && "bg-rose-500 text-white border-none hover:bg-rose-600 shadow-sm",
                           h.displayStatus === 'Field' && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
                           h.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
