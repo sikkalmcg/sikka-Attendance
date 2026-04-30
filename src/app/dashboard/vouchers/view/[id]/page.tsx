@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, X, Info, Download, ArrowLeft } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export default function VoucherDetailPage() {
   const params = useParams();
@@ -70,10 +71,9 @@ export default function VoucherDetailPage() {
         </div>
       </div>
 
-      {/* Main Document Content */}
+      {/* Main Document Content - Visible on Screen */}
       <ScrollArea className="flex-1 w-full" tabIndex={0} role="region" aria-label="Voucher Content">
         <div className="py-12 px-4 sm:px-8 flex justify-center">
-          <div className="print-only">
              <VoucherDocumentContent 
                voucher={voucher} 
                employees={employees} 
@@ -81,12 +81,24 @@ export default function VoucherDetailPage() {
                plants={plants}
                isPrintMode={false} 
              />
-          </div>
         </div>
         <ScrollBar orientation="vertical" className="w-3 opacity-100 block" />
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+
+      {/* Render Portal version for high-fidelity printing support */}
+      {isMounted && createPortal(
+        <div className="print-only">
+           <VoucherDocumentContent 
+             voucher={voucher} 
+             employees={employees} 
+             firms={firms} 
+             plants={plants}
+             isPrintMode={true} 
+           />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
-
