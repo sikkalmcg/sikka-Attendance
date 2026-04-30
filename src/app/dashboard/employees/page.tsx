@@ -509,12 +509,12 @@ export default function EmployeesPage() {
                     <Label className="text-[10px] font-black uppercase text-slate-500">Assigned Plant(s) *</Label>
                     <Popover open={isPlantPopoverOpen} onOpenChange={setIsPlantPopoverOpen}>
                       <PopoverTrigger asChild>
-                        <Button variant="outline" className="h-12 w-full justify-between font-bold rounded-lg border-slate-200">
+                        <Button className="h-12 w-full justify-between font-black bg-primary text-slate-900 hover:bg-primary/90 rounded-xl border-none shadow-lg shadow-primary/10">
                           {(formData.unitIds?.length || 0) > 0 ? `${formData.unitIds?.length} Plants Selected` : "Select Facility Access"}
                           <ChevronRight className="w-4 h-4 ml-2 opacity-50" />
                         </Button>
                       </PopoverTrigger>
-                      <PopoverContent className="w-[320px] p-2 rounded-2xl shadow-2xl" align="start">
+                      <PopoverContent className="w-[320px] p-2 rounded-2xl shadow-2xl border-none" align="start">
                         <ScrollArea className="h-[250px] pr-2">
                           <div className="space-y-1">
                             {plants.filter(p => p.firmId === formData.firmId).map(p => {
@@ -522,20 +522,22 @@ export default function EmployeesPage() {
                               return (
                                 <div 
                                   key={p.id} 
-                                  className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-colors" 
+                                  className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-all group" 
                                   onClick={(e) => {
                                     e.preventDefault();
+                                    e.stopPropagation();
                                     togglePlantSelection(p.id);
                                   }}
                                 >
-                                  <Checkbox 
-                                    checked={isChecked} 
-                                    onCheckedChange={() => {}} // Controlled by row click
-                                    className="rounded-md pointer-events-none" 
-                                  />
-                                  <div className="flex-1">
-                                    <p className="text-sm font-black text-slate-900">{p.name}</p>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase">Infrastructure Node</p>
+                                  <div className={cn(
+                                    "h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0",
+                                    isChecked ? "border-primary bg-primary/10" : "border-slate-300 group-hover:border-slate-400"
+                                  )}>
+                                    {isChecked && <div className="h-2.5 w-2.5 rounded-full bg-primary animate-in zoom-in-50 duration-200" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black text-slate-900 truncate">{p.name}</p>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Infrastructure Node</p>
                                   </div>
                                 </div>
                               );
@@ -568,7 +570,7 @@ export default function EmployeesPage() {
               <div className="space-y-6 pt-6 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-2">
                   <Banknote className="w-5 h-5 text-primary" />
-                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">3. Disbursement Credentials</h3>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">3. Banking Credentials</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div className="space-y-2">
