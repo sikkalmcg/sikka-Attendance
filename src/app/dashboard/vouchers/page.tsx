@@ -147,7 +147,8 @@ export default function VouchersPage() {
   const filterByAccess = (v: Voucher) => {
     if (!userAssignedPlantIds) return true;
     const emp = employees.find(e => e.id === v.employeeId);
-    return (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId);
+    if (!emp) return false;
+    return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
   };
 
   const filteredPendingVouchers = useMemo(() => {

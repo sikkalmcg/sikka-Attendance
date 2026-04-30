@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
@@ -180,28 +181,47 @@ export default function PayrollPage() {
   const pendingGenerationEmployees = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return employees.filter(emp => {
+      // SECURITY: Restriction by assigned plants
+      if (userAssignedPlantIds) {
+        const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+        if (!hasAccess) return false;
+      }
+      
       const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
       const plantMatch = selectedPlantId === "all" || (emp.unitIds || []).includes(selectedPlantId);
       const done = payrollRecords.some(p => p.employeeId === emp.employeeId && p.month === selectedMonth);
       return match && plantMatch && !done;
     }).map(emp => ({ ...emp, metrics: getAttendanceMetricsForMonth(emp.employeeId, selectedMonth) }));
-  }, [employees, searchTerm, selectedPlantId, payrollRecords, selectedMonth, attendanceRecords]);
+  }, [employees, searchTerm, selectedPlantId, payrollRecords, selectedMonth, attendanceRecords, userAssignedPlantIds]);
 
   const paymentTabLists = useMemo(() => {
     const search = searchTerm.toLowerCase();
     const filtered = payrollRecords.filter(p => {
       const emp = employees.find(e => e.employeeId === p.employeeId);
+      
+      // SECURITY: Restriction by assigned plants
+      if (userAssignedPlantIds && emp) {
+        const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+        if (!hasAccess) return false;
+      }
+
       const match = p.employeeName.toLowerCase().includes(search) || p.employeeId.toLowerCase().includes(search);
       const plantMatch = selectedPlantId === "all" || (emp?.unitIds || []).includes(selectedPlantId);
       return match && plantMatch;
     });
     const pending = filtered.filter(p => (p.netPayable - (p.salaryPaidAmount || 0)) > 0);
     return { pending };
-  }, [payrollRecords, searchTerm, selectedPlantId, employees]);
+  }, [payrollRecords, searchTerm, selectedPlantId, employees, userAssignedPlantIds]);
 
   const advanceSalaryData = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return employees.filter(emp => {
+      // SECURITY: Restriction by assigned plants
+      if (userAssignedPlantIds) {
+        const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+        if (!hasAccess) return false;
+      }
+
       const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
       const plantMatch = selectedPlantId === "all" || (emp.unitIds || []).includes(selectedPlantId);
       return match && plantMatch;
@@ -218,11 +238,17 @@ export default function PayrollPage() {
         remainingBalance: Math.max(0, totalAdv - totalRecovered)
       };
     }).sort((a, b) => b.remainingBalance - a.remainingBalance);
-  }, [employees, vouchers, payrollRecords, searchTerm, selectedPlantId]);
+  }, [employees, vouchers, payrollRecords, searchTerm, selectedPlantId, userAssignedPlantIds]);
 
   const advanceLeaveData = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return employees.filter(emp => {
+      // SECURITY: Restriction by assigned plants
+      if (userAssignedPlantIds) {
+        const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+        if (!hasAccess) return false;
+      }
+
       const match = emp.name.toLowerCase().includes(search) || emp.employeeId.toLowerCase().includes(search);
       const plantMatch = selectedPlantId === "all" || (emp.unitIds || []).includes(selectedPlantId);
       return match && plantMatch;
@@ -232,7 +258,7 @@ export default function PayrollPage() {
         currentBalance: emp.advanceLeaveBalance || 0
       };
     }).sort((a, b) => b.currentBalance - a.currentBalance);
-  }, [employees, searchTerm, selectedPlantId]);
+  }, [employees, searchTerm, selectedPlantId, userAssignedPlantIds]);
 
   if (!isMounted) return null;
 

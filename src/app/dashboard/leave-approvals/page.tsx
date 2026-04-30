@@ -107,7 +107,7 @@ export default function LeaveApprovalPage() {
         if (!authorizedPlantNames.has(req.plantName)) {
            // Double check if employee belongs to any assigned plant as a fallback
            const emp = employees.find(e => e.employeeId === req.employeeId);
-           const empHasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id));
+           const empHasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId);
            if (!empHasAccess) return false;
         }
       }

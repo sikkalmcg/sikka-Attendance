@@ -116,12 +116,16 @@ export default function DashboardHome() {
 
   const filteredEmployees = useMemo(() => {
     let list = employees.filter(e => e.active);
-    if (selectedPlantFilter !== "all") {
-      list = list.filter(e => (e.unitIds || []).includes(selectedPlantFilter));
-    }
+    
+    // SECURITY: Scope to assigned plants
     if (userAssignedPlantIds) {
-      list = list.filter(e => (e.unitIds || []).some(id => userAssignedPlantIds.includes(id)));
+      list = list.filter(e => (e.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(e.unitId));
     }
+
+    if (selectedPlantFilter !== "all") {
+      list = list.filter(e => (e.unitIds || []).includes(selectedPlantFilter) || e.unitId === selectedPlantFilter);
+    }
+    
     return list;
   }, [employees, selectedPlantFilter, userAssignedPlantIds]);
 

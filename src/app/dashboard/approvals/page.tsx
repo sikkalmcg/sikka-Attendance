@@ -120,8 +120,6 @@ export default function ApprovalsPage() {
     return plants.filter(p => userAssignedPlantIds.includes(p.id));
   }, [userAssignedPlantIds, plants]);
 
-  const authorizedPlantNames = useMemo(() => new Set(authorizedPlants.map(p => p.name)), [authorizedPlants]);
-
   const holidaySet = useMemo(() => {
     return new Set(holidays.map(h => h.date));
   }, [holidays]);
@@ -150,7 +148,13 @@ export default function ApprovalsPage() {
     const now = new Date();
     const employeeMap = new Map(employees.map(e => [e.employeeId, e]));
     
-    const actual = (attendanceRecords || []).map(rec => {
+    // 1. FILTER ACTUAL RECORDS BY ASSIGNED PLANTS
+    const actual = (attendanceRecords || []).filter(rec => {
+      if (!userAssignedPlantIds) return true;
+      const emp = employeeMap.get(rec.employeeId);
+      if (!emp) return false;
+      return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+    }).map(rec => {
       const emp = employeeMap.get(rec.employeeId);
       let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
       
@@ -172,6 +176,7 @@ export default function ApprovalsPage() {
       return processedRec;
     });
 
+    // 2. FILTER VIRTUAL RECORDS BY ASSIGNED PLANTS
     const missing: any[] = [];
     const yesterday = subDays(now, 1);
     const startDate = parseISO(PROJECT_START_DATE_STR);
@@ -222,7 +227,7 @@ export default function ApprovalsPage() {
 
     let filtered = [...actual, ...missing];
 
-    // SEARCH FILTER
+    // 3. SEARCH FILTER
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       filtered = filtered.filter(rec => 
@@ -231,7 +236,7 @@ export default function ApprovalsPage() {
       );
     }
 
-    // PLANT FILTER
+    // 4. PLANT FILTER (DROPDOWN)
     if (selectedPlantFilter !== "ALL_ASSIGNED") {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
@@ -431,8 +436,7 @@ export default function ApprovalsPage() {
              <p className="text-muted-foreground text-sm font-medium">Facility Scoped Oversight System</p>
           </div>
         </div>
-        {authorizedPlants.length > 0 && (
-          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border shadow-sm border-slate-200">
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border shadow-sm border-slate-200">
              <Building2 className="w-4 h-4 text-primary ml-2" />
              <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
                 <SelectTrigger className="h-9 w-[220px] border-none font-black text-xs uppercase focus:ring-0">
@@ -446,7 +450,6 @@ export default function ApprovalsPage() {
                 </SelectContent>
              </Select>
           </div>
-        )}
       </div>
 
       <div className="flex flex-col md:flex-row items-center gap-4">
