@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 export const metadata: Metadata = {
   title: 'Sikka HRMS - Sikka Industries & Logistics',
   description: 'Enterprise HRMS for Sikka Industries & Logistics',
+  manifest: '/manifest.json',
   icons: {
     icon: '/favicon.ico',
   },
@@ -29,6 +30,21 @@ export default function RootLayout({
           {children}
           <Toaster />
         </FirebaseClientProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('ServiceWorker registration successful');
+                  }, function(err) {
+                    console.log('ServiceWorker registration failed: ', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

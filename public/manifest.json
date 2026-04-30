@@ -1,0 +1,23 @@
+{
+  "name": "Attendance",
+  "short_name": "Attendance",
+  "description": "Sikka HRMS Attendance System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2179f5",
+  "icons": [
+    {
+      "src": "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
