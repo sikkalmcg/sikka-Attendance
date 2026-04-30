@@ -320,11 +320,12 @@ export default function VouchersPage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1200px]">
+                <Table className="min-w-[1400px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 py-4">Voucher No</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Voucher Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-primary">Created By</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Employee Name</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Department</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Designation</TableHead>
@@ -335,7 +336,7 @@ export default function VouchersPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredPendingVouchers.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground font-bold italic">No pending approvals.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={9} className="text-center py-20 text-muted-foreground font-bold italic">No pending approvals.</TableCell></TableRow>
                     ) : (
                       filteredPendingVouchers.map(v => {
                         const emp = getEmpData(v.employeeId);
@@ -345,6 +346,7 @@ export default function VouchersPage() {
                               <button onClick={() => handleVoucherClick(v)} className="hover:underline text-left">{v.voucherNo}</button>
                             </TableCell>
                             <TableCell className="text-xs font-bold text-slate-500">{formatDate(v.date)}</TableCell>
+                            <TableCell className="text-[10px] font-bold text-primary uppercase">{v.createdByName || "---"}</TableCell>
                             <TableCell className="font-black text-slate-900 uppercase text-xs">{emp?.name || "N/A"}</TableCell>
                             <TableCell className="text-xs font-bold text-slate-600">{emp?.department || "N/A"}</TableCell>
                             <TableCell className="text-[10px] text-muted-foreground font-medium uppercase">{emp?.designation || "N/A"}</TableCell>
@@ -377,11 +379,13 @@ export default function VouchersPage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1500px]">
+                <Table className="min-w-[1700px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest px-6 py-4">Voucher No</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Voucher Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-primary">Created By</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-widest text-emerald-600">Approved By</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Employee Name</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Department</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-widest">Designation</TableHead>
@@ -392,7 +396,7 @@ export default function VouchersPage() {
                   </TableHeader>
                   <TableBody>
                     {paymentTabLists.pending.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="text-center py-20 text-muted-foreground font-bold italic">No vouchers awaiting disbursement.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={10} className="text-center py-20 text-muted-foreground font-bold italic">No vouchers awaiting disbursement.</TableCell></TableRow>
                     ) : (
                       paymentTabLists.pending.map(v => {
                         const emp = getEmpData(v.employeeId);
@@ -402,6 +406,8 @@ export default function VouchersPage() {
                               <button onClick={() => handleVoucherClick(v)} className="hover:underline text-left">{v.voucherNo}</button>
                             </TableCell>
                             <TableCell className="text-xs font-bold text-slate-500">{formatDate(v.date)}</TableCell>
+                            <TableCell className="text-[10px] font-bold text-primary uppercase">{v.createdByName || "---"}</TableCell>
+                            <TableCell className="text-[10px] font-bold text-emerald-600 uppercase">{v.approvedByName || "---"}</TableCell>
                             <TableCell className="font-black text-slate-900 uppercase text-xs">{emp?.name || "N/A"}</TableCell>
                             <TableCell className="text-xs font-bold text-slate-600">{emp?.department || "N/A"}</TableCell>
                             <TableCell className="text-[10px] text-muted-foreground font-medium uppercase">{emp?.designation || "N/A"}</TableCell>
@@ -431,10 +437,13 @@ export default function VouchersPage() {
             </CardHeader>
             <CardContent className="p-0">
                <ScrollArea className="w-full">
-                  <Table className="min-w-[1200px]">
+                  <Table className="min-w-[1400px]">
                      <TableHeader className="bg-slate-50">
                         <TableRow>
-                           <TableHead className="font-black text-[10px] px-6 py-4 uppercase">Ref No</TableHead>
+                           <TableHead className="font-black text-[10px] px-6 py-4 uppercase">Voucher Number</TableHead>
+                           <TableHead className="font-black text-[10px] uppercase">Date</TableHead>
+                           <TableHead className="font-black text-[10px] uppercase text-primary">Created By</TableHead>
+                           <TableHead className="font-black text-[10px] uppercase text-emerald-600">Approved By</TableHead>
                            <TableHead className="font-black text-[10px] uppercase">Staff Name</TableHead>
                            <TableHead className="font-black text-[10px] uppercase text-right">Amount</TableHead>
                            <TableHead className="font-black text-[10px] uppercase">Paid Date</TableHead>
@@ -444,13 +453,16 @@ export default function VouchersPage() {
                      </TableHeader>
                      <TableBody>
                         {paymentTabLists.paid.length === 0 ? (
-                           <TableRow><TableCell colSpan={6} className="text-center py-20 text-muted-foreground font-bold">No history available.</TableCell></TableRow>
+                           <TableRow><TableCell colSpan={9} className="text-center py-20 text-muted-foreground font-bold">No history available.</TableCell></TableRow>
                         ) : (
                            paymentTabLists.paid.map(v => (
                               <TableRow key={v.id}>
                                  <TableCell className="px-6 py-4 font-mono text-xs font-bold text-slate-500">
                                     <button onClick={() => handleVoucherClick(v)} className="hover:underline text-left">{v.voucherNo}</button>
                                  </TableCell>
+                                 <TableCell className="text-xs font-bold text-slate-500">{formatDate(v.date)}</TableCell>
+                                 <TableCell className="text-[10px] font-bold text-primary uppercase">{v.createdByName || "---"}</TableCell>
+                                 <TableCell className="text-[10px] font-bold text-emerald-600 uppercase">{v.approvedByName || "---"}</TableCell>
                                  <TableCell className="font-bold uppercase text-xs">{getEmpData(v.employeeId)?.name}</TableCell>
                                  <TableCell className="text-right font-black text-emerald-600">{formatCurrency(v.amount)}</TableCell>
                                  <TableCell className="text-xs font-bold text-slate-400">{formatDate(v.paidDate || v.date)}</TableCell>
@@ -702,4 +714,3 @@ export function VoucherDocumentContent({ voucher, employees, firms, plants, isPr
     </div>
   );
 }
-
