@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
@@ -13,7 +14,7 @@ import { useEffect, useState } from "react";
  */
 function VoucherDetailContent() {
   const params = useParams();
-  const { vouchers, employees, firms } = useData();
+  const { vouchers, employees, firms, plants } = useData();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -40,10 +41,7 @@ function VoucherDetailContent() {
   }
 
   const handlePrint = () => {
-    // Small delay to ensure any UI states are settled
-    setTimeout(() => {
-      window.print();
-    }, 100);
+    window.print();
   };
 
   return (
@@ -56,21 +54,21 @@ function VoucherDetailContent() {
           </div>
           <div>
             <h1 className="text-sm font-black text-slate-900 uppercase tracking-widest">{voucher.voucherNo}</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mt-1">Official Payment Voucher</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mt-1">Payment Voucher Slip</p>
           </div>
         </div>
         
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="hidden lg:flex items-center gap-2 px-4 py-1.5 bg-slate-50 rounded-full border border-slate-200">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <Info className="w-3.5 h-3.5" /> Use Up/Down keys to scroll
+              <Info className="w-3.5 h-3.5" /> A4 Layout Preview
             </span>
           </div>
           <Button variant="ghost" size="sm" onClick={() => window.close()} className="font-bold text-xs h-9 px-4 rounded-xl">
             <X className="w-4 h-4 mr-2" /> Close
           </Button>
-          <Button onClick={handlePrint} size="sm" className="bg-primary hover:bg-primary/90 font-black text-xs h-9 px-6 rounded-xl shadow-lg shadow-primary/20">
-            <Printer className="w-4 h-4 mr-2" /> Print Document
+          <Button onClick={handlePrint} size="sm" className="bg-primary hover:bg-primary/90 font-black text-xs h-9 px-6 rounded-xl shadow-lg shadow-primary/20 gap-2">
+            <Printer className="w-4 h-4" /> Print / Save PDF
           </Button>
         </div>
       </div>
@@ -78,8 +76,14 @@ function VoucherDetailContent() {
       {/* Main Document Content */}
       <ScrollArea className="flex-1 w-full" tabIndex={0} role="region" aria-label="Voucher Content">
         <div className="py-12 px-4 sm:px-8 flex justify-center">
-          <div className="bg-white shadow-2xl rounded-sm ring-1 ring-slate-200 print:shadow-none print:ring-0 overflow-hidden">
-             <VoucherDocumentContent voucher={voucher} employees={employees} firms={firms} />
+          <div className="print-only">
+             <VoucherDocumentContent 
+               voucher={voucher} 
+               employees={employees} 
+               firms={firms} 
+               plants={plants}
+               isPrintMode={false} 
+             />
           </div>
         </div>
         <ScrollBar orientation="vertical" className="w-3 opacity-100 block" />
@@ -99,3 +103,4 @@ export default function VoucherDetailPage() {
     </DataProvider>
   );
 }
+
