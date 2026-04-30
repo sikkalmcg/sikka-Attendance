@@ -207,17 +207,15 @@ export default function AttendancePage() {
     if (isValid(inDateTime)) {
       const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
       
-      if (diffHours >= 16) {
-        const autoOutTime = addHours(inDateTime, 16);
-        const nextAllowedIn = addHours(autoOutTime, 8);
-        const isResting = isAfter(nextAllowedIn, now);
-
+      // AUTO OUT LOGIC: System trigger at IN + 16:00 + 1 minute
+      if (diffHours >= 16.0166) { // 16 hours + 1 minute (approx 1/60 hr)
         return {
-          activeRecord: null,
+          activeRecord: null, // Allow Mark IN again immediately
           lockState: {
-            isLocked: isResting,
-            unlockTime: isResting ? format(nextAllowedIn, "HH:mm") : null,
-            isStale: true
+            isLocked: false,
+            unlockTime: null,
+            isStale: true,
+            staleRecordId: latestRec.id
           }
         };
       }
@@ -230,6 +228,31 @@ export default function AttendancePage() {
 
     return { activeRecord: null, lockState: { isLocked: false, unlockTime: null } };
   }, [employeeRecords, currentTime]);
+
+  // Background sync for stale records exceeding 16:01 limit
+  useEffect(() => {
+    if (lockState.isStale && lockState.staleRecordId) {
+      const staleRec = (attendanceRecords || []).find(r => r.id === lockState.staleRecordId);
+      if (staleRec && !staleRec.outTime) {
+        const inDT = new Date(`${staleRec.inDate || staleRec.date}T${staleRec.inTime}`);
+        if (isValid(inDT)) {
+          const autoOutDT = addHours(inDT, 8); // System rule: Set OUT at IN + 8 hours
+          updateRecord('attendance', staleRec.id, {
+            outTime: format(autoOutDT, "HH:mm"),
+            outDate: format(autoOutDT, "yyyy-MM-dd"),
+            hours: 8.0,
+            status: 'PRESENT',
+            autoCheckout: true,
+            remark: "System Auto-Logged OUT (16h Limit Threshold reached)"
+          });
+          toast({ 
+            title: "Session Synced", 
+            description: "A previous shift exceeding 16 hours was auto-finalized at 8 hours duration." 
+          });
+        }
+      }
+    }
+  }, [lockState.isStale, lockState.staleRecordId, attendanceRecords, updateRecord, toast]);
 
   const requestLocation = (type: "IN" | "OUT") => {
     if (!isAccessAllowed) return;
