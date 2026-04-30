@@ -49,11 +49,12 @@ import {
   FileSpreadsheet,
   MessageSquare,
   UserX,
-  CheckCircle
+  CheckCircle,
+  Clock
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, subDays, isValid } from "date-fns";
+import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, subDays, isValid, differenceInMinutes } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -90,7 +91,7 @@ export default function ApprovalsPage() {
   const [attendanceRejectReason, setAttendanceRejectReason] = useState("");
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editData, setEditData] = useState({ inTime: "", outTime: "", remark: "" });
+  const [editData, setEditData] = useState({ inDate: "", inTime: "", outDate: "", outTime: "", remark: "" });
 
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
@@ -148,7 +149,6 @@ export default function ApprovalsPage() {
     const now = new Date();
     const employeeMap = new Map(employees.map(e => [e.employeeId, e]));
     
-    // 1. FILTER ACTUAL RECORDS BY ASSIGNED PLANTS
     const actual = (attendanceRecords || []).filter(rec => {
       if (!userAssignedPlantIds) return true;
       const emp = employeeMap.get(rec.employeeId);
@@ -156,19 +156,23 @@ export default function ApprovalsPage() {
       return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
     }).map(rec => {
       const emp = employeeMap.get(rec.employeeId);
-      let processedRec = { ...rec, dept: emp?.department || "N/A", desig: emp?.designation || "N/A" };
+      let processedRec = { 
+        ...rec, 
+        dept: emp?.department || "N/A", 
+        desig: emp?.designation || "N/A",
+        inDate: rec.inDate || rec.date,
+        outDate: rec.outDate || rec.date
+      };
       
+      // AUTO CALCULATE HOURS IF STILL LIVE BUT VERY OLD (STALE CHECK)
       if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
-        const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
-        if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
-          const autoOutDT = addHours(inDT, 16);
-          processedRec = { 
-            ...processedRec, 
-            outTime: format(autoOutDT, "HH:mm"), 
-            outDate: format(autoOutDT, "yyyy-MM-dd"), 
-            hours: 8, 
-            autoCheckout: true 
-          };
+        const inDT = new Date(`${processedRec.inDate}T${rec.inTime}`);
+        if (isValid(inDT)) {
+          const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+          if (diffHours >= 16) {
+             // We don't cap it at 8 anymore, we show actual or system finalized state
+             processedRec.autoCheckout = true;
+          }
         }
       }
       
@@ -176,11 +180,9 @@ export default function ApprovalsPage() {
       return processedRec;
     });
 
-    // 2. FILTER VIRTUAL RECORDS BY ASSIGNED PLANTS
     const missing: any[] = [];
     const yesterday = subDays(now, 1);
     const startDate = parseISO(PROJECT_START_DATE_STR);
-    
     const existingRecordsKeySet = new Set(attendanceRecords.map(r => `${r.employeeId}:${r.date}`));
 
     if (isBefore(startDate, now)) {
@@ -192,7 +194,6 @@ export default function ApprovalsPage() {
       const activeEmployees = employees.filter(e => e.active);
       
       activeEmployees.forEach(emp => {
-        // SECURITY: If user has assigned plants, only check employees in those plants
         if (userAssignedPlantIds) {
           const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
           if (!hasAccess) return;
@@ -227,7 +228,6 @@ export default function ApprovalsPage() {
 
     let filtered = [...actual, ...missing];
 
-    // 3. SEARCH FILTER
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       filtered = filtered.filter(rec => 
@@ -236,7 +236,6 @@ export default function ApprovalsPage() {
       );
     }
 
-    // 4. PLANT FILTER (DROPDOWN)
     if (selectedPlantFilter !== "ALL_ASSIGNED") {
       filtered = filtered.filter(rec => {
         if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
@@ -253,7 +252,6 @@ export default function ApprovalsPage() {
     return allAttendanceList.filter(rec => {
       const isBasePending = !rec.approved && !rec.remark;
       if (!isBasePending) return false;
-
       if (pendingSubMode === 'present') {
         return !rec.isVirtual && (rec.outTime || rec.autoCheckout);
       } else {
@@ -286,7 +284,6 @@ export default function ApprovalsPage() {
 
   const handleApproveAttendance = (rec: any) => {
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
-    
     if (rec.isVirtual) {
       addRecord('attendance', { 
         employeeId: rec.employeeId, 
@@ -307,7 +304,7 @@ export default function ApprovalsPage() {
       updateRecord('attendance', rec.id, { 
         approved: true, 
         approvedBy: approverName, 
-        ...(rec.autoCheckout && { outTime: rec.outTime, outDate: rec.outDate, hours: 8 }) 
+        ...(rec.autoCheckout && !rec.outTime && { outTime: rec.outTime || "23:59", outDate: rec.outDate || rec.date, hours: rec.hours || 8 }) 
       });
     }
     toast({ title: "Attendance Approved" });
@@ -357,19 +354,31 @@ export default function ApprovalsPage() {
 
   const handleManualEdit = () => {
     if (!selectedAttendance || !editData.remark.trim() || isProcessing) return;
+
+    const startDT = new Date(`${editData.inDate}T${editData.inTime}`);
+    const endDT = new Date(`${editData.outDate}T${editData.outTime}`);
+
+    if (!isValid(startDT) || !isValid(endDT)) {
+      toast({ variant: "destructive", title: "Invalid Input", description: "Please provide valid date and time." });
+      return;
+    }
+
+    if (endDT < startDT) {
+      toast({ variant: "destructive", title: "Logic Error", description: "OUT Date/Time cannot be before IN Date/Time." });
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      const inDT = new Date(`${selectedAttendance.inDate || selectedAttendance.date}T${editData.inTime}`);
-      const outDT = new Date(`${selectedAttendance.outDate || selectedAttendance.date}T${editData.outTime}`);
-      let hours = 0;
-      if (isValid(inDT) && isValid(outDT)) {
-        hours = parseFloat(((outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60)).toFixed(2));
-      }
+      const diffMinutes = differenceInMinutes(endDT, startDT);
+      const hours = parseFloat((diffMinutes / 60).toFixed(2));
       
       const editorName = verifiedUser?.fullName || "Admin";
       
       updateRecord('attendance', selectedAttendance.id, { 
+        inDate: editData.inDate,
         inTime: editData.inTime, 
+        outDate: editData.outDate,
         outTime: editData.outTime, 
         hours, 
         status: hours >= MIN_PRESENT_HOURS ? 'PRESENT' : 'ABSENT',
@@ -378,11 +387,11 @@ export default function ApprovalsPage() {
         approvedBy: editorName, 
         approved: true 
       });
-      toast({ title: "Record Updated" });
+      toast({ title: "Shift Corrected Successfully" });
       setIsEditModalOpen(false);
-      setEditData({ inTime: "", outTime: "", remark: "" });
+      setEditData({ inDate: "", inTime: "", outDate: "", outTime: "", remark: "" });
     } finally { setIsProcessing(false); }
-  };
+  }
 
   const handleExportHistory = () => {
     if (historyAttendanceList.length === 0) {
@@ -402,6 +411,13 @@ export default function ApprovalsPage() {
     link.click();
     toast({ title: "Export Success" });
   };
+
+  const isEditDataValid = useMemo(() => {
+    if (!editData.inDate || !editData.inTime || !editData.outDate || !editData.outTime || !editData.remark.trim()) return false;
+    const start = new Date(`${editData.inDate}T${editData.inTime}`);
+    const end = new Date(`${editData.outDate}T${editData.outTime}`);
+    return isValid(start) && isValid(end) && end >= start;
+  }, [editData]);
 
   function StandardPaginationFooter({ current, total, onPageChange }: any) {
     return (
@@ -592,7 +608,24 @@ export default function ApprovalsPage() {
                           {viewMode === 'pending' ? (
                             <>
                               {!rec.isVirtual && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500" onClick={() => { setSelectedAttendance(rec); setEditData({ inTime: rec.inTime || "", outTime: rec.outTime || "", remark: "" }); setIsEditModalOpen(true); }}><Pencil className="w-3.5 h-3.5" /></Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-slate-500" 
+                                  onClick={() => { 
+                                    setSelectedAttendance(rec); 
+                                    setEditData({ 
+                                      inDate: rec.inDate || rec.date,
+                                      inTime: rec.inTime || "09:00", 
+                                      outDate: rec.outDate || rec.date,
+                                      outTime: rec.outTime || "18:00", 
+                                      remark: "" 
+                                    }); 
+                                    setIsEditModalOpen(true); 
+                                  }}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
                               )}
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
                               <Button size="sm" className="h-8 font-black text-[10px] uppercase bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => handleApproveAttendance(rec)}>Approve</Button>
@@ -621,21 +654,52 @@ export default function ApprovalsPage() {
       </Card>
 
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
+        <DialogContent className="sm:max-w-xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
           <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
              <DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5 text-primary" /> Edit Shift Boundary</DialogTitle>
-             <p className="text-[10px] text-primary font-black uppercase mt-2">{selectedAttendance?.employeeName} • {formatDate(selectedAttendance?.date)}</p>
+             <p className="text-[10px] text-primary font-black uppercase mt-2">{selectedAttendance?.employeeName} • {selectedAttendance?.employeeId}</p>
           </DialogHeader>
           <div className="p-8 space-y-6">
-             <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">IN Time</Label><Input type="time" value={editData.inTime} onChange={(e) => setEditData({...editData, inTime: e.target.value})} className="h-12 font-bold" /></div>
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">OUT Time</Label><Input type="time" value={editData.outTime} onChange={(e) => setEditData({...editData, outTime: e.target.value})} className="h-12 font-bold" /></div>
+             <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-500">IN Date</Label>
+                    <Input type="date" value={editData.inDate} onChange={(e) => setEditData({...editData, inDate: e.target.value})} className="h-12 font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-500">IN Time</Label>
+                    <Input type="time" value={editData.inTime} onChange={(e) => setEditData({...editData, inTime: e.target.value})} className="h-12 font-bold" />
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-500">OUT Date</Label>
+                    <Input type="date" value={editData.outDate} onChange={(e) => setEditData({...editData, outDate: e.target.value})} className="h-12 font-bold" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-500">OUT Time</Label>
+                    <Input type="time" value={editData.outTime} onChange={(e) => setEditData({...editData, outTime: e.target.value})} className="h-12 font-bold" />
+                  </div>
+                </div>
              </div>
-             <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-500">Audit Remark * (Mandatory)</Label><Textarea placeholder="Reason for manual adjustment..." value={editData.remark} onChange={(e) => setEditData({...editData, remark: e.target.value})} className="min-h-[100px] bg-slate-50" /></div>
+             
+             {!isEditDataValid && editData.remark.trim() && (
+               <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-600 text-xs font-bold">
+                 <AlertCircle className="w-4 h-4" />
+                 To Date & Time cannot be earlier than From Date & Time.
+               </div>
+             )}
+
+             <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500">Audit Remark * (Mandatory)</Label>
+                <Textarea placeholder="Reason for manual adjustment..." value={editData.remark} onChange={(e) => setEditData({...editData, remark: e.target.value})} className="min-h-[100px] bg-slate-50" />
+             </div>
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t gap-3 flex-row">
              <Button variant="ghost" onClick={() => setIsEditModalOpen(false)} className="flex-1 rounded-xl font-bold">Cancel</Button>
-             <Button className="flex-1 bg-primary font-black rounded-xl" onClick={handleManualEdit} disabled={!editData.remark.trim() || isProcessing}>Save Adjustment</Button>
+             <Button className="flex-1 bg-primary font-black rounded-xl" onClick={handleManualEdit} disabled={!isEditDataValid || isProcessing}>
+               {isProcessing ? "Saving..." : "Save Adjustment"}
+             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
