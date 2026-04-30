@@ -647,7 +647,7 @@ export function VoucherDocumentContent({ voucher, employees, firms, plants, isPr
            <div className="h-6 w-1.5 bg-slate-900 rounded-full" />
            <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">Voucher Details</h3>
         </div>
-        <table className="w-[60%] border-collapse border-2 border-slate-900 text-left">
+        <table className="w-full border-collapse border-2 border-slate-900 text-left">
           <thead>
             <tr className="bg-slate-900 text-white">
               <th className="border-2 border-slate-900 p-1 text-[10px] font-black uppercase tracking-widest w-2/3">Description / Purpose</th>
@@ -705,7 +705,7 @@ export function VoucherDocumentContent({ voucher, employees, firms, plants, isPr
       {/* Footer Branding */}
       <div className="mt-16 text-center border-t border-slate-50 pt-6">
         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em] leading-none mb-2">
-          Sikka Industries & Logistics HRMS
+          Sikka HRMS
         </p>
         <p className="text-[8px] font-medium text-slate-300 uppercase tracking-widest">
           This voucher is generated digitally and it is valid as an original document.
