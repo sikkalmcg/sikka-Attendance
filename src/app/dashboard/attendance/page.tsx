@@ -466,9 +466,10 @@ export default function AttendancePage() {
           hours: 0, 
           isVirtual: true 
         };
-      }).filter(Boolean).reverse();
+      }).filter(Boolean);
     }
-    return baseList;
+    // Date-wise sorting, current date at top
+    return baseList.sort((a: any, b: any) => b.date.localeCompare(a.date));
   }, [verifiedUser, attendanceRecords, holidays, holidaySet, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth, userAssignedPlantIds, employees, approvedLeavesMap]);
 
   const filteredEmployeeLeaves = useMemo(() => {
@@ -620,7 +621,7 @@ export default function AttendancePage() {
                       <TableCell className="text-center">
                         <Badge className={cn(
                           "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
-                          h.displayStatus === 'Present' && "bg-emerald-500 text-white border-none hover:bg-emerald-600 shadow-sm",
+                          h.displayStatus === 'Present' && "bg-emerald-50 text-white border-none hover:bg-emerald-600 shadow-sm",
                           h.displayStatus === 'Absent' && "bg-rose-500 text-white border-none hover:bg-rose-600 shadow-sm",
                           h.displayStatus === 'Field' && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
                           h.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
@@ -797,8 +798,8 @@ export default function AttendancePage() {
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">From</Label><Input type="date" value={leaveFromDate} onChange={(e) => setLeaveFromDate(e.target.value)} /></div>
-                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">To</Label><Input type="date" value={leaveToDate} onChange={(e) => setLeaveToDate(e.target.value)} /></div>
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">From</Label><Input type="date" value={leaveFromDate} min={todayStr} onChange={(e) => setLeaveFromDate(e.target.value)} /></div>
+                <div className="space-y-2"><Label className="text-[10px] font-black uppercase">To</Label><Input type="date" value={leaveToDate} min={leaveFromDate || todayStr} onChange={(e) => setLeaveToDate(e.target.value)} /></div>
               </div>
               <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Purpose</Label><Textarea value={leavePurpose} onChange={(e) => setLeavePurpose(e.target.value)} placeholder="Reason for leave..." /></div>
             </div>
