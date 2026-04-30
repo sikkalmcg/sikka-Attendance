@@ -40,7 +40,8 @@ import {
   Phone,
   MapPin,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Info
 } from "lucide-react";
 import { 
   Select, 
@@ -117,7 +118,6 @@ export default function EmployeesPage() {
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState<Partial<Employee>>({ ...INITIAL_FORM_DATA });
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isPlantPopoverOpen, setIsPlantPopoverOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -188,7 +188,6 @@ export default function EmployeesPage() {
   const calculateFullSalary = (s: SalaryStructure, isComplianceEnabled: boolean) => {
     const gross = (Number(s.basic) || 0) + (Number(s.hra) || 0) + (Number(s.da) || 0) + (Number(s.allowance) || 0);
     
-    // PF & ESIC Calculations - Set to 0 if Not Applicable
     const epf = isComplianceEnabled ? Math.round(Number(s.basic) * (Number(s.pfRateEmp) / 100)) : 0;
     const erpf = isComplianceEnabled ? Math.round(Number(s.basic) * (Number(s.pfRateEx) / 100)) : 0;
     const eesic = isComplianceEnabled ? Math.round(gross * (Number(s.esicRateEmp) / 100)) : 0;
@@ -505,54 +504,45 @@ export default function EmployeesPage() {
                       <SelectContent>{firms.map(f => <SelectItem key={f.id} value={f.id} className="font-bold">{f.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-500">Assigned Plant(s) *</Label>
-                    <Popover open={isPlantPopoverOpen} onOpenChange={setIsPlantPopoverOpen}>
-                      <PopoverTrigger asChild>
-                        <Button type="button" className="h-12 w-full justify-between font-black bg-primary text-slate-900 hover:bg-primary/90 rounded-xl border-none shadow-lg shadow-primary/10">
-                          {(formData.unitIds?.length || 0) > 0 ? `${formData.unitIds?.length} Plants Selected` : "Select Facility Access"}
-                          <ChevronRight className="w-4 h-4 ml-2 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[320px] p-2 rounded-2xl shadow-2xl border-none" align="start" onPointerDownOutside={(e) => {
-                        // Prevent the popover from closing when clicking internal scroll areas or logic-heavy sections
-                        const target = e.target as HTMLElement;
-                        if (target.closest('[data-plant-selector]')) e.preventDefault();
-                      }}>
-                        <ScrollArea className="h-[250px] pr-2" data-plant-selector="true">
-                          <div className="space-y-1">
-                            {plants.filter(p => p.firmId === formData.firmId).map(p => {
-                              const isChecked = formData.unitIds?.includes(p.id);
-                              return (
-                                <div 
-                                  key={p.id} 
-                                  className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl cursor-pointer transition-all group" 
-                                  onPointerDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    togglePlantSelection(p.id);
-                                  }}
-                                >
-                                  <div className={cn(
-                                    "h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0",
-                                    isChecked ? "border-primary bg-primary/10" : "border-slate-300 group-hover:border-slate-400"
-                                  )}>
-                                    {isChecked && <div className="h-2.5 w-2.5 rounded-full bg-primary animate-in zoom-in-50 duration-200" />}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-black text-slate-900 truncate">{p.name}</p>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Infrastructure Node</p>
-                                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Assigned Plant(s) *</Label>
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-lg shadow-slate-100 overflow-hidden flex flex-col">
+                      <div className="h-14 w-full bg-primary flex items-center justify-between px-6 text-white shrink-0">
+                        <span className="font-black text-sm uppercase tracking-widest">Select Facility Access</span>
+                        <ChevronRight className="w-5 h-5 opacity-60" />
+                      </div>
+                      <ScrollArea className="h-[220px]">
+                        <div className="p-3 space-y-1">
+                          {plants.filter(p => p.firmId === formData.firmId).map(p => {
+                            const isChecked = formData.unitIds?.includes(p.id);
+                            return (
+                              <div 
+                                key={p.id} 
+                                className="flex items-center gap-4 p-4 hover:bg-slate-50 rounded-2xl cursor-pointer transition-all group select-none" 
+                                onClick={() => togglePlantSelection(p.id)}
+                              >
+                                <div className={cn(
+                                  "h-7 w-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0",
+                                  isChecked ? "border-primary bg-primary/10" : "border-slate-300 group-hover:border-slate-400"
+                                )}>
+                                  {isChecked && <div className="h-3.5 w-3.5 rounded-full bg-primary animate-in zoom-in-50 duration-200" />}
                                 </div>
-                              );
-                            })}
-                            {plants.filter(p => p.firmId === formData.firmId).length === 0 && (
-                              <p className="p-4 text-center text-xs font-bold text-slate-400 italic">No plants found for selected firm.</p>
-                            )}
-                          </div>
-                        </ScrollArea>
-                      </PopoverContent>
-                    </Popover>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-black text-slate-900 truncate uppercase tracking-tight">{p.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Infrastructure Node</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {plants.filter(p => p.firmId === formData.firmId).length === 0 && (
+                            <div className="p-12 text-center space-y-2">
+                              <Info className="w-8 h-8 text-slate-200 mx-auto" />
+                              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Select a Firm first</p>
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-500">Department *</Label>
