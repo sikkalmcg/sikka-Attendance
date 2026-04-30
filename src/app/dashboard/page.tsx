@@ -71,6 +71,9 @@ export default function DashboardHome() {
   const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'field' | 'wfh' | 'leave' | 'employees'>(null);
   const [todayStr, setTodayStr] = useState("");
   
+  // LIVE MODE: Trigger re-render every 5 minutes
+  const [liveUpdateTrigger, setLiveUpdateTrigger] = useState(0);
+
   // Plant Filter
   const [selectedPlantId, setSelectedPlantId] = useState("all");
 
@@ -87,6 +90,13 @@ export default function DashboardHome() {
     const yy = now.getFullYear().toString().slice(-2);
     setSelectedLeaderboardMonth(`${mmm}-${yy}`);
     setPickerYear(now.getFullYear());
+
+    // Setup 5-minute interval for live working hour updates
+    const interval = setInterval(() => {
+      setLiveUpdateTrigger(prev => prev + 1);
+    }, 300000); 
+
+    return () => clearInterval(interval);
   }, []);
 
   const userAssignedPlantIds = useMemo(() => {
@@ -202,7 +212,7 @@ export default function DashboardHome() {
       pendingLeaves: pendingLeaves,
       attendancePct: activeEmployees.length > 0 ? ((presentToday.length / activeEmployees.length) * 100).toFixed(1) : "0"
     };
-  }, [filteredEmployees, attendanceRecords, isMounted, todayStr, leaveRequests]);
+  }, [filteredEmployees, attendanceRecords, isMounted, todayStr, leaveRequests, liveUpdateTrigger]);
 
   const leaderboardData = useMemo(() => {
     if (!isMounted || !selectedLeaderboardMonth || !filteredEmployees.length) return { top: [], bottom: [] };
@@ -251,9 +261,15 @@ export default function DashboardHome() {
         
         if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
           const inDT = new Date(`${rec.inDate || rec.date}T${rec.inTime}`);
-          if (isValid(inDT) && (now.getTime() - inDT.getTime()) / (1000 * 60 * 60) >= 16) {
-            const autoOutDT = addHours(inDT, 16);
-            processed = { ...processed, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+          if (isValid(inDT)) {
+             const diff = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+             if (diff >= 16) {
+                const autoOutDT = addHours(inDT, 16);
+                processed = { ...processed, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
+             } else {
+                // LIVE MODE CALCULATION
+                processed.hours = parseFloat(diff.toFixed(2));
+             }
           }
         }
         return processed;
@@ -414,11 +430,16 @@ export default function DashboardHome() {
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="rounded-3xl border-none shadow-2xl overflow-hidden bg-white flex flex-col min-h-[calc(100vh-140px)]">
           <div className="p-8 bg-slate-900 text-white flex items-center justify-between">
-            <h2 className="text-2xl font-black uppercase">{viewMode} Logs Today</h2>
+            <h2 className="text-2xl font-black uppercase">
+              {viewMode === 'present' ? 'Present Logs Today' : 
+               viewMode === 'field' ? 'Field Logs Today' : 
+               viewMode === 'wfh' ? 'wfh Logs Today' : 
+               `${viewMode} Logs Today`}
+            </h2>
             <Button variant="ghost" size="icon" onClick={() => setViewMode(null)} className="text-white"><X className="w-6 h-6" /></Button>
           </div>
           <ScrollArea className="flex-1 bg-white">
-            <Table className="min-w-[1200px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="px-8">Employee Name</TableHead><TableHead>Dept/Desig</TableHead><TableHead>Log Time</TableHead><TableHead>Work Hour</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+            <Table className="min-w-[1200px]"><TableHeader className="bg-slate-50"><TableRow><TableHead className="px-8">Employee Name</TableHead><TableHead>Dept/Desig</TableHead><TableHead>Log Time</TableHead><TableHead>Working Hour</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
             <TableBody>{data.map((rec, idx) => (
               <TableRow key={idx}>
                 <TableCell className="px-8 py-6 font-bold">{rec.employeeName}</TableCell>
