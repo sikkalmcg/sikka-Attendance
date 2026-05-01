@@ -123,31 +123,43 @@ export default function DashboardHome() {
   }, [leaveRequests]);
 
   const getPriorityStatus = (dateStr: string, record: any, empId: string) => {
-    // 1. Leave Check
-    if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
-    
     const isSun = isSunday(parseISO(dateStr));
-    const isCustomHoliday = (holidays || []).some(h => h.date === dateStr);
-    const isHoliday = isSun || isCustomHoliday;
-    
-    // 2. Attendance Check
-    if (record && record.inTime) {
-      const type = record.attendanceType;
-      if (isHoliday) {
-        if (type === 'OFFICE') return "Present on Holiday";
-        if (type === 'FIELD') return "Field on Holiday";
-        if (type === 'WFH') return "Work at Home on Holiday";
+    const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
+    const isApprovedLeave = approvedLeavesMap.has(`${empId}:${dateStr}`);
+
+    if (isApprovedLeave) {
+      if (record && record.inTime) return "Present";
+      return "Leave";
+    }
+
+    if (isSun) {
+      if (record && record.inTime) {
+        if (record.attendanceType === 'OFFICE') return "Present on Weekly Off";
+        if (record.attendanceType === 'FIELD') return "Weekly Off on Field";
+        if (record.attendanceType === 'WFH') return "Weekly Off WFH";
+        return "Present on Weekly Off";
+      }
+      return "Weekly Off";
+    }
+
+    if (customHoliday) {
+      if (record && record.inTime) {
+        if (record.attendanceType === 'OFFICE') return "Present on Holiday";
+        if (record.attendanceType === 'FIELD') return "Holiday on Field";
+        if (record.attendanceType === 'WFH') return "Holiday WFH";
         return "Present on Holiday";
       }
-      
-      if (type === 'OFFICE') return "Present";
-      if (type === 'FIELD') return "Field";
-      if (type === 'WFH') return "Work at Home";
+      return `Holiday - ${customHoliday.name}`;
+    }
+
+    if (record && record.inTime) {
+      if (record.attendanceType === 'OFFICE') return "Present";
+      if (record.attendanceType === 'FIELD') return "Field";
+      if (record.attendanceType === 'WFH') return "WFH";
       return "Present";
     }
 
-    // 3. Absence/Holiday Check
-    return isHoliday ? "Holiday" : "Absent";
+    return "Absent";
   };
 
   const filteredEmployees = useMemo(() => {
@@ -267,7 +279,6 @@ export default function DashboardHome() {
                 const autoOutDT = addHours(inDT, 16);
                 processed = { ...processed, outTime: format(autoOutDT, "HH:mm"), outDate: format(autoOutDT, "yyyy-MM-dd"), hours: 8, autoCheckout: true };
              } else {
-                // LIVE MODE CALCULATION
                 processed.hours = parseFloat(diff.toFixed(2));
              }
           }
@@ -344,13 +355,11 @@ export default function DashboardHome() {
                     "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
                     rec.displayStatus === 'Present' && "bg-emerald-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Absent' && "bg-rose-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Field' && "bg-amber-400 text-black border-none shadow-sm",
-                    rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none shadow-sm",
+                    (rec.displayStatus === 'Field' || rec.displayStatus === 'Weekly Off on Field' || rec.displayStatus === 'Holiday on Field') && "bg-amber-400 text-black border-none shadow-sm",
+                    (rec.displayStatus === 'WFH' || rec.displayStatus === 'Weekly Off WFH' || rec.displayStatus === 'Holiday WFH') && "bg-orange-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
+                    (rec.displayStatus === 'Present on Holiday' || rec.displayStatus === 'Present on Weekly Off') && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
+                    (rec.displayStatus === 'Weekly Off' || rec.displayStatus.startsWith('Holiday -')) && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
                   )}>
                     {rec.displayStatus}
                   </Badge>
@@ -451,13 +460,11 @@ export default function DashboardHome() {
                     "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
                     rec.displayStatus === 'Present' && "bg-emerald-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Absent' && "bg-rose-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Field' && "bg-amber-400 text-black border-none shadow-sm",
-                    rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none shadow-sm",
+                    (rec.displayStatus === 'Field' || rec.displayStatus === 'Weekly Off on Field' || rec.displayStatus === 'Holiday on Field') && "bg-amber-400 text-black border-none shadow-sm",
+                    (rec.displayStatus === 'WFH' || rec.displayStatus === 'Weekly Off WFH' || rec.displayStatus === 'Holiday WFH') && "bg-orange-500 text-white border-none shadow-sm",
                     rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm",
-                    rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
+                    (rec.displayStatus === 'Present on Holiday' || rec.displayStatus === 'Present on Weekly Off') && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
+                    (rec.displayStatus === 'Weekly Off' || rec.displayStatus.startsWith('Holiday -')) && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
                   )}>
                     {rec.displayStatus}
                   </Badge>

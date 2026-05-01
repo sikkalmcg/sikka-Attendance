@@ -207,7 +207,6 @@ export default function AttendancePage() {
     if (isValid(inDateTime)) {
       const diffHours = (now.getTime() - inDateTime.getTime()) / (1000 * 60 * 60);
       
-      // AUTO OUT LOGIC: System trigger at IN + 16:00 + 1 minute
       if (diffHours >= 16.0166) { 
         return {
           activeRecord: null, 
@@ -304,7 +303,6 @@ export default function AttendancePage() {
       unapprovedOutDuration: 0
     });
 
-    // High-fidelity Activity Notification
     addRecord('notifications', {
       message: `${effectiveEmployeeName} – IN: ${format(now, "dd-MMM-yyyy HH:mm")} | ${plantName}`,
       timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
@@ -344,7 +342,6 @@ export default function AttendancePage() {
       outPlant: plantName
     });
 
-    // High-fidelity Activity Notification
     addRecord('notifications', {
       message: `${effectiveEmployeeName} – OUT: ${format(now, "dd-MMM-yyyy HH:mm")} | WORK: ${formatHoursToHHMM(finalHours)} HRS | ${plantName}`,
       timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
@@ -393,7 +390,6 @@ export default function AttendancePage() {
 
       await addRecord('leaveRequests', leaveData);
 
-      // High-fidelity Activity Notification
       addRecord('notifications', {
         message: `${effectiveEmployeeName} – Leave Req: ${formatDate(leaveFromDate)} to ${formatDate(leaveData.toDate)} | ${daysCount} Day(s)`,
         timestamp: new Date().toISOString(),
@@ -408,8 +404,6 @@ export default function AttendancePage() {
       setIsSubmittingLeave(false);
     }
   };
-
-  const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
 
   const approvedLeavesMap = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -426,33 +420,45 @@ export default function AttendancePage() {
 
   const history = useMemo(() => {
     if (!verifiedUser || !isMounted) return [];
-    const now = getISTTime();
 
     const getPriorityStatus = (dateStr: string, record: any, empId: string) => {
-      // 1. Leave Logic
-      if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
-      
       const isSun = isSunday(parseISO(dateStr));
-      const isCustomHoliday = holidaySet.has(dateStr);
-      const isHoliday = isSun || isCustomHoliday;
-      
-      // 2. Attendance Presence Logic
-      if (record && record.inTime) {
-        const type = record.attendanceType;
-        if (isHoliday) {
-          if (type === 'OFFICE') return "Present on Holiday";
-          if (type === 'FIELD') return "Field on Holiday";
-          if (type === 'WFH') return "Work at Home on Holiday";
+      const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
+      const isApprovedLeave = approvedLeavesMap.has(`${empId}:${dateStr}`);
+
+      if (isApprovedLeave) {
+        if (record && record.inTime) return "Present";
+        return "Leave";
+      }
+
+      if (isSun) {
+        if (record && record.inTime) {
+          if (record.attendanceType === 'OFFICE') return "Present on Weekly Off";
+          if (record.attendanceType === 'FIELD') return "Weekly Off on Field";
+          if (record.attendanceType === 'WFH') return "Weekly Off WFH";
+          return "Present on Weekly Off";
+        }
+        return "Weekly Off";
+      }
+
+      if (customHoliday) {
+        if (record && record.inTime) {
+          if (record.attendanceType === 'OFFICE') return "Present on Holiday";
+          if (record.attendanceType === 'FIELD') return "Holiday on Field";
+          if (record.attendanceType === 'WFH') return "Holiday WFH";
           return "Present on Holiday";
         }
-        if (type === 'OFFICE') return "Present";
-        if (type === 'FIELD') return "Field";
-        if (type === 'WFH') return "Work at Home";
+        return `Holiday - ${customHoliday.name}`;
+      }
+
+      if (record && record.inTime) {
+        if (record.attendanceType === 'OFFICE') return "Present";
+        if (record.attendanceType === 'FIELD') return "Field";
+        if (record.attendanceType === 'WFH') return "WFH";
         return "Present";
       }
 
-      // 3. Absence/Holiday Base Logic
-      return isHoliday ? "Holiday" : "Absent";
+      return "Absent";
     };
 
     let baseList = [];
@@ -490,7 +496,7 @@ export default function AttendancePage() {
         const dateStr = format(date, 'yyyy-MM-dd');
         const existing = empRecordMap.get(dateStr);
         if (existing) return { ...existing, displayStatus: getPriorityStatus(dateStr, existing, effectiveEmployeeId) };
-        if (isSameDay(date, now)) return null;
+        if (isSameDay(date, getISTTime())) return null;
         return { 
           id: `v-${dateStr}`, 
           employeeId: effectiveEmployeeId, 
@@ -504,16 +510,14 @@ export default function AttendancePage() {
         };
       }).filter(Boolean);
     }
-    // Date-wise sorting, current date at top
     return baseList.sort((a: any, b: any) => b.date.localeCompare(a.date));
-  }, [verifiedUser, attendanceRecords, holidays, holidaySet, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth, userAssignedPlantIds, employees, approvedLeavesMap]);
+  }, [verifiedUser, attendanceRecords, holidays, effectiveEmployeeId, effectiveEmployeeName, isAdminRole, isMounted, employeeRecords, oversightSearch, oversightMonth, userAssignedPlantIds, employees, approvedLeavesMap]);
 
   const filteredEmployeeLeaves = useMemo(() => {
     if (!isMounted || !todayStr) return [];
     return leaveRequests.filter(l => l.employeeId === effectiveEmployeeId && l.toDate >= todayStr); 
   }, [leaveRequests, effectiveEmployeeId, isMounted, todayStr]);
 
-  const totalPages = Math.ceil(history.length / ROWS_PER_PAGE);
   const paginatedHistory = useMemo(() => history.slice((oversightPage - 1) * ROWS_PER_PAGE, oversightPage * ROWS_PER_PAGE), [history, oversightPage]);
 
   if (!isMounted) return null;
@@ -659,13 +663,11 @@ export default function AttendancePage() {
                           "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
                           h.displayStatus === 'Present' && "bg-emerald-500 text-white border-none hover:bg-emerald-600 shadow-sm",
                           h.displayStatus === 'Absent' && "bg-rose-500 text-white border-none hover:bg-rose-600 shadow-sm",
-                          h.displayStatus === 'Field' && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
-                          h.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
+                          (h.displayStatus === 'Field' || h.displayStatus === 'Weekly Off on Field' || h.displayStatus === 'Holiday on Field') && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
+                          (h.displayStatus === 'WFH' || h.displayStatus === 'Weekly Off WFH' || h.displayStatus === 'Holiday WFH') && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
                           h.displayStatus === 'Leave' && "bg-purple-500 text-white border-none hover:bg-purple-600 shadow-sm",
-                          h.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
-                          h.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm font-black",
-                          h.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm font-black",
-                          h.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
+                          (h.displayStatus === 'Present on Holiday' || h.displayStatus === 'Present on Weekly Off') && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
+                          (h.displayStatus === 'Weekly Off' || h.displayStatus.startsWith('Holiday -')) && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
                         )}>
                           {h.displayStatus}
                         </Badge>

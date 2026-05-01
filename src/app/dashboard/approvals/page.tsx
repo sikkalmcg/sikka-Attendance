@@ -122,10 +122,6 @@ export default function ApprovalsPage() {
     return plants.filter(p => userAssignedPlantIds.includes(p.id));
   }, [userAssignedPlantIds, plants]);
 
-  const holidaySet = useMemo(() => {
-    return new Set(holidays.map(h => h.date));
-  }, [holidays]);
-
   const approvedLeavesMap = useMemo(() => {
     const map = new Map<string, boolean>();
     leaveRequests.filter(l => l.status === 'APPROVED').forEach(l => {
@@ -140,29 +136,43 @@ export default function ApprovalsPage() {
   }, [leaveRequests]);
 
   const getCalculatedStatus = (dateStr: string, record: any, empId: string) => {
-    if (approvedLeavesMap.has(`${empId}:${dateStr}`)) return "Leave";
-    
     const isSun = isSunday(parseISO(dateStr));
-    const isCustomHoliday = holidaySet.has(dateStr);
-    const isHoliday = isSun || isCustomHoliday;
-    
-    if (!record || (!record.inTime && !record.outTime)) {
-      return isHoliday ? "Holiday" : "Absent";
+    const customHoliday = holidays.find(h => h.date === dateStr && !h.auto);
+    const isApprovedLeave = approvedLeavesMap.has(`${empId}:${dateStr}`);
+
+    if (isApprovedLeave) {
+      if (record && record.inTime) return "Present";
+      return "Leave";
     }
 
-    const type = record.attendanceType;
-    if (isHoliday) {
-      if (type === 'OFFICE') return "Present on Holiday";
-      if (type === 'FIELD') return "Field on Holiday";
-      if (type === 'WFH') return "Work at Home on Holiday";
-      return "Present on Holiday";
+    if (isSun) {
+      if (record && record.inTime) {
+        if (record.attendanceType === 'OFFICE') return "Present on Weekly Off";
+        if (record.attendanceType === 'FIELD') return "Weekly Off on Field";
+        if (record.attendanceType === 'WFH') return "Weekly Off WFH";
+        return "Present on Weekly Off";
+      }
+      return "Weekly Off";
     }
 
-    if (type === 'OFFICE') return "Present";
-    if (type === 'FIELD') return "Field";
-    if (type === 'WFH') return "Work at Home";
-    
-    return "Present";
+    if (customHoliday) {
+      if (record && record.inTime) {
+        if (record.attendanceType === 'OFFICE') return "Present on Holiday";
+        if (record.attendanceType === 'FIELD') return "Holiday on Field";
+        if (record.attendanceType === 'WFH') return "Holiday WFH";
+        return "Present on Holiday";
+      }
+      return `Holiday - ${customHoliday.name}`;
+    }
+
+    if (record && record.inTime) {
+      if (record.attendanceType === 'OFFICE') return "Present";
+      if (record.attendanceType === 'FIELD') return "Field";
+      if (record.attendanceType === 'WFH') return "WFH";
+      return "Present";
+    }
+
+    return "Absent";
   };
 
   const allAttendanceList = useMemo(() => {
@@ -227,9 +237,9 @@ export default function ApprovalsPage() {
               employeeId: emp.employeeId, 
               employeeName: emp.name, 
               date: dStr, 
-              status: displayStatus === 'Holiday' ? 'HOLIDAY' : displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
+              status: 'ABSENT', 
               displayStatus, 
-              attendanceType: displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
+              attendanceType: 'ABSENT', 
               approved: true, 
               dept: emp.department, 
               desig: emp.designation, 
@@ -265,20 +275,22 @@ export default function ApprovalsPage() {
     }
 
     return filtered;
-  }, [attendanceRecords, employees, isMounted, holidaySet, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants, approvedLeavesMap]);
+  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants, approvedLeavesMap]);
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
       const isBasePending = !rec.approved && !rec.remark;
       if (!isBasePending) {
-         // RULE: If edited but not yet approved, it stays in pending with edited detail
          if (!rec.approved && rec.remark?.startsWith("Edited:")) return true;
          return false;
       }
       if (pendingSubMode === 'present') {
         return !rec.isVirtual && (rec.outTime || rec.autoCheckout);
       } else {
-        return rec.isVirtual && rec.displayStatus !== 'Leave' && rec.displayStatus !== 'Holiday';
+        return rec.isVirtual && 
+               rec.displayStatus !== 'Leave' && 
+               rec.displayStatus !== 'Weekly Off' && 
+               !rec.displayStatus.startsWith('Holiday -');
       }
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [allAttendanceList, pendingSubMode]);
@@ -313,8 +325,8 @@ export default function ApprovalsPage() {
         employeeName: rec.employeeName, 
         date: rec.date, 
         inDate: rec.date, 
-        status: rec.displayStatus === 'Holiday' ? 'HOLIDAY' : rec.displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
-        attendanceType: rec.displayStatus === 'Leave' ? 'LEAVE' : 'ABSENT', 
+        status: 'ABSENT', 
+        attendanceType: 'ABSENT', 
         approved: true, 
         approvedBy: approverName, 
         hours: 0, 
@@ -398,7 +410,6 @@ export default function ApprovalsPage() {
       
       const editorName = verifiedUser?.fullName || "Admin";
       
-      // RULE: Entries should not be auto Approved after edit.
       updateRecord('attendance', selectedAttendance.id, { 
         inDate: editData.inDate,
         inTime: editData.inTime, 
@@ -601,13 +612,11 @@ export default function ApprovalsPage() {
                           "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
                           rec.displayStatus === 'Present' && "bg-emerald-500 text-white border-none hover:bg-emerald-600 shadow-sm",
                           rec.displayStatus === 'Absent' && "bg-rose-500 text-white border-none hover:bg-rose-600 shadow-sm",
-                          rec.displayStatus === 'Field' && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
-                          rec.displayStatus === 'Work at Home' && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
+                          (rec.displayStatus === 'Field' || rec.displayStatus === 'Weekly Off on Field' || rec.displayStatus === 'Holiday on Field') && "bg-amber-400 text-black border-none hover:bg-amber-500 shadow-sm",
+                          (rec.displayStatus === 'WFH' || rec.displayStatus === 'Weekly Off WFH' || rec.displayStatus === 'Holiday WFH') && "bg-orange-500 text-white border-none hover:bg-orange-600 shadow-sm",
                           rec.displayStatus === 'Leave' && "bg-purple-500 text-white border-none hover:bg-purple-600 shadow-sm",
-                          rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
-                          rec.displayStatus === 'Field on Holiday' && "bg-gradient-to-r from-sky-200 to-amber-400 text-white border-none shadow-sm font-black",
-                          rec.displayStatus === 'Work at Home on Holiday' && "bg-gradient-to-r from-sky-200 to-orange-500 text-white border-none shadow-sm font-black",
-                          rec.displayStatus === 'Holiday' && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
+                          (rec.displayStatus === 'Present on Holiday' || rec.displayStatus === 'Present on Weekly Off') && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm font-black",
+                          (rec.displayStatus === 'Weekly Off' || rec.displayStatus.startsWith('Holiday -')) && "bg-transparent text-slate-400 border-slate-200 shadow-none hover:bg-transparent font-bold"
                         )}>
                           {rec.displayStatus}
                         </Badge>
