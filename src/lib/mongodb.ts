@@ -1,20 +1,12 @@
 import { MongoClient, type Db, type Collection, ObjectId } from 'mongodb';
 
-const uri = process.env.MONGODB_URI as string;
-const dbName = process.env.MONGODB_DB as string;
-
-
-
-if (!uri) {
-  throw new Error('Missing environment variable: MONGODB_URI');
-}
-if (!dbName) {
-  throw new Error('Missing environment variable: MONGODB_DB');
-}
-
 let clientPromise: Promise<MongoClient> | undefined;
 
 function getClient(): Promise<MongoClient> {
+  const uri = process.env.MONGODB_URI as string;
+  if (!uri) {
+    throw new Error('Missing environment variable: MONGODB_URI');
+  }
   if (!clientPromise) {
     const client = new MongoClient(uri, {
       // helps in serverless/next usage
@@ -26,6 +18,10 @@ function getClient(): Promise<MongoClient> {
 }
 
 export async function getDb(): Promise<Db> {
+  const dbName = process.env.MONGODB_DB as string;
+  if (!dbName) {
+    throw new Error('Missing environment variable: MONGODB_DB');
+  }
   const client = await getClient();
   return client.db(dbName);
 }
@@ -42,4 +38,3 @@ export function toObjectId(id: string): ObjectId {
   if (!id) throw new Error('Missing id');
   return new ObjectId(id);
 }
-
