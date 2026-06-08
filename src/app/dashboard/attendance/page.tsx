@@ -52,7 +52,8 @@ const getISTTime = () => {
 };
 
 export default function AttendancePage() {
-  const { attendanceRecords, addRecord, updateRecord, plants, employees, verifiedUser, isLoading } = useData();
+  const { attendanceRecords, addRecord, updateRecord, refreshData, plants, employees, verifiedUser, isLoading } = useData();
+  const [isMutatingAttendance, setIsMutatingAttendance] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   
@@ -121,8 +122,10 @@ export default function AttendancePage() {
     }
   }, [isStale, activeRecord]);
 
-  const performAutoCheckOut = (lat: number, lng: number, address: string, components: any) => {
+  const performAutoCheckOut = async (lat: number, lng: number, address: string, components: any) => {
+    // guard against concurrent mutations / stale UI states
     if (!activeRecord) return;
+    if (isMutatingAttendance) return;
     
     const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
     if (!inDT || !isValid(inDT)) return;
@@ -132,40 +135,49 @@ export default function AttendancePage() {
     const finalOutDate = format(creditOutDT, "yyyy-MM-dd");
     const finalOutTime = format(creditOutDT, "HH:mm");
     
-    updateRecord('attendance', activeRecord.id, {
-      outTime: finalOutTime,
-      outDate: finalOutDate,
-      outDateTime: creditOutDT.toISOString(),
-      hours: 8.0,
-      status: 'Auto OUT',
-      outType: 'AUTO',
-      latOut: lat,
-      lngOut: lng,
-      addressOut: address,
-      street: components.street || null,
-      area: components.area || null,
-      city: components.city || null,
-      state: components.state || null,
-      autoCheckout: true,
-      autoOut: true,
-      remark: "System Auto-Logged OUT (20h Limit Threshold reached)"
-    });
+    setIsMutatingAttendance(true);
+    try {
+      await updateRecord('attendance', activeRecord.id, {
+        outTime: finalOutTime,
+        outDate: finalOutDate,
+        outDateTime: creditOutDT.toISOString(),
+        hours: 8.0,
+        status: 'Auto OUT',
+        outType: 'AUTO',
+        latOut: lat,
+        lngOut: lng,
+        addressOut: address,
+        street: components.street || null,
+        area: components.area || null,
+        city: components.city || null,
+        state: components.state || null,
+        autoCheckout: true,
+        autoOut: true,
+        remark: "System Auto-Logged OUT (20h Limit Threshold reached)"
+      });
 
-    addRecord('notifications', {
-      message: `${effectiveEmployeeName} – AUTO OUT Processed | Recorded OUT: ${format(creditOutDT, "dd-MMM HH:mm")}`,
-      timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
-      read: false,
-      type: 'AUTO_OUT',
-      employeeId: effectiveEmployeeId
-    });
+      await addRecord('notifications', {
+        message: `${effectiveEmployeeName} – AUTO OUT Processed | Recorded OUT: ${format(creditOutDT, "dd-MMM HH:mm")}`,
+        timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
+        read: false,
+        type: 'AUTO_OUT',
+        employeeId: effectiveEmployeeId
+      });
 
-    toast({ 
-      title: "Auto OUT Triggered", 
-      description: "Session closed after 20 hours. 8 hours credited to your ledger." 
-    });
+      // Ensure UI re-computes activeRecord/status immediately
+      await refreshData();
+
+      toast({ 
+        title: "Auto OUT Triggered", 
+        description: "Session closed after 20 hours. 8 hours credited to your ledger." 
+      });
+    } finally {
+      setIsMutatingAttendance(false);
+    }
   };
 
   const requestLocation = (type: "IN" | "OUT" | "OUT_AUTO") => {
+    if (isMutatingAttendance) return;
     setIsLoadingLocation(true);
     setDetectedAddress(""); 
     
@@ -282,8 +294,9 @@ export default function AttendancePage() {
     toast({ title: "Mark IN Successful" });
   };
 
-  const handleConfirmCheckOut = () => {
+  const handleConfirmCheckOut = async () => {
     if (!activeRecord || !currentGPS) return;
+    if (isMutatingAttendance) return;
     const now = getISTTime();
     
     const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
@@ -297,25 +310,33 @@ export default function AttendancePage() {
     
     const plantName = detectedPlant?.name || "Remote";
 
-    updateRecord('attendance', activeRecord.id, { 
-      outTime: format(now, "HH:mm"), 
-      outDate: format(now, "yyyy-MM-dd"),
-      outDateTime: now.toISOString(),
-      hours: finalHours,
-      status: 'Closed',
-      outType: 'MANUAL',
-      latOut: currentGPS.lat, 
-      lngOut: currentGPS.lng,
-      addressOut: detectedAddress,
-      street: detailedLocation.street || null,
-      area: detailedLocation.area || null,
-      city: detailedLocation.city || null,
-      state: detailedLocation.state || null,
-      outPlant: plantName
-    });
+    setIsMutatingAttendance(true);
+    try {
+      await updateRecord('attendance', activeRecord.id, { 
+        outTime: format(now, "HH:mm"), 
+        outDate: format(now, "yyyy-MM-dd"),
+        outDateTime: now.toISOString(),
+        hours: finalHours,
+        status: 'Closed',
+        outType: 'MANUAL',
+        latOut: currentGPS.lat, 
+        lngOut: currentGPS.lng,
+        addressOut: detectedAddress,
+        street: detailedLocation.street || null,
+        area: detailedLocation.area || null,
+        city: detailedLocation.city || null,
+        state: detailedLocation.state || null,
+        outPlant: plantName
+      });
 
-    setActiveDialog("NONE");
-    toast({ title: "Mark OUT Successful" });
+      // Ensure UI immediately hides Mark OUT and recomputes next eligibility
+      await refreshData();
+
+      setActiveDialog("NONE");
+      toast({ title: "Mark OUT Successful" });
+    } finally {
+      setIsMutatingAttendance(false);
+    }
   };
 
   if (!isMounted) return null;
@@ -347,7 +368,7 @@ export default function AttendancePage() {
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
                   (!activeRecord && !todayRecord) ? "bg-primary text-white shadow-primary/20" : "bg-slate-100 text-slate-400"
                 )} 
-                disabled={isLoading || isLoadingLocation || !!activeRecord || !!todayRecord} 
+                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !!activeRecord || !!todayRecord} 
                 onClick={handleMarkInClick}
               >
                 {isLoadingLocation && activeDialog === 'NONE' ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Mark IN"}
@@ -356,7 +377,7 @@ export default function AttendancePage() {
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
                   activeRecord ? "bg-rose-600 text-white shadow-rose-200 hover:bg-rose-700" : "bg-slate-100 text-slate-400"
                 )} 
-                disabled={isLoading || isLoadingLocation || !activeRecord} 
+                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !activeRecord} 
                 onClick={() => requestLocation("OUT")}
               >
                 {isLoadingLocation && activeDialog === 'NONE' ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Mark OUT"}
