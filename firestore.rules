@@ -1,0 +1,64 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * SikkaTrack HRMS Security Rules (Flattened for MVP Compatibility)
+     *
+     * In this version, we match the application's root-level collection usage
+     * while requiring authentication for all data access.
+     */
+
+    // --- GLOBAL HELPER FUNCTIONS ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // --- COLLECTION RULES ---
+
+    // Allow all authenticated users to read/write to the flat collections
+    // for this prototype version to fix the path/auth mismatch errors.
+    
+    match /users/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /employees/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /firms/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /plants/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /attendance/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /payroll/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /vouchers/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /holidays/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /notifications/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /leaveRequests/{id} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

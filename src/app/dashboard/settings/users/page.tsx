@@ -1,0 +1,715 @@
+"use client";
+
+import { useState, useMemo, useEffect } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { 
+  UserPlus, 
+  Search, 
+  ShieldCheck, 
+  ShieldAlert, 
+  Shield, 
+  Key,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Lock,
+  Eye,
+  EyeOff,
+  Check,
+  X,
+  SearchIcon,
+  Globe,
+  Users,
+  Factory,
+  UserCheck
+} from "lucide-react";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useData } from "@/context/data-context";
+import { useToast } from "@/hooks/use-toast";
+import { User, Role } from "@/lib/types";
+import { APP_PERMISSIONS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+const INITIAL_USER_STATE: Partial<User> = {
+  fullName: "",
+  username: "",
+  password: "",
+  role: "HR",
+  permissions: ["Dashboard"],
+  plantIds: [],
+  status: "Active"
+};
+
+export default function UserManagementPage() {
+  const { users, plants, addRecord, updateRecord, deleteRecord } = useData();
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [permissionSearch, setPermissionSearch] = useState("");
+  const [plantSearch, setPlantSearch] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Modal States
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [isStatusAlertOpen, setIsStatusAlertOpen] = useState(false);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userToAction, setUserToAction] = useState<User | null>(null);
+  const [formData, setFormData] = useState<Partial<User>>(INITIAL_USER_STATE);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const sorted = [...(users || [])].reverse();
+    return sorted.filter(u => {
+      const nameMatch = u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
+      const userMatch = u.username.toLowerCase().includes(searchTerm.toLowerCase());
+      return nameMatch || userMatch;
+    });
+  }, [users, searchTerm]);
+
+  const filteredPermissions = useMemo(() => {
+    return APP_PERMISSIONS.filter(p => p.toLowerCase().includes(permissionSearch.toLowerCase()));
+  }, [permissionSearch]);
+
+  const filteredPlants = useMemo(() => {
+    return (plants || []).filter(p => p.name.toLowerCase().includes(plantSearch.toLowerCase()));
+  }, [plants, plantSearch]);
+
+  const passwordStrength = useMemo(() => {
+    const p = formData.password || "";
+    if (!p) return { score: 0, label: "NONE", color: "bg-slate-200" };
+    
+    let score = 0;
+    if (p.length >= 8) score++;
+    if (/[A-Z]/.test(p)) score++;
+    if ((p.match(/[0-9]/g) || []).length >= 3) score++;
+    if (/[@#$%&]/.test(p)) score++;
+
+    if (score <= 1) return { score, label: "WEAK", color: "bg-rose-500" };
+    if (score <= 3) return { score, label: "MEDIUM", color: "bg-amber-500" };
+    return { score, label: "STRONG", color: "bg-emerald-500" };
+  }, [formData.password]);
+
+  const handleOpenModal = (user?: User) => {
+    if (user) {
+      setEditingUser(user);
+      setFormData({ ...user });
+    } else {
+      setEditingUser(null);
+      setFormData({ ...INITIAL_USER_STATE });
+    }
+    setShowPassword(false);
+    setIsUserModalOpen(true);
+  };
+
+  const validateUserForm = () => {
+    const { fullName, username, password } = formData;
+
+    if (!fullName || !/^[a-zA-Z\s]+$/.test(fullName) || fullName.length < 3) {
+      toast({ variant: "destructive", title: "Invalid Name", description: "Alphabets and spaces only (min 3 chars)." });
+      return false;
+    }
+
+    if (!username || username.length < 5 || /\s/.test(username) || !/^[a-z0-9]+$/.test(username)) {
+      toast({ variant: "destructive", title: "Invalid Username", description: "Min 5 chars, lowercase and numbers only, no spaces." });
+      return false;
+    }
+
+    const exists = users.find(u => u.username === username && u.id !== editingUser?.id);
+    if (exists) {
+      toast({ variant: "destructive", title: "Duplicate Username", description: "This username is already taken." });
+      return false;
+    }
+
+    if (!editingUser) {
+      if (!password || password.length < 8 || password.length > 16) {
+        toast({ variant: "destructive", title: "Invalid Password", description: "Password must be 8-16 characters." });
+        return false;
+      }
+      if (!/[A-Z]/.test(password)) {
+        toast({ variant: "destructive", title: "Security Requirement", description: "At least 1 uppercase letter required." });
+        return false;
+      }
+      if ((password.match(/[0-9]/g) || []).length < 3) {
+        toast({ variant: "destructive", title: "Security Requirement", description: "At least 3 numeric digits required." });
+        return false;
+      }
+      if (!/[@#$%&]/.test(password)) {
+        toast({ variant: "destructive", title: "Security Requirement", description: "At least 1 special character (@, #, $, %, &) required." });
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleSaveUser = () => {
+    if (!validateUserForm()) return;
+
+    setIsProcessing(true);
+    try {
+      const userData = {
+        fullName: formData.fullName!,
+        username: formData.username!,
+        role: (formData.role as Role) || "HR",
+        permissions: formData.permissions || ["Dashboard"],
+        plantIds: formData.plantIds || [],
+        status: formData.status || "Active"
+      };
+
+      if (editingUser) {
+        updateRecord('users', editingUser.id, userData);
+        toast({ title: "User Updated", description: "Profile permissions saved successfully." });
+      } else {
+        addRecord('users', { ...userData, password: formData.password });
+        toast({ title: "User Created", description: `${userData.fullName} added with controlled access.` });
+      }
+      setIsUserModalOpen(false);
+      setIsResetPasswordOpen(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleStatusToggle = () => {
+    if (!userToAction || isProcessing) return;
+    
+    setIsProcessing(true);
+    try {
+      const newStatus = userToAction.status === 'Active' ? 'Inactive' : 'Active';
+      updateRecord('users', userToAction.id, { status: newStatus });
+      toast({ 
+        title: newStatus === 'Active' ? "User Activated" : "User Deactivated", 
+        description: `${userToAction.fullName} account is now ${newStatus.toLowerCase()}.` 
+      });
+      setIsStatusAlertOpen(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleGlobalPermissionsUpdate = () => {
+    if (!formData.permissions || formData.permissions.length === 0) {
+      toast({ variant: "destructive", title: "Action Blocked", description: "Select at least one permission to apply globally." });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      users.forEach(u => {
+        if (u.role !== 'SUPER_ADMIN') {
+          updateRecord('users', u.id, { permissions: formData.permissions });
+        }
+      });
+      toast({ title: "Global Update Success", description: "Permissions applied to all managed users." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const togglePermission = (perm: string) => {
+    const current = formData.permissions || [];
+    const updated = current.includes(perm) 
+      ? current.filter(p => p !== perm) 
+      : [...current, perm];
+    setFormData(p => ({ ...p, permissions: updated }));
+  };
+
+  const togglePlantAccess = (plantId: string) => {
+    const current = formData.plantIds || [];
+    const updated = current.includes(plantId)
+      ? current.filter(id => id !== plantId)
+      : [...current, plantId];
+    setFormData(p => ({ ...p, plantIds: updated }));
+  };
+
+  const selectAllPermissions = () => {
+    setFormData(p => ({ ...p, permissions: ["Dashboard", ...APP_PERMISSIONS] }));
+  };
+
+  const clearAllPermissions = () => {
+    setFormData(p => ({ ...p, permissions: ["Dashboard"] }));
+  };
+
+  const selectAllPlants = () => {
+    setFormData(p => ({ ...p, plantIds: (plants || []).map(pl => pl.id) }));
+  };
+
+  if (!isMounted) return null;
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-6 pb-12">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Access Control Center</h1>
+            <p className="text-muted-foreground">Provision secure user accounts with page-level restrictions.</p>
+          </div>
+          <Button className="font-bold shadow-lg shadow-primary/20 bg-primary" onClick={() => handleOpenModal()} disabled={isProcessing}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Create Security User
+          </Button>
+        </div>
+
+        <Card className="border-slate-200 shadow-sm overflow-hidden">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search administrators..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="font-bold">Full Name</TableHead>
+                  <TableHead className="font-bold">Username</TableHead>
+                  <TableHead className="font-bold">Role</TableHead>
+                  <TableHead className="font-bold text-center">Status</TableHead>
+                  <TableHead className="font-bold">Permissions</TableHead>
+                  <TableHead className="text-right font-bold pr-6">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.id} className="hover:bg-slate-50/50">
+                    <TableCell className="font-bold">{user.fullName}</TableCell>
+                    <TableCell className="font-mono text-primary text-xs tracking-tight">{user.username}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] uppercase font-black bg-white border-slate-200 mx-auto block w-fit">
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={cn("text-[9px] font-black uppercase py-0", user.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>
+                        {user.status || 'Active'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {user.permissions?.slice(0, 3).map(p => (
+                          <Badge key={p} variant="secondary" className="text-[9px] bg-slate-100 border-none font-bold">{p}</Badge>
+                        ))}
+                        {(user.permissions?.length || 0) > 3 && (
+                          <Badge variant="secondary" className="text-[9px] bg-primary/5 text-primary border-none font-bold">+{user.permissions!.length - 3} more</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end items-center gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-primary"
+                              onClick={() => handleOpenModal(user)}
+                              disabled={isProcessing}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit Permissions</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-slate-500 hover:text-primary"
+                              onClick={() => { setUserToAction(user); setIsResetPasswordOpen(true); }}
+                              disabled={isProcessing}
+                            >
+                              <Key className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Change Password</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className={cn(
+                                "h-8 w-8",
+                                user.status === 'Inactive' ? "text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50" : "text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                              )}
+                              onClick={() => { setUserToAction(user); setIsStatusAlertOpen(true); }}
+                              disabled={isProcessing || user.role === 'SUPER_ADMIN'}
+                            >
+                              {user.status === 'Inactive' ? <UserCheck className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{user.status === 'Inactive' ? 'Activate User' : 'Deactivate User'}</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Dialog open={isUserModalOpen} onOpenChange={(o) => { if (!o) setIsUserModalOpen(false); }}>
+          <DialogContent className="sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden border-none shadow-2xl rounded-2xl">
+            <DialogHeader className="p-3.5 shrink-0 border-b bg-white z-10">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <DialogTitle className="text-xl font-black flex items-center gap-2.5 text-slate-900 leading-tight">
+                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-5 h-5 text-primary" />
+                    </div>
+                    {editingUser ? `Edit Access: ${editingUser.fullName}` : "Create New Managed User"}
+                  </DialogTitle>
+                  <DialogDescription className="text-[11px] text-slate-500 font-medium ml-10.5">Define identity and assign modular page permissions.</DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            
+            <ScrollArea className="flex-1 px-8 py-6 custom-blue-scrollbar bg-slate-50/30">
+              <div className="space-y-10 pb-20 pr-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Full Name *</Label>
+                    <Input 
+                      value={formData.fullName || ""} 
+                      onChange={(e) => setFormData(p => ({...p, fullName: e.target.value}))} 
+                      className="h-14 bg-white border-slate-200 font-bold text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Username *</Label>
+                    <Input 
+                      value={formData.username || ""} 
+                      onChange={(e) => setFormData(p => ({...p, username: e.target.value.toLowerCase().replace(/\s/g, '')}))} 
+                      disabled={editingUser?.role === 'SUPER_ADMIN'} 
+                      className="h-14 bg-white border-slate-200 font-mono text-lg rounded-xl shadow-sm focus-visible:ring-primary focus-visible:border-primary disabled:bg-slate-100 disabled:text-slate-400"
+                    />
+                  </div>
+                </div>
+                
+                {!editingUser && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                    <div className="space-y-2 w-full">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.15em]">Secure Password *</Label>
+                      <div className="relative">
+                        <Input 
+                          type={showPassword ? "text" : "password"}
+                          value={formData.password || ""} 
+                          onChange={(e) => setFormData(p => ({...p, password: e.target.value}))} 
+                          className="h-14 bg-white border-slate-200 font-mono text-lg pr-14 rounded-xl shadow-sm focus-visible:ring-primary"
+                        />
+                        <button 
+                          type="button"
+                          className="absolute right-4 top-4 text-slate-400 hover:text-primary transition-colors"
+                          onClick={() => setShowPassword(!showPassword)}
+                        >
+                          {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-0 w-full">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Strength Indicator</span>
+                        <Badge className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1", 
+                          passwordStrength.label === 'STRONG' ? "bg-emerald-500" : 
+                          passwordStrength.label === 'MEDIUM' ? "bg-amber-500" : 
+                          passwordStrength.label === 'WEAK' ? "bg-rose-500" : "bg-slate-200 text-slate-500"
+                        )}>
+                          {passwordStrength.label}
+                        </Badge>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex gap-1.5">
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 1 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 2 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 3 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                        <div className={cn("h-full transition-all duration-500 rounded-full", passwordStrength.score >= 4 ? passwordStrength.color : "bg-transparent")} style={{ width: '25%' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-6 pt-8 border-t border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900 flex items-center gap-2">
+                        <Factory className="w-4 h-4 text-primary" /> Assign Plant Access
+                      </h3>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Restrict user to single or multiple logistics plants.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest rounded-lg" onClick={selectAllPlants} disabled={isProcessing}>Select All</Button>
+                      <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 rounded-lg" onClick={() => setFormData(p => ({...p, plantIds: []}))} disabled={isProcessing}>Clear</Button>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <SearchIcon className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                    <Input 
+                      placeholder="Search plants by name..." 
+                      className="pl-12 h-14 bg-white border-slate-200 rounded-xl text-base shadow-sm focus-visible:ring-primary"
+                      value={plantSearch}
+                      onChange={(e) => setPlantSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredPlants.map(plant => {
+                      const isSelected = formData.plantIds?.includes(plant.id);
+                      return (
+                        <div 
+                          key={plant.id}
+                          onClick={() => !isProcessing && togglePlantAccess(plant.id)}
+                          className={cn(
+                            "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
+                            isSelected 
+                              ? "bg-primary/5 border-primary shadow-sm" 
+                              : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
+                          )}
+                        >
+                          <Checkbox 
+                            id={`plant-${plant.id}`}
+                            checked={isSelected}
+                            onCheckedChange={() => togglePlantAccess(plant.id)}
+                            disabled={isProcessing}
+                            className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
+                          />
+                          <div className="flex-1">
+                            <Label 
+                              htmlFor={`plant-${plant.id}`} 
+                              className="text-sm font-bold text-slate-700 cursor-pointer block"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePlantAccess(plant.id); }}
+                            >
+                              {plant.name}
+                            </Label>
+                            <p className="text-[10px] text-muted-foreground uppercase font-medium">Authorized Node</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-6 pt-8 border-t border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Assign Page Access</h3>
+                      <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Select the modules this user can view and interact with.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 rounded-lg border-slate-200" onClick={selectAllPermissions} disabled={isProcessing}>Select All</Button>
+                      <Button variant="ghost" size="sm" className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 rounded-lg" onClick={clearAllPermissions} disabled={isProcessing}>Clear</Button>
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="h-9 px-4 text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg gap-2"
+                        onClick={handleGlobalPermissionsUpdate}
+                        disabled={isProcessing}
+                      >
+                        <Globe className="w-3.5 h-3.5" /> Apply Globally
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <SearchIcon className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+                    <Input 
+                      placeholder="Search available modules..." 
+                      className="pl-12 h-14 bg-white border-slate-200 rounded-xl text-base shadow-sm focus-visible:ring-primary"
+                      value={permissionSearch}
+                      onChange={(e) => setPermissionSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredPermissions.map(perm => {
+                      const isSelected = formData.permissions?.includes(perm);
+                      return (
+                        <div 
+                          key={perm}
+                          onClick={() => !isProcessing && togglePermission(perm)}
+                          className={cn(
+                            "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
+                            isSelected 
+                              ? "bg-primary/5 border-primary shadow-sm" 
+                              : "bg-white border-slate-100 hover:border-slate-200 shadow-sm"
+                          )}
+                        >
+                          <Checkbox 
+                            id={`perm-${perm}`}
+                            checked={isSelected}
+                            onCheckedChange={() => togglePermission(perm)}
+                            disabled={isProcessing}
+                            className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
+                          />
+                          <Label 
+                            htmlFor={`perm-${perm}`} 
+                            className="text-sm font-bold text-slate-700 cursor-pointer flex-1"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePermission(perm); }}
+                          >
+                            {perm}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-6 pt-12 border-t border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 text-slate-400" />
+                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-900">Managed Users Registry</h3>
+                  </div>
+                  <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="text-[9px] font-black uppercase">Name</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase">Username</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase">Role</TableHead>
+                          <TableHead className="text-[9px] font-black uppercase text-right">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map(u => (
+                          <TableRow key={u.id} className="hover:bg-slate-50/50">
+                            <TableCell className="text-xs font-bold">{u.fullName}</TableCell>
+                            <TableCell className="text-xs font-mono text-primary">{u.username}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-[8px] font-black uppercase py-0">{u.role}</Badge></TableCell>
+                            <TableCell className="text-right">
+                              <Badge className={cn("text-[8px] font-black uppercase py-0", u.status === 'Active' ? "bg-emerald-500" : "bg-slate-300")}>{u.status || 'Active'}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+
+            <DialogFooter className="p-3.5 bg-slate-50 border-t shrink-0 z-10">
+              <div className="flex justify-end gap-3 w-full">
+                <Button variant="ghost" onClick={() => setIsUserModalOpen(false)} className="rounded-lg font-bold h-11 px-8 text-slate-500 hover:bg-slate-200">Cancel</Button>
+                <Button 
+                  onClick={handleSaveUser} 
+                  disabled={isProcessing}
+                  className="bg-primary hover:bg-primary/90 rounded-lg font-black h-11 px-12 shadow-lg shadow-primary/20 text-sm"
+                >
+                  {isProcessing ? "Processing..." : editingUser ? "Save Changes" : "Create Secure User"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isResetPasswordOpen} onOpenChange={(o) => { if (!o) setIsResetPasswordOpen(false); }}>
+          <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black flex items-center gap-2">
+                <Key className="w-5 h-5 text-primary" />
+                Update Credentials
+              </DialogTitle>
+              <DialogDescription className="font-medium">Reset password for <strong>{userToAction?.username}</strong></DialogDescription>
+            </DialogHeader>
+            <div className="py-6 space-y-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">New Secure Password</Label>
+                <Input 
+                  type="password"
+                  className="h-12 bg-slate-50 border-slate-200 rounded-xl font-mono"
+                  value={formData.password || ""}
+                  onChange={(e) => setFormData(p => ({...p, password: e.target.value}))}
+                />
+              </div>
+            </div>
+            <DialogFooter className="bg-slate-50 -m-6 mt-2 p-6 rounded-b-2xl border-t gap-2">
+              <Button variant="ghost" onClick={() => setIsResetPasswordOpen(false)} className="rounded-xl font-bold">Cancel</Button>
+              <Button onClick={handleSaveUser} disabled={isProcessing} className="bg-primary rounded-xl font-black px-8">Update Password</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={isStatusAlertOpen} onOpenChange={setIsStatusAlertOpen}>
+          <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
+            <AlertDialogHeader>
+              <div className={cn(
+                "mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4",
+                userToAction?.status === 'Inactive' ? "bg-emerald-50" : "bg-rose-50"
+              )}>
+                {userToAction?.status === 'Inactive' ? (
+                  <UserCheck className="w-8 h-8 text-emerald-500" />
+                ) : (
+                  <AlertTriangle className="w-8 h-8 text-rose-500" />
+                )}
+              </div>
+              <AlertDialogTitle className="text-center text-2xl font-black">
+                Confirm User {userToAction?.status === 'Inactive' ? 'Activation' : 'Deactivation'}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-center text-slate-500 font-medium pt-2">
+                Are you sure you want to <strong>{userToAction?.status === 'Inactive' ? 'activate' : 'deactivate'}</strong> <strong>{userToAction?.fullName}</strong>? 
+                {userToAction?.status === 'Active' && " They will lose all access to assigned pages immediately."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="sm:justify-center gap-3 pt-8 pb-4">
+              <AlertDialogCancel className="rounded-xl font-bold h-12 px-8">Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleStatusToggle();
+                }} 
+                disabled={isProcessing}
+                className={cn(
+                  "rounded-xl font-black h-12 px-8 shadow-lg",
+                  userToAction?.status === 'Inactive' 
+                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100" 
+                    : "bg-rose-600 hover:bg-rose-700 shadow-rose-100"
+                )}
+              >
+                {isProcessing ? "Processing..." : `Confirm ${userToAction?.status === 'Inactive' ? 'Activate' : 'Deactivate'}`}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </TooltipProvider>
+  );
+}

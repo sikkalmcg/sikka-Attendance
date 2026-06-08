@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 32% 91%;
+    --secondary-foreground: 222 47% 11.2%;
+    --muted: 214 32% 91%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 222 47% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 217 91% 60%;
+    --radius: 0.75rem;
+    --chart-1: 217 91% 60%;
+    --chart-2: 188 78% 55%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 210 40% 96.1%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline;
+  }
+
+  .font-calibri {
+    font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', 'Arial', sans-serif;
+  }
+
+  /* Global Scrollbar Styles - Standardized for Sikka HR */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    display: block !important;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors border-2 border-slate-100;
+    display: block !important;
+  }
+
+  /* Specialized scrollbar for popups/previews - Force Visibility */
+  .custom-blue-scrollbar [data-radix-scroll-area-thumb] {
+    @apply bg-primary opacity-100 transition-colors !important;
+    visibility: visible !important;
+    display: block !important;
+    border: 2px solid white;
+  }
+  
+  .custom-blue-scrollbar [data-radix-scroll-area-scrollbar] {
+    @apply bg-slate-200/50 opacity-100 border-l border-slate-300 !important;
+    visibility: visible !important;
+    display: flex !important;
+    width: 10px !important;
+  }
+
+  /* Mobile UI Tweaks */
+  @media (max-width: 640px) {
+    .container {
+      @apply px-4;
+    }
+    
+    .overflow-x-auto {
+      -webkit-overflow-scrolling: touch;
+    }
+
+    [role="dialog"] {
+      padding: 0 !important;
+    }
+    
+    /* Document Scaling for mobile preview */
+    .document-preview-container {
+      transform: scale(0.65);
+      transform-origin: top left;
+      width: 153%; /* Adjust for scale */
+    }
+  }
+}
+
+@layer utilities {
+  .print-only {
+    display: none;
+  }
+}
+
+@media print {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body > * {
+    display: none !important;
+  }
+
+  body > .print-only {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    background: white !important;
+    margin: 0 !important;
+    padding: 15mm !important;
+    z-index: 999999 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  .print-only * {
+    visibility: visible !important;
+    break-inside: avoid;
+  }
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
