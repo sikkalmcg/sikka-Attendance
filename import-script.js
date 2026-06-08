@@ -2,7 +2,7 @@ const { MongoClient } = require('mongodb');
 const fs = require('fs');
 
 // Srv string ke sath connectTimeoutMS add kiya hai taaki slow network par fail na ho
-const url = "mongodb://localhost:27017";
+const url = "mongodb+srv://sikkapanindia_db_user:Sikkalmc2105@cluster0.hfmiky2.mongodb.net/";
 const dbName = "sikka_database"; // Yeh aapke local machine par is naam ka database bana dega
 
 // Baki ka insert wala code niche bilkul same rahega...
