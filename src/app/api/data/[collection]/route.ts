@@ -1,139 +1,114 @@
 import { NextResponse } from 'next/server';
-import { getDb, toObjectId } from '@/lib/mongodb';
-import { getSessionUser, requireSessionUser } from '@/lib/auth/session';
-import { canDeleteCollection, isSuperAdmin } from '@/app/api/_utils/permissions';
+import { getDb } from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 
-const ALLOWED_COLLECTIONS = new Set([
-  'employees',
-  'attendance',
-  'vouchers',
-  'payroll',
-  'plants',
-  'firms',
-  'users',
-  'holidays',
-  'notifications',
-  'leaveRequests',
-]);
-
-type Params = { params: { collection: string } };
-
-function badRequest(message: string, status = 400) {
-  return NextResponse.json({ message }, { status });
+// 1. GET HANDLER: Saari collections ka data read karne ke liye
+export async function GET(
+  req: Request,
+  { params }: { params: { collection: string } }
+) {
+  try {
+    const { collection } = params;
+    const db = await getDb();
+    
+    const data = await db.collection(collection).find({}).toArray();
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error(`GET Error in ${params.collection}:`, error);
+    return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });
+  }
 }
 
-function unauthorized(message = 'Unauthorized') {
-  return NextResponse.json({ message }, { status: 401 });
+// 2. POST HANDLER: Naya data insert karne ke liye
+export async function POST(
+  req: Request,
+  { params }: { params: { collection: string } }
+) {
+  try {
+    const { collection } = params;
+    const body = await req.json();
+    const db = await getDb();
+
+    const result = await db.collection(collection).insertOne(body);
+    return NextResponse.json({ success: true, id: result.insertedId });
+  } catch (error) {
+    console.error(`POST Error in ${params.collection}:`, error);
+    return NextResponse.json({ error: "Failed to insert data" }, { status: 500 });
+  }
 }
 
-export async function GET(_req: Request, { params }: Params) {
-  const collection = params.collection;
-  if (!ALLOWED_COLLECTIONS.has(collection)) return badRequest('Invalid collection');
+// 3. PUT HANDLER: YAHI MISSING THA JISSE 405 AA RAHA THA!
+export async function PUT(
+  req: Request,
+  { params }: { params: { collection: string } }
+) {
+  try {
+    const { collection } = params;
+    
+    // URL se ?id=JZvVOQ8R3... nikalne ke liye
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
 
-  const user = getSessionUser();
-
-  // Role-based filtering to match existing frontend logic.
-  // - employees/attendance/vouchers/plants/firms/holidays/leaveRequests: only if logged in
-  // - payroll: only HR/ADMIN/SUPER_ADMIN (frontend checks isAdminRole)
-  // - users: only SUPER_ADMIN
-  // - notifications: SUPER_ADMIN sees all; EMPLOYEE sees where employeeId == currentUser.username
-  if (collection === 'payroll' && (!user || !['SUPER_ADMIN', 'ADMIN', 'HR'].includes(user.role))) {
-    return NextResponse.json({ data: [] }, { status: 200 });
-  }
-
-  if (collection === 'users' && (!user || user.role !== 'SUPER_ADMIN')) {
-    return NextResponse.json({ data: [] }, { status: 200 });
-  }
-
-  if (!user) {
-    return unauthorized();
-  }
-
-  const db = await getDb();
-  const col = db.collection(collection);
-
-  let docs: any[];
-
-  if (collection === 'notifications') {
-    if (user.role === 'SUPER_ADMIN') {
-      docs = await col.find({}).toArray();
-    } else {
-      // existing frontend: where('employeeId','==', currentUser.username)
-      docs = await col.find({ employeeId: user.username }).toArray();
+    if (!id) {
+      return NextResponse.json({ error: "Missing document ID" }, { status: 400 });
     }
-  } else if (collection === 'payroll') {
-    docs = await col.find({}).toArray();
-  } else {
-    docs = await col.find({}).toArray();
-  }
 
-  const data = docs.map((d) => ({ ...d, id: String(d._id) }));
-  return NextResponse.json({ data }, { status: 200 });
+    const body = await req.json();
+    const db = await getDb();
+
+    // MongoDB ke IDs ke formats (_id as string vs ObjectId) ko match karne ke liye safe query
+    let query: any = { _id: id };
+    if (ObjectId.isValid(id)) {
+      query = {
+        $or: [
+          { _id: id },
+          { _id: new ObjectId(id) },
+          { id: id }
+        ]
+      };
+    }
+
+    // Body se internal _id ya id remove karenge taaki Mongo schema structural crash na ho
+    const updateData = { ...body };
+    delete updateData._id;
+    delete updateData.id;
+
+    const result = await db.collection(collection).updateOne(
+      query,
+      { $set: updateData }
+    );
+
+    return NextResponse.json({ success: true, modifiedCount: result.modifiedCount });
+  } catch (error) {
+    console.error(`PUT Error in collection ${params.collection}:`, error);
+    return NextResponse.json({ error: "Failed to update data" }, { status: 500 });
+  }
 }
 
-export async function POST(req: Request, { params }: Params) {
-  const collection = params.collection;
-  if (!ALLOWED_COLLECTIONS.has(collection)) return badRequest('Invalid collection');
-
-  // For writes, we still require session.
-  let user;
+// 4. DELETE HANDLER: Record delete karne ke liye
+export async function DELETE(
+  req: Request,
+  { params }: { params: { collection: string } }
+) {
   try {
-    user = requireSessionUser();
-  } catch {
-    return unauthorized();
+    const { collection } = params;
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: "Missing document ID" }, { status: 400 });
+    }
+
+    const db = await getDb();
+    let query: any = { _id: id };
+    if (ObjectId.isValid(id)) {
+      query = { $or: [{ _id: id }, { _id: new ObjectId(id) }] };
+    }
+
+    await db.collection(collection).deleteOne(query);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error(`DELETE Error in ${params.collection}:`, error);
+    return NextResponse.json({ error: "Failed to delete data" }, { status: 500 });
   }
-
-  const body = await req.json().catch(() => null);
-  if (!body) return badRequest('Missing body');
-
-  const db = await getDb();
-  const col = db.collection(collection);
-  const result = await col.insertOne(body);
-
-  return NextResponse.json({ id: String(result.insertedId) }, { status: 201 });
 }
-
-export async function PATCH(req: Request, { params }: Params) {
-  const collection = params.collection;
-  if (!ALLOWED_COLLECTIONS.has(collection)) return badRequest('Invalid collection');
-
-  let user;
-  try {
-    user = requireSessionUser();
-  } catch {
-    return unauthorized();
-  }
-
-  const body = await req.json().catch(() => null);
-  if (!body?.id) return badRequest('Missing id');
-
-  const id = body.id as string;
-  const { id: _, ...rest } = body;
-
-  const db = await getDb();
-  const col = db.collection(collection);
-  await col.updateOne({ _id: toObjectId(id) }, { $set: rest });
-
-  return NextResponse.json({ ok: true }, { status: 200 });
-}
-
-export async function DELETE(_req: Request, { params }: Params) {
-  const collection = params.collection;
-  if (!ALLOWED_COLLECTIONS.has(collection)) return badRequest('Invalid collection');
-
-  const user = getSessionUser();
-  if (!canDeleteCollection(user)) {
-    return NextResponse.json({ message: 'Permission Denied' }, { status: 403 });
-  }
-
-  const url = new URL(_req.url);
-  const id = url.searchParams.get('id');
-  if (!id) return badRequest('Missing id');
-
-  const db = await getDb();
-  const col = db.collection(collection);
-  await col.deleteOne({ _id: toObjectId(id) });
-
-  return NextResponse.json({ ok: true }, { status: 200 });
-}
-

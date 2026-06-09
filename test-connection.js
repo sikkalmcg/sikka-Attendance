@@ -1,7 +1,7 @@
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
-// Password ke @ ko %40 se encode kar diya hai
-const uri = "mongodb+srv://sikkapanindia_db_user:Sikka%40lmc2105@cluster0.hfmiky2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+// Humne 'replicaSet' parameter hata diya hai taaki koi mismatch na ho
+const uri = "mongodb://sikkapanindia_db_user:Sikkalmc2105@ac-ngps0di-shard-00-00.hfmiky2.mongodb.net:27017,ac-ngps0di-shard-00-01.hfmiky2.mongodb.net:27017,ac-ngps0di-shard-00-02.hfmiky2.mongodb.net:27017/?ssl=true&authSource=admin";
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -13,10 +13,13 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    console.log("Connecting to MongoDB...");
     await client.connect();
-    // Admin database ko ping karke connection check kar rahe hain
+    
     await client.db("admin").command({ ping: 1 });
-    console.log("🚀 Pinged your deployment. You successfully connected to MongoDB Cloud!");
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+  } catch (error) {
+    console.error("Connection failed:", error);
   } finally {
     await client.close();
   }

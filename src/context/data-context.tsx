@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react';
@@ -28,7 +27,6 @@ interface DataContextType {
   holidays: Holiday[];
   notifications: AppNotification[];
   leaveRequests: LeaveRequest[];
-  // Mutation helpers
   addRecord: (col: string, data: any) => Promise<void>;
   updateRecord: (col: string, id: string, data: any) => Promise<void>;
   deleteRecord: (col: string, id: string) => Promise<void>;
@@ -70,19 +68,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const isAdminRole = useMemo(() => {
     return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
-  }, [currentUser]);
+  }, [currentUser?.role]);
+
+  const currentUserId = currentUser?.id;
+  const currentUserRole = currentUser?.role;
+  const currentUserUsername = currentUser?.username;
 
   const fetchData = useCallback(async () => {
-    if (!currentUser) {
+    if (!currentUserId) {
       setIsLoading(false);
       return;
     }
     
     setIsLoading(true);
     try {
-      const collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests'];
-      if (isAdminRole) collectionsToFetch.push('payroll', 'notifications');
-      if (currentUser.role === 'SUPER_ADMIN') collectionsToFetch.push('users');
+      // LIGHTWEIGHT ROUTING: Agar user ek employee hai, toh query loading parameters chote rakhein
+      let collectionsToFetch: string[] = [];
+
+      if (currentUserRole === 'EMPLOYEE') {
+        // Employee dashboard ke liye sirf itna hi kaafi hai
+        collectionsToFetch = ['attendance', 'plants', 'holidays'];
+      } else {
+        // Admin/HR ke liye saari collections fetch karein
+        collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests'];
+        if (isAdminRole) collectionsToFetch.push('payroll', 'notifications');
+        if (currentUserRole === 'SUPER_ADMIN') collectionsToFetch.push('users');
+      }
 
       const results = await Promise.all(
         collectionsToFetch.map(col => fetch(`/api/data/${col}`).then(res => res.ok ? res.json() : []))
@@ -93,6 +104,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dataMap[col] = Array.isArray(results[index]) ? results[index] : (results[index]?.data || []);
       });
 
+      // Mapping state context arrays safely
       if (dataMap['employees']) setEmployees(dataMap['employees']);
       if (dataMap['attendance']) setAttendanceRecords(dataMap['attendance']);
       if (dataMap['vouchers']) setVouchers(dataMap['vouchers']);
@@ -103,38 +115,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (dataMap['holidays']) setHolidays(dataMap['holidays']);
       if (dataMap['leaveRequests']) setLeaveRequests(dataMap['leaveRequests']);
       
+      // Fetch user notifications efficiently
       if (dataMap['notifications']) {
         setNotifications(dataMap['notifications']);
-      } else if (currentUser) {
-        const notifRes = await fetch(`/api/data/notifications?employeeId=${currentUser.username}`);
+      } else if (currentUserUsername) {
+        const notifRes = await fetch(`/api/data/notifications?employeeId=${currentUserUsername}`);
         if (notifRes.ok) {
             const json = await notifRes.json();
             setNotifications(Array.isArray(json) ? json : (json?.data || []));
         }
       }
     } catch (error) {
-      console.error("Failed to fetch data:", error);
+      console.error("Failed to fetch data efficiently:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser, isAdminRole]);
+  }, [currentUserId, currentUserRole, currentUserUsername, isAdminRole]);
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [currentUserId, fetchData]);
 
-  // Centralized Verified User Logic
   const verifiedUser = useMemo(() => {
     if (!currentUser) return null;
 
     if (currentUser.role === 'EMPLOYEE') {
+      // Agar employees state khali hai (un-fetched due to role segregation), use standard details session parameters
+      if (employees.length === 0) {
+        return { ...currentUser, fullName: currentUser.fullName || "Employee" };
+      }
       const loginIdent = currentUser.username?.replace(/\s/g, '');
       const dbEmp = (employees || []).find(e => {
-        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
-        const empMobile = e.mobile?.replace(/\s/g, '');
+        const empAadhaar = String(e.aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
+        const empMobile = String(e.mobileNumber || e.mobile || '').replace(/\s/g, '');
         return empAadhaar === loginIdent || empMobile === loginIdent;
       });
-      return dbEmp ? { ...currentUser, ...dbEmp, fullName: dbEmp.name, avatar: dbEmp.avatar } : currentUser;
+      const fullName = dbEmp ? (dbEmp.firstName ? `${dbEmp.firstName} ${dbEmp.lastName || ''}`.trim() : dbEmp.name) : (currentUser.fullName || "Employee");
+      return dbEmp ? { ...currentUser, ...dbEmp, fullName, avatar: dbEmp.avatar } : currentUser;
     }
 
     if (currentUser.role !== 'SUPER_ADMIN') {
@@ -145,14 +162,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return currentUser;
   }, [currentUser, employees, users]);
 
-  // Mutation helpers
   const addRecord = async (col: string, data: any) => {
     try {
-      await fetch(`/api/data/${col}`, {
+      const res = await fetch(`/api/data/${col}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, createdAt: new Date().toISOString() })
       });
+      if (!res.ok) console.warn(`Failed to append record in ${col}. Status: ${res.status}`);
       await fetchData();
     } catch (e) {
       console.error(e);

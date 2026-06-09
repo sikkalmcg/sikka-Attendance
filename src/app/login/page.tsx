@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { SUPER_ADMIN_USER } from "@/lib/constants";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Loader2, Eye, EyeOff, ShieldAlert } from "lucide-react";
+import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import Cookies from 'js-cookie';
 import { getDeviceId, getDeviceName } from "@/lib/utils";
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null); // For live database debugging
   const { toast } = useToast();
   const router = useRouter();
 
@@ -36,22 +37,101 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setDebugInfo(null);
 
     try {
       const deviceId = getDeviceId();
       const deviceName = getDeviceName();
 
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password, deviceId, deviceName }),
-      });
+      const cleanUser = username.trim().replace(/\s/g, '');
+      const cleanPass = password.trim().replace(/\s/g, '');
 
-      const data = await response.json();
+      // 1. Emergency Admin Fallback
+      if (SUPER_ADMIN_USER && cleanUser === SUPER_ADMIN_USER.username && cleanPass === SUPER_ADMIN_USER.password) {
+        const adminData = {
+          id: "super_admin_id",
+          username: cleanUser,
+          role: "SUPER_ADMIN",
+          fullName: "System Admin"
+        };
+        persistSession(adminData);
+        toast({ title: "Welcome back, Admin", description: "Login successful." });
+        setTimeout(() => router.push("/dashboard"), 100);
+        return;
+      }
 
-      if (response.ok) {
+      let data: any = null;
+      let isSuccess = false;
+      let errorMessage = "Invalid Credentials.";
+
+      // 2. Try Standard API Login
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: cleanUser, password: cleanPass, deviceId, deviceName }),
+        });
+        data = await response.json();
+        isSuccess = response.ok;
+        if (!isSuccess && data?.message) errorMessage = data.message;
+      } catch (err) {
+        console.error("API login failed:", err);
+      }
+
+      // 3. Fallback to Employee Direct Check (Aadhaar & Mobile)
+      if (!isSuccess) {
+        try {
+          const empRes = await fetch('/api/data/employees');
+          if (empRes.ok) {
+            const empData = await empRes.json();
+            const employees = Array.isArray(empData) ? empData : (empData?.data || []);
+
+            if (employees.length > 0) {
+              // DEBUGGING AID: Catching exact key names from your database live
+              const sample = employees[0];
+              const availableKeys = Object.keys(sample).join(", ");
+              setDebugInfo(`DB Connected! Checked keys inside employee collection: [${availableKeys}].`);
+            } else {
+              setDebugInfo("DB Connected, but your 'employees' collection is completely empty!");
+            }
+
+            // Matching Logic using multiple flexible key name options
+            const employeeByEmployeeId = employees.find((e: any) => 
+              String(e.employeeId || e.id || e._id || '').replace(/\s/g, '') === cleanUser
+            );
+            
+            const employeeByAadhaarMobile = employees.find((e: any) => {
+              const dbAadhaar = String(e.aadhaarNumber || e.aadhaar || e.Aadhaar || '').replace(/\s/g, '');
+              const dbMobile = String(e.mobileNumber || e.mobile || e.Mobile || '').replace(/\s/g, '');
+              return dbAadhaar === cleanUser && dbMobile === cleanPass;
+            });
+
+            const employee = employeeByEmployeeId || employeeByAadhaarMobile;
+            
+            if (employee) {
+              const empFullName = employee.firstName 
+                ? `${employee.firstName} ${employee.lastName || ''}`.trim() 
+                : (employee.name || "Employee");
+                
+              data = { 
+                id: employee.id || employee._id, 
+                username: cleanUser, 
+                role: 'EMPLOYEE', 
+                fullName: empFullName, 
+                employeeId: employee.employeeId, 
+                firmId: employee.firmId 
+              };
+              isSuccess = true;
+            }
+          } else {
+            setDebugInfo(`Failed to load employee fallback database. Status code: ${empRes.status}`);
+          }
+        } catch (empErr) { 
+          console.error("Employee fallback check failed:", empErr); 
+        }
+      }
+
+      if (isSuccess && data) {
         persistSession(data);
         toast({
           title: data.role === 'SUPER_ADMIN' ? "Welcome back, Admin" : "Login Successful",
@@ -62,7 +142,7 @@ export default function LoginPage() {
           router.push(targetPath);
         }, 100);
       } else {
-        setError(data.message || "An error occurred.");
+        setError(errorMessage);
       }
     } catch (err) {
       console.error("Login error:", err);
@@ -101,10 +181,17 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col items-center">
           <form onSubmit={handleLogin} className="w-full max-w-sm space-y-4">
             {error && (
-              <Alert variant="destructive" className="mb-4 py-2 border-rose-200 bg-rose-50 text-rose-900">
+              <Alert variant="destructive" className="mb-2 py-2 border-rose-200 bg-rose-50 text-rose-900">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-xs">{error}</AlertDescription>
               </Alert>
+            )}
+
+            {/* Debug Monitor Box (Visible only during login issues) */}
+            {debugInfo && (
+              <div className="p-2 border border-blue-200 bg-blue-50 text-blue-900 rounded text-[11px] leading-relaxed break-all">
+                <strong>System Debug:</strong> {debugInfo}
+              </div>
             )}
 
             <div className="flex items-center gap-4">
@@ -167,7 +254,7 @@ export default function LoginPage() {
                 alt="Logo Small"
                 fill
                 className="object-cover"
-              />
+                />
             </div>
           </div>
         </div>

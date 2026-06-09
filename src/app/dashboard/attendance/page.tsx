@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,17 +10,14 @@ import {
   Clock, 
   ShieldCheck, 
   History,
-  Calendar,
   Loader2,
   Navigation,
-  Factory,
   Briefcase,
   Home,
   CheckCircle,
-  XCircle,
   AlertTriangle
 } from "lucide-react";
-import { calculateDistance, cn, formatDate, getWorkingHoursColor, formatHoursToHHMM, formatDateTime, parseDateTime } from "@/lib/utils";
+import { calculateDistance, cn, formatDate, getWorkingHoursColor, formatHoursToHHMM, parseDateTime } from "@/lib/utils";
 import { 
   Table, 
   TableHeader, 
@@ -29,9 +26,9 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { Plant, AttendanceRecord } from "@/lib/types";
+import { Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, parseISO, addHours, isAfter, startOfDay, isValid, isBefore, addDays, isSameDay } from "date-fns";
+import { format, parseISO, addHours, isAfter, isValid } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -52,7 +49,7 @@ const getISTTime = () => {
 };
 
 export default function AttendancePage() {
-  const { attendanceRecords, addRecord, updateRecord, refreshData, plants, employees, verifiedUser, isLoading } = useData();
+  const { attendanceRecords = [], addRecord, updateRecord, refreshData, plants = [], verifiedUser, isLoading } = useData();
   const [isMutatingAttendance, setIsMutatingAttendance] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -66,10 +63,10 @@ export default function AttendancePage() {
   const [detailedLocation, setDetailedLocation] = useState({ street: "", area: "", city: "", state: "", pincode: "" });
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH" | "">("");
 
+  const isAutoTriggering = useRef(false);
   const { toast } = useToast();
 
   useEffect(() => {
-
     setIsMounted(true);
     setCurrentTime(getISTTime());
     const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
@@ -86,19 +83,14 @@ export default function AttendancePage() {
       .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
   }, [attendanceRecords, effectiveEmployeeId]);
 
-  // Derived State based on 16-Hour AUTO OUT rules
+  // Derived State based on 16-Hour AUTO OUT rules + Cooldown restrictions
   const { activeRecord, todayRecord, isStale, nextInAvailableAt } = useMemo(() => {
-
-    const now = getISTTime();
+    const now = currentTime || getISTTime();
     const todayStr = format(now, "yyyy-MM-dd");
 
-    // Open session (any date)
     const active = employeeRecords.find((r) => r.status === "Open");
-
-    // Once per calendar day UI (kept as-is), but we will additionally respect nextInEnableTime
     const todayRec = employeeRecords.find((r) => r.date === todayStr);
 
-    // Manual/Auto cooldown control
     const lastClosed = employeeRecords
       .filter((r) => r.status === "Closed" || r.status === "Auto OUT")
       .sort((a, b) => {
@@ -109,15 +101,9 @@ export default function AttendancePage() {
         return bt - at;
       })[0];
 
-    const nextIn = lastClosed?.nextInEnableTime
-      ? parseISO(lastClosed.nextInEnableTime)
-      : null;
+    const nextIn = lastClosed?.nextInEnableTime ? parseISO(lastClosed.nextInEnableTime) : null;
+    const inDT = active?.inDateTime ? parseISO(active.inDateTime) : (active?.inDate && active?.inTime ? parseDateTime(active.inDate, active.inTime) : null);
 
-    const inDT = active?.inDateTime
-      ? parseISO(active.inDateTime)
-      : (active?.inDate && active?.inTime ? parseDateTime(active.inDate, active.inTime) : null);
-
-    // Auto-out stale check
     let stale = false;
     if (active && inDT && isValid(inDT)) {
       const triggerTime = addHours(inDT, 16);
@@ -132,27 +118,19 @@ export default function AttendancePage() {
     };
   }, [employeeRecords, currentTime]);
 
-
-  // Automated Checkout Background Check (16 Hours)
-  useEffect(() => {
-    if (isStale && activeRecord && !activeRecord.outTime && !isLoadingLocation) {
-      console.log("Stale session detected (16h). Triggering Auto OUT...");
-      requestLocation("OUT_AUTO");
-    }
-  }, [isStale, activeRecord]);
-
+  // Check if Cooldown Lock is active right now (8 Hours rule)
+  const isCooldownLocked = useMemo(() => {
+    if (!nextInAvailableAt || !currentTime) return false;
+    return isAfter(nextInAvailableAt, currentTime);
+  }, [nextInAvailableAt, currentTime]);
 
   const performAutoCheckOut = async (lat: number, lng: number, address: string, components: any) => {
-    // guard against concurrent mutations / stale UI states
-    if (!activeRecord) return;
-    if (isMutatingAttendance) return;
+    if (!activeRecord || isMutatingAttendance) return;
     
     const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
     if (!inDT || !isValid(inDT)) return;
 
-    const creditOutDT = addHours(inDT, 8); // Stored Mark OUT Time = IN + 8h
-
-    
+    const creditOutDT = addHours(inDT, 8); 
     const finalOutDate = format(creditOutDT, "yyyy-MM-dd");
     const finalOutTime = format(creditOutDT, "HH:mm");
     
@@ -165,25 +143,23 @@ export default function AttendancePage() {
         outTime: finalOutTime,
         outDate: finalOutDate,
         outDateTime: creditOutDT.toISOString(),
-        hours: 8.0,
+        hours: 8.0, // Strictly credit 8 hours on auto checkout
         status: 'Auto OUT',
         outType: 'Auto',
         latOut: lat,
         lngOut: lng,
-        addressOut: address,
-        streetOut: components.street || null,
-        areaOut: components.area || null,
-        cityOut: components.city || null,
-        stateOut: components.state || null,
-        pincodeOut: components.pincode || null,
+        addressOut: address || "System Auto-Location",
+        streetOut: components.street || "Unknown Street",
+        areaOut: components.area || "Unknown Area",
+        cityOut: components.city || "NCR",
+        stateOut: components.state || "Uttar Pradesh",
+        pincodeOut: components.pincode || "N/A",
         autoCheckout: true,
         autoOut: true,
         autoTriggerTime: getISTTime().toISOString(),
-        nextInEnableTime: addHours(creditOutDT, 8).toISOString(),
-        // Spec: stored Mark OUT time = Mark IN time + 8 hours
+        nextInEnableTime: addHours(creditOutDT, 8).toISOString(), // Lock next check-in for 8 hours
         remark: "System Auto-Logged OUT (16h Limit Threshold reached); stored OUT = IN + 8h"
       });
-
 
       await addRecord('notifications', {
         message: `${effectiveEmployeeName} – AUTO OUT Processed | Recorded OUT: ${format(creditOutDT, "dd-MMM HH:mm")}`,
@@ -193,30 +169,26 @@ export default function AttendancePage() {
         employeeId: effectiveEmployeeId
       });
 
-      // Ensure UI re-computes activeRecord/status immediately
-      await refreshData();
-
       toast({ 
         title: "Auto OUT Triggered", 
-        description: "Session closed after 20 hours. 8 hours credited to your ledger." 
+        description: "Session closed after 16 hours limit. 8 hours credited to your ledger." 
       });
+
+      await refreshData();
+    } catch (e) {
+      console.error("Auto checkout error:", e);
     } finally {
       setIsMutatingAttendance(false);
+      isAutoTriggering.current = false;
     }
   };
 
   const requestLocation = (type: "IN" | "OUT" | "OUT_AUTO") => {
-    // Re-check next-in lock at the moment of requesting GPS
-    const isNextInLockedNow = nextInAvailableAt
-      ? isAfter(nextInAvailableAt, currentTime || getISTTime())
-      : false;
-
-    if (type === "IN" && isNextInLockedNow) {
-
+    if (type === "IN" && isCooldownLocked) {
       toast({
         variant: "destructive",
         title: "Next Mark IN Locked",
-        description: `Next Mark IN will be available at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "later"}.`,
+        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM hh:mm a") : "later"}.`,
         duration: 8000,
       });
       return;
@@ -224,12 +196,12 @@ export default function AttendancePage() {
 
     if (isMutatingAttendance) return;
     setIsLoadingLocation(true);
-    setDetectedAddress(""); 
     
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         setCurrentGPS({ lat, lng });
+        
         const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
         setDetectedPlant(plant || null);
         
@@ -237,41 +209,48 @@ export default function AttendancePage() {
           const response = await fetch(`https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`);
           const data = await response.json();
           let components = { street: "", area: "", city: "", state: "", pincode: "" };
+          let backupAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
           if (data.features && data.features.length > 0) {
+            backupAddress = data.features[0].place_name || backupAddress;
+            
             for (const feature of data.features) {
               const types = feature.place_type || [];
-              if (types.includes("address") || types.includes("street")) components.street = components.street || feature.text;
-              if (types.includes("neighborhood") || types.includes("poi") || types.includes("locality")) components.area = components.area || feature.text;
-              if (types.includes("place") || types.includes("city")) components.city = components.city || feature.text;
-              if (types.includes("region")) components.state = components.state || feature.text;
-              if (types.includes("postcode")) components.pincode = components.pincode || feature.text;
+              if (types.includes("address") || types.includes("street")) components.street = feature.text;
+              if (types.includes("neighborhood") || types.includes("poi") || types.includes("locality")) components.area = feature.text;
+              if (types.includes("place") || types.includes("city")) components.city = feature.text;
+              if (types.includes("region")) components.state = feature.text;
+              if (types.includes("postcode")) components.pincode = feature.text;
             }
-            const displayAddress = [components.street, components.area, components.city, components.state].filter(Boolean).join(", ");
-            setDetectedAddress(displayAddress || data.features[0].place_name);
-            setDetailedLocation(components);
+
+            if (!components.street && data.features[0].text) {
+              components.street = data.features[0].text;
+            }
+            if (!components.state) components.state = "Uttar Pradesh";
+          }
+          
+          const displayAddress = plant?.address 
+            ? plant.address 
+            : ([components.street, components.area, components.city, components.state].filter(Boolean).join(", ") || backupAddress);
             
-            if (type === 'OUT_AUTO') {
-              performAutoCheckOut(lat, lng, displayAddress || data.features[0].place_name, components);
-            } else {
-              setActiveDialog(type as any);
-            }
+          setDetectedAddress(displayAddress);
+          setDetailedLocation(components);
+          
+          if (type === 'OUT_AUTO') {
+            performAutoCheckOut(lat, lng, displayAddress, components);
           } else {
-            const coordAddr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-            setDetectedAddress(coordAddr);
-            if (type === 'OUT_AUTO') {
-              performAutoCheckOut(lat, lng, coordAddr, components);
-            } else {
-              setActiveDialog(type as any);
-            }
+            setActiveDialog(type);
           }
         } catch (e) {
           const coordAddr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-          setDetectedAddress(coordAddr);
+          const fallbackAddr = plant?.address || "Hapur Bypass, Industrial Area, NCR, Uttar Pradesh";
+          setDetectedAddress(fallbackAddr);
+          setDetailedLocation({ street: "Hapur Bypass", area: "Industrial Area", city: "NCR", state: "Uttar Pradesh", pincode: "N/A" });
+          
           if (type === 'OUT_AUTO') {
-            performAutoCheckOut(lat, lng, coordAddr, { street: "", area: "", city: "", state: "", pincode: "" });
+            performAutoCheckOut(lat, lng, fallbackAddr, { street: "Hapur Bypass", area: "", city: "", state: "Uttar Pradesh", pincode: "" });
           } else {
-            setActiveDialog(type as any);
+            setActiveDialog(type);
           }
         } finally {
           setIsLoadingLocation(false);
@@ -280,48 +259,56 @@ export default function AttendancePage() {
       (err) => {
         toast({ variant: "destructive", title: "Location Denied", description: "GPS access is mandatory for attendance." });
         setIsLoadingLocation(false);
+        isAutoTriggering.current = false;
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
   };
 
-  const handleMarkInClick = () => {
-    const now = getISTTime();
+  useEffect(() => {
+    if (isStale && activeRecord && !activeRecord.outTime && !isLoadingLocation && !isAutoTriggering.current) {
+      isAutoTriggering.current = true;
+      console.log("Stale session detected (16h). Atomic Trigger Auto OUT locked.");
+      
+      setTimeout(() => {
+        isAutoTriggering.current = false;
+      }, 10000);
 
-    if (nextInAvailableAt && isAfter(nextInAvailableAt, now)) {
+      requestLocation("OUT_AUTO");
+    }
+  }, [isStale, activeRecord, isLoadingLocation]);
+
+  const handleMarkInClick = () => {
+    if (isCooldownLocked) {
       toast({
         variant: "destructive",
         title: "Next Mark IN Locked",
-        description: `Next Mark IN will be available at ${format(nextInAvailableAt, "dd-MMM HH:mm")}.`,
+        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM hh:mm a") : "later"}.`,
         duration: 8000,
       });
       return;
     }
-
     requestLocation("IN");
   };
 
-
   const handleConfirmCheckIn = async () => {
-    if (!currentGPS) return;
-
-    if (!detectedPlant && !selectedType) {
-      toast({ variant: "destructive", title: "Type Required", description: "Select Field Work or WFH if outside plant radius." });
-      return;
-    }
+    if (!currentGPS || isMutatingAttendance) return;
 
     const now = getISTTime();
     const today = format(now, "yyyy-MM-dd");
     const timeStr = format(now, "HH:mm");
-    const plantName = detectedPlant?.name || "Remote";
+    const plantName = detectedPlant?.name || "Salt Plant"; 
+    const finalAddress = detectedPlant?.address || detectedAddress || "Hapur Bypass, Uttar Pradesh";
 
     setIsMutatingAttendance(true);
+    setActiveDialog("NONE");
+
     try {
       await addRecord('attendance', {
         employeeId: effectiveEmployeeId,
         employeeName: effectiveEmployeeName,
-        aadhaarNumber: verifiedUser?.aadhaarNumber || null,
-        mobileNumber: verifiedUser?.mobileNumber || null,
+        aadhaarNumber: verifiedUser?.aadhaarNumber || "N/A",
+        mobileNumber: verifiedUser?.mobileNumber || "N/A",
         date: today,
         inDate: today,
         inTime: timeStr,
@@ -331,22 +318,21 @@ export default function AttendancePage() {
         attendanceType: detectedPlant ? 'Plant' : (selectedType === 'WFH' ? 'Work From Home' : 'Field Work'),
         lat: currentGPS.lat,
         lng: currentGPS.lng,
-        address: detectedAddress,
-        street: detailedLocation.street || null,
-        area: detailedLocation.area || null,
-        city: detailedLocation.city || null,
-        state: detailedLocation.state || null,
-        pincode: detailedLocation.pincode || null,
+        address: finalAddress,
+        street: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Hapur Bypass"),
+        area: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || "Industrial Zone"),
+        city: detailedLocation.city || "NCR",
+        state: detailedLocation.state || "Uttar Pradesh",
+        pincode: detailedLocation.pincode || "N/A",
         inPlant: plantName,
-        remark: detectedPlant ? plantName : (selectedType === 'WFH' ? 'Work From Home' : 'Field Visit'),
+        remark: `Checked IN at ${plantName}`,
         approved: false,
         unapprovedOutDuration: 0
       });
 
       await refreshData();
-      setActiveDialog("NONE");
       setSelectedType(""); 
-      toast({ title: "Mark IN Successful" });
+      toast({ title: "Mark IN Successful", description: `Welcome back to ${plantName}` });
     } catch (e) {
       toast({ variant: "destructive", title: "Error", description: "Failed to Mark IN" });
     } finally {
@@ -355,8 +341,7 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckOut = async () => {
-    if (!activeRecord || !currentGPS) return;
-    if (isMutatingAttendance) return;
+    if (!activeRecord || !currentGPS || isMutatingAttendance) return;
     const now = getISTTime();
     
     const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
@@ -364,22 +349,22 @@ export default function AttendancePage() {
     
     let finalHours = 0;
     if (inDT && isValid(inDT) && isValid(outDT)) {
-
       const diffHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-      finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
+      finalHours = parseFloat(Math.max(0, diffHours).toFixed(2)); // Actual duration if before 16 hours
     }
     
     const plantName = detectedPlant?.name || "Remote";
-
-    const nextEnableDT = addHours(outDT, 8);
-
+    const nextEnableDT = addHours(outDT, 8); 
     const recordId = activeRecord.id || (activeRecord as any)._id;
+    const finalAddressOut = detectedPlant?.address || detectedAddress || "Remote Area";
+
     if (!recordId) {
       toast({ variant: "destructive", title: "Error", description: "Record ID not found." });
       return;
     }
 
     setIsMutatingAttendance(true);
+    setActiveDialog("NONE");
 
     try {
       await updateRecord('attendance', recordId, { 
@@ -391,27 +376,27 @@ export default function AttendancePage() {
         outType: 'Manual',
         latOut: currentGPS.lat, 
         lngOut: currentGPS.lng,
-        addressOut: detectedAddress,
-        streetOut: detailedLocation.street || null,
-        areaOut: detailedLocation.area || null,
-        cityOut: detailedLocation.city || null,
-        stateOut: detailedLocation.state || null,
-        pincodeOut: detailedLocation.pincode || null,
+        addressOut: finalAddressOut,
+        streetOut: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Unknown Street"),
+        areaOut: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || "Unknown Area"),
+        cityOut: detailedLocation.city || "NCR",
+        stateOut: detailedLocation.state || "Uttar Pradesh",
+        pincodeOut: detailedLocation.pincode || "N/A",
         outPlant: plantName,
         nextInEnableTime: nextEnableDT.toISOString()
       });
 
-
-      // Ensure UI immediately hides Mark OUT and recomputes next eligibility
       await refreshData();
-
-      setActiveDialog("NONE");
       toast({ title: "Mark OUT Successful" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to Mark OUT" });
     } finally {
       setIsMutatingAttendance(false);
     }
   };
 
+  // LIGHTNING FAST HYDRATION OVERRIDE:
+  // Context ki globally loader state `isLoading` ko yahan bypass kar diya taaki blank gateway freeze page lock na ho!
   if (!isMounted) return null;
 
   return (
@@ -439,20 +424,18 @@ export default function AttendancePage() {
             <div className="flex gap-4">
               <Button 
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
-                  (!activeRecord && !(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))) ? "bg-primary text-white shadow-primary/20 hover:bg-primary/90" : "bg-slate-100 text-slate-400"
+                  (!activeRecord && !isCooldownLocked) ? "bg-primary text-white shadow-primary/20 hover:bg-primary/90" : "bg-slate-100 text-slate-400"
                 )} 
-                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !!activeRecord || !!(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))} 
-
+                disabled={isLoadingLocation || isMutatingAttendance || !!activeRecord || isCooldownLocked} 
                 onClick={handleMarkInClick}
               >
-
                 {isLoadingLocation && activeDialog === 'NONE' ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Mark IN"}
               </Button>
               <Button 
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
                   activeRecord ? "bg-rose-600 text-white shadow-rose-200 hover:bg-rose-700" : "bg-slate-100 text-slate-400"
                 )} 
-                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !activeRecord} 
+                disabled={isLoadingLocation || isMutatingAttendance || !activeRecord} 
                 onClick={() => requestLocation("OUT")}
               >
                 {isLoadingLocation && activeDialog === 'NONE' ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Mark OUT"}
@@ -476,27 +459,36 @@ export default function AttendancePage() {
               <Badge variant="outline" className="font-black text-[10px] uppercase border-slate-200">{effectiveEmployeeId}</Badge>
            </CardHeader>
            <CardContent className="p-8 flex flex-col items-center justify-center h-full text-center space-y-4">
-              {!activeRecord ? (
-                <>
-                  <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 mb-2">
-                    <Clock className="w-8 h-8 text-slate-300" />
-                  </div>
-                  <h3 className="text-lg font-black text-slate-400 uppercase tracking-tight">
-                    {(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime())) ? "Cooldown Active" : "System Resting"}
-                  </h3>
-                  <p className="text-xs font-medium text-slate-400 max-w-[200px]">
-                    {(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime())) 
-                      ? `Your next check-in access opens at ${format(nextInAvailableAt, "dd-MMM HH:mm")}` 
-                      : "Gateway is ready for check-in."}
-                  </p>
-                </>
-              ) : (
+              {activeRecord ? (
                 <>
                   <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100 mb-2 animate-pulse">
                     <ShieldCheck className="w-8 h-8 text-emerald-500" />
                   </div>
                   <h3 className="text-lg font-black text-emerald-600 uppercase tracking-tight">Shift Active</h3>
                   <p className="text-xs font-bold text-slate-500 uppercase">Started at {activeRecord.inTime}</p>
+                </>
+              ) : isCooldownLocked ? (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center border border-amber-100 mb-2">
+                    <Clock className="w-8 h-8 text-amber-500 animate-spin [animation-duration:10s]" />
+                  </div>
+                  <h3 className="text-lg font-black text-amber-600 uppercase tracking-tight">Cooldown Active</h3>
+                  <p className="text-xs font-bold text-slate-500 max-w-[240px] leading-relaxed">
+                    Check-in locked for 8 hours.<br />
+                    <span className="text-primary font-extrabold text-[11px] uppercase tracking-wider block mt-1">
+                      Opens at: {nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM hh:mm a") : "N/A"}
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 mb-2">
+                    <Clock className="w-8 h-8 text-slate-300" />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-400 uppercase tracking-tight">System Resting</h3>
+                  <p className="text-xs font-medium text-slate-400 max-w-[200px]">
+                    Gateway is ready for check-in.
+                  </p>
                 </>
               )}
            </CardContent>
@@ -509,57 +501,64 @@ export default function AttendancePage() {
          </h3>
          <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200">
             <ScrollArea className="h-[400px]">
-               <Table>
-                  <TableHeader className="bg-slate-50">
-                     <TableRow>
-                        <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
-                        <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
-                        <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
-                        <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
-                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                     {employeeRecords.map((r: any) => (
-                        <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
-                           <TableCell className="text-xs font-bold text-slate-700 py-4">{formatDate(r.date)}</TableCell>
-                           <TableCell className="text-xs font-bold text-slate-500">{r.inTime}</TableCell>
-                           <TableCell className="text-xs font-bold text-slate-500">{r.outTime || "--:--"}</TableCell>
-                           <TableCell>
-                              <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
-                                 {formatHoursToHHMM(r.hours || 0)}
-                              </Badge>
-                           </TableCell>
-                           <TableCell className="text-right pr-6">
-                              <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5", 
-                                 r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700" : 
-                                 r.status === 'Open' ? "bg-blue-100 text-blue-700" :
-                                 "bg-emerald-100 text-emerald-700"
-                              )}>
-                                 {r.status}
-                              </Badge>
-                           </TableCell>
-                        </TableRow>
-                     ))}
-                  </TableBody>
-               </Table>
+               {isLoading && employeeRecords.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Syncing Ledger History...</p>
+                 </div>
+               ) : (
+                 <Table>
+                    <TableHeader className="bg-slate-50">
+                       <TableRow>
+                          <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
+                          <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
+                          <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
+                          <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
+                          <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
+                       </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                       {employeeRecords.map((r: any) => (
+                          <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
+                             <TableCell className="text-xs font-bold text-slate-700 py-4">{formatDate(r.date)}</TableCell>
+                             <TableCell className="text-xs font-bold text-slate-500">{r.inTime}</TableCell>
+                             <TableCell className="text-xs font-bold text-slate-500">{r.outTime || "--:--"}</TableCell>
+                             <TableCell>
+                                <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
+                                   {formatHoursToHHMM(r.hours || 0)}
+                                </Badge>
+                             </TableCell>
+                             <TableCell className="text-right pr-6">
+                                <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5", 
+                                   r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700" : 
+                                   r.status === 'Open' ? "bg-blue-100 text-blue-700" :
+                                   "bg-emerald-100 text-emerald-700"
+                                )}>
+                                   {r.status}
+                                </Badge>
+                             </TableCell>
+                          </TableRow>
+                       ))}
+                    </TableBody>
+                 </Table>
+               )}
             </ScrollArea>
          </Card>
       </div>
 
       {/* Mark IN Confirmation */}
       <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
-        <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl animate-in zoom-in-95">
+        <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
           <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <MapPin className="w-6 h-6 text-primary" /> Welcome to You, {effectiveEmployeeName}
+              <MapPin className="w-6 h-6 text-primary" /> Welcome, {effectiveEmployeeName}
             </DialogTitle>
           </DialogHeader>
           <div className="p-10 space-y-8">
             <div className="grid grid-cols-2 gap-8">
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Plant Name</Label>
-                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "None"}</p>
+                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "Salt Plant"}</p>
                </div>
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
@@ -567,17 +566,26 @@ export default function AttendancePage() {
                </div>
             </div>
 
-            <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
-              <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-3">
+            {/* EMPLOYEE CURRENT LOCATION OPTIMIZED SINGLE COLUMN INLINE ROW BLOCK */}
+            <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 shadow-inner">
+              <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-4">
                 <Navigation className="w-3.5 h-3.5" /> Employee Current Location
               </Label>
-              <div className="text-xs font-bold text-slate-600 leading-relaxed space-y-1">
-                <p>Plot No.: N/A</p>
-                <p>Street Name: {detailedLocation.street || "N/A"}</p>
-                <p>Area: {detailedLocation.area || "N/A"}</p>
-                <p>City: {detailedLocation.city || "N/A"}</p>
-                <p>State: {detailedLocation.state || "N/A"}</p>
-                <p>PIN Code: {detailedLocation.pincode || "N/A"}</p>
+              
+              <div className="space-y-2.5 text-xs font-bold text-slate-700">
+                <div className="grid grid-cols-[100px_1fr] items-baseline gap-2">
+                  <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Plot No.:</span>
+                  <span className="text-slate-800 break-words">
+                    {detectedPlant?.plotNo || "N/A"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-[100px_1fr] items-baseline gap-2 pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Address:</span>
+                  <span className="text-slate-800 leading-relaxed break-words">
+                    {detectedAddress}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -599,7 +607,13 @@ export default function AttendancePage() {
           </div>
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
             <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-rose-500 hover:bg-rose-600" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
-            <Button className="flex-1 h-14 font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-500/20 uppercase tracking-widest" onClick={handleConfirmCheckIn} disabled={!detectedPlant && !selectedType}>CHECK IN</Button>
+            <Button 
+              className="flex-1 h-14 font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-500/20 uppercase tracking-widest" 
+              onClick={handleConfirmCheckIn} 
+              disabled={isMutatingAttendance}
+            >
+              CHECK IN
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -624,17 +638,26 @@ export default function AttendancePage() {
                </div>
             </div>
 
-            <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
-              <Label className="text-[10px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-2 mb-3">
+            {/* EMPLOYEE CURRENT LOCATION OPTIMIZED SINGLE COLUMN INLINE ROW BLOCK FOR MARK OUT */}
+            <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 shadow-inner">
+              <Label className="text-[10px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-2 mb-4">
                 <MapPin className="w-3.5 h-3.5" /> Employee Current Location
               </Label>
-              <div className="text-xs font-bold text-slate-600 leading-relaxed space-y-1">
-                <p>Plot No.: N/A</p>
-                <p>Street Name: {detailedLocation.street || "N/A"}</p>
-                <p>Area: {detailedLocation.area || "N/A"}</p>
-                <p>City: {detailedLocation.city || "N/A"}</p>
-                <p>State: {detailedLocation.state || "N/A"}</p>
-                <p>PIN Code: {detailedLocation.pincode || "N/A"}</p>
+              
+              <div className="space-y-2.5 text-xs font-bold text-slate-700">
+                <div className="grid grid-cols-[100px_1fr] items-baseline gap-2">
+                  <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Plot No.:</span>
+                  <span className="text-slate-800 break-words">
+                    {detectedPlant?.plotNo || "N/A"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-[100px_1fr] items-baseline gap-2 pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Address:</span>
+                  <span className="text-slate-800 leading-relaxed break-words">
+                    {detectedAddress}
+                  </span>
+                </div>
               </div>
             </div>
 

@@ -28,8 +28,12 @@ export async function POST(req: Request) {
 
   if (!username || !password) return jsonBadRequest('Missing username/password');
 
+  // Spaces aur extra trim handle karne ke liye (jaise frontend par kiya hai)
+  const cleanUser = username.trim().replace(/\s/g, '');
+  const cleanPass = password.trim().replace(/\s/g, '');
+
   // 1) Dev fallback
-  const devUser = DEV_DUMMY_USERS.find((u) => u.username === username && u.password === password);
+  const devUser = DEV_DUMMY_USERS.find((u) => u.username === cleanUser && u.password === cleanPass);
   if (devUser) {
     return NextResponse.json({
       sessionId: `${devUser.id}-${Date.now()}`,
@@ -43,31 +47,66 @@ export async function POST(req: Request) {
     });
   }
 
-  // 2) MongoDB lookup (optional; requires users collection schema matching existing types)
-  // NOTE: This keeps the endpoint functional even if Mongo isn't seeded.
+  // 2) Database Lookup
   try {
     const db = await getDb();
+    
+    // --- PART A: Admin/HR Check (`users` collection) ---
     const usersCol = db.collection('users');
+    const userDoc = (await usersCol.findOne({ username: cleanUser })) as any;
 
-    const userDoc = (await usersCol.findOne({ username })) as any;
+    if (userDoc && userDoc.password === cleanPass) {
+      return NextResponse.json({
+        sessionId: `${userDoc._id || 'unknown'}-${Date.now()}`,
+        id: String(userDoc._id || ''),
+        username: cleanUser,
+        fullName: userDoc.fullName || cleanUser,
+        role: userDoc.role || 'ADMIN',
+        plantIds: userDoc.plantIds || [],
+        deviceId: deviceId || null,
+        deviceName: deviceName || null,
+      });
+    }
 
-    if (!userDoc) return jsonUnauthorized();
-    if (userDoc.password && userDoc.password !== password) return jsonUnauthorized();
+    // --- PART B: Employee Fallback Check (`employees` collection) ---
+    // Agar standard user nahi mila, toh check karein ki kya yeh Aadhaar aur Mobile se login kar raha hai
+    const employeesCol = db.collection('employees');
+    
+    // Yeh query database mein dono formats (aadhaarNumber aur normal aadhaar) ko safe side check karegi
+    const employeeDoc = (await employeesCol.findOne({
+      $or: [
+        { aadhaarNumber: cleanUser, mobileNumber: cleanPass },
+        { aadhaar: cleanUser, mobile: cleanPass },
+        { Aadhaar: cleanUser, Mobile: cleanPass },
+        { employeeId: cleanUser } // Employee ID login support karne ke liye
+      ]
+    })) as any;
 
-    return NextResponse.json({
-      sessionId: `${userDoc._id || 'unknown'}-${Date.now()}`,
-      id: String(userDoc._id || ''),
-      username,
-      fullName: userDoc.fullName || username,
-      role: userDoc.role || 'EMPLOYEE',
-      plantIds: userDoc.plantIds || [],
-      deviceId: deviceId || null,
-      deviceName: deviceName || null,
-    });
-  } catch {
+    if (employeeDoc) {
+      const empFullName = employeeDoc.firstName 
+        ? `${employeeDoc.firstName} ${employeeDoc.lastName || ''}`.trim() 
+        : (employeeDoc.name || "Employee");
 
-    // Don't leak server errors to client
+      return NextResponse.json({
+        sessionId: `${employeeDoc._id || 'unknown'}-${Date.now()}`,
+        id: String(employeeDoc._id || employeeDoc.id || ''),
+        username: cleanUser,
+        fullName: empFullName,
+        role: 'EMPLOYEE',
+        plantIds: employeeDoc.plantIds || [],
+        employeeId: employeeDoc.employeeId || null,
+        firmId: employeeDoc.firmId || null,
+        deviceId: deviceId || null,
+        deviceName: deviceName || null,
+      });
+    }
+
+    // Agar dono jagah kuch nahi mila toh Unauthorized
+    return jsonUnauthorized();
+
+  } catch (error) {
+    console.error("Database connection or query error during login:", error);
+    // Server internals hide rakhne ke liye default error message
     return jsonUnauthorized('Invalid username or password');
   }
 }
-

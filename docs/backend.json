@@ -351,6 +351,14 @@
           "type": "string",
           "description": "Address captured from Google API when the employee marked 'OUT', if available."
         },
+        "workType": {
+          "type": "string",
+          "description": "The attendance type or work location (Office, WFH, Field Work)."
+        },
+        "outType": {
+          "type": "string",
+          "description": "Indicates whether the mark out was manual or automatic. Defaults to Manual."
+        },
         "isApproved": {
           "type": "boolean",
           "description": "A flag indicating if the attendance record has been approved by an administrator."

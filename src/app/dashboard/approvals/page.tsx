@@ -9,11 +9,11 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Dialog, 
   DialogContent, 
@@ -36,31 +36,19 @@ import {
   Search, 
   XCircle, 
   RotateCcw,
-  MapPin,
-  Navigation,
-  Filter,
-  ShieldCheck,
   Building2,
-  UserCheck,
   Pencil,
-  ArrowRightCircle,
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  MessageSquare,
-  UserX,
-  CheckCircle,
   Clock,
-  AlertCircle,
-  ClipboardList,
-  CheckCircle2,
-  Factory
+  UserCheck,
+  AlertCircle
 } from "lucide-react";
-import { cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM, parseDateTime, isEmployeeActiveOnDate } from "@/lib/utils";
+import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, subDays, isValid, differenceInMinutes, isWithinInterval, startOfDay, endOfMonth, isSameDay } from "date-fns";
+import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, isValid, startOfDay, endOfMonth } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 
 const ITEMS_PER_PAGE = 15;
 const PROJECT_START_DATE_STR = "2026-04-01";
@@ -78,22 +66,19 @@ const generateFilterMonths = () => {
   return options;
 };
 
-// Helper for location display priority (Street + City + State or Coordinates)
 const formatLocation = (address?: string, lat?: number, lng?: number) => {
   if (address && address !== "Location Not Available" && address.trim() !== "") {
     const isCoordinateString = /^-?\d+\.\d+, -?\d+\.\d+$/.test(address);
     if (!isCoordinateString) return address;
   }
-  
   if (lat !== undefined && lng !== undefined && lat !== 0 && lng !== 0) {
     return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   }
-  
   return address || "Location Not Available";
 };
 
 export default function ApprovalsPage() {
-  const { attendanceRecords, employees, updateRecord, addRecord, verifiedUser, holidays, plants, leaveRequests } = useData();
+  const { attendanceRecords = [], employees = [], updateRecord, addRecord, verifiedUser, holidays = [], plants = [], leaveRequests = [] } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
@@ -104,7 +89,6 @@ export default function ApprovalsPage() {
   const [pendingPage, setPendingPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
 
-  // Modals
   const [selectedAttendance, setSelectedAttendance] = useState<any>(null);
   const [isApproveConfirmOpen, setIsApproveConfirmOpen] = useState(false);
   const [isAttendanceRejectOpen, setIsAttendanceRejectOpen] = useState(false);
@@ -150,7 +134,8 @@ export default function ApprovalsPage() {
 
   const approvedLeavesMap = useMemo(() => {
     const map = new Map<string, any>();
-    leaveRequests.filter(l => l.status === 'APPROVED').forEach(l => {
+    if (!leaveRequests) return map;
+    leaveRequests.filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
       const start = startOfDay(parseISO(l.fromDate));
       const end = startOfDay(parseISO(l.toDate));
       if (!isValid(start) || !isValid(end)) return;
@@ -163,7 +148,7 @@ export default function ApprovalsPage() {
 
   const getCalculatedStatus = (dateStr: string, record: any, empId: string) => {
     const isSun = isSunday(parseISO(dateStr));
-    const customHoliday = holidays.find(h => h.date === dateStr && !h.auto);
+    const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
     const approvedLeave = approvedLeavesMap.get(`${empId}:${dateStr}`);
 
     if (record && record.inTime) {
@@ -179,17 +164,16 @@ export default function ApprovalsPage() {
     return "Absent";
   };
 
+  // FIXED & RESTORED ALL ATTENDANCE STRUCTURAL LIST DATA LOOKUP BOUNDS
   const allAttendanceList = useMemo(() => {
     if (!isMounted) return [];
     const now = new Date();
-    const employeeMap = new Map(employees.map(e => [e.employeeId, e]));
+    const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
     
     const actual = (attendanceRecords || []).filter(rec => {
       const emp = employeeMap.get(rec.employeeId);
       if (!emp) return false;
-      
       if (!isEmployeeActiveOnDate(emp, rec.date)) return false;
-
       if (!userAssignedPlantIds) return true;
       return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
     }).map(rec => {
@@ -204,11 +188,11 @@ export default function ApprovalsPage() {
         outDate: rec.outDate || rec.date,
         leaveType: leave ? leave.purpose : "-",
         leaveStatus: leave ? "Approved" : "-",
-        workingHourDisplay: formatHoursToHHMM(rec.hours)
+        workingHourDisplay: formatHoursToHHMM(rec.hours || 0)
       };
       
       if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
-        const inDT = parseDateTime(processedRec.inDate, rec.inTime);
+        const inDT = parseISO(rec.inDateTime || `${processedRec.inDate}T${rec.inTime}:00`);
         if (inDT && isValid(inDT)) {
           const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
           if (diffHours >= 16) {
@@ -225,10 +209,7 @@ export default function ApprovalsPage() {
 
     const missing: any[] = [];
     const projectStartDate = parseISO(PROJECT_START_DATE_STR);
-    
-    const handledRecordsKeySet = new Set(
-      actual.map(r => `${r.employeeId}:${r.date}`)
-    );
+    const handledRecordsKeySet = new Set(actual.map(r => `${r.employeeId}:${r.date}`));
 
     if (isBefore(projectStartDate, now)) {
       let generationEndDate = now;
@@ -244,7 +225,7 @@ export default function ApprovalsPage() {
         end: generationEndDate
       }).map(d => format(d, "yyyy-MM-dd"));
       
-      employees.forEach(emp => {
+      (employees || []).forEach(emp => {
         if (userAssignedPlantIds) {
           const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
           if (!hasAccess) return;
@@ -252,7 +233,6 @@ export default function ApprovalsPage() {
 
         intervalDates.forEach(dStr => {
           if (!isEmployeeActiveOnDate(emp, dStr)) return;
-
           const key = `${emp.employeeId}:${dStr}`;
           if (!handledRecordsKeySet.has(key)) {
             const displayStatus = getCalculatedStatus(dStr, null, emp.employeeId);
@@ -261,14 +241,14 @@ export default function ApprovalsPage() {
             missing.push({ 
               id: `v-abs-${emp.employeeId}-${dStr}`, 
               employeeId: emp.employeeId, 
-              employeeName: emp.name, 
+              employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name, 
               date: dStr, 
               status: 'ABSENT', 
               displayStatus, 
               attendanceType: 'ABSENT', 
               approved: false, 
-              dept: emp.department, 
-              desig: emp.designation, 
+              dept: emp.department || "Operations", 
+              desig: emp.designation || "Staff", 
               isVirtual: true, 
               hours: 0, 
               workingHourDisplay: "00:00",
@@ -306,20 +286,31 @@ export default function ApprovalsPage() {
     return combined;
   }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants, approvedLeavesMap, historyMonthFilter]);
 
+  // FIXED RE-ACTIVATED SUB-QUEUE FILTERS FOR PENDING AND HISTORY SECTIONS
   const pendingAttendanceList = useMemo(() => {
-    let list = allAttendanceList.filter(rec => !rec.approved);
-    
-    if (selectedStatusFilter !== "ALL") {
-      list = list.filter(rec => rec.displayStatus === selectedStatusFilter);
-    }
-    
-    return list.sort((a, b) => b.date.localeCompare(a.date));
+    return allAttendanceList.filter(rec => {
+      // Virtual logs and non-approved logs are treated as pending queues
+      const matchesApproval = !rec.approved;
+      const matchesStatus = selectedStatusFilter === "ALL" ? true : rec.displayStatus === selectedStatusFilter;
+      return matchesApproval && matchesStatus;
+    }).sort((a, b) => b.date.localeCompare(a.date));
   }, [allAttendanceList, selectedStatusFilter]);
 
   const historyAttendanceList = useMemo(() => {
-    return allAttendanceList.filter(rec => rec.approved)
-      .sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
-  }, [allAttendanceList]);
+    return allAttendanceList.filter(rec => {
+      const matchesApproval = rec.approved;
+      if (!matchesApproval) return false;
+      
+      // History specific month boundaries configuration
+      if (historyMonthFilter && historyMonthFilter !== 'all') {
+        const [mmm, yy] = historyMonthFilter.split('-');
+        const recDate = parseISO(rec.date);
+        const filterDate = parseISO(`20${yy}-${mmm}-01`);
+        return recDate.getMonth() === filterDate.getMonth() && recDate.getFullYear() === filterDate.getFullYear();
+      }
+      return true;
+    }).sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
+  }, [allAttendanceList, historyMonthFilter]);
 
   const currentData = useMemo(() => {
     const list = viewMode === 'pending' ? pendingAttendanceList : historyAttendanceList;
@@ -347,7 +338,7 @@ export default function ApprovalsPage() {
       const nowIso = new Date().toISOString();
 
       if (rec.isVirtual) {
-        addRecord('attendance', { 
+        await addRecord('attendance', { 
           employeeId: rec.employeeId, 
           employeeName: rec.employeeName, 
           date: rec.date, 
@@ -369,7 +360,7 @@ export default function ApprovalsPage() {
         let finalHours = rec.hours || 0;
 
         if (rec.autoCheckout && !rec.outTime) {
-          const inDT = parseDateTime(rec.inDate || rec.date, rec.inTime || "");
+          const inDT = parseISO(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}:00`);
           if (inDT && isValid(inDT)) {
             const autoOutDT = addHours(inDT, 16);
             finalOutTime = format(autoOutDT, "HH:mm");
@@ -378,7 +369,7 @@ export default function ApprovalsPage() {
           }
         }
 
-        updateRecord('attendance', rec.id, { 
+        await updateRecord('attendance', rec.id || rec._id, { 
           approved: true, 
           approvedBy: approverName, 
           approvalActionDate: nowIso,
@@ -401,7 +392,7 @@ export default function ApprovalsPage() {
   const handleOpenEditModal = (rec: any) => {
     setSelectedAttendance(rec);
     setEditData({
-      plant: rec.inPlant || "",
+      plant: rec.inPlant || "Salt Plant",
       inDate: rec.inDate || rec.date,
       inTime: rec.inTime || "",
       outDate: rec.outDate || rec.date,
@@ -413,14 +404,13 @@ export default function ApprovalsPage() {
 
   const handleUpdateAttendance = async () => {
     if (!selectedAttendance || isProcessing) return;
-
     if (!editData.plant || !editData.inDate || !editData.inTime || !editData.outDate || !editData.outTime || !editData.remark.trim()) {
       toast({ variant: "destructive", title: "Incomplete Form", description: "All fields including Remark are mandatory." });
       return;
     }
 
-    const inDT = parseDateTime(editData.inDate, editData.inTime);
-    const outDT = parseDateTime(editData.outDate, editData.outTime);
+    const inDT = parseISO(`${editData.inDate}T${editData.inTime}:00`);
+    const outDT = parseISO(`${editData.outDate}T${editData.outTime}:00`);
 
     if (!inDT || !outDT || !isValid(inDT) || !isValid(outDT)) {
       toast({ variant: "destructive", title: "Invalid Date Format" });
@@ -432,15 +422,9 @@ export default function ApprovalsPage() {
       return;
     }
 
-    const diffMs = outDT.getTime() - inDT.getTime();
-    const diffHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
-
-    if (isNaN(diffHours)) {
-      toast({ variant: "destructive", title: "Calculation Error", description: "Could not calculate working hours." });
-      return;
-    }
-
+    const diffHours = parseFloat(((outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60)).toFixed(2));
     setIsProcessing(true);
+
     try {
       const modifierName = verifiedUser?.fullName || "HR_ADMIN";
       const updatePayload: any = {
@@ -452,18 +436,11 @@ export default function ApprovalsPage() {
         hours: diffHours,
         remark: editData.remark,
         editedBy: modifierName,
-        editedAt: new Date().toISOString(),
-        ...(!selectedAttendance.originalInTime && {
-          originalInTime: selectedAttendance.inTime || null,
-          originalOutTime: selectedAttendance.outTime || null,
-          originalInDate: selectedAttendance.inDate || selectedAttendance.date || null,
-          originalOutDate: selectedAttendance.outDate || selectedAttendance.date || null,
-          originalPlant: selectedAttendance.inPlant || null
-        })
+        editedAt: new Date().toISOString()
       };
 
       if (selectedAttendance.isVirtual) {
-        addRecord('attendance', {
+        await addRecord('attendance', {
           ...updatePayload,
           employeeId: selectedAttendance.employeeId,
           employeeName: selectedAttendance.employeeName,
@@ -475,21 +452,20 @@ export default function ApprovalsPage() {
           unapprovedOutDuration: 0
         });
       } else {
-        updateRecord('attendance', selectedAttendance.id, updatePayload);
+        await updateRecord('attendance', selectedAttendance.id || selectedAttendance._id, updatePayload);
       }
 
-      toast({ title: "Attendance Entry Updated", description: "Record modified with audit trail." });
+      toast({ title: "Attendance Entry Updated" });
       setIsEditModalOpen(false);
       setSelectedAttendance(null);
     } catch (e) {
-      console.error("Update failed", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to update record." });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handlePostAttendanceReject = () => {
+  const handlePostAttendanceReject = async () => {
     if (!selectedAttendance || !attendanceRejectReason.trim() || isProcessing) return;
     setIsProcessing(true);
     try {
@@ -497,7 +473,7 @@ export default function ApprovalsPage() {
       const nowIso = new Date().toISOString();
 
       if (selectedAttendance.isVirtual) {
-        addRecord('attendance', { 
+        await addRecord('attendance', { 
           employeeId: selectedAttendance.employeeId, 
           employeeName: selectedAttendance.employeeName, 
           date: selectedAttendance.date, 
@@ -511,7 +487,7 @@ export default function ApprovalsPage() {
           approvalActionDate: nowIso
         });
       } else {
-        updateRecord('attendance', selectedAttendance.id, { 
+        await updateRecord('attendance', selectedAttendance.id || selectedAttendance._id, { 
           approved: false, 
           remark: attendanceRejectReason, 
           status: 'ABSENT', 
@@ -523,19 +499,25 @@ export default function ApprovalsPage() {
       setIsAttendanceRejectOpen(false);
       setAttendanceRejectReason("");
       setSelectedAttendance(null);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to reject record." });
     } finally { setIsProcessing(false); }
   };
 
-  const handleRestoreAttendance = (rec: any) => {
+  const handleRestoreAttendance = async (rec: any) => {
     if (rec.isVirtual) return; 
-    updateRecord('attendance', rec.id, { 
-      approved: false, 
-      remark: null, 
-      approvedBy: null,
-      editedBy: null,
-      approvalActionDate: null 
-    });
-    toast({ title: "Record Restored", description: "Moved back to Pending queue." });
+    try {
+      await updateRecord('attendance', rec.id || rec._id, { 
+        approved: false, 
+        remark: null, 
+        approvedBy: null,
+        editedBy: null,
+        approvalActionDate: null 
+      });
+      toast({ title: "Record Restored", description: "Moved back to Pending queue." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Failed to restore record." });
+    }
   };
 
   function StandardPaginationFooter({ current, total, onPageChange }: any) {
@@ -553,18 +535,17 @@ export default function ApprovalsPage() {
   if (!isMounted) return null;
 
   return (
-    <div className="space-y-8 pb-12">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-8 pb-12 px-4 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-5">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Staff Attendance Approvals</h1>
-          <p className="text-muted-foreground text-sm font-medium mt-1">Multi-Facility Compliance Oversight</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Staff Attendance Approvals</h1>
+          <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider mt-1">Multi-Facility Compliance Oversight & Session Ledger</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {viewMode === 'pending' && (
-            <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border shadow-sm border-slate-200">
-              <Filter className="w-4 h-4 text-primary ml-2" />
+            <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border shadow-sm">
               <Select value={selectedStatusFilter} onValueChange={setSelectedStatusFilter}>
-                <SelectTrigger className="h-9 w-[200px] border-none font-black text-xs uppercase focus:ring-0">
+                <SelectTrigger className="h-8 w-[180px] border-none font-black text-xs uppercase focus:ring-0 shadow-none bg-transparent">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -574,16 +555,14 @@ export default function ApprovalsPage() {
                   <SelectItem value="Absent" className="font-bold text-xs uppercase">Absent</SelectItem>
                   <SelectItem value="Weekly Off" className="font-bold text-xs uppercase">Weekly Off</SelectItem>
                   <SelectItem value="Holiday" className="font-bold text-xs uppercase">Holiday</SelectItem>
-                  <SelectItem value="Present on Weekly Off" className="font-bold text-xs uppercase">Present on Weekly Off</SelectItem>
-                  <SelectItem value="Present on Holiday" className="font-bold text-xs uppercase">Present on Holiday</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           )}
-          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border shadow-sm border-slate-200">
+          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border shadow-sm">
              <Building2 className="w-4 h-4 text-primary ml-2" />
              <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
-                <SelectTrigger className="h-9 w-[220px] border-none font-black text-xs uppercase focus:ring-0">
+                <SelectTrigger className="h-8 w-[200px] border-none font-black text-xs uppercase focus:ring-0 shadow-none bg-transparent">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -598,81 +577,77 @@ export default function ApprovalsPage() {
       </div>
 
       <div className="flex flex-col md:flex-row items-center gap-4">
-        <div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or ID..." className="pl-10 h-10 bg-white" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v)} className="w-full md:w-auto"><TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[240px]"><TabsTrigger value="pending" className="text-xs font-black">Pending Session</TabsTrigger><TabsTrigger value="history" className="text-xs font-black">History</TabsTrigger></TabsList></Tabs>
-        </div>
+        <div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or Employee ID..." className="pl-10 h-10 bg-white shadow-sm rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v)} className="w-full md:w-auto">
+          <TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl w-[260px]">
+            <TabsTrigger value="pending" className="text-xs font-black uppercase">Pending Logs</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs font-black uppercase">History Queue</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {viewMode === 'history' && (
-        <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-           <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <Select value={historyMonthFilter} onValueChange={setHistoryMonthFilter}>
-                   <SelectTrigger className="h-9 w-[150px] font-black text-xs uppercase bg-slate-50 border-slate-200">
-                      <SelectValue placeholder="Select Month" />
-                   </SelectTrigger>
-                   <SelectContent>
-                      <SelectItem value="all" className="font-bold text-xs">All History</SelectItem>
-                      {filterMonths.map(m => <SelectItem key={m} value={m} className="font-bold text-xs">{m}</SelectItem>)}
-                   </SelectContent>
-                </Select>
-              </div>
-           </div>
-           <Button onClick={() => {}} variant="outline" className="h-10 font-bold border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 px-6">
-              <FileSpreadsheet className="w-4 h-4" /> Export History
-           </Button>
+        <div className="flex justify-between items-center bg-white p-4 rounded-2xl border shadow-sm">
+          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border">
+            <Select value={historyMonthFilter} onValueChange={setHistoryMonthFilter}>
+               <SelectTrigger className="h-7 w-[140px] font-black text-xs uppercase bg-transparent border-none shadow-none focus:ring-0">
+                  <SelectValue placeholder="Select Month" />
+               </SelectTrigger>
+               <SelectContent>
+                  <SelectItem value="all" className="font-bold text-xs">All History</SelectItem>
+                  {filterMonths.map(m => <SelectItem key={m} value={m} className="font-bold text-xs">{m}</SelectItem>)}
+               </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" className="h-10 font-black text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 px-6 rounded-xl uppercase tracking-wider">
+             <FileSpreadsheet className="w-4 h-4" /> Export Ledger csv
+          </Button>
         </div>
       )}
 
-      <Card className="border-slate-200 shadow-sm overflow-hidden">
+      <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
         <CardContent className="p-0">
           <ScrollArea className="w-full">
-            <Table className="min-w-[2200px]">
-              <TableHeader className="bg-slate-50/50">
+            <Table className="min-w-[2000px]">
+              <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee Name</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Date</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Attendance Status</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Plant</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Date time</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Date time</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-primary">Working Hour</TableHead>
-                  {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Auto Out</TableHead>}
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">In Location</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Out Location</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Leave Type</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Leave Status</TableHead>
-                  <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Remark</TableHead>
-                  {viewMode === 'history' && <TableHead className="font-bold text-[11px] uppercase tracking-widest text-slate-500">Approved By</TableHead>}
-                  <TableHead className={cn("text-right font-bold text-[11px] uppercase tracking-widest text-slate-500", viewMode === 'history' ? "pr-10" : "pr-6")}>Action</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee Name</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Date</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Attendance Status</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Plant Facility</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">In Date Time</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Out Date Time</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-primary">Working Hours</TableHead>
+                  {viewMode === 'history' && <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Auto Close</TableHead>}
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Captured Address</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Adjustment Audit Remark</TableHead>
+                  {viewMode === 'history' && <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Processed By</TableHead>}
+                  <TableHead className={cn("text-right font-black text-[11px] uppercase tracking-widest text-slate-500", viewMode === 'history' ? "pr-10" : "pr-6")}>Action Matrix</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {currentData.items.length === 0 ? (
-                  <TableRow><TableCell colSpan={viewMode === 'history' ? 15 : 13} className="text-center py-20 text-muted-foreground font-bold italic">No records found.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={viewMode === 'history' ? 12 : 10} className="text-center py-20 text-muted-foreground font-bold italic">No logs matched criteria constraints bounds.</TableCell></TableRow>
                 ) : (
                   currentData.items.map((rec: any) => {
                     const canApprove = rec.isVirtual || (rec.inTime && (rec.outTime || rec.autoCheckout));
-                    
                     const inDisplay = rec.inTime ? `${formatDate(rec.inDate || rec.date)} ${rec.inTime}` : "--";
+                    
                     let outDisplay = "--";
                     if (rec.outTime) {
                       outDisplay = `${formatDate(rec.outDate || rec.date)} ${rec.outTime}`;
                     } else if (rec.autoCheckout && rec.inTime) {
-                      const inDT = parseDateTime(rec.inDate || rec.date, rec.inTime);
+                      const inDT = parseISO(`${rec.inDate || rec.date}T${rec.inTime}:00`);
                       if (inDT && isValid(inDT)) {
                         const autoOutDT = addHours(inDT, 16);
                         outDisplay = `${formatDate(format(autoOutDT, "yyyy-MM-dd"))} ${format(autoOutDT, "HH:mm")}`;
                       }
                     }
 
-                    const inLocationDisplay = formatLocation(rec.address, rec.lat, rec.lng);
-                    const outLocationDisplay = formatLocation(rec.addressOut, rec.latOut, rec.lngOut);
+                    const mergedAddress = rec.address || formatLocation(rec.address, rec.lat, rec.lng);
 
                     return (
-                    <TableRow key={rec.id} className={cn("hover:bg-slate-50/50", rec.autoCheckout && "bg-amber-50/20")}>
+                    <TableRow key={rec.id || rec._id} className={cn("hover:bg-slate-50/50 transition-colors", rec.autoCheckout && "bg-amber-50/10")}>
                       <TableCell className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-black text-slate-900 uppercase text-xs sm:text-sm">{rec.employeeName}</span>
@@ -682,25 +657,23 @@ export default function ApprovalsPage() {
                       <TableCell className="text-xs font-bold text-slate-700">{formatDate(rec.date)}</TableCell>
                       <TableCell>
                         <Badge className={cn(
-                          "text-[9px] font-black uppercase px-3 py-1 transition-all duration-300", 
-                          rec.displayStatus === 'Present' && "bg-emerald-50 text-emerald-700 border-none shadow-sm",
-                          rec.displayStatus === 'Absent' && "bg-rose-500 text-white border-none shadow-sm",
-                          rec.displayStatus === 'Absent on Leave' && "bg-purple-500 text-white border-none shadow-sm",
-                          rec.displayStatus === 'Present on Weekly Off' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
-                          rec.displayStatus === 'Present on Holiday' && "bg-gradient-to-r from-sky-200 to-emerald-500 text-white border-none shadow-sm",
-                          (rec.displayStatus === 'Weekly Off' || rec.displayStatus === 'Holiday') && "bg-transparent text-slate-400 border-slate-200 shadow-none font-bold"
+                          "text-[9px] font-black uppercase px-3 py-1 shadow-none", 
+                          (rec.displayStatus === 'Present' || rec.displayStatus.includes('Present')) && "bg-emerald-50 text-emerald-700 border-none",
+                          rec.displayStatus === 'Absent' && "bg-rose-50 text-rose-700 border-none",
+                          rec.displayStatus === 'Absent on Leave' && "bg-purple-50 text-purple-700 border-none",
+                          (rec.displayStatus === 'Weekly Off' || rec.displayStatus === 'Holiday') && "bg-slate-50 text-slate-400 border-slate-200"
                         )}>
                           {rec.displayStatus}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px] font-black uppercase bg-white border-slate-200">
-                          {rec.inPlant || rec.remark || "--"}
+                          {rec.inPlant || "Salt Plant"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs font-bold text-slate-600 whitespace-nowrap">{inDisplay}</TableCell>
                       <TableCell className="text-xs font-bold text-slate-600 whitespace-nowrap">{outDisplay}</TableCell>
-                      <TableCell className="text-xs font-black text-slate-900">{rec.workingHourDisplay || "--"}</TableCell>
+                      <TableCell className="text-xs font-black text-slate-900 font-mono">{rec.workingHourDisplay || "00:00"}</TableCell>
                       {viewMode === 'history' && (
                         <TableCell>
                            <Badge variant={rec.autoCheckout || rec.autoOut ? "destructive" : "outline"} className="text-[9px] font-black uppercase">
@@ -708,42 +681,22 @@ export default function ApprovalsPage() {
                            </Badge>
                         </TableCell>
                       )}
-                      <TableCell className="text-[10px] font-medium text-slate-500 max-w-[200px] truncate leading-tight" title={inLocationDisplay}>{inLocationDisplay}</TableCell>
-                      <TableCell className="text-[10px] font-medium text-slate-500 max-w-[200px] truncate leading-tight" title={outLocationDisplay}>{outLocationDisplay}</TableCell>
-                      <TableCell className="text-xs font-medium text-slate-500">{rec.leaveType}</TableCell>
-                      <TableCell>
-                        {rec.leaveStatus !== '-' ? (
-                          <Badge variant="outline" className="text-[9px] font-black uppercase border-emerald-200 bg-emerald-50 text-emerald-700">
-                             {rec.leaveStatus}
-                          </Badge>
-                        ) : "-"}
-                      </TableCell>
+                      <TableCell className="text-[10px] font-medium text-slate-500 max-w-[250px] truncate leading-tight" title={mergedAddress}>{mergedAddress}</TableCell>
                       <TableCell className="text-xs font-medium text-slate-600 max-w-[200px] truncate">{rec.remark || "-"}</TableCell>
                       {viewMode === 'history' && (
-                        <TableCell>
-                           <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">
-                                {rec.approvedBy || rec.editedBy || "SYSTEM"}
-                              </span>
-                           </div>
+                        <TableCell className="text-[10px] font-bold text-slate-600 uppercase font-mono">
+                          {rec.approvedBy || rec.editedBy || "SYSTEM LOG"}
                         </TableCell>
                       )}
                       <TableCell className={cn("text-right", viewMode === 'history' ? "pr-10" : "pr-6")}>
-                        <div className="flex justify-end gap-1">
+                        <div className="flex justify-end items-center gap-1.5">
                           {viewMode === 'pending' ? (
                             <>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-slate-500" 
-                                onClick={() => handleOpenEditModal(rec)}
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" onClick={() => handleOpenEditModal(rec)}><Pencil className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
                               <Button 
                                 size="sm" 
-                                className="h-8 font-black text-[10px] uppercase bg-emerald-600 text-white disabled:bg-slate-200 disabled:text-slate-400" 
+                                className="h-8 font-black text-[10px] uppercase bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/10 rounded-lg px-4" 
                                 onClick={() => handleOpenApproveConfirmation(rec)}
                                 disabled={!canApprove}
                               >
@@ -752,12 +705,7 @@ export default function ApprovalsPage() {
                             </>
                           ) : (
                             !rec.isVirtual && (
-                              <Button 
-                                variant="secondary" 
-                                size="sm" 
-                                className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg"
-                                onClick={() => handleRestoreAttendance(rec)}
-                              >
+                              <Button variant="secondary" size="sm" className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg" onClick={() => handleRestoreAttendance(rec)}>
                                 <RotateCcw className="w-3 h-3" /> Restore
                               </Button>
                             )
@@ -776,7 +724,75 @@ export default function ApprovalsPage() {
         <StandardPaginationFooter current={viewMode === 'pending' ? pendingPage : historyPage} total={currentData.totalPages} onPageChange={viewMode === 'pending' ? setPendingPage : setHistoryPage} />
       </Card>
 
-      {/* Edit Attendance Entry Dialog */}
+      {/* CONFIRM APPROVAL MODAL */}
+      <Dialog open={isApproveConfirmOpen} onOpenChange={setIsApproveConfirmOpen}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-0 overflow-hidden border-none shadow-2xl animate-in fade-in duration-300">
+          <DialogHeader className="p-6 bg-slate-900 text-white flex flex-row items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
+              <UserCheck className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle className="text-md font-black uppercase tracking-tight">Confirm Approval</DialogTitle>
+              <DialogDescription className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Verify session compliance logs</DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <div className="p-6 space-y-4 bg-white text-xs font-bold text-slate-700">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3 shadow-inner">
+              <div className="grid grid-cols-[110px_1fr] gap-2 items-baseline">
+                <span className="text-slate-400 text-[10px] uppercase tracking-wider">Employee Name:</span>
+                <span className="text-slate-900 uppercase text-sm font-black">{selectedAttendance?.employeeName}</span>
+              </div>
+              <div className="grid grid-cols-[110px_1fr] gap-2 items-baseline pt-2 border-t border-slate-200/50">
+                <span className="text-slate-400 text-[10px] uppercase tracking-wider">Employee ID:</span>
+                <span className="text-primary font-mono text-xs font-extrabold uppercase">{selectedAttendance?.employeeId}</span>
+              </div>
+              <div className="grid grid-cols-[110px_1fr] gap-2 items-baseline pt-2 border-t border-slate-200/50">
+                <span className="text-slate-400 text-[10px] uppercase tracking-wider">Shift Date:</span>
+                <span className="text-slate-800">{selectedAttendance ? formatDate(selectedAttendance.date) : ""}</span>
+              </div>
+              <div className="grid grid-cols-[110px_1fr] gap-2 items-baseline pt-2 border-t border-slate-200/50">
+                <span className="text-slate-400 text-[10px] uppercase tracking-wider">Mark IN Time:</span>
+                <span className="text-slate-800 font-mono">{selectedAttendance?.inTime || "--:--"}</span>
+              </div>
+              <div className="grid grid-cols-[110px_1fr] gap-2 items-baseline pt-2 border-t border-slate-200/50">
+                <span className="text-slate-400 text-[10px] uppercase tracking-wider">Mark OUT Time:</span>
+                <span className="text-slate-800 font-mono">
+                  {selectedAttendance?.outTime || (selectedAttendance?.autoCheckout ? "16:00 (Auto Limit)" : "--:--")}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
+            <Button variant="ghost" className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" onClick={() => setIsApproveConfirmOpen(false)}>Cancel</Button>
+            <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10" onClick={handleConfirmApproval} disabled={isProcessing}>
+              {isProcessing ? "Processing..." : "Confirm Approve"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* REJECT MODAL */}
+      <Dialog open={isAttendanceRejectOpen} onOpenChange={setIsAttendanceRejectOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
+             <DialogTitle className="flex items-center gap-2 text-md font-black uppercase">
+                <AlertCircle className="w-5 h-5 text-rose-500" /> Reject Attendance Entry
+             </DialogTitle>
+          </DialogHeader>
+          <div className="p-6 space-y-4 bg-white">
+             <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Rejection Reason * (Mandatory)</Label>
+             <Textarea placeholder="Specify exact correction discrepancy details for record rejection..." value={attendanceRejectReason} onChange={(e) => setAttendanceRejectReason(e.target.value)} className="min-h-[100px] border-slate-200 bg-slate-50 rounded-xl font-medium" />
+          </div>
+          <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
+             <Button variant="ghost" onClick={() => setIsAttendanceRejectOpen(false)} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
+             <Button onClick={handlePostAttendanceReject} disabled={!attendanceRejectReason.trim() || isProcessing} className="flex-1 bg-rose-600 hover:bg-rose-700 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-rose-600/10">Reject Entry</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT MODAL */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="sm:max-w-2xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
            <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
@@ -831,18 +847,16 @@ export default function ApprovalsPage() {
               <div className="space-y-2">
                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Adjustment Remark * (Mandatory)</Label>
                  <Textarea 
-                    placeholder="Specify the reason for manual timestamp adjustment..." 
-                    value={editData.remark} 
-                    onChange={(e) => setEditData({...editData, remark: e.target.value})} 
-                    className="min-h-[100px] border-slate-200 rounded-xl bg-slate-50"
+                   placeholder="Specify the reason for manual timestamp adjustment..." 
+                   value={editData.remark} 
+                   onChange={(e) => setEditData({...editData, remark: e.target.value})} 
+                   className="min-h-[100px] border-slate-200 rounded-xl bg-slate-50"
                  />
               </div>
            </div>
 
            <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
-              <Button variant="destructive" onClick={() => setIsEditModalOpen(false)} className="flex-1 rounded-xl font-bold h-12 uppercase text-xs">
-                 Cancel
-              </Button>
+              <Button variant="destructive" onClick={() => setIsEditModalOpen(false)} className="flex-1 rounded-xl font-bold h-12 uppercase text-xs">Cancel</Button>
               <Button 
                 onClick={handleUpdateAttendance} 
                 disabled={isProcessing}
