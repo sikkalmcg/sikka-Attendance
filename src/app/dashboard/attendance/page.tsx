@@ -174,6 +174,8 @@ export default function AttendancePage() {
         state: components.state || null,
         autoCheckout: true,
         autoOut: true,
+        autoTriggerTime: getISTTime().toISOString(),
+        nextInEnableTime: null,
         // Spec: stored Mark OUT time = Mark IN time + 8 hours
         remark: "System Auto-Logged OUT (16h Limit Threshold reached); stored OUT = IN + 8h"
       });
@@ -287,17 +289,6 @@ export default function AttendancePage() {
         title: "Next Mark IN Locked",
         description: `Next Mark IN will be available at ${format(nextInAvailableAt, "dd-MMM HH:mm")}.`,
         duration: 8000,
-      });
-      return;
-    }
-
-    if (todayRecord) {
-      const formattedDate = format(parseISO(todayRecord.date), "dd-MM-yyyy");
-      toast({ 
-        variant: "destructive", 
-        title: "Same Day Restriction", 
-        description: `You have already marked IN on Date ${formattedDate}.`,
-        duration: 8000
       });
       return;
     }
@@ -425,9 +416,9 @@ export default function AttendancePage() {
             <div className="flex gap-4">
               <Button 
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
-                  (!activeRecord && !todayRecord && !(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))) ? "bg-primary text-white shadow-primary/20" : "bg-slate-100 text-slate-400"
+                  (!activeRecord && !(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))) ? "bg-primary text-white shadow-primary/20 hover:bg-primary/90" : "bg-slate-100 text-slate-400"
                 )} 
-                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !!activeRecord || !!todayRecord || !!(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))} 
+                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !!activeRecord || !!(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))} 
 
                 onClick={handleMarkInClick}
               >
@@ -468,10 +459,12 @@ export default function AttendancePage() {
                     <Clock className="w-8 h-8 text-slate-300" />
                   </div>
                   <h3 className="text-lg font-black text-slate-400 uppercase tracking-tight">
-                    {todayRecord ? "Daily Quota Reached" : "System Resting"}
+                    {(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime())) ? "Cooldown Active" : "System Resting"}
                   </h3>
                   <p className="text-xs font-medium text-slate-400 max-w-[200px]">
-                    {todayRecord ? `Your next check-in access opens at 12:00 AM on ${format(addDays(getISTTime(), 1), "dd-MMM")}` : "Gateway is ready for check-in."}
+                    {(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime())) 
+                      ? `Your next check-in access opens at ${format(nextInAvailableAt, "dd-MMM HH:mm")}` 
+                      : "Gateway is ready for check-in."}
                   </p>
                 </>
               ) : (
