@@ -63,7 +63,7 @@ export default function AttendancePage() {
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
-  const [detailedLocation, setDetailedLocation] = useState({ street: "", area: "", city: "", state: "" });
+  const [detailedLocation, setDetailedLocation] = useState({ street: "", area: "", city: "", state: "", pincode: "" });
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH" | "">("");
 
   const { toast } = useToast();
@@ -156,26 +156,30 @@ export default function AttendancePage() {
     const finalOutDate = format(creditOutDT, "yyyy-MM-dd");
     const finalOutTime = format(creditOutDT, "HH:mm");
     
+    const recordId = activeRecord.id || (activeRecord as any)._id;
+    if (!recordId) return;
+
     setIsMutatingAttendance(true);
     try {
-      await updateRecord('attendance', activeRecord.id, { 
+      await updateRecord('attendance', recordId, { 
         outTime: finalOutTime,
         outDate: finalOutDate,
         outDateTime: creditOutDT.toISOString(),
         hours: 8.0,
         status: 'Auto OUT',
-        outType: 'AUTO',
+        outType: 'Auto',
         latOut: lat,
         lngOut: lng,
         addressOut: address,
-        street: components.street || null,
-        area: components.area || null,
-        city: components.city || null,
-        state: components.state || null,
+        streetOut: components.street || null,
+        areaOut: components.area || null,
+        cityOut: components.city || null,
+        stateOut: components.state || null,
+        pincodeOut: components.pincode || null,
         autoCheckout: true,
         autoOut: true,
         autoTriggerTime: getISTTime().toISOString(),
-        nextInEnableTime: null,
+        nextInEnableTime: addHours(creditOutDT, 8).toISOString(),
         // Spec: stored Mark OUT time = Mark IN time + 8 hours
         remark: "System Auto-Logged OUT (16h Limit Threshold reached); stored OUT = IN + 8h"
       });
@@ -232,15 +236,16 @@ export default function AttendancePage() {
         try {
           const response = await fetch(`https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}`);
           const data = await response.json();
-          let components = { street: "", area: "", city: "", state: "" };
+          let components = { street: "", area: "", city: "", state: "", pincode: "" };
 
           if (data.features && data.features.length > 0) {
             for (const feature of data.features) {
               const types = feature.place_type || [];
-              if (types.includes("address") || types.includes("street")) components.street = feature.text;
-              if (types.includes("neighborhood") || types.includes("poi") || types.includes("locality")) components.area = feature.text;
-              if (types.includes("place") || types.includes("city")) components.city = feature.text;
-              if (types.includes("region")) components.state = feature.text;
+              if (types.includes("address") || types.includes("street")) components.street = components.street || feature.text;
+              if (types.includes("neighborhood") || types.includes("poi") || types.includes("locality")) components.area = components.area || feature.text;
+              if (types.includes("place") || types.includes("city")) components.city = components.city || feature.text;
+              if (types.includes("region")) components.state = components.state || feature.text;
+              if (types.includes("postcode")) components.pincode = components.pincode || feature.text;
             }
             const displayAddress = [components.street, components.area, components.city, components.state].filter(Boolean).join(", ");
             setDetectedAddress(displayAddress || data.features[0].place_name);
@@ -264,7 +269,7 @@ export default function AttendancePage() {
           const coordAddr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
           setDetectedAddress(coordAddr);
           if (type === 'OUT_AUTO') {
-            performAutoCheckOut(lat, lng, coordAddr, { street: "", area: "", city: "", state: "" });
+            performAutoCheckOut(lat, lng, coordAddr, { street: "", area: "", city: "", state: "", pincode: "" });
           } else {
             setActiveDialog(type as any);
           }
@@ -297,7 +302,7 @@ export default function AttendancePage() {
   };
 
 
-  const handleConfirmCheckIn = () => {
+  const handleConfirmCheckIn = async () => {
     if (!currentGPS) return;
 
     if (!detectedPlant && !selectedType) {
@@ -310,32 +315,43 @@ export default function AttendancePage() {
     const timeStr = format(now, "HH:mm");
     const plantName = detectedPlant?.name || "Remote";
 
-    addRecord('attendance', {
-      employeeId: effectiveEmployeeId,
-      employeeName: effectiveEmployeeName,
-      date: today,
-      inDate: today,
-      inTime: timeStr,
-      inDateTime: now.toISOString(),
-      hours: 0,
-      status: 'Open',
-      attendanceType: detectedPlant ? 'OFFICE' : (selectedType as any),
-      lat: currentGPS.lat,
-      lng: currentGPS.lng,
-      address: detectedAddress,
-      street: detailedLocation.street || null,
-      area: detailedLocation.area || null,
-      city: detailedLocation.city || null,
-      state: detailedLocation.state || null,
-      inPlant: plantName,
-      remark: detectedPlant ? plantName : (selectedType === 'WFH' ? 'Work From Home' : 'Field Visit'),
-      approved: false,
-      unapprovedOutDuration: 0
-    });
+    setIsMutatingAttendance(true);
+    try {
+      await addRecord('attendance', {
+        employeeId: effectiveEmployeeId,
+        employeeName: effectiveEmployeeName,
+        aadhaarNumber: verifiedUser?.aadhaarNumber || null,
+        mobileNumber: verifiedUser?.mobileNumber || null,
+        date: today,
+        inDate: today,
+        inTime: timeStr,
+        inDateTime: now.toISOString(),
+        hours: 0,
+        status: 'Open',
+        attendanceType: detectedPlant ? 'Plant' : (selectedType === 'WFH' ? 'Work From Home' : 'Field Work'),
+        lat: currentGPS.lat,
+        lng: currentGPS.lng,
+        address: detectedAddress,
+        street: detailedLocation.street || null,
+        area: detailedLocation.area || null,
+        city: detailedLocation.city || null,
+        state: detailedLocation.state || null,
+        pincode: detailedLocation.pincode || null,
+        inPlant: plantName,
+        remark: detectedPlant ? plantName : (selectedType === 'WFH' ? 'Work From Home' : 'Field Visit'),
+        approved: false,
+        unapprovedOutDuration: 0
+      });
 
-    setActiveDialog("NONE");
-    setSelectedType(""); 
-    toast({ title: "Mark IN Successful" });
+      await refreshData();
+      setActiveDialog("NONE");
+      setSelectedType(""); 
+      toast({ title: "Mark IN Successful" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to Mark IN" });
+    } finally {
+      setIsMutatingAttendance(false);
+    }
   };
 
   const handleConfirmCheckOut = async () => {
@@ -357,23 +373,30 @@ export default function AttendancePage() {
 
     const nextEnableDT = addHours(outDT, 8);
 
+    const recordId = activeRecord.id || (activeRecord as any)._id;
+    if (!recordId) {
+      toast({ variant: "destructive", title: "Error", description: "Record ID not found." });
+      return;
+    }
+
     setIsMutatingAttendance(true);
 
     try {
-      await updateRecord('attendance', activeRecord.id, { 
+      await updateRecord('attendance', recordId, { 
         outTime: format(outDT, "HH:mm"), 
         outDate: format(outDT, "yyyy-MM-dd"),
         outDateTime: outDT.toISOString(),
         hours: finalHours,
         status: 'Closed',
-        outType: 'MANUAL',
+        outType: 'Manual',
         latOut: currentGPS.lat, 
         lngOut: currentGPS.lng,
         addressOut: detectedAddress,
-        street: detailedLocation.street || null,
-        area: detailedLocation.area || null,
-        city: detailedLocation.city || null,
-        state: detailedLocation.state || null,
+        streetOut: detailedLocation.street || null,
+        areaOut: detailedLocation.area || null,
+        cityOut: detailedLocation.city || null,
+        stateOut: detailedLocation.state || null,
+        pincodeOut: detailedLocation.pincode || null,
         outPlant: plantName,
         nextInEnableTime: nextEnableDT.toISOString()
       });
@@ -498,7 +521,7 @@ export default function AttendancePage() {
                   </TableHeader>
                   <TableBody>
                      {employeeRecords.map((r: any) => (
-                        <TableRow key={r.id} className="hover:bg-slate-50/50">
+                        <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
                            <TableCell className="text-xs font-bold text-slate-700 py-4">{formatDate(r.date)}</TableCell>
                            <TableCell className="text-xs font-bold text-slate-500">{r.inTime}</TableCell>
                            <TableCell className="text-xs font-bold text-slate-500">{r.outTime || "--:--"}</TableCell>
@@ -529,47 +552,54 @@ export default function AttendancePage() {
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl animate-in zoom-in-95">
           <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <MapPin className="w-6 h-6 text-primary" /> Session Verification
+              <MapPin className="w-6 h-6 text-primary" /> Welcome to You, {effectiveEmployeeName}
             </DialogTitle>
           </DialogHeader>
           <div className="p-10 space-y-8">
             <div className="grid grid-cols-2 gap-8">
                <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Facility Allocation</Label>
-                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "Off-Site Entry"}</p>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Plant Name</Label>
+                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "None"}</p>
                </div>
                <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Entry Timestamp</Label>
-                  <p className="text-sm font-bold text-slate-700 mt-1">{format(getISTTime(), "HH:mm")}</p>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
+                  <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm a")}</p>
                </div>
             </div>
 
             <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
               <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-3">
-                <Navigation className="w-3.5 h-3.5" /> Resolved Address
+                <Navigation className="w-3.5 h-3.5" /> Employee Current Location
               </Label>
-              <p className="text-xs font-bold text-slate-600 leading-relaxed italic">{detectedAddress}</p>
+              <div className="text-xs font-bold text-slate-600 leading-relaxed space-y-1">
+                <p>Plot No.: N/A</p>
+                <p>Street Name: {detailedLocation.street || "N/A"}</p>
+                <p>Area: {detailedLocation.area || "N/A"}</p>
+                <p>City: {detailedLocation.city || "N/A"}</p>
+                <p>State: {detailedLocation.state || "N/A"}</p>
+                <p>PIN Code: {detailedLocation.pincode || "N/A"}</p>
+              </div>
             </div>
 
             {!detectedPlant && (
               <div className="space-y-4 pt-4 border-t border-slate-100">
-                <Label className="text-[10px] font-black uppercase text-rose-500 tracking-widest">Entry Classification Required</Label>
+                <Label className="text-[10px] font-black uppercase text-rose-500 tracking-widest">Work Location Type</Label>
                 <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
-                  <div className={cn("p-5 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200")} onClick={() => setSelectedType('FIELD')}>
-                    <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
-                    <Label className="font-black text-[10px] uppercase cursor-pointer">Field Entry</Label>
-                  </div>
                   <div className={cn("p-5 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200")} onClick={() => setSelectedType('WFH')}>
                     <Home className={cn("w-6 h-6", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
-                    <Label className="font-black text-[10px] uppercase cursor-pointer">Remote Hub</Label>
+                    <Label className="font-black text-[10px] uppercase cursor-pointer">Work From Home</Label>
+                  </div>
+                  <div className={cn("p-5 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200")} onClick={() => setSelectedType('FIELD')}>
+                    <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
+                    <Label className="font-black text-[10px] uppercase cursor-pointer">Field Work</Label>
                   </div>
                 </RadioGroup>
               </div>
             )}
           </div>
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
-            <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-slate-400" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
-            <Button className="flex-1 h-14 font-black bg-primary text-white rounded-2xl shadow-xl shadow-primary/20 uppercase tracking-widest" onClick={handleConfirmCheckIn} disabled={!detectedPlant && !selectedType}>CONFIRM ENTRY</Button>
+            <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-rose-500 hover:bg-rose-600" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
+            <Button className="flex-1 h-14 font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-500/20 uppercase tracking-widest" onClick={handleConfirmCheckIn} disabled={!detectedPlant && !selectedType}>CHECK IN</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -579,26 +609,33 @@ export default function AttendancePage() {
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
           <DialogHeader className="p-8 bg-rose-600 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <Navigation className="w-6 h-6" /> Close Shift
+              <Navigation className="w-6 h-6" /> {effectiveEmployeeName}
             </DialogTitle>
           </DialogHeader>
           <div className="p-10 space-y-8">
              <div className="grid grid-cols-2 gap-8">
                <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Active Facility</Label>
-                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{activeRecord?.inPlant || "External Location"}</p>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Plant Name</Label>
+                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "None"}</p>
                </div>
                <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Exit Timestamp</Label>
-                  <p className="text-sm font-bold text-slate-700 mt-1">{format(getISTTime(), "HH:mm")}</p>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
+                  <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm a")}</p>
                </div>
             </div>
 
             <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
               <Label className="text-[10px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-2 mb-3">
-                <MapPin className="w-3.5 h-3.5" /> Exit Location
+                <MapPin className="w-3.5 h-3.5" /> Employee Current Location
               </Label>
-              <p className="text-xs font-bold text-slate-600 leading-relaxed italic">{detectedAddress}</p>
+              <div className="text-xs font-bold text-slate-600 leading-relaxed space-y-1">
+                <p>Plot No.: N/A</p>
+                <p>Street Name: {detailedLocation.street || "N/A"}</p>
+                <p>Area: {detailedLocation.area || "N/A"}</p>
+                <p>City: {detailedLocation.city || "N/A"}</p>
+                <p>State: {detailedLocation.state || "N/A"}</p>
+                <p>PIN Code: {detailedLocation.pincode || "N/A"}</p>
+              </div>
             </div>
 
             {!detectedPlant && (
@@ -611,7 +648,7 @@ export default function AttendancePage() {
             )}
           </div>
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
-            <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-slate-400" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
+            <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-blue-500 hover:bg-blue-600" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
             <Button className="flex-1 h-14 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-2xl shadow-xl shadow-rose-200 uppercase tracking-widest" onClick={handleConfirmCheckOut}>CHECK OUT</Button>
           </DialogFooter>
         </DialogContent>
