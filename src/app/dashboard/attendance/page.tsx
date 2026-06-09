@@ -69,6 +69,7 @@ export default function AttendancePage() {
   const { toast } = useToast();
 
   useEffect(() => {
+
     setIsMounted(true);
     setCurrentTime(getISTTime());
     const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
@@ -85,42 +86,61 @@ export default function AttendancePage() {
       .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
   }, [attendanceRecords, effectiveEmployeeId]);
 
-  // Derived State based on 20-Hour Rules
-  const { activeRecord, todayRecord, isStale } = useMemo(() => {
+  // Derived State based on 16-Hour AUTO OUT rules
+  const { activeRecord, todayRecord, isStale, nextInAvailableAt } = useMemo(() => {
+
     const now = getISTTime();
     const todayStr = format(now, "yyyy-MM-dd");
-    
-    // Check if any record exists for today (Once per calendar day rule)
-    const todayRec = employeeRecords.find(r => r.date === todayStr);
-    
-    // Find if there's an open session (any date)
-    const active = employeeRecords.find(r => r.status === 'Open');
 
+    // Open session (any date)
+    const active = employeeRecords.find((r) => r.status === "Open");
+
+    // Once per calendar day UI (kept as-is), but we will additionally respect nextInEnableTime
+    const todayRec = employeeRecords.find((r) => r.date === todayStr);
+
+    // Manual/Auto cooldown control
+    const lastClosed = employeeRecords
+      .filter((r) => r.status === "Closed" || r.status === "Auto OUT")
+      .sort((a, b) => {
+        const adt = a.outDateTime ? parseISO(a.outDateTime) : (a.outDate && a.outTime ? parseDateTime(a.outDate, a.outTime) : null);
+        const bdt = b.outDateTime ? parseISO(b.outDateTime) : (b.outDate && b.outTime ? parseDateTime(b.outDate, b.outTime) : null);
+        const at = adt && isValid(adt) ? adt.getTime() : 0;
+        const bt = bdt && isValid(bdt) ? bdt.getTime() : 0;
+        return bt - at;
+      })[0];
+
+    const nextIn = lastClosed?.nextInEnableTime
+      ? parseISO(lastClosed.nextInEnableTime)
+      : null;
+
+    const inDT = active?.inDateTime
+      ? parseISO(active.inDateTime)
+      : (active?.inDate && active?.inTime ? parseDateTime(active.inDate, active.inTime) : null);
+
+    // Auto-out stale check
     let stale = false;
-    if (active) {
-      const inDT = active.inDateTime ? parseISO(active.inDateTime) : parseDateTime(active.inDate || active.date, active.inTime || "");
-      if (inDT && isValid(inDT)) {
-        const triggerTime = addHours(inDT, 20); // 20 Hour Threshold for AUTO OUT
-        if (isAfter(now, triggerTime)) {
-          stale = true;
-        }
-      }
+    if (active && inDT && isValid(inDT)) {
+      const triggerTime = addHours(inDT, 16);
+      if (isAfter(now, triggerTime)) stale = true;
     }
 
-    return { 
-      activeRecord: active || null, 
+    return {
+      activeRecord: active || null,
       todayRecord: todayRec || null,
-      isStale: stale
+      isStale: stale,
+      nextInAvailableAt: nextIn && isValid(nextIn) ? nextIn : null,
     };
   }, [employeeRecords, currentTime]);
 
-  // Automated Checkout Background Check (20 Hours)
+
+  // Automated Checkout Background Check (16 Hours)
   useEffect(() => {
     if (isStale && activeRecord && !activeRecord.outTime && !isLoadingLocation) {
-      console.log("Stale session detected (20h). Triggering Auto OUT...");
+      console.log("Stale session detected (16h). Triggering Auto OUT...");
       requestLocation("OUT_AUTO");
     }
   }, [isStale, activeRecord]);
+
 
   const performAutoCheckOut = async (lat: number, lng: number, address: string, components: any) => {
     // guard against concurrent mutations / stale UI states
@@ -130,14 +150,15 @@ export default function AttendancePage() {
     const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
     if (!inDT || !isValid(inDT)) return;
 
-    const creditOutDT = addHours(inDT, 8); // 8 Hour Credit Rule (IN + 8h)
+    const creditOutDT = addHours(inDT, 8); // Stored Mark OUT Time = IN + 8h
+
     
     const finalOutDate = format(creditOutDT, "yyyy-MM-dd");
     const finalOutTime = format(creditOutDT, "HH:mm");
     
     setIsMutatingAttendance(true);
     try {
-      await updateRecord('attendance', activeRecord.id, {
+      await updateRecord('attendance', activeRecord.id, { 
         outTime: finalOutTime,
         outDate: finalOutDate,
         outDateTime: creditOutDT.toISOString(),
@@ -153,8 +174,10 @@ export default function AttendancePage() {
         state: components.state || null,
         autoCheckout: true,
         autoOut: true,
-        remark: "System Auto-Logged OUT (20h Limit Threshold reached)"
+        // Spec: stored Mark OUT time = Mark IN time + 8 hours
+        remark: "System Auto-Logged OUT (16h Limit Threshold reached); stored OUT = IN + 8h"
       });
+
 
       await addRecord('notifications', {
         message: `${effectiveEmployeeName} – AUTO OUT Processed | Recorded OUT: ${format(creditOutDT, "dd-MMM HH:mm")}`,
@@ -177,6 +200,22 @@ export default function AttendancePage() {
   };
 
   const requestLocation = (type: "IN" | "OUT" | "OUT_AUTO") => {
+    // Re-check next-in lock at the moment of requesting GPS
+    const isNextInLockedNow = nextInAvailableAt
+      ? isAfter(nextInAvailableAt, currentTime || getISTTime())
+      : false;
+
+    if (type === "IN" && isNextInLockedNow) {
+
+      toast({
+        variant: "destructive",
+        title: "Next Mark IN Locked",
+        description: `Next Mark IN will be available at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "later"}.`,
+        duration: 8000,
+      });
+      return;
+    }
+
     if (isMutatingAttendance) return;
     setIsLoadingLocation(true);
     setDetectedAddress(""); 
@@ -240,18 +279,32 @@ export default function AttendancePage() {
   };
 
   const handleMarkInClick = () => {
+    const now = getISTTime();
+
+    if (nextInAvailableAt && isAfter(nextInAvailableAt, now)) {
+      toast({
+        variant: "destructive",
+        title: "Next Mark IN Locked",
+        description: `Next Mark IN will be available at ${format(nextInAvailableAt, "dd-MMM HH:mm")}.`,
+        duration: 8000,
+      });
+      return;
+    }
+
     if (todayRecord) {
       const formattedDate = format(parseISO(todayRecord.date), "dd-MM-yyyy");
       toast({ 
         variant: "destructive", 
         title: "Same Day Restriction", 
-        description: `You have already marked IN on Date ${formattedDate}. Your next Mark IN will be available on Date ${format(addDays(parseISO(todayRecord.date), 1), "dd-MM-yyyy")} at 12:00 AM.`,
+        description: `You have already marked IN on Date ${formattedDate}.`,
         duration: 8000
       });
       return;
     }
+
     requestLocation("IN");
   };
+
 
   const handleConfirmCheckIn = () => {
     if (!currentGPS) return;
@@ -304,18 +357,22 @@ export default function AttendancePage() {
     
     let finalHours = 0;
     if (inDT && isValid(inDT) && isValid(outDT)) {
+
       const diffHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
       finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
     }
     
     const plantName = detectedPlant?.name || "Remote";
 
+    const nextEnableDT = addHours(outDT, 8);
+
     setIsMutatingAttendance(true);
+
     try {
       await updateRecord('attendance', activeRecord.id, { 
-        outTime: format(now, "HH:mm"), 
-        outDate: format(now, "yyyy-MM-dd"),
-        outDateTime: now.toISOString(),
+        outTime: format(outDT, "HH:mm"), 
+        outDate: format(outDT, "yyyy-MM-dd"),
+        outDateTime: outDT.toISOString(),
         hours: finalHours,
         status: 'Closed',
         outType: 'MANUAL',
@@ -326,8 +383,10 @@ export default function AttendancePage() {
         area: detailedLocation.area || null,
         city: detailedLocation.city || null,
         state: detailedLocation.state || null,
-        outPlant: plantName
+        outPlant: plantName,
+        nextInEnableTime: nextEnableDT.toISOString()
       });
+
 
       // Ensure UI immediately hides Mark OUT and recomputes next eligibility
       await refreshData();
@@ -366,11 +425,13 @@ export default function AttendancePage() {
             <div className="flex gap-4">
               <Button 
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
-                  (!activeRecord && !todayRecord) ? "bg-primary text-white shadow-primary/20" : "bg-slate-100 text-slate-400"
+                  (!activeRecord && !todayRecord && !(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))) ? "bg-primary text-white shadow-primary/20" : "bg-slate-100 text-slate-400"
                 )} 
-                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !!activeRecord || !!todayRecord} 
+                disabled={isLoading || isLoadingLocation || isMutatingAttendance || !!activeRecord || !!todayRecord || !!(nextInAvailableAt && isAfter(nextInAvailableAt, currentTime || getISTTime()))} 
+
                 onClick={handleMarkInClick}
               >
+
                 {isLoadingLocation && activeDialog === 'NONE' ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Mark IN"}
               </Button>
               <Button 
