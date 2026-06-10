@@ -1,38 +1,31 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { 
   FileBarChart2, 
   FileText, 
   Download, 
-  CalendarDays,
-  X,
-  Eye,
-  Building2,
-  CheckCircle2,
-  Table as TableIcon,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  ShieldCheck,
-  ArrowRightCircle,
+  X, 
+  Building2, 
+  ChevronLeft, 
+  ChevronRight, 
+  Filter, 
+  Clock,
   Factory
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Table, 
   TableHeader, 
@@ -41,12 +34,6 @@ import {
   TableHead, 
   TableCell 
 } from "@/components/ui/table";
-import { 
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -54,16 +41,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { format, subDays, isWithinInterval, parseISO, isAfter, eachDayOfInterval, isSunday, startOfDay, isValid, addHours } from "date-fns";
+import { format, subDays, isAfter, eachDayOfInterval, isSunday, startOfDay, isValid, addHours, parseISO } from "date-fns";
 import { useData } from "@/context/data-context";
-import { formatCurrency, cn, formatDate, getWorkingHoursColor, formatMinutesToHHMM, formatHoursToHHMM, isEmployeeActiveOnDate, parseDateTime } from "@/lib/utils";
+import { formatCurrency, cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate, parseDateTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 type ReportType = "ATTENDANCE" | "PAYROLL";
 const PROJECT_START_DATE_STR = "2026-04-01";
 const ROWS_PER_PAGE = 15;
 
-// Helper for location display priority (Street + City + State or Coordinates)
 const formatLocation = (address?: string, lat?: number, lng?: number) => {
   if (address && address !== "Location Not Available" && address.trim() !== "") {
     const isCoordinateString = /^-?\d+\.\d+, -?\d+\.\d+$/.test(address);
@@ -76,7 +62,7 @@ const formatLocation = (address?: string, lat?: number, lng?: number) => {
 };
 
 export default function ReportsPage() {
-  const { employees, attendanceRecords, payrollRecords, plants, firms, verifiedUser, holidays, leaveRequests } = useData();
+  const { employees = [], attendanceRecords = [], payrollRecords = [], plants = [], firms = [], verifiedUser, holidays = [], leaveRequests = [] } = useData();
   const { toast } = useToast();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -88,9 +74,11 @@ export default function ReportsPage() {
   const [viewData, setViewData] = useState<any[] | null>(null);
   const [viewType, setViewType] = useState<ReportType | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    const end = new Date();
+    setIsMounted(true);
+    const end = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
     const floor = parseISO(PROJECT_START_DATE_STR);
     const start = isAfter(subDays(end, 90), floor) ? subDays(end, 90) : floor;
     setFromDate(format(start, "yyyy-MM-dd"));
@@ -119,20 +107,20 @@ export default function ReportsPage() {
     const type = typeOverride || activeReport;
     if (!type) return [];
     
-    const start = parseISO(fromDate);
-    const end = parseISO(toDate);
+    const start = startOfDay(parseISO(fromDate));
+    const end = startOfDay(parseISO(toDate));
 
     if (type === "ATTENDANCE") {
       const allReportData: any[] = [];
       const dateRange = eachDayOfInterval({ start, end });
       
       const recordMap = new Map<string, any>();
-      attendanceRecords.forEach(r => {
+      (attendanceRecords || []).forEach(r => {
         recordMap.set(`${r.employeeId}:${r.date}`, r);
       });
 
       const approvedLeavesMap = new Map<string, any>();
-      leaveRequests.filter(l => l.status === 'APPROVED').forEach(l => {
+      (leaveRequests || []).filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
         const lStart = startOfDay(parseISO(l.fromDate));
         const lEnd = startOfDay(parseISO(l.toDate));
         if (!isValid(lStart) || !isValid(lEnd)) return;
@@ -141,12 +129,12 @@ export default function ReportsPage() {
         });
       });
 
-      const targetEmployees = employees.filter(emp => {
+      const targetEmployees = (employees || []).filter(emp => {
         if (userAssignedPlantIds) {
           const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
           if (!hasAccess) return false;
         }
-        return selectedFirmIds.includes(emp.firmId);
+        return (!emp.firmId || selectedFirmIds.length === 0 || selectedFirmIds.includes(emp.firmId));
       });
 
       targetEmployees.forEach(emp => {
@@ -157,7 +145,6 @@ export default function ReportsPage() {
 
         dateRange.forEach(date => {
           const dateStr = format(date, 'yyyy-MM-dd');
-          
           if (!isEmployeeActiveOnDate(emp, dateStr)) return;
 
           const r = recordMap.get(`${emp.employeeId}:${dateStr}`);
@@ -170,55 +157,75 @@ export default function ReportsPage() {
           let inPlant = "--";
           let workingHour = "00:00";
           let markingRemark = "--";
+          let isApprovedStatus = "Pending";
           
           const isSun = isSunday(date);
-          const customHoliday = holidays.find(h => h.date === dateStr && !h.auto);
+          const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
           const leave = approvedLeavesMap.get(`${emp.employeeId}:${dateStr}`);
 
-          if (r && r.inTime) {
-            inPlant = r.remark || r.inPlant || "--";
-            inDateTime = `${formatDate(r.inDate || r.date)} ${r.inTime || ""}`;
-            inLocation = formatLocation(r.address, r.lat, r.lng);
-            
-            if (r.autoCheckout) {
-              const inDT = parseDateTime(r.inDate || r.date, r.inTime || "");
-              if (inDT && isValid(inDT)) {
-                const autoOutDT = addHours(inDT, 16);
-                outDateTime = `${formatDate(format(autoOutDT, "yyyy-MM-dd"))} ${format(autoOutDT, "HH:mm")}`;
-              }
-              workingHour = "16:00";
-              markingRemark = "System Auto-Logged OUT (16h Limit Threshold reached)";
-            } else {
-              outDateTime = r.outTime ? `${formatDate(r.outDate || r.date)} ${r.outTime}` : "--";
-              outLocation = formatLocation(r.addressOut, r.latOut, r.lngOut);
-              workingHour = formatHoursToHHMM(r.hours);
-              markingRemark = r.remark || "--";
-            }
+          // FIXED LOGIC: Fills report data for both approved history and raw live present logs matching date intervals
+          if (r) {
+            isApprovedStatus = (r.approved === true || r.approved === "true") ? "Approved" : "Pending";
+            markingRemark = r.remark || "--";
+            inPlant = r.inPlant || "Salt Plant";
 
-            if (isSun) {
-              displayStatus = "Present on Weekly Off";
-            } else if (customHoliday) {
-              displayStatus = "Present on Holiday";
+            if (r.inTime) {
+              inDateTime = `${formatDate(r.inDate || r.date)} ${r.inTime || ""}`;
+              inLocation = formatLocation(r.address, r.lat, r.lng);
+              
+              if (r.autoCheckout) {
+                const inDT = parseDateTime(r.inDate || r.date, r.inTime || "");
+                if (inDT && isValid(inDT)) {
+                  const autoOutDT = addHours(inDT, 16);
+                  outDateTime = `${formatDate(format(autoOutDT, "yyyy-MM-dd"))} ${format(autoOutDT, "HH:mm")}`;
+                }
+                workingHour = "16:00";
+                if (!r.remark) markingRemark = "System Auto-Logged OUT (16h Limit Threshold reached)";
+              } else {
+                outDateTime = r.outTime ? `${formatDate(r.outDate || r.date)} ${r.outTime}` : "--";
+                outLocation = formatLocation(r.addressOut, r.latOut, r.lngOut);
+                workingHour = formatHoursToHHMM(r.hours || 0);
+              }
+
+              if (isSun) displayStatus = "Present on Weekly Off";
+              else if (customHoliday) displayStatus = "Present on Holiday";
+              else displayStatus = "Present";
             } else {
-              displayStatus = "Present";
+              if (leave) {
+                displayStatus = "Absent on Leave";
+                isApprovedStatus = "Approved";
+                markingRemark = `Leave: ${leave.purpose}`;
+              } else if (isSun) {
+                displayStatus = "Weekly Off";
+                isApprovedStatus = "System Link";
+              } else if (customHoliday) {
+                displayStatus = "Holiday";
+                isApprovedStatus = "System Link";
+              } else {
+                displayStatus = r.status === 'PRESENT' ? 'Present' : 'Absent';
+              }
+              workingHour = formatHoursToHHMM(r.hours || 0);
             }
           } else {
             if (leave) {
               displayStatus = "Absent on Leave";
+              isApprovedStatus = "Approved";
+              markingRemark = `Leave: ${leave.purpose}`;
             } else if (isSun) {
               displayStatus = "Weekly Off";
+              isApprovedStatus = "System Link";
             } else if (customHoliday) {
               displayStatus = "Holiday";
+              isApprovedStatus = "System Link";
             } else {
               displayStatus = "Absent";
+              isApprovedStatus = "Unmarked";
             }
-            
-            markingRemark = leave ? `Leave: ${leave.purpose}` : "--";
           }
 
           allReportData.push({
             "Employee ID": emp.employeeId,
-            "Employee Name": emp.name,
+            "Employee Name": emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name,
             "In date time": inDateTime,
             "In Plant": inPlant,
             "Out Date time": outDateTime,
@@ -226,67 +233,75 @@ export default function ReportsPage() {
             "Out Location": outLocation,
             "Working Hour": workingHour,
             "Status": displayStatus,
+            "Approval": isApprovedStatus,
             "Remark": markingRemark
           });
         });
       });
 
-      return allReportData;
+      return allReportData.sort((a, b) => b["In date time"].localeCompare(a["In date time"]));
     }
 
-    return payrollRecords
+    return (payrollRecords || [])
       .filter(p => {
         const emp = employees.find(e => e.employeeId === p.employeeId);
         if (userAssignedPlantIds) {
-          const hasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id));
+          const hasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId);
           if (!hasAccess) return false;
         }
         if (selectedPlantId !== "all") {
-          const empAtPlant = emp?.unitIds?.includes(selectedPlantId);
+          const empAtPlant = emp?.unitIds?.includes(selectedPlantId) || emp?.unitId === selectedPlantId;
           if (!empAtPlant) return false;
         }
-        return emp ? selectedFirmIds.includes(emp.firmId) : true;
+        return emp ? (!emp.firmId || selectedFirmIds.length === 0 || selectedFirmIds.includes(emp.firmId)) : true;
       })
       .map(p => {
-          const emp = employees.find(e => e.employeeId === p.employeeId);
-          const firm = firms.find(f => f.id === emp?.firmId);
-          const lastPayment = p.salaryHistory?.[p.salaryHistory.length - 1];
-          
-          return {
-            "Firm": firm?.name || "N/A",
-            "Employee ID": p.employeeId,
-            "Employee Name": p.employeeName,
-            "Salary Slip No.": p.slipNo || "N/A",
-            "Date": p.slipDate || formatDate(p.createdAt),
-            "Payroll Month": p.month,
-            "Working Day": p.totalEarningDays || 0,
-            "Absent": p.absent || 0,
-            "Monthly CTC": formatCurrency(emp?.salary?.monthlyCTC || 0),
-            "Advance Deduction": formatCurrency(p.advanceRecovery || 0),
-            "Net Payable Salary": formatCurrency(p.netPayable || 0),
-            "Paid Amount": formatCurrency(p.salaryPaidAmount || 0),
-            "Paid Date": p.salaryPaidDate || "---",
-            "Banking Reference": lastPayment?.reference || "---"
-          };
+        const emp = employees.find(e => e.employeeId === p.employeeId);
+        const firm = firms.find(f => f.id === emp?.firmId);
+        const lastPayment = p.salaryHistory?.[p.salaryHistory.length - 1];
+        
+        return {
+          "Firm": firm?.name || "N/A",
+          "Employee ID": p.employeeId,
+          "Employee Name": p.employeeName,
+          "Salary Slip No.": p.slipNo || "N/A",
+          "Date": p.slipDate || formatDate(p.createdAt),
+          "Payroll Month": p.month,
+          "Working Day": p.totalEarningDays || 0,
+          "Absent": p.absent || 0,
+          "Monthly CTC": formatCurrency(emp?.salary?.monthlyCTC || 0),
+          "Advance Deduction": formatCurrency(p.advanceRecovery || 0),
+          "Net Payable Salary": formatCurrency(p.netPayable || 0),
+          "Paid Amount": formatCurrency(p.salaryPaidAmount || 0),
+          "Paid Date": p.salaryPaidDate || "---",
+          "Banking Reference": lastPayment?.reference || "---"
+        };
       });
   };
 
   const handleExport = (typeOverride?: ReportType) => {
     const data = processReportData(typeOverride);
-    if (!data.length) { toast({ variant: "destructive", title: "No Data" }); return; }
-    const csv = [Object.keys(data[0]).join(","), ...data.map(r => Object.values(r).map(v => `"${v}"`).join(","))].join("\n");
+    if (!data.length) { toast({ variant: "destructive", title: "No Data Scopes Finalized" }); return; }
+    const csv = [Object.keys(data[0]).join(","), ...data.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
     const link = document.createElement("a");
     link.setAttribute("href", URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })));
-    link.setAttribute("download", `${typeOverride || viewType}_Report.csv`);
+    link.setAttribute("download", `Sikka_${typeOverride || viewType}_Report_${fromDate}_to_${toDate}.csv`);
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
+  if (!isMounted) return null;
+
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-black">Analytics & Reports</h1>
+    <div className="space-y-8 pb-20 px-4 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center border-b pb-5">
+        <div>
+          <h1 className="text-3xl font-black uppercase flex items-center gap-3">Analytics & Reports</h1>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">Compile Audited Shift Records and History Ledgers</p>
+        </div>
         {viewData && (
-          <Button variant="ghost" onClick={() => { setViewData(null); setViewType(null); }} className="gap-2 font-bold">
+          <Button variant="ghost" onClick={() => { setViewData(null); setViewType(null); }} className="gap-2 font-black text-xs uppercase text-slate-500 hover:bg-slate-100 rounded-xl px-4 h-10 border">
             <X className="w-4 h-4" /> Reset View
           </Button>
         )}
@@ -294,29 +309,29 @@ export default function ReportsPage() {
 
       {!viewData ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Card className="p-10 cursor-pointer hover:shadow-xl transition-all group" onClick={() => { setActiveReport("ATTENDANCE"); setIsDialogOpen(true); }}>
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-primary group-hover:text-white transition-colors">
+          <Card className="p-10 cursor-pointer hover:shadow-xl transition-all group rounded-[2rem] bg-white border border-slate-100 shadow-sm" onClick={() => { setActiveReport("ATTENDANCE"); setIsDialogOpen(true); }}>
+            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-primary group-hover:text-white transition-colors shadow-inner">
               <FileBarChart2 className="w-8 h-8 text-primary group-hover:text-white" />
             </div>
-            <h3 className="text-xl font-bold">Attendance Export</h3>
-            <p className="text-sm text-muted-foreground mt-2">Facility-scoped audit trails and workforce presence analytics.</p>
+            <h3 className="text-xl font-black uppercase tracking-tight text-slate-800">Attendance Export</h3>
+            <p className="text-sm font-semibold text-slate-400 mt-2 leading-relaxed">Scoped history ledger data streams mapping the facility compliance records.</p>
           </Card>
-          <Card className="p-10 cursor-pointer hover:shadow-xl transition-all group" onClick={() => { setActiveReport("PAYROLL"); setIsDialogOpen(true); }}>
-            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+          <Card className="p-10 cursor-pointer hover:shadow-xl transition-all group rounded-[2rem] bg-white border border-slate-100 shadow-sm" onClick={() => { setActiveReport("PAYROLL"); setIsDialogOpen(true); }}>
+            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-inner">
               <FileText className="w-8 h-8 text-emerald-600 group-hover:text-white" />
             </div>
-            <h3 className="text-xl font-bold">Payroll Summary</h3>
-            <p className="text-sm text-muted-foreground mt-2">Consolidated monthly earnings data and disbursement audit trails.</p>
+            <h3 className="text-xl font-black uppercase tracking-tight text-slate-800">Payroll Summary</h3>
+            <p className="text-sm font-semibold text-slate-400 mt-2 leading-relaxed">Consolidated monthly disbursements arrays logs and transaction referential ledgers.</p>
           </Card>
         </div>
       ) : (
-        <Card className="border-none shadow-2xl overflow-hidden rounded-2xl">
-          <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between p-6">
+        <Card className="border-none shadow-2xl overflow-hidden rounded-2xl bg-white">
+          <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between p-6 shrink-0">
             <div>
-              <CardTitle>{viewType} View</CardTitle>
-              <p className="text-[10px] text-primary font-black uppercase mt-1">Period: {formatDate(fromDate)} to {formatDate(toDate)}</p>
+              <CardTitle className="uppercase font-black tracking-tight text-lg">{viewType} History Ledger Preview</CardTitle>
+              <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">Filter Period: {formatDate(fromDate)} to {formatDate(toDate)}</p>
             </div>
-            <Button onClick={() => handleExport(viewType!)} className="bg-emerald-600 h-11 px-8 font-black gap-2"><Download className="w-4 h-4" /> Export CSV</Button>
+            <Button onClick={() => handleExport(viewType!)} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-8 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10"><Download className="w-4 h-4" /> Export CSV Sheet</Button>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="w-full">
@@ -324,19 +339,27 @@ export default function ReportsPage() {
                 <TableHeader className="bg-slate-50">
                   <TableRow>
                     {viewData[0] && Object.keys(viewData[0]).map(h => (
-                      <TableHead key={h} className="font-black text-[11px] uppercase tracking-widest py-4 px-6 text-slate-500 whitespace-nowrap">{h}</TableHead>
+                      <TableHead key={h} className="font-black text-[10px] uppercase tracking-widest py-4 px-6 text-slate-500 whitespace-nowrap">{h}</TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedData.length === 0 ? (
-                    <TableRow><TableCell colSpan={viewData[0] ? Object.keys(viewData[0]).length : 1} className="text-center py-20 text-muted-foreground font-bold">No records found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={viewData[0] ? Object.keys(viewData[0]).length : 1} className="text-center py-20 text-slate-400 font-bold italic text-xs uppercase bg-slate-50/30">No matching finalized records found.</TableCell></TableRow>
                   ) : (
                     paginatedData.map((row, idx) => (
-                      <TableRow key={idx} className="hover:bg-slate-50/50">
+                      <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
                         {Object.values(row).map((val: any, i) => (
                           <TableCell key={i} className="px-6 py-4 text-xs font-bold text-slate-700 whitespace-nowrap">
-                            {val}
+                            {val?.toString() === "Approved" ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
+                            ) : val?.toString() === "Pending" ? (
+                              <Badge className="bg-amber-50 text-amber-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
+                            ) : val?.toString().includes("Hrs") || val?.toString().includes("₹") ? (
+                              <span className="font-mono font-black text-slate-900">{val}</span>
+                            ) : (
+                              val
+                            )}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -349,62 +372,69 @@ export default function ReportsPage() {
           </CardContent>
           {totalPages > 1 && (
             <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
-              <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
+              <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="font-bold h-9"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
               <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {currentPage} of {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+              <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="font-bold h-9">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
             </CardFooter>
           )}
         </Card>
       )}
 
+      {/* PARAMETERS DIALOG BOX */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-2xl p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
           <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-primary" /> Report Parameters
+            <DialogTitle className="flex items-center gap-2 font-black uppercase text-sm tracking-wider">
+              <Filter className="w-5 h-5 text-primary" /> Report Parameters Setup
             </DialogTitle>
           </DialogHeader>
           
-          <div className="p-8 space-y-8">
+          <div className="p-8 space-y-6 bg-white">
             <div className="grid grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">From Date</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">From Date Range</Label>
                 <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
               </div>
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">To Date</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">To Date Range</Label>
                 <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Filter by Plant</Label>
+            <div className="space-y-2 flex flex-col">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1.5 mb-1"><Building2 className="w-3.5 h-3.5 text-primary" /> Scope Filter By Plant Facility</Label>
               <Select value={selectedPlantId} onValueChange={setSelectedPlantId}>
-                <SelectTrigger className="h-12 bg-slate-50 border-slate-200 font-bold rounded-xl">
+                <SelectTrigger className="h-12 w-full bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase focus:ring-0 shadow-none px-4 flex items-center justify-between">
                   <SelectValue placeholder="All Authorized Plants" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  <SelectItem value="all" className="font-bold text-xs uppercase">All Authorized Plants</SelectItem>
+                <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl max-h-[250px] overflow-y-auto z-[9999]">
+                  <SelectItem value="all" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">All Authorized Plants</SelectItem>
                   {authorizedPlants.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="font-bold text-xs uppercase">{p.name}</SelectItem>
+                    <SelectItem key={p.id} value={p.id} className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <DialogFooter className="p-6 bg-slate-50 border-t flex flex-col sm:flex-row gap-3">
-            <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="flex-1 font-bold h-12 rounded-xl">Cancel</Button>
+          <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
+            <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="flex-1 font-black rounded-xl h-12 uppercase text-xs">Cancel</Button>
             <Button 
               onClick={() => { 
                 setCurrentPage(1);
-                setViewData(processReportData()); 
+                const compiledData = processReportData();
+                setViewData(compiledData); 
                 setViewType(activeReport); 
                 setIsDialogOpen(false); 
+                if(compiledData.length > 0) {
+                  toast({ title: "Report view generated successfully." });
+                } else {
+                  toast({ variant: "destructive", title: "No Records", description: "No entries matched month selection parameters." });
+                }
               }} 
-              className="flex-1 bg-primary hover:bg-primary/90 font-black h-12 rounded-xl shadow-lg shadow-primary/20"
+              className="flex-1 bg-primary hover:bg-primary/90 text-white font-black h-12 rounded-xl shadow-lg shadow-primary/20 uppercase text-xs tracking-wider"
             >
-              Generate Report View
+              Generate View
             </Button>
           </DialogFooter>
         </DialogContent>
