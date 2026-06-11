@@ -14,13 +14,6 @@ import {
   Filter
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter 
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { 
@@ -62,7 +55,6 @@ export default function ReportsPage() {
   const { employees = [], attendanceRecords = [], verifiedUser, holidays = [], leaveRequests = [] } = useData();
   const { toast } = useToast();
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedPlantFilter, setSelectedPlantFilter] = useState("all");
@@ -70,7 +62,7 @@ export default function ReportsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Auto-open modal immediately when page mounts (Removes box interaction from image_48b5bc.png)
+  // Initialize dates when page mounts
   useEffect(() => {
     setIsMounted(true);
     const end = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -78,7 +70,6 @@ export default function ReportsPage() {
     const start = isAfter(subDays(end, 90), floor) ? subDays(end, 90) : floor;
     setFromDate(format(start, "yyyy-MM-dd"));
     setToDate(format(end, "yyyy-MM-dd"));
-    setIsDialogOpen(true);
   }, []);
 
   const userAssignedPlantIds = useMemo(() => {
@@ -114,7 +105,7 @@ export default function ReportsPage() {
       const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
       const approvedLeavesMap = new Map<string, any>();
       
-      (leaveRequests || []).filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
+      (leaveRequests || []).filter(l => String(l.status).toUpperCase() === 'APPROVED').forEach(l => {
         const lStart = startOfDay(parseISO(l.fromDate));
         const lEnd = startOfDay(parseISO(l.toDate));
         if (!isValid(lStart) || !isValid(lEnd)) return;
@@ -178,7 +169,7 @@ export default function ReportsPage() {
           "Out Location": formatLocation(rec.addressOut, rec.latOut, rec.lngOut),
           "Working Hour": workingHour,
           "Status": displayStatus,
-          "Approval": (rec.approved === true || rec.approved === "true" || rec.status === "Closed") ? "Approved" : "Pending",
+          "Approval": (rec.approved === true || String(rec.approved) === "true" || rec.status === "Closed") ? "Approved" : "Pending",
           "Remark": markingRemark
         });
       });
@@ -268,11 +259,70 @@ export default function ReportsPage() {
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">Compile Audited Shift Records and History Ledgers</p>
         </div>
         {viewData && (
-          <Button variant="ghost" onClick={() => { setViewData(null); setIsDialogOpen(true); }} className="gap-2 font-black text-xs uppercase text-slate-500 hover:bg-slate-100 rounded-xl px-4 h-10 border">
-            <Filter className="w-4 h-4" /> Reset Parameters
+          <Button variant="ghost" onClick={() => setViewData(null)} className="gap-2 font-black text-xs uppercase text-slate-500 hover:bg-slate-100 rounded-xl px-4 h-10 border">
+            <X className="w-4 h-4" /> Clear Report
           </Button>
         )}
       </div>
+
+      {/* DIRECT PARAMETERS SECTION */}
+      <Card className="border-none shadow-xl rounded-2xl bg-white p-6 space-y-6">
+        <div className="flex items-center gap-2 mb-2">
+          <Filter className="w-5 h-5 text-primary" /> 
+          <h2 className="font-black uppercase text-sm tracking-wider">Report Parameters Setup</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+          <div className="space-y-2">
+            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">From Date Range</Label>
+            <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">To Date Range</Label>
+            <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
+          </div>
+          <div className="space-y-2 flex flex-col">
+            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1.5 mb-1">
+              <Building2 className="w-3.5 h-3.5 text-primary" /> Scope Filter By Plant
+            </Label>
+            <Select value={selectedPlantFilter} onValueChange={(value) => setSelectedPlantFilter(value)}>
+              <SelectTrigger className="h-12 w-full bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase focus:ring-0 shadow-none px-4">
+                <SelectValue placeholder="ALL AUTHORIZED PLANTS" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl z-[9999]">
+                <SelectItem value="all" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                  ALL AUTHORIZED PLANTS
+                </SelectItem>
+                <SelectItem value="TEA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                  TEA PLANT
+                </SelectItem>
+                <SelectItem value="SALT PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                  SALT PLANT
+                </SelectItem>
+                <SelectItem value="DASNA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                  DASNA PLANT
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Button 
+              onClick={() => { 
+                setCurrentPage(1);
+                const compiledData = processReportData();
+                setViewData(compiledData); 
+                if(compiledData && compiledData.length > 0) {
+                  toast({ title: "Report preview compiled successfully." });
+                } else {
+                  toast({ variant: "destructive", title: "No Records Found", description: "No entries matched selection date parameters bounds." });
+                }
+              }} 
+              className="w-full bg-primary hover:bg-primary/90 text-white font-black h-12 rounded-xl shadow-lg shadow-primary/20 uppercase text-xs tracking-wider"
+            >
+              Generate View
+            </Button>
+          </div>
+        </div>
+      </Card>
 
       {viewData && (
         <Card className="border-none shadow-2xl overflow-hidden rounded-2xl bg-white">
@@ -331,76 +381,6 @@ export default function ReportsPage() {
           )}
         </Card>
       )}
-
-      {/* PARAMETERS DIALOG BOX (image_48b5a1.png) */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
-          <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2 font-black uppercase text-sm tracking-wider">
-              <Filter className="w-5 h-5 text-primary" /> Report Parameters Setup
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="p-8 space-y-6 bg-white">
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">From Date Range</Label>
-                <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">To Date Range</Label>
-                <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
-              </div>
-            </div>
-
-            {/* FIXED 4 DROPDOWNS SELECTION COMPONENT */}
-            <div className="space-y-2 flex flex-col">
-              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1.5 mb-1">
-                <Building2 className="w-3.5 h-3.5 text-primary" /> Scope Filter By Plant Facility
-              </Label>
-              <Select value={selectedPlantFilter} onValueChange={(value) => setSelectedPlantFilter(value)}>
-                <SelectTrigger className="h-12 w-full bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase focus:ring-0 shadow-none px-4">
-                  <SelectValue placeholder="ALL AUTHORIZED PLANTS" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl z-[9999]">
-                  <SelectItem value="all" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                    ALL AUTHORIZED PLANTS
-                  </SelectItem>
-                  <SelectItem value="TEA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                    TEA PLANT
-                  </SelectItem>
-                  <SelectItem value="SALT PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                    SALT PLANT
-                  </SelectItem>
-                  <SelectItem value="DASNA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                    DASNA PLANT
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
-            <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="flex-1 font-black rounded-xl h-12 uppercase text-xs">Cancel</Button>
-            <Button 
-              onClick={() => { 
-                setCurrentPage(1);
-                const compiledData = processReportData();
-                setViewData(compiledData); 
-                setIsDialogOpen(false); 
-                if(compiledData && compiledData.length > 0) {
-                  toast({ title: "Report preview compiled successfully." });
-                } else {
-                  toast({ variant: "destructive", title: "No Records Found", description: "No entries matched selection date parameters bounds." });
-                }
-              }} 
-              className="flex-1 bg-primary hover:bg-primary/90 text-white font-black h-12 rounded-xl shadow-lg shadow-primary/20 uppercase text-xs tracking-wider"
-            >
-              Generate View
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
