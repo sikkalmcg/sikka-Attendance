@@ -6,15 +6,12 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { 
   FileBarChart2, 
-  FileText, 
   Download, 
   X, 
   Building2, 
   ChevronLeft, 
   ChevronRight, 
-  Filter, 
-  Clock,
-  Factory
+  Filter
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -43,10 +40,10 @@ import {
 } from "@/components/ui/select";
 import { format, subDays, isAfter, eachDayOfInterval, isSunday, startOfDay, isValid, addHours, parseISO } from "date-fns";
 import { useData } from "@/context/data-context";
-import { formatCurrency, cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate, parseDateTime } from "@/lib/utils";
+import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
-type ReportType = "ATTENDANCE" | "PAYROLL";
+type ReportType = "ATTENDANCE";
 const PROJECT_START_DATE_STR = "2026-04-01";
 const ROWS_PER_PAGE = 15;
 
@@ -62,20 +59,18 @@ const formatLocation = (address?: string, lat?: number, lng?: number) => {
 };
 
 export default function ReportsPage() {
-  const { employees = [], attendanceRecords = [], payrollRecords = [], plants = [], firms = [], verifiedUser, holidays = [], leaveRequests = [] } = useData();
+  const { employees = [], attendanceRecords = [], verifiedUser, holidays = [], leaveRequests = [] } = useData();
   const { toast } = useToast();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [activeReport, setActiveReport] = useState<ReportType | null>(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [selectedFirmIds, setSelectedFirmIds] = useState<string[]>([]);
-  const [selectedPlantId, setSelectedPlantId] = useState("all");
+  const [selectedPlantFilter, setSelectedPlantFilter] = useState("all");
   const [viewData, setViewData] = useState<any[] | null>(null);
-  const [viewType, setViewType] = useState<ReportType | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isMounted, setIsMounted] = useState(false);
 
+  // Auto-open modal immediately when page mounts (Removes box interaction from image_48b5bc.png)
   useEffect(() => {
     setIsMounted(true);
     const end = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -83,18 +78,13 @@ export default function ReportsPage() {
     const start = isAfter(subDays(end, 90), floor) ? subDays(end, 90) : floor;
     setFromDate(format(start, "yyyy-MM-dd"));
     setToDate(format(end, "yyyy-MM-dd"));
-    if (firms?.length) setSelectedFirmIds(firms.map(f => f.id));
-  }, [firms]);
+    setIsDialogOpen(true);
+  }, []);
 
   const userAssignedPlantIds = useMemo(() => {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
     return verifiedUser.plantIds || [];
   }, [verifiedUser]);
-
-  const authorizedPlants = useMemo(() => {
-    if (!userAssignedPlantIds) return plants;
-    return plants.filter(p => userAssignedPlantIds.includes(p.id));
-  }, [userAssignedPlantIds, plants]);
 
   const paginatedData = useMemo(() => {
     if (!viewData) return [];
@@ -103,9 +93,9 @@ export default function ReportsPage() {
 
   const totalPages = viewData ? Math.ceil(viewData.length / ROWS_PER_PAGE) : 0;
 
-  const processReportData = (typeOverride?: ReportType) => {
-    const type = typeOverride || activeReport;
-    if (!type || !fromDate || !toDate) return [];
+  // COMPACT LIVE FETCH ENGINE (Approvals Page Synced Replication Logic)
+  const processReportData = () => {
+    if (!fromDate || !toDate) return [];
     
     try {
       const start = startOfDay(parseISO(fromDate));
@@ -120,204 +110,149 @@ export default function ReportsPage() {
         return [];
       }
 
-      if (type === "ATTENDANCE") {
-        const allReportData: any[] = [];
-        const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
-        const approvedLeavesMap = new Map<string, any>();
+      const allReportData: any[] = [];
+      const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
+      const approvedLeavesMap = new Map<string, any>();
+      
+      (leaveRequests || []).filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
+        const lStart = startOfDay(parseISO(l.fromDate));
+        const lEnd = startOfDay(parseISO(l.toDate));
+        if (!isValid(lStart) || !isValid(lEnd)) return;
+        eachDayOfInterval({ start: lStart, end: lEnd }).forEach(d => {
+          approvedLeavesMap.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, l);
+        });
+      });
+
+      // 1. ACTUAL ATTENDANCE DATABASE RECORD MATRIX
+      const filteredActual = (attendanceRecords || []).filter(rec => {
+        const emp = employeeMap.get(rec.employeeId);
+        if (!emp) return false;
         
-        (leaveRequests || []).filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
-          const lStart = startOfDay(parseISO(l.fromDate));
-          const lEnd = startOfDay(parseISO(l.toDate));
-          if (!isValid(lStart) || !isValid(lEnd)) return;
-          eachDayOfInterval({ start: lStart, end: lEnd }).forEach(d => {
-            approvedLeavesMap.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, l);
-          });
-        });
+        const recDate = startOfDay(parseISO(rec.date));
+        if (recDate < start || recDate > end) return false;
+        if (!isEmployeeActiveOnDate(emp, rec.date)) return false;
 
-        // 1. ACTUAL RECORDS PROCESSING (Approvals Page Pending Logs aur History Queue dono ka raw data)
-        const filteredActual = (attendanceRecords || []).filter(rec => {
-          const emp = employeeMap.get(rec.employeeId);
-          if (!emp) return false;
-          
-          // Date Filter Check bounds
-          const recDate = startOfDay(parseISO(rec.date));
-          if (recDate < start || recDate > end) return false;
+        // Dynamic Strict Dropdown Selection Logic Bounds
+        if (selectedPlantFilter !== "all" && rec.inPlant !== selectedPlantFilter) return false;
 
-          if (!isEmployeeActiveOnDate(emp, rec.date)) return false;
+        if (!userAssignedPlantIds) return true;
+        return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+      });
 
-          // Firm filter bounds
-          if (selectedFirmIds.length > 0 && emp.firmId && !selectedFirmIds.includes(emp.firmId)) return false;
+      filteredActual.forEach(rec => {
+        const emp = employeeMap.get(rec.employeeId);
+        const isSun = isSunday(parseISO(rec.date));
+        const customHoliday = (holidays || []).find(h => h.date === rec.date && !h.auto);
 
-          // Plant filter bounds
-          if (selectedPlantId !== "all") {
-            const targetPlant = plants.find(p => p.id === selectedPlantId);
-            if (rec.inPlant !== targetPlant?.name) return false;
+        let displayStatus = "Present";
+        if (isSun) displayStatus = "Present on Weekly Off";
+        else if (customHoliday) displayStatus = "Present on Holiday";
+
+        let inDateTime = rec.inTime ? `${formatDate(rec.inDate || rec.date)} ${rec.inTime}` : "--";
+        let outDateTime = "--";
+        let workingHour = formatHoursToHHMM(rec.hours || 0);
+        let markingRemark = rec.remark || "--";
+
+        if (!rec.outTime && rec.inTime) {
+          const inDT = parseISO(rec.inDateTime || `${rec.inDate || rec.date}T${rec.inTime}:00`);
+          if (inDT && isValid(inDT)) {
+            const diffHours = (new Date().getTime() - inDT.getTime()) / (1000 * 60 * 60);
+            if (diffHours >= 16 || rec.autoCheckout) {
+              const autoOutDT = addHours(inDT, 16);
+              outDateTime = `${formatDate(format(autoOutDT, "yyyy-MM-dd"))} ${format(autoOutDT, "HH:mm")}`;
+              workingHour = "16:00";
+              if (!rec.remark) markingRemark = "System Auto-Logged OUT (16h Limit Threshold reached)";
+            }
           }
+        } else if (rec.outTime) {
+          outDateTime = `${formatDate(rec.outDate || rec.date)} ${rec.outTime}`;
+        }
 
-          if (!userAssignedPlantIds) return true;
-          return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+        allReportData.push({
+          "Employee ID": rec.employeeId,
+          "Employee Name": emp?.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : rec.employeeName,
+          "In date time": inDateTime,
+          "In Plant": rec.inPlant || "Salt Plant",
+          "Out Date time": outDateTime,
+          "In Location": formatLocation(rec.address, rec.lat, rec.lng),
+          "Out Location": formatLocation(rec.addressOut, rec.latOut, rec.lngOut),
+          "Working Hour": workingHour,
+          "Status": displayStatus,
+          "Approval": (rec.approved === true || rec.approved === "true" || rec.status === "Closed") ? "Approved" : "Pending",
+          "Remark": markingRemark
         });
+      });
 
-        filteredActual.forEach(rec => {
-          const emp = employeeMap.get(rec.employeeId);
-          const isSun = isSunday(parseISO(rec.date));
-          const customHoliday = (holidays || []).find(h => h.date === rec.date && !h.auto);
-          const leave = approvedLeavesMap.get(`${rec.employeeId}:${rec.date}`);
+      // 2. ABSENT / COMPLIANCE SYSTEM GENERATOR LOOKUP LINK
+      const handledRecordsKeySet = new Set((attendanceRecords || []).map(r => `${r.employeeId}:${r.date}`));
+      const dateRangeInterval = eachDayOfInterval({ start, end });
 
-          let displayStatus = "Present";
-          if (isSun) displayStatus = "Present on Weekly Off";
-          else if (customHoliday) displayStatus = "Present on Holiday";
+      (employees || []).forEach(emp => {
+        if (userAssignedPlantIds) {
+          const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+          if (!hasAccess) return;
+        }
 
-          let inDateTime = rec.inTime ? `${formatDate(rec.inDate || rec.date)} ${rec.inTime}` : "--";
-          let outDateTime = "--";
-          let workingHour = formatHoursToHHMM(rec.hours || 0);
-          let markingRemark = rec.remark || "--";
+        dateRangeInterval.forEach(date => {
+          const dateStr = format(date, "yyyy-MM-dd");
+          if (!isEmployeeActiveOnDate(emp, dateStr)) return;
 
-          if (!rec.outTime && rec.inTime) {
-            const inDT = parseISO(rec.inDateTime || `${rec.inDate || rec.date}T${rec.inTime}:00`);
-            if (inDT && isValid(inDT)) {
-              const diffHours = (new Date().getTime() - inDT.getTime()) / (1000 * 60 * 60);
-              if (diffHours >= 16 || rec.autoCheckout) {
-                const autoOutDT = addHours(inDT, 16);
-                outDateTime = `${formatDate(format(autoOutDT, "yyyy-MM-dd"))} ${format(autoOutDT, "HH:mm")}`;
-                workingHour = "16:00";
-                if (!rec.remark) markingRemark = "System Auto-Logged OUT (16h Limit Threshold reached)";
-              }
+          const key = `${emp.employeeId}:${dateStr}`;
+          if (!handledRecordsKeySet.has(key)) {
+            const isSun = isSunday(date);
+            const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
+            const leave = approvedLeavesMap.get(`${emp.employeeId}:${dateStr}`);
+
+            let displayStatus = "Absent";
+            let approvalState = "Unmarked";
+            let remarkText = "--";
+
+            if (leave) {
+              displayStatus = "Absent on Leave";
+              approvalState = "Approved";
+              remarkText = `Leave: ${leave.purpose}`;
+            } else if (isSun) {
+              displayStatus = "Weekly Off";
+              approvalState = "System Link";
+            } else if (customHoliday) {
+              displayStatus = "Holiday";
+              approvalState = "System Link";
             }
-          } else if (rec.outTime) {
-            outDateTime = `${formatDate(rec.outDate || rec.date)} ${rec.outTime}`;
+
+            // Fallback virtual plant string generator checks
+            const virtualPlantName = selectedPlantFilter !== "all" ? selectedPlantFilter : "Salt Plant";
+
+            allReportData.push({
+              "Employee ID": emp.employeeId,
+              "Employee Name": emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name,
+              "In date time": formatDate(dateStr),
+              "In Plant": virtualPlantName,
+              "Out Date time": "--",
+              "In Location": "Location Not Available",
+              "Out Location": "Location Not Available",
+              "Working Hour": "00:00",
+              "Status": displayStatus,
+              "Approval": approvalState,
+              "Remark": remarkText
+            });
           }
-
-          allReportData.push({
-            "Employee ID": rec.employeeId,
-            "Employee Name": emp?.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : rec.employeeName,
-            "In date time": inDateTime,
-            "In Plant": rec.inPlant || "Salt Plant",
-            "Out Date time": outDateTime,
-            "In Location": formatLocation(rec.address, rec.lat, rec.lng),
-            "Out Location": formatLocation(rec.addressOut, rec.latOut, rec.lngOut),
-            "Working Hour": workingHour,
-            "Status": displayStatus,
-            "Approval": (rec.approved === true || rec.approved === "true") ? "Approved" : "Pending",
-            "Remark": markingRemark
-          });
         });
+      });
 
-        // 2. VIRTUAL ABSENT LOGS PROCESSING (Jo Approvals Page par automatic system generate karta hai)
-        const handledRecordsKeySet = new Set((attendanceRecords || []).map(r => `${r.employeeId}:${r.date}`));
-        const dateRangeInterval = eachDayOfInterval({ start, end });
-
-        (employees || []).forEach(emp => {
-          if (userAssignedPlantIds) {
-            const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
-            if (!hasAccess) return;
-          }
-          if (selectedFirmIds.length > 0 && emp.firmId && !selectedFirmIds.includes(emp.firmId)) return;
-          if (selectedPlantId !== "all" && !(emp.unitIds || []).includes(selectedPlantId) && emp.unitId !== selectedPlantId) return;
-
-          dateRangeInterval.forEach(date => {
-            const dateStr = format(date, "yyyy-MM-dd");
-            if (!isEmployeeActiveOnDate(emp, dateStr)) return;
-
-            const key = `${emp.employeeId}:${dateStr}`;
-            if (!handledRecordsKeySet.has(key)) {
-              const isSun = isSunday(date);
-              const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
-              const leave = approvedLeavesMap.get(`${emp.employeeId}:${dateStr}`);
-
-              let displayStatus = "Absent";
-              let approvalState = "Unmarked";
-              let remarkText = "--";
-
-              if (leave) {
-                displayStatus = "Absent on Leave";
-                approvalState = "Approved";
-                remarkText = `Leave: ${leave.purpose}`;
-              } else if (isSun) {
-                displayStatus = "Weekly Off";
-                approvalState = "System Link";
-              } else if (customHoliday) {
-                displayStatus = "Holiday";
-                approvalState = "System Link";
-              }
-
-              const targetPlantObj = plants.find(p => p.id === selectedPlantId) || plants.find(p => p.id === emp.unitId);
-
-              allReportData.push({
-                "Employee ID": emp.employeeId,
-                "Employee Name": emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name,
-                "In date time": formatDate(dateStr),
-                "In Plant": targetPlantObj ? targetPlantObj.name : "Salt Plant",
-                "Out Date time": "--",
-                "In Location": "Location Not Available",
-                "Out Location": "Location Not Available",
-                "Working Hour": "00:00",
-                "Status": displayStatus,
-                "Approval": approvalState,
-                "Remark": remarkText
-              });
-            }
-          });
-        });
-
-        return allReportData.sort((a, b) => b["In date time"].localeCompare(a["In date time"]));
-      }
-
-      if (type === "PAYROLL") {
-        return (payrollRecords || [])
-          .filter(p => {
-            const emp = employees.find(e => e.employeeId === p.employeeId);
-            if (!emp) return false;
-
-            if (userAssignedPlantIds && userAssignedPlantIds.length > 0) {
-              const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
-              if (!hasAccess) return false;
-            }
-            if (selectedPlantId !== "all") {
-              const empAtPlant = emp.unitIds?.includes(selectedPlantId) || emp.unitId === selectedPlantId;
-              if (!empAtPlant) return false;
-            }
-            if (!selectedFirmIds || selectedFirmIds.length === 0) return true;
-            return !emp.firmId || selectedFirmIds.includes(emp.firmId);
-          })
-          .map(p => {
-            const emp = employees.find(e => e.employeeId === p.employeeId);
-            const firm = firms.find(f => f.id === emp?.firmId);
-            const lastPayment = p.salaryHistory?.[p.salaryHistory.length - 1];
-            
-            return {
-              "Firm": firm?.name || "N/A",
-              "Employee ID": p.employeeId,
-              "Employee Name": p.employeeName,
-              "Salary Slip No.": p.slipNo || "N/A",
-              "Date": p.slipDate || formatDate(p.createdAt),
-              "Payroll Month": p.month,
-              "Working Day": p.totalEarningDays || 0,
-              "Absent": p.absent || 0,
-              "Monthly CTC": formatCurrency(emp?.salary?.monthlyCTC || 0),
-              "Advance Deduction": formatCurrency(p.advanceRecovery || 0),
-              "Net Payable Salary": formatCurrency(p.netPayable || 0),
-              "Paid Amount": formatCurrency(p.salaryPaidAmount || 0),
-              "Paid Date": p.salaryPaidDate || "---",
-              "Banking Reference": lastPayment?.reference || "---"
-            };
-          });
-      }
+      return allReportData.sort((a, b) => b["In date time"].localeCompare(a["In date time"]));
     } catch (error) {
       console.error("Error processing report data:", error);
-      toast({ variant: "destructive", title: "Error", description: "Failed to generate report due to an unexpected error." });
       return [];
     }
-    return [];
   };
 
-  const handleExport = (typeOverride?: ReportType) => {
-    const data = processReportData(typeOverride);
+  const handleExport = () => {
+    const data = processReportData();
     if (!data.length) { toast({ variant: "destructive", title: "No Data Scopes Finalized" }); return; }
     const csv = [Object.keys(data[0]).join(","), ...data.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
     const link = document.createElement("a");
     link.setAttribute("href", URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })));
-    link.setAttribute("download", `Sikka_${typeOverride || viewType}_Report_${fromDate}_to_${toDate}.csv`);
+    link.setAttribute("download", `Sikka_Attendance_Report_${fromDate}_to_${toDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -333,37 +268,20 @@ export default function ReportsPage() {
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">Compile Audited Shift Records and History Ledgers</p>
         </div>
         {viewData && (
-          <Button variant="ghost" onClick={() => { setViewData(null); setViewType(null); }} className="gap-2 font-black text-xs uppercase text-slate-500 hover:bg-slate-100 rounded-xl px-4 h-10 border">
-            <X className="w-4 h-4" /> Reset View
+          <Button variant="ghost" onClick={() => { setViewData(null); setIsDialogOpen(true); }} className="gap-2 font-black text-xs uppercase text-slate-500 hover:bg-slate-100 rounded-xl px-4 h-10 border">
+            <Filter className="w-4 h-4" /> Reset Parameters
           </Button>
         )}
       </div>
 
-      {!viewData ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Card className="p-10 cursor-pointer hover:shadow-xl transition-all group rounded-[2rem] bg-white border border-slate-100 shadow-sm" onClick={() => { setActiveReport("ATTENDANCE"); setIsDialogOpen(true); }}>
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-primary group-hover:text-white transition-colors shadow-inner">
-              <FileBarChart2 className="w-8 h-8 text-primary group-hover:text-white" />
-            </div>
-            <h3 className="text-xl font-black uppercase tracking-tight text-slate-800">Attendance Export</h3>
-            <p className="text-sm font-semibold text-slate-400 mt-2 leading-relaxed">Scoped history ledger data streams mapping the facility compliance records.</p>
-          </Card>
-          <Card className="p-10 cursor-pointer hover:shadow-xl transition-all group rounded-[2rem] bg-white border border-slate-100 shadow-sm" onClick={() => { setActiveReport("PAYROLL"); setIsDialogOpen(true); }}>
-            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-inner">
-              <FileText className="w-8 h-8 text-emerald-600 group-hover:text-white" />
-            </div>
-            <h3 className="text-xl font-black uppercase tracking-tight text-slate-800">Payroll Summary</h3>
-            <p className="text-sm font-semibold text-slate-400 mt-2 leading-relaxed">Consolidated monthly disbursements arrays logs and transaction referential ledgers.</p>
-          </Card>
-        </div>
-      ) : (
+      {viewData && (
         <Card className="border-none shadow-2xl overflow-hidden rounded-2xl bg-white">
           <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between p-6 shrink-0">
             <div>
-              <CardTitle className="uppercase font-black tracking-tight text-lg">{viewType} History Ledger Preview</CardTitle>
+              <CardTitle className="uppercase font-black tracking-tight text-lg">Attendance History Ledger Preview</CardTitle>
               <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">Filter Period: {formatDate(fromDate)} to {formatDate(toDate)}</p>
             </div>
-            <Button onClick={() => handleExport(viewType!)} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-8 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10"><Download className="w-4 h-4" /> Export CSV Sheet</Button>
+            <Button onClick={handleExport} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-8 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10"><Download className="w-4 h-4" /> Export CSV Sheet</Button>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="w-full">
@@ -383,11 +301,13 @@ export default function ReportsPage() {
                       <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
                         {Object.values(row).map((val: any, i) => (
                           <TableCell key={i} className="px-6 py-4 text-xs font-bold text-slate-700 whitespace-nowrap">
-                            {val?.toString() === "Approved" ? (
+                            {val?.toString() === "Approved" || val?.toString() === "System Link" ? (
                               <Badge className="bg-emerald-50 text-emerald-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
                             ) : val?.toString() === "Pending" ? (
                               <Badge className="bg-amber-50 text-amber-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
-                            ) : val?.toString().includes("Hrs") || val?.toString().includes("₹") ? (
+                            ) : val?.toString() === "Absent" ? (
+                              <Badge className="bg-rose-50 text-rose-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
+                            ) : val?.toString().includes("Hrs") || val?.toString().includes(":") ? (
                               <span className="font-mono font-black text-slate-900">{val}</span>
                             ) : (
                               val
@@ -412,7 +332,7 @@ export default function ReportsPage() {
         </Card>
       )}
 
-      {/* PARAMETERS DIALOG BOX */}
+      {/* PARAMETERS DIALOG BOX (image_48b5a1.png) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl p-0 overflow-hidden">
           <DialogHeader className="p-6 bg-slate-900 text-white shrink-0">
@@ -433,23 +353,28 @@ export default function ReportsPage() {
               </div>
             </div>
 
+            {/* FIXED 4 DROPDOWNS SELECTION COMPONENT */}
             <div className="space-y-2 flex flex-col">
               <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1.5 mb-1">
                 <Building2 className="w-3.5 h-3.5 text-primary" /> Scope Filter By Plant Facility
               </Label>
-              <Select value={selectedPlantId} onValueChange={(value) => setSelectedPlantId(value)}>
+              <Select value={selectedPlantFilter} onValueChange={(value) => setSelectedPlantFilter(value)}>
                 <SelectTrigger className="h-12 w-full bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase focus:ring-0 shadow-none px-4">
-                  <SelectValue placeholder="All Authorized Plants" />
+                  <SelectValue placeholder="ALL AUTHORIZED PLANTS" />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl max-h-[250px] overflow-y-auto z-[9999]">
+                <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl z-[9999]">
                   <SelectItem value="all" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                    All Authorized Plants
+                    ALL AUTHORIZED PLANTS
                   </SelectItem>
-                  {authorizedPlants.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                      {p.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="TEA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                    TEA PLANT
+                  </SelectItem>
+                  <SelectItem value="SALT PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                    SALT PLANT
+                  </SelectItem>
+                  <SelectItem value="DASNA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                    DASNA PLANT
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -462,12 +387,11 @@ export default function ReportsPage() {
                 setCurrentPage(1);
                 const compiledData = processReportData();
                 setViewData(compiledData); 
-                setViewType(activeReport); 
                 setIsDialogOpen(false); 
                 if(compiledData && compiledData.length > 0) {
-                  toast({ title: "Report view generated successfully." });
+                  toast({ title: "Report preview compiled successfully." });
                 } else {
-                  toast({ variant: "destructive", title: "No Records", description: "No entries matched selection date parameters bounds." });
+                  toast({ variant: "destructive", title: "No Records Found", description: "No entries matched selection date parameters bounds." });
                 }
               }} 
               className="flex-1 bg-primary hover:bg-primary/90 text-white font-black h-12 rounded-xl shadow-lg shadow-primary/20 uppercase text-xs tracking-wider"
