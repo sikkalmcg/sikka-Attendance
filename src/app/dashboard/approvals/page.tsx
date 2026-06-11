@@ -450,7 +450,7 @@ export default function ApprovalsPage() {
       return;
     }
 
-    const inDT = parseISO(`${editData.plant}T${editData.inTime}:00`);
+    const inDT = parseISO(`${editData.inDate}T${editData.inTime}:00`);
     const outDT = parseISO(`${editData.outDate}T${editData.outTime}:00`);
 
     setIsEditModalOpen(false);
@@ -832,6 +832,69 @@ export default function ApprovalsPage() {
           <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
              <Button variant="ghost" onClick={() => setIsAttendanceRejectOpen(false)} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
              <Button onClick={handlePostAttendanceReject} disabled={!attendanceRejectReason.trim()} className="flex-1 bg-rose-600 hover:bg-rose-700 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-rose-600/10">Reject Entry</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EDIT MODAL */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="p-6 bg-slate-900 text-white flex flex-row items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
+              <Pencil className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle className="text-md font-black uppercase tracking-tight">Edit Attendance Record</DialogTitle>
+              <DialogDescription className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Modify session details manually</DialogDescription>
+            </div>
+          </DialogHeader>
+          
+          <div className="p-6 space-y-4 bg-white max-h-[60vh] overflow-y-auto">
+             <div className="space-y-2 flex flex-col">
+               <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Plant Facility</Label>
+               <Select value={editData.plant} onValueChange={(v) => setEditData(prev => ({ ...prev, plant: v }))}>
+                  <SelectTrigger className="h-10 border-slate-200 font-bold bg-slate-50 rounded-xl focus:ring-0 shadow-none text-xs">
+                    <SelectValue placeholder="Select Plant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {authorizedPlants.map(p => (
+                      <SelectItem key={p.id} value={p.name} className="font-bold text-xs uppercase">{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+               </Select>
+             </div>
+             
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Date</Label>
+                 <Input type="date" value={editData.inDate} onChange={(e) => setEditData(prev => ({ ...prev, inDate: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+               </div>
+               <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Time</Label>
+                 <Input type="time" value={editData.inTime} onChange={(e) => setEditData(prev => ({ ...prev, inTime: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+               </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+               <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Date</Label>
+                 <Input type="date" value={editData.outDate} onChange={(e) => setEditData(prev => ({ ...prev, outDate: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+               </div>
+               <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Time</Label>
+                 <Input type="time" value={editData.outTime} onChange={(e) => setEditData(prev => ({ ...prev, outTime: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+               </div>
+             </div>
+
+             <div className="space-y-2 flex flex-col">
+               <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Remark / Reason *</Label>
+               <Textarea placeholder="Explain reason for manual modification..." value={editData.remark} onChange={(e) => setEditData(prev => ({ ...prev, remark: e.target.value }))} className="min-h-[80px] border-slate-200 bg-slate-50 rounded-xl font-medium text-xs" />
+             </div>
+          </div>
+          
+          <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
+             <Button variant="ghost" onClick={() => setIsEditModalOpen(false)} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
+             <Button onClick={handleUpdateAttendance} className="flex-1 bg-primary hover:bg-primary/90 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-primary/10">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -105,178 +105,210 @@ export default function ReportsPage() {
 
   const processReportData = (typeOverride?: ReportType) => {
     const type = typeOverride || activeReport;
-    if (!type) return [];
+    if (!type || !fromDate || !toDate) return [];
     
-    const start = startOfDay(parseISO(fromDate));
-    const end = startOfDay(parseISO(toDate));
+    try {
+      const start = startOfDay(parseISO(fromDate));
+      const end = startOfDay(parseISO(toDate));
 
-    if (type === "ATTENDANCE") {
-      const allReportData: any[] = [];
-      const dateRange = eachDayOfInterval({ start, end });
-      
-      const recordMap = new Map<string, any>();
-      (attendanceRecords || []).forEach(r => {
-        recordMap.set(`${r.employeeId}:${r.date}`, r);
-      });
-
-      const approvedLeavesMap = new Map<string, any>();
-      (leaveRequests || []).filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
-        const lStart = startOfDay(parseISO(l.fromDate));
-        const lEnd = startOfDay(parseISO(l.toDate));
-        if (!isValid(lStart) || !isValid(lEnd)) return;
-        eachDayOfInterval({ start: lStart, end: lEnd }).forEach(d => {
-          approvedLeavesMap.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, l);
+      if (!isValid(start) || !isValid(end) || isAfter(start, end)) {
+        toast({
+          variant: "destructive",
+          title: "Invalid Date Range",
+          description: "The 'From' date cannot be after the 'To' date.",
         });
-      });
+        return [];
+      }
 
-      const targetEmployees = (employees || []).filter(emp => {
-        if (userAssignedPlantIds) {
-          const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
-          if (!hasAccess) return false;
-        }
-        return (!emp.firmId || selectedFirmIds.length === 0 || selectedFirmIds.includes(emp.firmId));
-      });
+      if (type === "ATTENDANCE") {
+        const allReportData: any[] = [];
+        const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
+        const approvedLeavesMap = new Map<string, any>();
+        
+        (leaveRequests || []).filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
+          const lStart = startOfDay(parseISO(l.fromDate));
+          const lEnd = startOfDay(parseISO(l.toDate));
+          if (!isValid(lStart) || !isValid(lEnd)) return;
+          eachDayOfInterval({ start: lStart, end: lEnd }).forEach(d => {
+            approvedLeavesMap.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, l);
+          });
+        });
 
-      targetEmployees.forEach(emp => {
-        if (selectedPlantId !== "all") {
-          const empAtPlant = emp.unitIds?.includes(selectedPlantId) || emp.unitId === selectedPlantId;
-          if (!empAtPlant) return;
-        }
-
-        dateRange.forEach(date => {
-          const dateStr = format(date, 'yyyy-MM-dd');
-          if (!isEmployeeActiveOnDate(emp, dateStr)) return;
-
-          const r = recordMap.get(`${emp.employeeId}:${dateStr}`);
+        // 1. ACTUAL RECORDS PROCESSING (Approvals Page Pending Logs aur History Queue dono ka raw data)
+        const filteredActual = (attendanceRecords || []).filter(rec => {
+          const emp = employeeMap.get(rec.employeeId);
+          if (!emp) return false;
           
-          let displayStatus = "";
-          let inDateTime = formatDate(dateStr);
+          // Date Filter Check bounds
+          const recDate = startOfDay(parseISO(rec.date));
+          if (recDate < start || recDate > end) return false;
+
+          if (!isEmployeeActiveOnDate(emp, rec.date)) return false;
+
+          // Firm filter bounds
+          if (selectedFirmIds.length > 0 && emp.firmId && !selectedFirmIds.includes(emp.firmId)) return false;
+
+          // Plant filter bounds
+          if (selectedPlantId !== "all") {
+            const targetPlant = plants.find(p => p.id === selectedPlantId);
+            if (rec.inPlant !== targetPlant?.name) return false;
+          }
+
+          if (!userAssignedPlantIds) return true;
+          return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+        });
+
+        filteredActual.forEach(rec => {
+          const emp = employeeMap.get(rec.employeeId);
+          const isSun = isSunday(parseISO(rec.date));
+          const customHoliday = (holidays || []).find(h => h.date === rec.date && !h.auto);
+          const leave = approvedLeavesMap.get(`${rec.employeeId}:${rec.date}`);
+
+          let displayStatus = "Present";
+          if (isSun) displayStatus = "Present on Weekly Off";
+          else if (customHoliday) displayStatus = "Present on Holiday";
+
+          let inDateTime = rec.inTime ? `${formatDate(rec.inDate || rec.date)} ${rec.inTime}` : "--";
           let outDateTime = "--";
-          let inLocation = "Location Not Available";
-          let outLocation = "Location Not Available";
-          let inPlant = "--";
-          let workingHour = "00:00";
-          let markingRemark = "--";
-          let isApprovedStatus = "Pending";
-          
-          const isSun = isSunday(date);
-          const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
-          const leave = approvedLeavesMap.get(`${emp.employeeId}:${dateStr}`);
+          let workingHour = formatHoursToHHMM(rec.hours || 0);
+          let markingRemark = rec.remark || "--";
 
-          // FIXED LOGIC: Fills report data for both approved history and raw live present logs matching date intervals
-          if (r) {
-            isApprovedStatus = (r.approved === true || r.approved === "true") ? "Approved" : "Pending";
-            markingRemark = r.remark || "--";
-            inPlant = r.inPlant || "Salt Plant";
-
-            if (r.inTime) {
-              inDateTime = `${formatDate(r.inDate || r.date)} ${r.inTime || ""}`;
-              inLocation = formatLocation(r.address, r.lat, r.lng);
-              
-              if (r.autoCheckout) {
-                const inDT = parseDateTime(r.inDate || r.date, r.inTime || "");
-                if (inDT && isValid(inDT)) {
-                  const autoOutDT = addHours(inDT, 16);
-                  outDateTime = `${formatDate(format(autoOutDT, "yyyy-MM-dd"))} ${format(autoOutDT, "HH:mm")}`;
-                }
+          if (!rec.outTime && rec.inTime) {
+            const inDT = parseISO(rec.inDateTime || `${rec.inDate || rec.date}T${rec.inTime}:00`);
+            if (inDT && isValid(inDT)) {
+              const diffHours = (new Date().getTime() - inDT.getTime()) / (1000 * 60 * 60);
+              if (diffHours >= 16 || rec.autoCheckout) {
+                const autoOutDT = addHours(inDT, 16);
+                outDateTime = `${formatDate(format(autoOutDT, "yyyy-MM-dd"))} ${format(autoOutDT, "HH:mm")}`;
                 workingHour = "16:00";
-                if (!r.remark) markingRemark = "System Auto-Logged OUT (16h Limit Threshold reached)";
-              } else {
-                outDateTime = r.outTime ? `${formatDate(r.outDate || r.date)} ${r.outTime}` : "--";
-                outLocation = formatLocation(r.addressOut, r.latOut, r.lngOut);
-                workingHour = formatHoursToHHMM(r.hours || 0);
+                if (!rec.remark) markingRemark = "System Auto-Logged OUT (16h Limit Threshold reached)";
               }
-
-              if (isSun) displayStatus = "Present on Weekly Off";
-              else if (customHoliday) displayStatus = "Present on Holiday";
-              else displayStatus = "Present";
-            } else {
-              if (leave) {
-                displayStatus = "Absent on Leave";
-                isApprovedStatus = "Approved";
-                markingRemark = `Leave: ${leave.purpose}`;
-              } else if (isSun) {
-                displayStatus = "Weekly Off";
-                isApprovedStatus = "System Link";
-              } else if (customHoliday) {
-                displayStatus = "Holiday";
-                isApprovedStatus = "System Link";
-              } else {
-                displayStatus = r.status === 'PRESENT' ? 'Present' : 'Absent';
-              }
-              workingHour = formatHoursToHHMM(r.hours || 0);
             }
-          } else {
-            if (leave) {
-              displayStatus = "Absent on Leave";
-              isApprovedStatus = "Approved";
-              markingRemark = `Leave: ${leave.purpose}`;
-            } else if (isSun) {
-              displayStatus = "Weekly Off";
-              isApprovedStatus = "System Link";
-            } else if (customHoliday) {
-              displayStatus = "Holiday";
-              isApprovedStatus = "System Link";
-            } else {
-              displayStatus = "Absent";
-              isApprovedStatus = "Unmarked";
-            }
+          } else if (rec.outTime) {
+            outDateTime = `${formatDate(rec.outDate || rec.date)} ${rec.outTime}`;
           }
 
           allReportData.push({
-            "Employee ID": emp.employeeId,
-            "Employee Name": emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name,
+            "Employee ID": rec.employeeId,
+            "Employee Name": emp?.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : rec.employeeName,
             "In date time": inDateTime,
-            "In Plant": inPlant,
+            "In Plant": rec.inPlant || "Salt Plant",
             "Out Date time": outDateTime,
-            "In Location": inLocation,
-            "Out Location": outLocation,
+            "In Location": formatLocation(rec.address, rec.lat, rec.lng),
+            "Out Location": formatLocation(rec.addressOut, rec.latOut, rec.lngOut),
             "Working Hour": workingHour,
             "Status": displayStatus,
-            "Approval": isApprovedStatus,
+            "Approval": (rec.approved === true || rec.approved === "true") ? "Approved" : "Pending",
             "Remark": markingRemark
           });
         });
-      });
 
-      return allReportData.sort((a, b) => b["In date time"].localeCompare(a["In date time"]));
+        // 2. VIRTUAL ABSENT LOGS PROCESSING (Jo Approvals Page par automatic system generate karta hai)
+        const handledRecordsKeySet = new Set((attendanceRecords || []).map(r => `${r.employeeId}:${r.date}`));
+        const dateRangeInterval = eachDayOfInterval({ start, end });
+
+        (employees || []).forEach(emp => {
+          if (userAssignedPlantIds) {
+            const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+            if (!hasAccess) return;
+          }
+          if (selectedFirmIds.length > 0 && emp.firmId && !selectedFirmIds.includes(emp.firmId)) return;
+          if (selectedPlantId !== "all" && !(emp.unitIds || []).includes(selectedPlantId) && emp.unitId !== selectedPlantId) return;
+
+          dateRangeInterval.forEach(date => {
+            const dateStr = format(date, "yyyy-MM-dd");
+            if (!isEmployeeActiveOnDate(emp, dateStr)) return;
+
+            const key = `${emp.employeeId}:${dateStr}`;
+            if (!handledRecordsKeySet.has(key)) {
+              const isSun = isSunday(date);
+              const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
+              const leave = approvedLeavesMap.get(`${emp.employeeId}:${dateStr}`);
+
+              let displayStatus = "Absent";
+              let approvalState = "Unmarked";
+              let remarkText = "--";
+
+              if (leave) {
+                displayStatus = "Absent on Leave";
+                approvalState = "Approved";
+                remarkText = `Leave: ${leave.purpose}`;
+              } else if (isSun) {
+                displayStatus = "Weekly Off";
+                approvalState = "System Link";
+              } else if (customHoliday) {
+                displayStatus = "Holiday";
+                approvalState = "System Link";
+              }
+
+              const targetPlantObj = plants.find(p => p.id === selectedPlantId) || plants.find(p => p.id === emp.unitId);
+
+              allReportData.push({
+                "Employee ID": emp.employeeId,
+                "Employee Name": emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name,
+                "In date time": formatDate(dateStr),
+                "In Plant": targetPlantObj ? targetPlantObj.name : "Salt Plant",
+                "Out Date time": "--",
+                "In Location": "Location Not Available",
+                "Out Location": "Location Not Available",
+                "Working Hour": "00:00",
+                "Status": displayStatus,
+                "Approval": approvalState,
+                "Remark": remarkText
+              });
+            }
+          });
+        });
+
+        return allReportData.sort((a, b) => b["In date time"].localeCompare(a["In date time"]));
+      }
+
+      if (type === "PAYROLL") {
+        return (payrollRecords || [])
+          .filter(p => {
+            const emp = employees.find(e => e.employeeId === p.employeeId);
+            if (!emp) return false;
+
+            if (userAssignedPlantIds && userAssignedPlantIds.length > 0) {
+              const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+              if (!hasAccess) return false;
+            }
+            if (selectedPlantId !== "all") {
+              const empAtPlant = emp.unitIds?.includes(selectedPlantId) || emp.unitId === selectedPlantId;
+              if (!empAtPlant) return false;
+            }
+            if (!selectedFirmIds || selectedFirmIds.length === 0) return true;
+            return !emp.firmId || selectedFirmIds.includes(emp.firmId);
+          })
+          .map(p => {
+            const emp = employees.find(e => e.employeeId === p.employeeId);
+            const firm = firms.find(f => f.id === emp?.firmId);
+            const lastPayment = p.salaryHistory?.[p.salaryHistory.length - 1];
+            
+            return {
+              "Firm": firm?.name || "N/A",
+              "Employee ID": p.employeeId,
+              "Employee Name": p.employeeName,
+              "Salary Slip No.": p.slipNo || "N/A",
+              "Date": p.slipDate || formatDate(p.createdAt),
+              "Payroll Month": p.month,
+              "Working Day": p.totalEarningDays || 0,
+              "Absent": p.absent || 0,
+              "Monthly CTC": formatCurrency(emp?.salary?.monthlyCTC || 0),
+              "Advance Deduction": formatCurrency(p.advanceRecovery || 0),
+              "Net Payable Salary": formatCurrency(p.netPayable || 0),
+              "Paid Amount": formatCurrency(p.salaryPaidAmount || 0),
+              "Paid Date": p.salaryPaidDate || "---",
+              "Banking Reference": lastPayment?.reference || "---"
+            };
+          });
+      }
+    } catch (error) {
+      console.error("Error processing report data:", error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to generate report due to an unexpected error." });
+      return [];
     }
-
-    return (payrollRecords || [])
-      .filter(p => {
-        const emp = employees.find(e => e.employeeId === p.employeeId);
-        if (userAssignedPlantIds) {
-          const hasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId);
-          if (!hasAccess) return false;
-        }
-        if (selectedPlantId !== "all") {
-          const empAtPlant = emp?.unitIds?.includes(selectedPlantId) || emp?.unitId === selectedPlantId;
-          if (!empAtPlant) return false;
-        }
-        return emp ? (!emp.firmId || selectedFirmIds.length === 0 || selectedFirmIds.includes(emp.firmId)) : true;
-      })
-      .map(p => {
-        const emp = employees.find(e => e.employeeId === p.employeeId);
-        const firm = firms.find(f => f.id === emp?.firmId);
-        const lastPayment = p.salaryHistory?.[p.salaryHistory.length - 1];
-        
-        return {
-          "Firm": firm?.name || "N/A",
-          "Employee ID": p.employeeId,
-          "Employee Name": p.employeeName,
-          "Salary Slip No.": p.slipNo || "N/A",
-          "Date": p.slipDate || formatDate(p.createdAt),
-          "Payroll Month": p.month,
-          "Working Day": p.totalEarningDays || 0,
-          "Absent": p.absent || 0,
-          "Monthly CTC": formatCurrency(emp?.salary?.monthlyCTC || 0),
-          "Advance Deduction": formatCurrency(p.advanceRecovery || 0),
-          "Net Payable Salary": formatCurrency(p.netPayable || 0),
-          "Paid Amount": formatCurrency(p.salaryPaidAmount || 0),
-          "Paid Date": p.salaryPaidDate || "---",
-          "Banking Reference": lastPayment?.reference || "---"
-        };
-      });
+    return [];
   };
 
   const handleExport = (typeOverride?: ReportType) => {
@@ -402,15 +434,21 @@ export default function ReportsPage() {
             </div>
 
             <div className="space-y-2 flex flex-col">
-              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1.5 mb-1"><Building2 className="w-3.5 h-3.5 text-primary" /> Scope Filter By Plant Facility</Label>
-              <Select value={selectedPlantId} onValueChange={setSelectedPlantId}>
-                <SelectTrigger className="h-12 w-full bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase focus:ring-0 shadow-none px-4 flex items-center justify-between">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1.5 mb-1">
+                <Building2 className="w-3.5 h-3.5 text-primary" /> Scope Filter By Plant Facility
+              </Label>
+              <Select value={selectedPlantId} onValueChange={(value) => setSelectedPlantId(value)}>
+                <SelectTrigger className="h-12 w-full bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase focus:ring-0 shadow-none px-4">
                   <SelectValue placeholder="All Authorized Plants" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl max-h-[250px] overflow-y-auto z-[9999]">
-                  <SelectItem value="all" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">All Authorized Plants</SelectItem>
+                  <SelectItem value="all" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                    All Authorized Plants
+                  </SelectItem>
                   {authorizedPlants.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">{p.name}</SelectItem>
+                    <SelectItem key={p.id} value={p.id} className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                      {p.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -426,10 +464,10 @@ export default function ReportsPage() {
                 setViewData(compiledData); 
                 setViewType(activeReport); 
                 setIsDialogOpen(false); 
-                if(compiledData.length > 0) {
+                if(compiledData && compiledData.length > 0) {
                   toast({ title: "Report view generated successfully." });
                 } else {
-                  toast({ variant: "destructive", title: "No Records", description: "No entries matched month selection parameters." });
+                  toast({ variant: "destructive", title: "No Records", description: "No entries matched selection date parameters bounds." });
                 }
               }} 
               className="flex-1 bg-primary hover:bg-primary/90 text-white font-black h-12 rounded-xl shadow-lg shadow-primary/20 uppercase text-xs tracking-wider"
