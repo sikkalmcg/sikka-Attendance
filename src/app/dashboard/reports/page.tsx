@@ -84,7 +84,7 @@ export default function ReportsPage() {
 
   const totalPages = viewData ? Math.ceil(viewData.length / ROWS_PER_PAGE) : 0;
 
-  // COMPACT LIVE FETCH ENGINE (Approvals Page Synced Replication Logic)
+  // COMPACT LIVE FETCH ENGINE (Fixed Object Mappings)
   const processReportData = () => {
     if (!fromDate || !toDate) return [];
     
@@ -123,7 +123,6 @@ export default function ReportsPage() {
         if (recDate < start || recDate > end) return false;
         if (!isEmployeeActiveOnDate(emp, rec.date)) return false;
 
-        // Dynamic Strict Dropdown Selection Logic Bounds
         if (selectedPlantFilter !== "all" && rec.inPlant !== selectedPlantFilter) return false;
 
         if (!userAssignedPlantIds) return true;
@@ -135,17 +134,17 @@ export default function ReportsPage() {
         const isSun = isSunday(parseISO(rec.date));
         const customHoliday = (holidays || []).find(h => h.date === rec.date && !h.auto);
 
-        let displayStatus = "Present";
-        if (isSun) displayStatus = "Present on Weekly Off";
-        else if (customHoliday) displayStatus = "Present on Holiday";
+        let displayStatus: string = rec.status || "Present";
+        if (isSun && !rec.status) displayStatus = "Present on Weekly Off";
+        else if (customHoliday && !rec.status) displayStatus = "Present on Holiday";
 
         let inDateTime = rec.inTime ? `${formatDate(rec.inDate || rec.date)} ${rec.inTime}` : "--";
         let outDateTime = "--";
-        let workingHour = formatHoursToHHMM(rec.hours || 0);
+        let workingHour = (rec as any).workingHours || formatHoursToHHMM(rec.hours || 0);
         let markingRemark = rec.remark || "--";
 
         if (!rec.outTime && rec.inTime) {
-          const inDT = parseISO(rec.inDateTime || `${rec.inDate || rec.date}T${rec.inTime}:00`);
+          const inDT = parseISO((rec as any).inDateTime || `${rec.inDate || rec.date}T${rec.inTime}:00`);
           if (inDT && isValid(inDT)) {
             const diffHours = (new Date().getTime() - inDT.getTime()) / (1000 * 60 * 60);
             if (diffHours >= 16 || rec.autoCheckout) {
@@ -161,15 +160,15 @@ export default function ReportsPage() {
 
         allReportData.push({
           "Employee ID": rec.employeeId,
-          "Employee Name": emp?.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : rec.employeeName,
-          "In date time": inDateTime,
+          "Employee Name": emp?.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : (rec.employeeName || emp?.name || "--"),
+          "In Date Time": inDateTime,
           "In Plant": rec.inPlant || "Salt Plant",
-          "Out Date time": outDateTime,
-          "In Location": formatLocation(rec.address, rec.lat, rec.lng),
-          "Out Location": formatLocation(rec.addressOut, rec.latOut, rec.lngOut),
-          "Working Hour": workingHour,
+          "Out Date Time": outDateTime,
+          "In Location": formatLocation(rec.address || (rec as any).inLocation, rec.lat, rec.lng),
+          "Out Location": formatLocation(rec.addressOut || (rec as any).outLocation, rec.latOut, rec.lngOut),
+          "Working Hour": workingHour === "00:00" && rec.hours > 0 ? formatHoursToHHMM(rec.hours) : workingHour,
           "Status": displayStatus,
-          "Approval": (rec.approved === true || String(rec.approved) === "true" || rec.status === "Closed") ? "Approved" : "Pending",
+          "Approval": rec.approvedBy || ((rec.approved === true || String(rec.approved) === "true" || rec.status === "Closed") ? "Approved" : "Pending"),
           "Remark": markingRemark
         });
       });
@@ -210,15 +209,14 @@ export default function ReportsPage() {
               approvalState = "System Link";
             }
 
-            // Fallback virtual plant string generator checks
             const virtualPlantName = selectedPlantFilter !== "all" ? selectedPlantFilter : "Salt Plant";
 
             allReportData.push({
               "Employee ID": emp.employeeId,
               "Employee Name": emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name,
-              "In date time": formatDate(dateStr),
+              "In Date Time": formatDate(dateStr),
               "In Plant": virtualPlantName,
-              "Out Date time": "--",
+              "Out Date Time": "--",
               "In Location": "Location Not Available",
               "Out Location": "Location Not Available",
               "Working Hour": "00:00",
@@ -230,7 +228,7 @@ export default function ReportsPage() {
         });
       });
 
-      return allReportData.sort((a, b) => b["In date time"].localeCompare(a["In date time"]));
+      return allReportData.sort((a, b) => b["In Date Time"].localeCompare(a["In Date Time"]));
     } catch (error) {
       console.error("Error processing report data:", error);
       return [];
@@ -265,7 +263,7 @@ export default function ReportsPage() {
         )}
       </div>
 
-      {/* DIRECT PARAMETERS SECTION */}
+      {/* PARAMETERS SECTION */}
       <Card className="border-none shadow-xl rounded-2xl bg-white p-6 space-y-6">
         <div className="flex items-center gap-2 mb-2">
           <Filter className="w-5 h-5 text-primary" /> 
@@ -349,7 +347,7 @@ export default function ReportsPage() {
                   ) : (
                     paginatedData.map((row, idx) => (
                       <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
-                        {Object.values(row).map((val: any, i) => (
+                        {Object.entries(row).map(([key, val]: [string, any], i) => (
                           <TableCell key={i} className="px-6 py-4 text-xs font-bold text-slate-700 whitespace-nowrap">
                             {val?.toString() === "Approved" || val?.toString() === "System Link" ? (
                               <Badge className="bg-emerald-50 text-emerald-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
@@ -357,7 +355,7 @@ export default function ReportsPage() {
                               <Badge className="bg-amber-50 text-amber-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
                             ) : val?.toString() === "Absent" ? (
                               <Badge className="bg-rose-50 text-rose-700 shadow-none border-none font-black text-[9px] uppercase">{val}</Badge>
-                            ) : val?.toString().includes("Hrs") || val?.toString().includes(":") ? (
+                            ) : key === "Working Hour" ? (
                               <span className="font-mono font-black text-slate-900">{val}</span>
                             ) : (
                               val
