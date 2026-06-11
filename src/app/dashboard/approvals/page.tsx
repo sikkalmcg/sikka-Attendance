@@ -53,6 +53,53 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 const ITEMS_PER_PAGE = 15;
 const PROJECT_START_DATE_STR = "2026-04-01";
 
+interface AttendanceItem {
+  id: string;
+  _id?: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  inDate?: string;
+  outDate?: string;
+  inTime: string | null;
+  outTime: string | null;
+  hours: number;
+  status: string;
+  attendanceType: string;
+  approved: boolean | string;
+  inPlant?: string;
+  remark?: string | null;
+  address?: string;
+  addressOut?: string;
+  lat?: number;
+  lng?: number;
+  latOut?: number;
+  lngOut?: number;
+  isVirtual?: boolean;
+  dept?: string;
+  desig?: string;
+  leaveType?: string;
+  leaveStatus?: string;
+  workingHourDisplay?: string;
+  autoCheckout?: boolean;
+  autoOut?: boolean;
+  displayStatus: string;
+  approvedBy?: string | null;
+  editedBy?: string | null;
+  approvalActionDate?: string | null;
+}
+
+function StandardPaginationFooter({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) {
+  if (total <= 1) return null;
+  return (
+    <CardFooter className="bg-slate-50 border-t flex items-center justify-between p-4">
+      <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)} className="font-bold h-9"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
+      <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {current} of {total}</span>
+      <Button variant="outline" size="sm" disabled={current === total} onClick={() => onPageChange(current + 1)} className="font-bold h-9">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+    </CardFooter>
+  );
+}
+
 export default function ApprovalsPage() {
   const { attendanceRecords = [], employees = [], updateRecord, addRecord, verifiedUser, holidays = [], plants = [], leaveRequests = [] } = useData();
   const [isMounted, setIsMounted] = useState(false);
@@ -123,7 +170,7 @@ export default function ApprovalsPage() {
   const approvedLeavesMap = useMemo(() => {
     const map = new Map<string, any>();
     if (!leaveRequests) return map;
-    leaveRequests.filter(l => l.status === 'APPROVED' || l.status === 'Approved').forEach(l => {
+    leaveRequests.filter(l => String(l.status).toUpperCase() === 'APPROVED').forEach(l => {
       const start = startOfDay(parseISO(l.fromDate));
       const end = startOfDay(parseISO(l.toDate));
       if (!isValid(start) || !isValid(end)) return;
@@ -180,7 +227,7 @@ export default function ApprovalsPage() {
         leaveType: leave ? leave.purpose : "-",
         leaveStatus: leave ? "Approved" : "-",
         workingHourDisplay: formatHoursToHHMM(rec.hours || 0),
-        approved: currentApprovalState === true || currentApprovalState === "true",
+        approved: currentApprovalState === true || String(currentApprovalState) === "true",
         ...cachedEdit
       };
       
@@ -341,7 +388,6 @@ export default function ApprovalsPage() {
     const rec = selectedAttendance;
     const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
-    const nowIso = new Date().toISOString();
 
     setIsApproveConfirmOpen(false);
     setLocalApprovals(prev => ({ ...prev, [recId]: true }));
@@ -385,7 +431,19 @@ export default function ApprovalsPage() {
         setSelectedAttendance(null);
       }
     };
+
     runApprovalTask();
+  };
+
+  const formatLocation = (address?: string, lat?: number, lng?: number) => {
+    if (address && address !== "Location Not Available" && address.trim() !== "") {
+      const isCoordinateString = /^-?\d+\.\d+, -?\d+\.\d+$/.test(address);
+      if (!isCoordinateString) return address;
+    }
+    if (lat !== undefined && lng !== undefined && lat !== 0 && lng !== 0) {
+      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+    return address || "Location Not Available";
   };
 
   const handleOpenEditModal = (rec: AttendanceItem) => {
@@ -401,10 +459,18 @@ export default function ApprovalsPage() {
     setIsEditModalOpen(true);
   };
 
+  // EDITED: STRUCT VALIDATION GATEWAY ATTACHED INSIDE UPDATE METHOD
   const handleUpdateAttendance = async () => {
     if (!selectedAttendance) return;
+
+    // 1. Mandatory Input Fields Check Validation
     if (!editData.plant || !editData.inDate || !editData.inTime || !editData.outDate || !editData.outTime || !editData.remark.trim()) {
-      toast({ variant: "destructive", title: "Incomplete Form" });
+      toast({ variant: "destructive", title: "Incomplete Form", description: "All fields including modification remarks are mandatory." });
+      return;
+    }
+
+    if (editData.remark.trim().length < 3) {
+      toast({ variant: "destructive", title: "Invalid Remark", description: "Please enter a valid descriptive adjustment audit remark." });
       return;
     }
 
@@ -412,14 +478,36 @@ export default function ApprovalsPage() {
     const inDT = parseISO(`${editData.inDate}T${editData.inTime}:00`);
     const outDT = parseISO(`${editData.outDate}T${editData.outTime}:00`);
 
-    let calculatedHours = 0;
-    if (isValid(inDT) && isValid(outDT)) {
-      calculatedHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-      if (calculatedHours < 0) calculatedHours = 0;
+    if (!isValid(inDT) || !isValid(outDT)) {
+      toast({ variant: "destructive", title: "Invalid Timestamps", description: "Provided date or time formatting strings broken." });
+      return;
+    }
+
+    // 2. Date Sequence Shield Gateway Check
+    if (isBefore(outDT, inDT)) {
+      toast({ 
+        variant: "destructive", 
+        title: "Chronology Error", 
+        description: "OUT session checkpoint cannot exist before the IN session checkpoint." 
+      });
+      return;
+    }
+
+    let calculatedHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+    
+    // 3. Same Day Exact Hour Conflict Check
+    if (calculatedHours <= 0) {
+      toast({ 
+        variant: "destructive", 
+        title: "Zero Duration Conflict", 
+        description: "OUT time must be later than IN time to calculate valid shift sessions." 
+      });
+      return;
     }
 
     setIsEditModalOpen(false);
 
+    // Apply Front-End Cache Mutation Instantly
     setLocalEdits(prev => ({
       ...prev,
       [recId]: {
@@ -433,7 +521,7 @@ export default function ApprovalsPage() {
       }
     }));
     
-    toast({ title: "Attendance Entry Updated Successfully" });
+    toast({ title: "Attendance Entry Verified & Updated" });
 
     const commitSilentUpdate = async () => {
       try {
@@ -484,7 +572,6 @@ export default function ApprovalsPage() {
     setSelectedAttendance(null);
   };
 
-  // FIXED REJECTION SYSTEM: Safe dynamic recordId wiring mapping
   const handlePostAttendanceReject = async () => {
     if (!selectedAttendance || !attendanceRejectReason.trim()) return;
     setIsAttendanceRejectOpen(false);
@@ -510,14 +597,13 @@ export default function ApprovalsPage() {
 
     const runSilentRejection = async () => {
       try {
-        // FIXED VALUE TRANSLATOR: Excludes 'v-abs-' strings so backend ObjectId parsing passes 100% cleanly
         const finalDbId = (rec.id && rec.id.startsWith('v-')) ? undefined : (rec.id || (rec as any)._id);
 
         const response = await fetch('/api/attendance/approve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            recordId: finalDbId, // Safely mapped parameter
+            recordId: finalDbId, 
             firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
             employeeId: rec.employeeId,
             attendanceDate: rec.date,
@@ -538,7 +624,7 @@ export default function ApprovalsPage() {
           delete fresh[recId];
           return fresh;
         });
-        toast({ variant: "destructive", title: "Action Failed", description: "Rejection write error on server node context." });
+        toast({ variant: "destructive", title: "Action Failed", description: "Rejection failed to sync." });
       }
     };
 
@@ -577,31 +663,6 @@ export default function ApprovalsPage() {
 
     runRestoreTask();
   };
-
-  const formatLocation = (address?: string, lat?: number, lng?: number) => {
-    if (address && address !== "Location Not Available" && address.trim() !== "") {
-      const isCoordinateString = /^-?\d+\.\d+, -?\d+\.\d+$/.test(address);
-      if (!isCoordinateString) return address;
-    }
-    if (lat !== undefined && lng !== undefined && lat !== 0 && lng !== 0) {
-      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    }
-    return address || "Location Not Available";
-  };
-
-  function StandardPaginationFooter({ current, total, onPageChange }: any) {
-    return (
-      <CardFooter className="bg-slate-50 border-t flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={current === 1} onClick={() => onPageChange(current - 1)} className="font-bold h-9"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
-          <Button variant="outline" size="sm" disabled={current === total || total === 0} onClick={() => onPageChange(current + 1)} className="font-bold h-9">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
-        </div>
-        <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Page {current} of {total || 1}</span>
-      </CardFooter>
-    );
-  }
-
-  if (!isMounted) return null;
 
   return (
     <div className="space-y-8 pb-12 px-4 max-w-7xl mx-auto">

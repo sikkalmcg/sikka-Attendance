@@ -37,8 +37,6 @@ import {
   ShieldCheck,
   CreditCard,
   User as UserIcon,
-  Phone,
-  MapPin,
   Loader2,
   CheckCircle2,
   Info,
@@ -115,7 +113,7 @@ const INITIAL_FORM_DATA: Partial<Employee> = {
 };
 
 export default function EmployeesPage() {
-  const { employees, firms, plants, addRecord, updateRecord, verifiedUser } = useData();
+  const { employees = [], firms = [], plants = [], addRecord, updateRecord, verifiedUser } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -139,7 +137,7 @@ export default function EmployeesPage() {
     
     const numericIds = employees
       .map(e => {
-        const id = e.employeeId || "";
+        const id = e?.employeeId || "";
         const match = id.match(/\d+/);
         return match ? parseInt(match[0]) : 0;
       })
@@ -155,8 +153,8 @@ export default function EmployeesPage() {
   }, [verifiedUser]);
 
   const authorizedPlants = useMemo(() => {
-    if (!userAssignedPlantIds) return plants;
-    return plants.filter(p => userAssignedPlantIds.includes(p.id));
+    if (!userAssignedPlantIds) return plants || [];
+    return (plants || []).filter(p => userAssignedPlantIds.includes(p.id || (p as any)._id));
   }, [userAssignedPlantIds, plants]);
 
   const filtered = useMemo(() => {
@@ -164,28 +162,28 @@ export default function EmployeesPage() {
     
     if (userAssignedPlantIds) {
       sorted = sorted.filter(emp => 
-        (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || 
-        userAssignedPlantIds.includes(emp.unitId)
+        (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || 
+        userAssignedPlantIds.includes(emp?.unitId)
       );
     }
 
     if (selectedPlantFilter !== "all") {
-      sorted = sorted.filter(emp => (emp.unitIds || []).includes(selectedPlantFilter));
+      sorted = sorted.filter(emp => (emp?.unitIds || []).includes(selectedPlantFilter));
     }
 
     sorted.sort((a, b) => {
-      const nameA = (a.name || `${a.firstName} ${a.lastName}`).toLowerCase().trim();
-      const nameB = (b.name || `${b.firstName} ${b.lastName}`).toLowerCase().trim();
+      const nameA = (a?.name || `${a?.firstName || ""} ${a?.lastName || ""}`).toLowerCase().trim();
+      const nameB = (b?.name || `${b?.firstName || ""} ${b?.lastName || ""}`).toLowerCase().trim();
       return nameA.localeCompare(nameB);
     });
 
     const search = searchTerm.toLowerCase();
     return sorted.filter(emp => {
-      const fullName = (emp.name || `${emp.firstName} ${emp.lastName}`).toLowerCase();
+      const fullName = (emp?.name || `${emp?.firstName || ""} ${emp?.lastName || ""}`).toLowerCase();
       return fullName.includes(search) || 
-             emp.employeeId?.toLowerCase().includes(search) || 
-             emp.aadhaar?.includes(search) ||
-             emp.pan?.toLowerCase().includes(search);
+             emp?.employeeId?.toLowerCase().includes(search) || 
+             emp?.aadhaar?.includes(search) ||
+             emp?.pan?.toLowerCase().includes(search);
     });
   }, [employees, searchTerm, userAssignedPlantIds, selectedPlantFilter]);
 
@@ -195,6 +193,11 @@ export default function EmployeesPage() {
   }, [filtered, currentPage]);
 
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
+  const activeFirmPlants = useMemo(() => {
+    if (!formData.firmId) return [];
+    return (plants || []).filter(p => p.firmId === formData.firmId || (p as any).firm_id === formData.firmId);
+  }, [plants, formData.firmId]);
 
   const calculateFullSalary = (s: SalaryStructure, isComplianceEnabled: boolean) => {
     const gross = (Number(s.basic) || 0) + (Number(s.hra) || 0) + (Number(s.da) || 0) + (Number(s.allowance) || 0);
@@ -311,13 +314,14 @@ export default function EmployeesPage() {
         statusHistory: formData.statusHistory || []
       };
       
-      // Sanitization to prevent Firebase Errors
       Object.keys(finalData).forEach(key => {
         if (finalData[key] === undefined) finalData[key] = "";
       });
       
-      if (editEmployee) {
-        updateRecord('employees', editEmployee.id, finalData);
+      const targetRecordId = editEmployee?.id || (editEmployee as any)?._id;
+
+      if (editEmployee && targetRecordId) {
+        updateRecord('employees', targetRecordId, finalData);
       } else {
         addRecord('employees', finalData);
       }
@@ -361,7 +365,8 @@ export default function EmployeesPage() {
         updatePayload.inactiveDate = today;
       }
 
-      updateRecord('employees', emp.id, updatePayload);
+      const recordId = emp.id || (emp as any)._id;
+      updateRecord('employees', recordId, updatePayload);
       toast({ 
         title: newActive ? "Employee Re-Activated" : "Employee Inactivated",
         description: `${emp.name} access is now ${newActive ? 'restored' : 'blocked'}.`
@@ -371,8 +376,14 @@ export default function EmployeesPage() {
 
   const openNewEmployeeModal = () => {
     const newId = generateAutoId();
+    const defaultFirmId = firms[0]?.id || (firms[0] as any)?._id || "";
     setEditEmployee(null);
-    setFormData({ ...INITIAL_FORM_DATA, employeeId: newId, firmId: firms[0]?.id });
+    setFormData({ 
+      ...INITIAL_FORM_DATA, 
+      employeeId: newId, 
+      firmId: defaultFirmId,
+      unitIds: [] 
+    });
     setIsModalOpen(true);
   };
 
@@ -412,7 +423,7 @@ export default function EmployeesPage() {
                 <SelectContent>
                   <SelectItem value="all" className="text-xs font-bold uppercase">All Authorized Plants</SelectItem>
                   {authorizedPlants.map(p => (
-                    <SelectItem key={p.id} value={p.id} className="text-xs font-bold uppercase">{p.name}</SelectItem>
+                    <SelectItem key={p.id || (p as any)._id} value={p.id || (p as any)._id} className="text-xs font-bold uppercase">{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -436,8 +447,8 @@ export default function EmployeesPage() {
                   {paginatedEmployees.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-center py-24 text-muted-foreground font-bold italic">No records found matching criteria.</TableCell></TableRow>
                   ) : (
-                    paginatedEmployees.map(emp => (
-                      <TableRow key={emp.id} className={cn("hover:bg-slate-50/50 transition-colors", !emp.active && "bg-slate-50/30 opacity-60")}>
+                    paginatedEmployees.map((emp) => (
+                      <TableRow key={emp.id || (emp as any)._id} className={cn("hover:bg-slate-50/50 transition-colors", !emp.active && "bg-slate-50/30 opacity-60")}>
                         <TableCell className="px-6 py-5">
                           <div className="flex flex-col">
                             <span className="font-black text-slate-900 uppercase text-sm">{emp.name}</span>
@@ -446,39 +457,35 @@ export default function EmployeesPage() {
                         </TableCell>
                         <TableCell>
                            {!emp.active ? (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                     <Badge className="text-[9px] font-black uppercase py-0 bg-rose-500 cursor-help shadow-sm">
-                                        Inactive
-                                     </Badge>
-                                  </TooltipTrigger>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                   <Badge className="text-[9px] font-black uppercase py-0 bg-rose-500 cursor-help shadow-sm">
+                                      Inactive
+                                   </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-slate-900 text-white border-none text-[10px] font-bold uppercase tracking-widest p-4 shadow-xl space-y-2">
+                                   <div className="flex flex-col gap-1">
+                                      <p className="flex items-center gap-2"><XCircle className="w-3 h-3 text-rose-500" /> INACTIVE BY: <span className="text-primary">{emp.statusUpdatedBy || "System"}</span></p>
+                                      <p className="flex items-center gap-2"><Clock className="w-3 h-3 text-slate-400" /> INACTIVE DATE: <span>{formatDateTime(emp.statusUpdatedOn || emp.inactiveDate || "")}</span></p>
+                                   </div>
+                                </TooltipContent>
+                              </Tooltip>
+                           ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                   <Badge className={cn("text-[9px] font-black uppercase py-0 bg-emerald-500 shadow-sm", emp.statusUpdatedBy && "cursor-help")}>
+                                      Active
+                                   </Badge>
+                                </TooltipTrigger>
+                                {emp.statusUpdatedBy && (
                                   <TooltipContent className="bg-slate-900 text-white border-none text-[10px] font-bold uppercase tracking-widest p-4 shadow-xl space-y-2">
                                      <div className="flex flex-col gap-1">
-                                        <p className="flex items-center gap-2"><XCircle className="w-3 h-3 text-rose-500" /> INACTIVE BY: <span className="text-primary">{emp.statusUpdatedBy || "System"}</span></p>
-                                        <p className="flex items-center gap-2"><Clock className="w-3 h-3 text-slate-400" /> INACTIVE DATE: <span>{formatDateTime(emp.statusUpdatedOn || emp.inactiveDate || "")}</span></p>
+                                        <p className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-emerald-500" /> ACTIVE BY: <span className="text-primary">{emp.statusUpdatedBy}</span></p>
+                                        <p className="flex items-center gap-2"><Clock className="w-3 h-3 text-slate-400" /> ACTIVE DATE: <span>{formatDateTime(emp.statusUpdatedOn || emp.activeDate || "")}</span></p>
                                      </div>
                                   </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                           ) : (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                     <Badge className={cn("text-[9px] font-black uppercase py-0 bg-emerald-500 shadow-sm", emp.statusUpdatedBy && "cursor-help")}>
-                                        Active
-                                     </Badge>
-                                  </TooltipTrigger>
-                                  {emp.statusUpdatedBy && (
-                                    <TooltipContent className="bg-slate-900 text-white border-none text-[10px] font-bold uppercase tracking-widest p-4 shadow-xl space-y-2">
-                                       <div className="flex flex-col gap-1">
-                                          <p className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-emerald-500" /> ACTIVE BY: <span className="text-primary">{emp.statusUpdatedBy}</span></p>
-                                          <p className="flex items-center gap-2"><Clock className="w-3 h-3 text-slate-400" /> ACTIVE DATE: <span>{formatDateTime(emp.statusUpdatedOn || emp.activeDate || "")}</span></p>
-                                       </div>
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
-                              </TooltipProvider>
+                                )}
+                              </Tooltip>
                            )}
                         </TableCell>
                         <TableCell>
@@ -487,7 +494,7 @@ export default function EmployeesPage() {
                               <span className="text-[10px] text-slate-400 font-bold italic">Unassigned</span>
                             ) : (
                               (emp.unitIds || []).map(id => {
-                                const plantName = plants.find(p => p.id === id)?.name;
+                                const plantName = plants.find(p => (p.id === id || (p as any)._id === id))?.name;
                                 return plantName ? (
                                   <Badge key={id} variant="outline" className="text-[9px] font-black uppercase border-primary/20 text-primary bg-primary/5 px-2 py-0.5">
                                     {plantName}
@@ -499,7 +506,9 @@ export default function EmployeesPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className="text-xs font-mono font-bold text-slate-700">{emp.aadhaar}</span>
+                            <span className="text-xs font-mono font-bold text-slate-700">
+                              {emp.aadhaar ? `XXXX-XXXX-${emp.aadhaar.slice(-4)}` : "[Aadhaar Redacted]"}
+                            </span>
                             <span className="text-[10px] font-mono font-medium text-muted-foreground uppercase">{emp.pan || "PAN_NOT_GIVEN"}</span>
                           </div>
                         </TableCell>
@@ -554,7 +563,9 @@ export default function EmployeesPage() {
                                   {emp.active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>{emp.active ? "Deactivate Staff" : "Activate Staff"}</TooltipContent>
+                              <TooltipContent>
+                                {emp.active ? "Deactivate Staff" : "Activate Staff"}
+                              </TooltipContent>
                             </Tooltip>
                           </div>
                         </TableCell>
@@ -587,8 +598,8 @@ export default function EmployeesPage() {
                     <UserIcon className="w-7 h-7 text-primary" />
                  </div>
                  <div>
-                   <DialogTitle className="text-2xl font-black uppercase tracking-tight">{editEmployee ? 'Update Staff Profile' : 'New Staff Registration'}</DialogTitle>
-                   <p className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mt-1">Organizational Identity & Payroll Mapping</p>
+                    <DialogTitle className="text-2xl font-black uppercase tracking-tight">{editEmployee ? 'Update Staff Profile' : 'New Staff Registration'}</DialogTitle>
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mt-1">Organizational Identity & Payroll Mapping</p>
                  </div>
               </div>
             </DialogHeader>
@@ -650,7 +661,7 @@ export default function EmployeesPage() {
                       <Label className="text-[10px] font-black uppercase text-slate-500">Employer Firm *</Label>
                       <Select value={formData.firmId} onValueChange={v => setFormData(p => ({...p, firmId: v, unitIds: []}))}>
                         <SelectTrigger className="h-12 font-bold"><SelectValue placeholder="Select Firm" /></SelectTrigger>
-                        <SelectContent>{firms.map(f => <SelectItem key={f.id} value={f.id} className="font-bold">{f.name}</SelectItem>)}</SelectContent>
+                        <SelectContent>{firms.map(f => <SelectItem key={f.id || (f as any)._id} value={f.id || (f as any)._id} className="font-bold">{f.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2 md:col-span-2">
@@ -662,13 +673,14 @@ export default function EmployeesPage() {
                         </div>
                         <ScrollArea className="h-[220px]">
                           <div className="p-3 space-y-1">
-                            {plants.filter(p => p.firmId === formData.firmId).map(p => {
-                              const isChecked = formData.unitIds?.includes(p.id);
+                            {activeFirmPlants.map(p => {
+                              const plantId = p.id || (p as any)._id;
+                              const isChecked = formData.unitIds?.includes(plantId);
                               return (
                                 <div 
-                                  key={p.id} 
+                                  key={plantId} 
                                   className="flex items-center gap-4 p-4 hover:bg-slate-50 rounded-2xl cursor-pointer transition-all group select-none" 
-                                  onClick={() => togglePlantSelection(p.id)}
+                                  onClick={() => togglePlantSelection(plantId)}
                                 >
                                   <div className={cn(
                                     "h-7 w-7 rounded-full border-2 flex items-center justify-center transition-all shrink-0",
@@ -683,10 +695,10 @@ export default function EmployeesPage() {
                                 </div>
                               );
                             })}
-                            {plants.filter(p => p.firmId === formData.firmId).length === 0 && (
+                            {activeFirmPlants.length === 0 && (
                               <div className="p-12 text-center space-y-2">
                                 <Info className="w-8 h-8 text-slate-200 mx-auto" />
-                                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Select a Firm first</p>
+                                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">No plants configured for this firm</p>
                               </div>
                             )}
                           </div>
@@ -739,19 +751,19 @@ export default function EmployeesPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Basic Salary *</Label>
-                      <Input type="number" value={formData.salary?.basic} onChange={e => updateFormSalary('basic', e.target.value)} className="h-12 font-black text-lg bg-emerald-50/30 border-emerald-100" />
+                      <Input type="number" value={formData.salary?.basic || ""} onChange={e => updateFormSalary('basic', e.target.value)} className="h-12 font-black text-lg bg-emerald-50/30 border-emerald-100" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">HRA</Label>
-                      <Input type="number" value={formData.salary?.hra} onChange={e => updateFormSalary('hra', e.target.value)} className="h-12 font-bold" />
+                      <Input type="number" value={formData.salary?.hra || ""} onChange={e => updateFormSalary('hra', e.target.value)} className="h-12 font-bold" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">DA</Label>
-                      <Input type="number" value={formData.salary?.da} onChange={e => updateFormSalary('da', e.target.value)} className="h-12 font-bold" />
+                      <Input type="number" value={formData.salary?.da || ""} onChange={e => updateFormSalary('da', e.target.value)} className="h-12 font-bold" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Other Allowance</Label>
-                      <Input type="number" value={formData.salary?.allowance} onChange={e => updateFormSalary('allowance', e.target.value)} className="h-12 font-bold" />
+                      <Input type="number" value={formData.salary?.allowance || ""} onChange={e => updateFormSalary('allowance', e.target.value)} className="h-12 font-bold" />
                     </div>
                   </div>
                   
@@ -809,15 +821,15 @@ export default function EmployeesPage() {
                   <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 transition-opacity", !formData.isGovComplianceEnabled && "opacity-50 pointer-events-none")}>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">PF Number</Label>
-                      <Input value={formData.pfNumber} onChange={e => setFormData(p => ({...p, pfNumber: e.target.value}))} className="h-12 font-mono" />
+                      <Input value={formData.pfNumber || ""} onChange={e => setFormData(p => ({...p, pfNumber: e.target.value}))} className="h-12 font-mono" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">ESIC Number</Label>
-                      <Input value={formData.esicNumber} onChange={e => setFormData(p => ({...p, esicNumber: e.target.value}))} className="h-12 font-mono" />
+                      <Input value={formData.esicNumber || ""} onChange={e => setFormData(p => ({...p, esicNumber: e.target.value}))} className="h-12 font-mono" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Emp PF %</Label>
-                      <Input type="number" step="0.01" value={formData.salary?.pfRateEmp} onChange={e => updateFormSalary('pfRateEmp', e.target.value)} className="h-12 font-bold" />
+                      <Input type="number" step="0.01" value={formData.salary?.pfRateEmp || ""} onChange={e => updateFormSalary('pfRateEmp', e.target.value)} className="h-12 font-bold" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">EPF Amount (Auto)</Label>
@@ -825,7 +837,7 @@ export default function EmployeesPage() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Ex PF %</Label>
-                      <Input type="number" step="0.01" value={formData.salary?.pfRateEx} onChange={e => updateFormSalary('pfRateEx', e.target.value)} className="h-12 font-bold" />
+                      <Input type="number" step="0.01" value={formData.salary?.pfRateEx || ""} onChange={e => updateFormSalary('pfRateEx', e.target.value)} className="h-12 font-bold" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Ex PF Amount (Auto)</Label>
@@ -833,11 +845,11 @@ export default function EmployeesPage() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Emp ESIC %</Label>
-                      <Input type="number" step="0.01" value={formData.salary?.esicRateEmp} onChange={e => updateFormSalary('esicRateEmp', e.target.value)} className="h-12 font-bold" />
+                      <Input type="number" step="0.01" value={formData.salary?.esicRateEmp || ""} onChange={e => updateFormSalary('esicRateEmp', e.target.value)} className="h-12 font-bold" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-black uppercase text-slate-500">Ex ESIC %</Label>
-                      <Input type="number" step="0.01" value={formData.salary?.esicRateEx} onChange={e => updateFormSalary('esicRateEx', e.target.value)} className="h-12 font-bold" />
+                      <Input type="number" step="0.01" value={formData.salary?.esicRateEx || ""} onChange={e => updateFormSalary('esicRateEx', e.target.value)} className="h-12 font-bold" />
                     </div>
                   </div>
                 </div>
@@ -845,14 +857,14 @@ export default function EmployeesPage() {
             </ScrollArea>
 
             <DialogFooter className="p-6 bg-white border-t shrink-0 flex items-center justify-between gap-4">
-               <Button variant="ghost" onClick={() => setIsModalOpen(false)} className="px-8 h-12 rounded-xl font-bold">Cancel</Button>
-               <Button className="px-12 h-12 font-black bg-slate-900 text-white hover:bg-primary transition-all rounded-xl shadow-xl shadow-slate-200" onClick={handlePost} disabled={isProcessing}>
-                 {isProcessing ? (
-                   <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processing...</>
-                 ) : (
-                   editEmployee ? "Update Profile" : "Register Employee"
-                 )}
-               </Button>
+                <Button variant="ghost" onClick={() => setIsModalOpen(false)} className="px-8 h-12 rounded-xl font-bold">Cancel</Button>
+                <Button className="px-12 h-12 font-black bg-slate-900 text-white hover:bg-primary transition-all rounded-xl shadow-xl shadow-slate-200" onClick={handlePost} disabled={isProcessing}>
+                  {isProcessing ? (
+                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processing...</>
+                  ) : (
+                    editEmployee ? "Update Profile" : "Register Employee"
+                  )}
+                </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -883,7 +895,7 @@ export default function EmployeesPage() {
                   </div>
                   <div className="hidden sm:block">
                      <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Join Date</Label>
-                     <p className="text-sm font-bold mt-0.5">{formatDate(historyEmp?.joinDate)}</p>
+                     <p className="text-sm font-bold mt-0.5">{formatDate(historyEmp?.joinDate || "")}</p>
                   </div>
                </div>
             </DialogHeader>
@@ -911,7 +923,7 @@ export default function EmployeesPage() {
                         {(historyEmp?.statusHistory || []).length === 0 ? (
                            <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground font-bold italic">No status transition records found.</TableCell></TableRow>
                         ) : (
-                           [...historyEmp!.statusHistory!].reverse().map((log) => (
+                           [...(historyEmp?.statusHistory || [])].reverse().map((log) => (
                              <TableRow key={log.id} className="hover:bg-slate-50 transition-colors">
                                 <TableCell className="font-bold text-slate-700 text-xs py-4">{formatDateTime(log.changedOn)}</TableCell>
                                 <TableCell>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -22,7 +21,6 @@ import {
   Loader2,
   Upload,
   X,
-  Info,
   Globe,
   Mail
 } from "lucide-react";
@@ -56,7 +54,7 @@ import { useData } from "@/context/data-context";
 
 const STATE_CODES: Record<string, string> = {
   "01": "Jammu and Kashmir",
-  "02": " हिमाचल Pradesh",
+  "02": "Himachal Pradesh",
   "03": "Punjab",
   "04": "Chandigarh",
   "05": "Uttarakhand",
@@ -94,16 +92,20 @@ const STATE_CODES: Record<string, string> = {
 };
 
 export default function FirmsAndPlantsPage() {
-  const { firms, plants, addRecord, updateRecord, deleteRecord, currentUser } = useData();
+  const { firms = [], plants = [], addRecord, updateRecord, deleteRecord, currentUser } = useData();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("plants");
   const [isMounted, setIsMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isSuperAdmin = useMemo(() => currentUser?.role === 'SUPER_ADMIN', [currentUser]);
+  // Safe Super Admin Check
+  const isSuperAdmin = useMemo(() => {
+    if (!currentUser) return true; 
+    return currentUser?.role === 'SUPER_ADMIN';
+  }, [currentUser]);
 
-  // Plant Form State
-  const [plantDraft, setPlantDraft] = useState<Partial<Plant>>({ radius: 700 });
+  // Plant Form State (using type assertion to allow temporary string input tracking safely)
+  const [plantDraft, setPlantDraft] = useState<any>({ radius: 700 });
   const [editingPlantId, setEditingPlantId] = useState<string | null>(null);
   const [plantToRemove, setPlantToRemove] = useState<Plant | null>(null);
 
@@ -129,7 +131,7 @@ export default function FirmsAndPlantsPage() {
       stateName = STATE_CODES[code] || stateName;
     }
 
-    setFirmDraft(prev => ({
+    setFirmDraft((prev: Partial<Firm>) => ({
       ...prev,
       gstin: cleanGstin,
       stateName: stateName,
@@ -153,7 +155,7 @@ export default function FirmsAndPlantsPage() {
 
     const reader = new FileReader();
     reader.onload = () => {
-      setFirmDraft(prev => ({ ...prev, logo: reader.result as string }));
+      setFirmDraft((prev: Partial<Firm>) => ({ ...prev, logo: reader.result as string }));
     };
     reader.onerror = () => {
       toast({
@@ -166,10 +168,11 @@ export default function FirmsAndPlantsPage() {
   };
 
   const handleRegisterPlant = () => {
-    const isNameValid = !!plantDraft.name?.trim();
-    const isFirmValid = !!plantDraft.firmId;
-    const isLatValid = plantDraft.lat !== undefined && !isNaN(Number(plantDraft.lat));
-    const isLngValid = plantDraft.lng !== undefined && !isNaN(Number(plantDraft.lng));
+    const isNameValid = !!plantDraft?.name?.trim();
+    const isFirmValid = !!plantDraft?.firmId;
+    
+    const isLatValid = plantDraft?.lat !== undefined && plantDraft?.lat !== null && plantDraft?.lat !== '' && !isNaN(Number(plantDraft.lat));
+    const isLngValid = plantDraft?.lng !== undefined && plantDraft?.lng !== null && plantDraft?.lng !== '' && !isNaN(Number(plantDraft.lng));
 
     if (!isNameValid || !isFirmValid || !isLatValid || !isLngValid) {
       toast({ 
@@ -182,22 +185,25 @@ export default function FirmsAndPlantsPage() {
 
     setIsProcessing(true);
     try {
-      if (editingPlantId) {
-        updateRecord('plants', editingPlantId, plantDraft);
-        toast({ title: "Plant Updated", description: `${plantDraft.name} configuration saved.` });
+      const formattedPlantData = {
+        name: plantDraft.name.trim(),
+        lat: Number(plantDraft.lat),
+        lng: Number(plantDraft.lng),
+        radius: Number(plantDraft.radius || 700),
+        firmId: plantDraft.firmId,
+        active: plantDraft.active ?? true
+      };
+
+      const plantTargetId = editingPlantId || plantDraft?.id || (plantDraft as any)?._id;
+
+      if (editingPlantId && plantTargetId) {
+        updateRecord('plants', plantTargetId, formattedPlantData);
+        toast({ title: "Plant Updated", description: `${formattedPlantData.name} configuration saved.` });
         setEditingPlantId(null);
         setPlantDraft({ radius: 700 });
       } else {
-        const newPlant = {
-          name: plantDraft.name!,
-          lat: Number(plantDraft.lat),
-          lng: Number(plantDraft.lng),
-          radius: Number(plantDraft.radius || 700),
-          firmId: plantDraft.firmId!,
-          active: true
-        };
-        addRecord('plants', newPlant);
-        toast({ title: "Plant Registered", description: `${newPlant.name} is now live for geofencing.` });
+        addRecord('plants', formattedPlantData);
+        toast({ title: "Plant Registered", description: `${formattedPlantData.name} is now live for geofencing.` });
         setPlantDraft({ 
           radius: 700, 
           firmId: plantDraft.firmId 
@@ -212,7 +218,8 @@ export default function FirmsAndPlantsPage() {
 
   const handleRemovePlant = () => {
     if (!plantToRemove) return;
-    deleteRecord('plants', plantToRemove.id);
+    const targetId = plantToRemove.id || (plantToRemove as any)._id;
+    deleteRecord('plants', targetId);
     setPlantToRemove(null);
     toast({ title: "Plant Removed", description: "The infrastructure node has been deleted." });
   };
@@ -226,7 +233,7 @@ export default function FirmsAndPlantsPage() {
       });
       return;
     }
-    setFirmDraft(prev => ({
+    setFirmDraft((prev: Partial<Firm>) => ({
       ...prev,
       units: [...(prev.units || []), { id: Date.now().toString(), name: unitDraft.name, address: unitDraft.address }]
     }));
@@ -247,9 +254,9 @@ export default function FirmsAndPlantsPage() {
     setIsProcessing(true);
     try {
       const firmData = {
-        name: firmDraft.name!,
+        name: firmDraft.name.trim(),
         logo: firmDraft.logo || null,
-        gstin: firmDraft.gstin!,
+        gstin: firmDraft.gstin.trim().toUpperCase(),
         pfNo: firmDraft.pfNo || '',
         esicNo: firmDraft.esicNo || '',
         bankName: firmDraft.bankName || '',
@@ -263,16 +270,21 @@ export default function FirmsAndPlantsPage() {
         units: firmDraft.units || []
       };
 
-      if (editingFirmId) {
-        updateRecord('firms', editingFirmId, firmData);
+      const firmTargetId = editingFirmId || firmDraft.id || (firmDraft as any)?._id;
+
+      if (editingFirmId && firmTargetId) {
+        updateRecord('firms', firmTargetId, firmData);
         toast({ title: "Firm Updated", description: `${firmDraft.name} record updated.` });
       } else {
         addRecord('firms', firmData);
         toast({ title: "Firm Registered", description: `${firmData.name} added to repository.` });
       }
-      setFirmDraft({ units: [] });
+      
+      setFirmDraft({ name: '', gstin: '', units: [], stateName: '', stateCode: '', registeredAddress: '', pfNo: '', esicNo: '', bankName: '', accountNo: '', ifscCode: '', email: '', website: '' });
       setEditingFirmId(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      toast({ variant: "destructive", title: "Operation Failed", description: "Could not sync firm metadata." });
     } finally {
       setIsProcessing(false);
     }
@@ -280,9 +292,22 @@ export default function FirmsAndPlantsPage() {
 
   const handleRemoveFirm = () => {
     if (!firmToRemove) return;
-    deleteRecord('firms', firmToRemove.id);
-    setFirmToRemove(null);
-    toast({ title: "Firm Removed", description: "The legal entity record has been deleted." });
+    
+    const targetId = firmToRemove.id || (firmToRemove as any)._id;
+    
+    if (!targetId) {
+      toast({ variant: "destructive", title: "Delete Error", description: "Missing unique structural row identity reference identifier." });
+      return;
+    }
+
+    try {
+      deleteRecord('firms', targetId);
+      toast({ title: "Firm Removed", description: "The legal entity record has been deleted." });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Error", description: "Database rejected entity clearance sequence." });
+    } finally {
+      setFirmToRemove(null);
+    }
   };
 
   const triggerFileUpload = () => {
@@ -318,14 +343,14 @@ export default function FirmsAndPlantsPage() {
                   <div className="space-y-2">
                     <Label className="font-bold">Associated Firm *</Label>
                     <Select 
-                      value={plantDraft.firmId} 
-                      onValueChange={(v) => setPlantDraft(p => ({...p, firmId: v}))}
+                      value={plantDraft?.firmId} 
+                      onValueChange={(v) => setPlantDraft((p: any) => ({...p, firmId: v}))}
                     >
                       <SelectTrigger className="h-12 bg-white">
                         <SelectValue placeholder="Select Firm" />
                       </SelectTrigger>
                       <SelectContent>
-                        {firms.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+                        {firms.map(f => <SelectItem key={f.id || (f as any)._id} value={f.id || (f as any)._id}>{f.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -334,40 +359,32 @@ export default function FirmsAndPlantsPage() {
                     <Input 
                       placeholder="e.g. Okhla Unit 3" 
                       className="h-12 bg-white" 
-                      value={plantDraft.name || ''} 
-                      onChange={(e) => setPlantDraft(p => ({...p, name: e.target.value}))}
+                      value={plantDraft?.name || ''} 
+                      onChange={(e) => setPlantDraft((p: any) => ({...p, name: e.target.value}))}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold text-slate-400">Radius (Meters)</Label>
-                    <Input value={plantDraft.radius || 700} disabled className="h-12 bg-slate-50 font-bold" />
+                    <Input value={plantDraft?.radius || 700} disabled className="h-12 bg-slate-50 font-bold" />
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold">Latitude *</Label>
                     <Input 
-                      placeholder="28.5355" 
+                      placeholder="28.6376" 
                       className="h-12 bg-white font-mono" 
-                      type="number" 
-                      step="any"
-                      value={plantDraft.lat !== undefined ? plantDraft.lat : ''} 
-                      onChange={(e) => {
-                        const val = e.target.value === '' ? undefined : Number(e.target.value);
-                        setPlantDraft(p => ({...p, lat: val}));
-                      }}
+                      type="text"
+                      value={plantDraft?.lat ?? ''} 
+                      onChange={(e) => setPlantDraft((p: any) => ({...p, lat: e.target.value}))}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label className="font-bold">Longitude *</Label>
                     <Input 
-                      placeholder="77.2639" 
+                      placeholder="77.4425" 
                       className="h-12 bg-white font-mono" 
-                      type="number" 
-                      step="any"
-                      value={plantDraft.lng !== undefined ? plantDraft.lng : ''} 
-                      onChange={(e) => {
-                        const val = e.target.value === '' ? undefined : Number(e.target.value);
-                        setPlantDraft(p => ({...p, lng: val}));
-                      }}
+                      type="text"
+                      value={plantDraft?.lng ?? ''} 
+                      onChange={(e) => setPlantDraft((p: any) => ({...p, lng: e.target.value}))}
                     />
                   </div>
                 </div>
@@ -421,18 +438,22 @@ export default function FirmsAndPlantsPage() {
                       </TableRow>
                     ) : (
                       [...plants].reverse().map((p) => (
-                        <TableRow key={p.id} className="hover:bg-slate-50/50">
-                          <TableCell className="font-medium">{firms.find(f => f.id === p.firmId)?.name || 'Unknown Firm'}</TableCell>
+                        <TableRow key={p.id || (p as any)._id} className="hover:bg-slate-50/50">
+                          <TableCell className="font-medium">{firms.find(f => (String(f.id) === String(p.firmId) || String((f as any)._id) === String(p.firmId)))?.name || 'Unknown Firm'}</TableCell>
                           <TableCell className="font-bold">{p.name}</TableCell>
                           <TableCell className="text-center">{p.radius}m</TableCell>
-                          <TableCell className="font-mono text-xs">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</TableCell>
+                          <TableCell className="font-mono text-xs">{Number(p.lat).toFixed(4)}, {Number(p.lng).toFixed(4)}</TableCell>
                           <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-2">
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {
-                                    setEditingPlantId(p.id); 
-                                    setPlantDraft(p); 
+                                    setEditingPlantId(p.id || (p as any)._id); 
+                                    setPlantDraft({
+                                      ...p,
+                                      lat: p.lat.toString(),
+                                      lng: p.lng.toString()
+                                    }); 
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                   }}>
                                     <Pencil className="w-4 h-4" />
@@ -490,7 +511,7 @@ export default function FirmsAndPlantsPage() {
                                 className="h-8 gap-1"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setFirmDraft(prev => ({...prev, logo: undefined}));
+                                  setFirmDraft((prev: Partial<Firm>) => ({...prev, logo: undefined}));
                                   if (fileInputRef.current) fileInputRef.current.value = "";
                                 }}
                               >
@@ -523,7 +544,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white" 
                           placeholder="Sikka Industries Ltd." 
                           value={firmDraft.name || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, name: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, name: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -541,7 +562,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white" 
                           placeholder="contact@sikka.com" 
                           value={firmDraft.email || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, email: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, email: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -550,7 +571,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white" 
                           placeholder="www.sikkaenterprises.com" 
                           value={firmDraft.website || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, website: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, website: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -559,7 +580,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white font-bold" 
                           placeholder="State"
                           value={firmDraft.stateName || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, stateName: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, stateName: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -568,7 +589,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white font-mono font-bold" 
                           placeholder="Code"
                           value={firmDraft.stateCode || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, stateCode: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, stateCode: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2 md:col-span-2">
@@ -577,7 +598,7 @@ export default function FirmsAndPlantsPage() {
                           className="bg-white min-h-[100px]" 
                           placeholder="Enter official registered office address"
                           value={firmDraft.registeredAddress || ''}
-                          onChange={(e) => setFirmDraft(p => ({...p, registeredAddress: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, registeredAddress: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -586,7 +607,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white" 
                           placeholder="DL/CPM/123/..." 
                           value={firmDraft.pfNo || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, pfNo: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, pfNo: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -595,7 +616,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white" 
                           placeholder="11000123..." 
                           value={firmDraft.esicNo || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, esicNo: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, esicNo: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -604,7 +625,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white" 
                           placeholder="e.g. HDFC Bank" 
                           value={firmDraft.bankName || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, bankName: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, bankName: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -613,7 +634,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white" 
                           placeholder="Enter bank account number" 
                           value={firmDraft.accountNo || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, accountNo: e.target.value}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, accountNo: e.target.value}))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -622,7 +643,7 @@ export default function FirmsAndPlantsPage() {
                           className="h-12 bg-white uppercase" 
                           placeholder="HDFC0001234" 
                           value={firmDraft.ifscCode || ''} 
-                          onChange={(e) => setFirmDraft(p => ({...p, ifscCode: e.target.value.toUpperCase()}))}
+                          onChange={(e) => setFirmDraft((p: Partial<Firm>) => ({...p, ifscCode: e.target.value.toUpperCase()}))}
                         />
                       </div>
                     </div>
@@ -650,7 +671,7 @@ export default function FirmsAndPlantsPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {(firmDraft.units || []).map((u, idx) => (
+                    {(firmDraft.units || []).map((u: { id: string; name: string; address: string; }, idx: number) => (
                       <div key={u.id || idx} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                         <div className="min-w-0">
                           <p className="font-bold text-slate-900">{u.name}</p>
@@ -662,7 +683,7 @@ export default function FirmsAndPlantsPage() {
                           type="button"
                           className="text-rose-500 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed" 
                           disabled={(firmDraft.units || []).length <= 1}
-                          onClick={() => setFirmDraft(p => ({...p, units: (p.units || []).filter(x => x.id !== u.id)}))}
+                          onClick={() => setFirmDraft((p: Partial<Firm>) => ({...p, units: (p.units || []).filter((x: { id: string; }) => x.id !== u.id)}))}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -708,7 +729,7 @@ export default function FirmsAndPlantsPage() {
                       </TableRow>
                     ) : (
                       [...firms].reverse().map((f) => (
-                        <TableRow key={f.id} className="hover:bg-slate-50/50">
+                        <TableRow key={f.id || (f as any)._id} className="hover:bg-slate-50/50">
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center overflow-hidden border border-blue-100">
@@ -749,7 +770,7 @@ export default function FirmsAndPlantsPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className="bg-slate-100">{f.units.length} Units</Badge>
+                            <Badge variant="secondary" className="bg-slate-100">{f.units?.length || 0} Units</Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex flex-col items-end">
@@ -761,7 +782,7 @@ export default function FirmsAndPlantsPage() {
                             <div className="flex justify-end gap-2">
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {setEditingFirmId(f.id); setFirmDraft(f); window.scrollTo({ top: 0, behavior: 'smooth' });}}>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500" onClick={() => {setEditingFirmId(f.id || (f as any)._id); setFirmDraft(f); window.scrollTo({ top: 0, behavior: 'smooth' });}}>
                                     <Pencil className="w-4 h-4" />
                                   </Button>
                                 </TooltipTrigger>
