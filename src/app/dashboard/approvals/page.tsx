@@ -140,8 +140,10 @@ export default function ApprovalsPage() {
     remark: "" 
   });
 
-  // MASTER STATE CACHE MAP
   const [localApprovals, setLocalApprovals] = useState<Record<string, boolean>>({});
+  
+  // OPTIMISTIC CACHE STORAGE FOR EDITED ENTRIES (PREVENTS FALLBACK & DELAY HOOKS)
+  const [localEdits, setLocalEdits] = useState<Record<string, Partial<AttendanceItem>>>({});
 
   const { toast } = useToast();
   const filterMonths = useMemo(() => generateFilterMonths(), []);
@@ -215,9 +217,12 @@ export default function ApprovalsPage() {
     }).map(rec => {
       const emp = employeeMap.get(rec.employeeId);
       const leave = approvedLeavesMap.get(`${rec.employeeId}:${rec.date}`);
-      const recId = rec.id || rec._id || `${rec.employeeId}:${rec.date}`;
+      const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
       
       const currentApprovalState = localApprovals[recId] !== undefined ? localApprovals[recId] : rec.approved;
+      
+      // Inject local edits configuration overrides instantly to avoid context lag triggers
+      const cachedEdit = localEdits[recId] || {};
 
       let processedRec: any = { 
         ...rec, 
@@ -228,11 +233,16 @@ export default function ApprovalsPage() {
         leaveType: leave ? leave.purpose : "-",
         leaveStatus: leave ? "Approved" : "-",
         workingHourDisplay: formatHoursToHHMM(rec.hours || 0),
-        approved: currentApprovalState === true || currentApprovalState === "true"
+        approved: currentApprovalState === true || currentApprovalState === "true",
+        ...cachedEdit // Natively appends dynamic time tracking edits
       };
       
-      if (!rec.outTime && rec.inTime && rec.inTime.trim() !== "") {
-        const inDT = parseISO(rec.inDateTime || `${processedRec.inDate}T${rec.inTime}:00`);
+      if (cachedEdit.hours !== undefined) {
+        processedRec.workingHourDisplay = formatHoursToHHMM(cachedEdit.hours);
+      }
+      
+      if (!processedRec.outTime && processedRec.inTime && processedRec.inTime.trim() !== "") {
+        const inDT = parseISO(processedRec.inDateTime || `${processedRec.inDate}T${processedRec.inTime}:00`);
         if (inDT && isValid(inDT)) {
           const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
           if (diffHours >= 16) {
@@ -243,7 +253,7 @@ export default function ApprovalsPage() {
         }
       }
       
-      processedRec.displayStatus = getCalculatedStatus(rec.date, processedRec, rec.employeeId);
+      processedRec.displayStatus = getCalculatedStatus(processedRec.date, processedRec, processedRec.employeeId);
       return processedRec as AttendanceItem;
     });
 
@@ -278,10 +288,11 @@ export default function ApprovalsPage() {
           
           if (!handledRecordsKeySet.has(key)) {
             const currentApprovalState = localApprovals[virtualKey] !== undefined ? localApprovals[virtualKey] : false;
+            const cachedEdit = localEdits[virtualKey] || {};
             const displayStatus = getCalculatedStatus(dStr, null, emp.employeeId);
             const leave = approvedLeavesMap.get(`${emp.employeeId}:${dStr}`);
             
-            missing.push({ 
+            let virtualItem: any = { 
               id: virtualKey, 
               employeeId: emp.employeeId, 
               employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name, 
@@ -295,13 +306,19 @@ export default function ApprovalsPage() {
               isVirtual: true, 
               hours: 0, 
               workingHourDisplay: "00:00",
-              unapprovedOutDuration: 0,
               inTime: null,
               outTime: null,
               remark: null,
               leaveType: leave ? leave.purpose : "-",
-              leaveStatus: leave ? "Approved" : "-"
-            });
+              leaveStatus: leave ? "Approved" : "-",
+              ...cachedEdit
+            };
+
+            if (cachedEdit.hours !== undefined) {
+              virtualItem.workingHourDisplay = formatHoursToHHMM(cachedEdit.hours);
+            }
+
+            missing.push(virtualItem as AttendanceItem);
           }
         });
       });
@@ -327,7 +344,7 @@ export default function ApprovalsPage() {
     }
 
     return combined;
-  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants, approvedLeavesMap, historyMonthFilter, localApprovals]);
+  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants, approvedLeavesMap, historyMonthFilter, localApprovals, localEdits]);
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
@@ -371,22 +388,19 @@ export default function ApprovalsPage() {
     setIsApproveConfirmOpen(true);
   };
 
-  // EDIT PARAMETER: Bypasses standard fetch endpoint rollbacks to freeze optimistic states permanently
   const handleConfirmApproval = () => {
     if (!selectedAttendance) return;
     
     const rec = selectedAttendance;
-    const recId = rec.id || rec._id || `${rec.employeeId}:${rec.date}`;
+    const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
     const nowIso = new Date().toISOString();
 
     setIsApproveConfirmOpen(false);
 
-    // Swap local front-end cache map array node properties instantly to true
     setLocalApprovals(prev => ({ ...prev, [recId]: true }));
     toast({ title: "Attendance approved successfully and moved to History." });
 
-    // Directly execute background transactional actions inside separated worker scope threads
     (async () => {
       try {
         let finalOutTime = rec.outTime;
@@ -407,7 +421,7 @@ export default function ApprovalsPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            recordId: rec.id || rec._id,
+            recordId: rec.id || (rec as any)._id,
             firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
             employeeId: rec.employeeId,
             attendanceDate: rec.date,
@@ -422,8 +436,7 @@ export default function ApprovalsPage() {
 
         if (!response.ok) throw new Error("API Approval Call Failed");
       } catch (e) {
-        // Safe fail fallback override
-        console.warn("Background commit muted to retain front-end optimistic layout integrity.");
+        setLocalApprovals(prev => ({ ...prev, [recId]: false }));
       } finally {
         setSelectedAttendance(null);
       }
@@ -443,6 +456,7 @@ export default function ApprovalsPage() {
     setIsEditModalOpen(true);
   };
 
+  // OPTIMISTICALLY EDITED WRAPPER: ELIMINATES 6-7 SECONDS INTRUSION FROM DATABASE RE-FETCH LOOPS Completely
   const handleUpdateAttendance = async () => {
     if (!selectedAttendance) return;
     if (!editData.plant || !editData.inDate || !editData.inTime || !editData.outDate || !editData.outTime || !editData.remark.trim()) {
@@ -450,50 +464,84 @@ export default function ApprovalsPage() {
       return;
     }
 
+    const recId = selectedAttendance.id || (selectedAttendance as any)._id || `${selectedAttendance.employeeId}:${selectedAttendance.date}`;
     const inDT = parseISO(`${editData.inDate}T${editData.inTime}:00`);
     const outDT = parseISO(`${editData.outDate}T${editData.outTime}:00`);
 
+    let calculatedHours = 0;
+    if (isValid(inDT) && isValid(outDT)) {
+      calculatedHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+      if (calculatedHours < 0) calculatedHours = 0;
+    }
+
+    // Step 1: UI Modal close instantly to release screen controls
     setIsEditModalOpen(false);
 
-    try {
-      const modifierName = verifiedUser?.fullName || "HR_ADMIN";
-      const finalDbId = selectedAttendance.id && !selectedAttendance.id.startsWith('v-') ? selectedAttendance.id : (selectedAttendance._id || '');
-
-      if (selectedAttendance.isVirtual) {
-        await addRecord('attendance', {
-          inPlant: editData.plant,
-          inDate: editData.inDate,
-          inTime: editData.inTime,
-          outDate: editData.outDate,
-          outTime: editData.outTime,
-          remark: editData.remark,
-          employeeId: selectedAttendance.employeeId,
-          employeeName: selectedAttendance.employeeName,
-          date: selectedAttendance.date,
-          status: 'PRESENT',
-          attendanceType: 'OFFICE',
-          approved: false,
-          address: 'Manually Created Log',
-          unapprovedOutDuration: 0
-        });
-      } else {
-        await updateRecord('attendance', finalDbId, {
-          inPlant: editData.plant,
-          inDate: editData.inDate,
-          inTime: editData.inTime,
-          outDate: editData.outDate,
-          outTime: editData.outTime,
-          remark: editData.remark,
-          editedBy: modifierName,
-          editedAt: new Date().toISOString()
-        });
+    // Step 2: Push variables directly into frontend memory cache state (0 millisecond loading layer)
+    setLocalEdits(prev => ({
+      ...prev,
+      [recId]: {
+        inPlant: editData.plant,
+        inDate: editData.inDate,
+        inTime: editData.inTime,
+        outDate: editData.outDate,
+        outTime: editData.outTime,
+        hours: calculatedHours,
+        remark: editData.remark
       }
-      toast({ title: "Attendance Entry Updated" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Failed to update record." });
-    } finally {
-      setSelectedAttendance(null);
-    }
+    }));
+    
+    toast({ title: "Attendance Entry Updated Successfully" });
+
+    // Step 3: Database mutation triggers silently in background thread without triggering global loaders
+    (async () => {
+      try {
+        const modifierName = verifiedUser?.fullName || "HR_ADMIN";
+        const finalDbId = selectedAttendance.id && !selectedAttendance.id.startsWith('v-') ? selectedAttendance.id : ((selectedAttendance as any)._id || '');
+
+        if (selectedAttendance.isVirtual) {
+          await addRecord('attendance', {
+            inPlant: editData.plant,
+            inDate: editData.inDate,
+            inTime: editData.inTime,
+            outDate: editData.outDate,
+            outTime: editData.outTime,
+            hours: calculatedHours,
+            remark: editData.remark,
+            employeeId: selectedAttendance.employeeId,
+            employeeName: selectedAttendance.employeeName,
+            date: selectedAttendance.date,
+            status: 'PRESENT',
+            attendanceType: 'OFFICE',
+            approved: false,
+            address: 'Manually Created Log',
+            unapprovedOutDuration: 0
+          });
+        } else {
+          await updateRecord('attendance', finalDbId, {
+            inPlant: editData.plant,
+            inDate: editData.inDate,
+            inTime: editData.inTime,
+            outDate: editData.outDate,
+            outTime: editData.outTime,
+            hours: calculatedHours,
+            remark: editData.remark,
+            editedBy: modifierName,
+            editedAt: new Date().toISOString()
+          });
+        }
+      } catch (e) {
+        // Rollback smoothly on error bounds
+        setLocalEdits(prev => {
+          const next = { ...prev };
+          delete next[recId];
+          return next;
+        });
+        toast({ variant: "destructive", title: "Sync failed. Reverted entry values." });
+      } finally {
+        setSelectedAttendance(null);
+      }
+    })();
   };
 
   const handlePostAttendanceReject = async () => {
@@ -508,7 +556,7 @@ export default function ApprovalsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          recordId: rec.id || rec._id,
+          recordId: rec.id || (rec as any)._id,
           firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
           employeeId: rec.employeeId,
           attendanceDate: rec.date,
@@ -529,16 +577,13 @@ export default function ApprovalsPage() {
     }
   };
 
-  // EDIT PARAMETER: Bypasses standard fetch endpoint rollbacks to freeze optimistic states permanently
   const handleRestoreAttendance = (rec: AttendanceItem) => {
     if (rec.isVirtual) return; 
-    const recId = rec.id || rec._id || '';
+    const recId = rec.id || (rec as any)._id || '';
 
-    // Swap local front-end cache map array node properties instantly to false (Vanish immediately)
     setLocalApprovals(prev => ({ ...prev, [recId]: false }));
     toast({ title: "Record Restored", description: "Moved back to Pending queue." });
 
-    // Directly execute background transactional actions inside separated worker scope threads
     (async () => {
       try {
         const approverName = verifiedUser?.fullName || "HR_ADMIN";
@@ -546,7 +591,7 @@ export default function ApprovalsPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            recordId: rec.id || rec._id,
+            recordId: rec.id || (rec as any)._id,
             firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
             employeeId: rec.employeeId,
             attendanceDate: rec.date,
@@ -558,8 +603,7 @@ export default function ApprovalsPage() {
 
         if (!response.ok) throw new Error("API Restore Call Failed");
       } catch (e) {
-        // Safe fail fallback override to lock front-end optimistic rows layout state safely
-        console.warn("Background commit muted to retain front-end optimistic layout integrity.");
+        setLocalApprovals(prev => ({ ...prev, [recId]: true }));
       }
     })();
   };
@@ -691,7 +735,7 @@ export default function ApprovalsPage() {
                     const mergedAddress = rec.address || formatLocation(rec.address, rec.lat, rec.lng);
 
                     return (
-                    <TableRow key={rec.id || rec._id || `${rec.employeeId}:${rec.date}`} className={cn("hover:bg-slate-50/50 transition-colors", rec.autoCheckout && "bg-amber-50/10")}>
+                    <TableRow key={rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`} className={cn("hover:bg-slate-50/50 transition-colors", rec.autoCheckout && "bg-amber-50/10")}>
                       <TableCell className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-black text-slate-900 uppercase text-xs sm:text-sm">{rec.employeeName}</span>
@@ -830,7 +874,7 @@ export default function ApprovalsPage() {
              <Textarea placeholder="Specify exact correction discrepancy details for record rejection..." value={attendanceRejectReason} onChange={(e) => setAttendanceRejectReason(e.target.value)} className="min-h-[100px] border-slate-200 bg-slate-50 rounded-xl font-medium" />
           </div>
           <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
-             <Button variant="ghost" onClick={() => setIsAttendanceRejectOpen(false)} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
+             <Button variant="ghost" onClick={() => { setIsAttendanceRejectOpen(false); setSelectedAttendance(null); }} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
              <Button onClick={handlePostAttendanceReject} disabled={!attendanceRejectReason.trim()} className="flex-1 bg-rose-600 hover:bg-rose-700 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-rose-600/10">Reject Entry</Button>
           </DialogFooter>
         </DialogContent>
@@ -893,7 +937,7 @@ export default function ApprovalsPage() {
           </div>
           
           <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
-             <Button variant="ghost" onClick={() => setIsEditModalOpen(false)} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
+             <Button variant="ghost" onClick={() => { setIsEditModalOpen(false); setSelectedAttendance(null); }} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
              <Button onClick={handleUpdateAttendance} className="flex-1 bg-primary hover:bg-primary/90 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-primary/10">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
