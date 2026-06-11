@@ -1,5 +1,4 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-// FIXED: Path mapping adjusted directly to match the root level folder schema file structure
 import { processAttendanceApproval } from "./AttendanceApprovalService";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -8,17 +7,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { firmId, employeeId, attendanceDate, approvedBy, status, remarks, isVirtual, virtualData, updateData } = req.body;
+    // FIXED: Destructured 'recordId' directly from req.body to bridge frontend telemetry parameters
+    const { recordId, firmId, employeeId, attendanceDate, approvedBy, status, remarks, isVirtual, virtualData, updateData } = req.body;
 
-    // Strict dynamic layout status check parameters validation mapping
     const normalizedStatus = String(status || '').toUpperCase();
 
     await processAttendanceApproval({
+      recordId, // Injected parameter cleanly into the database engine
       firmId,
       employeeId,
       attendanceDate,
       approvedBy,
-      status: normalizedStatus, 
+      status: normalizedStatus as any, 
       remarks,
       isVirtual,
       virtualData,

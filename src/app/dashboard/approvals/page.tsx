@@ -53,66 +53,6 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 const ITEMS_PER_PAGE = 15;
 const PROJECT_START_DATE_STR = "2026-04-01";
 
-interface AttendanceItem {
-  id: string;
-  _id?: string;
-  employeeId: string;
-  employeeName: string;
-  date: string;
-  inDate?: string;
-  outDate?: string;
-  inTime: string | null;
-  outTime: string | null;
-  hours: number;
-  status: string;
-  attendanceType: string;
-  approved: boolean | string;
-  inPlant?: string;
-  remark?: string | null;
-  address?: string;
-  addressOut?: string;
-  lat?: number;
-  lng?: number;
-  latOut?: number;
-  lngOut?: number;
-  isVirtual?: boolean;
-  dept?: string;
-  desig?: string;
-  leaveType?: string;
-  leaveStatus?: string;
-  workingHourDisplay?: string;
-  autoCheckout?: boolean;
-  autoOut?: boolean;
-  displayStatus: string;
-  approvedBy?: string | null;
-  editedBy?: string | null;
-  approvalActionDate?: string | null;
-}
-
-const generateFilterMonths = () => {
-  const options = [];
-  const date = new Date();
-  for (let i = -6; i < 12; i++) {
-    const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
-    if (isBefore(d, startOfMonth(parseISO(PROJECT_START_DATE_STR)))) continue;
-    const mmm = d.toLocaleString('en-US', { month: 'short' });
-    const yy = d.getFullYear().toString().slice(-2);
-    options.push(`${mmm}-${yy}`);
-  }
-  return options;
-};
-
-const formatLocation = (address?: string, lat?: number, lng?: number) => {
-  if (address && address !== "Location Not Available" && address.trim() !== "") {
-    const isCoordinateString = /^-?\d+\.\d+, -?\d+\.\d+$/.test(address);
-    if (!isCoordinateString) return address;
-  }
-  if (lat !== undefined && lng !== undefined && lat !== 0 && lng !== 0) {
-    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-  }
-  return address || "Location Not Available";
-};
-
 export default function ApprovalsPage() {
   const { attendanceRecords = [], employees = [], updateRecord, addRecord, verifiedUser, holidays = [], plants = [], leaveRequests = [] } = useData();
   const [isMounted, setIsMounted] = useState(false);
@@ -144,7 +84,18 @@ export default function ApprovalsPage() {
   const [localEdits, setLocalEdits] = useState<Record<string, Partial<AttendanceItem>>>({});
 
   const { toast } = useToast();
-  const filterMonths = useMemo(() => generateFilterMonths(), []);
+  const filterMonths = useMemo(() => {
+    const options = [];
+    const date = new Date();
+    for (let i = -6; i < 12; i++) {
+      const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+      if (isBefore(d, startOfMonth(parseISO(PROJECT_START_DATE_STR)))) continue;
+      const mmm = d.toLocaleString('en-US', { month: 'short' });
+      const yy = d.getFullYear().toString().slice(-2);
+      options.push(`${mmm}-${yy}`);
+    }
+    return options;
+  }, []);
 
   useEffect(() => {
     setIsMounted(true);
@@ -396,7 +347,6 @@ export default function ApprovalsPage() {
     setLocalApprovals(prev => ({ ...prev, [recId]: true }));
     toast({ title: "Attendance approved successfully and moved to History." });
 
-    // BYPASS INTERCEPTOR FOR CONFIRMATION
     const runApprovalTask = async () => {
       try {
         let finalOutTime = rec.outTime;
@@ -417,7 +367,7 @@ export default function ApprovalsPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            recordId: rec.id || (rec as any)._id,
+            recordId: (rec.id && rec.id.startsWith('v-')) ? undefined : (rec.id || (rec as any)._id),
             firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
             employeeId: rec.employeeId,
             attendanceDate: rec.date,
@@ -431,11 +381,11 @@ export default function ApprovalsPage() {
         });
       } catch (e) {
         setLocalApprovals(prev => ({ ...prev, [recId]: false }));
+      } finally {
+        setSelectedAttendance(null);
       }
     };
-
     runApprovalTask();
-    setSelectedAttendance(null);
   };
 
   const handleOpenEditModal = (rec: AttendanceItem) => {
@@ -451,7 +401,6 @@ export default function ApprovalsPage() {
     setIsEditModalOpen(true);
   };
 
-  // COMPLETE MULTI-STAGE LOADER BYPASS ON UPDATE FORM SUBMIT
   const handleUpdateAttendance = async () => {
     if (!selectedAttendance) return;
     if (!editData.plant || !editData.inDate || !editData.inTime || !editData.outDate || !editData.outTime || !editData.remark.trim()) {
@@ -471,7 +420,6 @@ export default function ApprovalsPage() {
 
     setIsEditModalOpen(false);
 
-    // Apply Front-End Cache Mutation Instantly
     setLocalEdits(prev => ({
       ...prev,
       [recId]: {
@@ -487,7 +435,6 @@ export default function ApprovalsPage() {
     
     toast({ title: "Attendance Entry Updated Successfully" });
 
-    // CRITICAL FIX: Executes isolation macro-task to completely decouple parent hook intercept loaders
     const commitSilentUpdate = async () => {
       try {
         const modifierName = verifiedUser?.fullName || "HR_ADMIN";
@@ -533,42 +480,71 @@ export default function ApprovalsPage() {
       }
     };
 
-    // Native macro queue dispatch
     setTimeout(commitSilentUpdate, 0);
     setSelectedAttendance(null);
   };
 
+  // FIXED REJECTION SYSTEM: Safe dynamic recordId wiring mapping
   const handlePostAttendanceReject = async () => {
     if (!selectedAttendance || !attendanceRejectReason.trim()) return;
     setIsAttendanceRejectOpen(false);
     const rec = selectedAttendance;
 
-    try {
-      const approver = verifiedUser?.fullName || "HR_ADMIN";
+    const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
+    const approver = verifiedUser?.fullName || "HR_ADMIN";
 
-      const response = await fetch('/api/attendance/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recordId: rec.id || (rec as any)._id,
-          firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
-          employeeId: rec.employeeId,
-          attendanceDate: rec.date,
-          approvedBy: approver,
-          status: 'REJECTED',
-          remarks: attendanceRejectReason,
-          isVirtual: !!rec.isVirtual,
-          virtualData: rec.isVirtual ? { employeeName: rec.employeeName, attendanceType: 'ABSENT' } : null
-        })
-      });
-      if (!response.ok) throw new Error("API Rejection Call Failed");
-      toast({ variant: "destructive", title: "Log Rejected" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Discrepancy write error" });
-    } finally {
-      setAttendanceRejectReason("");
-      setSelectedAttendance(null);
-    }
+    setLocalApprovals(prev => ({ ...prev, [recId]: true }));
+    setLocalEdits(prev => ({
+      ...prev,
+      [recId]: {
+        inTime: null,
+        outTime: null,
+        hours: 0,
+        workingHourDisplay: "00:00",
+        displayStatus: "Absent",
+        remark: attendanceRejectReason
+      }
+    }));
+    
+    toast({ title: "Log Rejected Successfully", description: "Record has been invalidated and moved to History Queue." });
+
+    const runSilentRejection = async () => {
+      try {
+        // FIXED VALUE TRANSLATOR: Excludes 'v-abs-' strings so backend ObjectId parsing passes 100% cleanly
+        const finalDbId = (rec.id && rec.id.startsWith('v-')) ? undefined : (rec.id || (rec as any)._id);
+
+        const response = await fetch('/api/attendance/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId: finalDbId, // Safely mapped parameter
+            firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
+            employeeId: rec.employeeId,
+            attendanceDate: rec.date,
+            approvedBy: approver,
+            status: 'REJECTED',
+            remarks: attendanceRejectReason,
+            isVirtual: !!rec.isVirtual,
+            virtualData: rec.isVirtual ? { employeeName: rec.employeeName, attendanceType: 'ABSENT' } : null,
+            updateData: !rec.isVirtual ? { status: 'ABSENT', hours: 0, attendanceType: 'ABSENT' } : null
+          })
+        });
+
+        if (!response.ok) throw new Error("API Rejection Call Failed");
+      } catch (e) {
+        setLocalApprovals(prev => ({ ...prev, [recId]: false }));
+        setLocalEdits(prev => {
+          const fresh = { ...prev };
+          delete fresh[recId];
+          return fresh;
+        });
+        toast({ variant: "destructive", title: "Action Failed", description: "Rejection write error on server node context." });
+      }
+    };
+
+    setTimeout(runSilentRejection, 0);
+    setAttendanceRejectReason("");
+    setSelectedAttendance(null);
   };
 
   const handleRestoreAttendance = (rec: AttendanceItem) => {
@@ -600,6 +576,17 @@ export default function ApprovalsPage() {
     };
 
     runRestoreTask();
+  };
+
+  const formatLocation = (address?: string, lat?: number, lng?: number) => {
+    if (address && address !== "Location Not Available" && address.trim() !== "") {
+      const isCoordinateString = /^-?\d+\.\d+, -?\d+\.\d+$/.test(address);
+      if (!isCoordinateString) return address;
+    }
+    if (lat !== undefined && lng !== undefined && lat !== 0 && lng !== 0) {
+      return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+    return address || "Location Not Available";
   };
 
   function StandardPaginationFooter({ current, total, onPageChange }: any) {

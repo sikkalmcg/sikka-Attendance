@@ -1,9 +1,8 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017";
 const DATABASE_NAME = process.env.MONGODB_DB || "sikka_hrms";
 
-// Serverless environments mein connection cache karne ke liye global variable use karte hain
 let cachedClient: MongoClient | null = null;
 let cachedDb: any = null;
 
@@ -12,11 +11,10 @@ async function connectToDatabase() {
     return { client: cachedClient, db: cachedDb };
   }
 
-  // Agar naya client banana pad raha hai toh pooling options set karein
   const client = new MongoClient(MONGODB_URI, {
-    maxPoolSize: 10, // Max connections in pool
-    minPoolSize: 2,  // Keep at least 2 connections alive
-    connectTimeoutMS: 5000, // 5 seconds timeout max
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    connectTimeoutMS: 5000,
   });
 
   await client.connect();
@@ -43,30 +41,33 @@ export interface ApprovalPayload {
 
 export async function processAttendanceApproval(payload: ApprovalPayload): Promise<boolean> {
   const normalizedStatus = String(payload.status || '').toUpperCase();
-  
-  // Instant cached connection pooling wrapper call
   const { db } = await connectToDatabase();
 
   const attendanceCollection = db.collection('attendance');
   const ledgerCollection = db.collection('historyLedger');
 
+  // FIXED PARAMETER CHECKER: Ensures recordId matches true string lengths layout rules without throwing exceptions
+  let parsedRecordId: any = payload.recordId;
+  if (payload.recordId && typeof payload.recordId === 'string' && ObjectId.isValid(payload.recordId) && payload.recordId.length === 24) {
+    parsedRecordId = new ObjectId(payload.recordId);
+  }
+
   const nowIso = new Date().toISOString();
   const commonFields = {
     status: normalizedStatus === 'APPROVED' ? 'Closed' : (normalizedStatus === 'RESTORE' || normalizedStatus === 'EDIT' ? 'PENDING' : 'ABSENT'),
-    approved: normalizedStatus === 'APPROVED',
+    approved: normalizedStatus === 'APPROVED' || normalizedStatus === 'REJECTED',
     approvedBy: (normalizedStatus === 'RESTORE' || normalizedStatus === 'EDIT') ? null : payload.approvedBy,
     approvalActionDate: (normalizedStatus === 'RESTORE' || normalizedStatus === 'EDIT') ? null : nowIso,
     updatedAt: new Date(),
     remarks: normalizedStatus === 'RESTORE' ? null : (payload.remarks || payload.virtualData?.remark || null),
-    isLocked: normalizedStatus === 'APPROVED',
+    isLocked: normalizedStatus === 'APPROVED' || normalizedStatus === 'REJECTED',
   };
 
-  // Advanced exact matching using document _id or composite key fallback
-  const filterQuery = payload.recordId && !payload.recordId.startsWith('v-')
-    ? { _id: payload.recordId }
+  // FIXED QUERY MAPPER: Resolves conditional fallbacks to select correct mapping query index nodes
+  const filterQuery = payload.recordId && typeof payload.recordId === 'string' && !payload.recordId.startsWith('v-') && ObjectId.isValid(payload.recordId)
+    ? { _id: parsedRecordId }
     : { employeeId: payload.employeeId, date: payload.attendanceDate };
 
-  // Background execution operations query
   if (payload.isVirtual) {
     await attendanceCollection.updateOne(
       { employeeId: payload.employeeId, date: payload.attendanceDate },
@@ -90,14 +91,12 @@ export async function processAttendanceApproval(payload: ApprovalPayload): Promi
       { upsert: true }
     );
   } else {
-    const res = await attendanceCollection.updateOne(
+    await attendanceCollection.updateOne(
       filterQuery,
       { $set: { ...(payload.updateData || {}), ...commonFields } }
     );
-    console.log(`DB Sync -> Employee: ${payload.employeeId} | Matched: ${res.matchedCount} | Modified: ${res.modifiedCount}`);
   }
 
-  // Log in ledger
   await ledgerCollection.insertOne({
     firmId: payload.firmId,
     action: `ATTENDANCE_${normalizedStatus}`,
