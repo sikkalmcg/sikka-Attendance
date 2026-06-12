@@ -21,6 +21,8 @@ export interface Plant {
   radius: number; 
   firmId: string;
   active: boolean;
+  address?: string;
+  plotNo?: string;
 }
 
 export interface FirmUnit {
@@ -109,8 +111,10 @@ export interface Employee {
   name: string; 
   fatherName: string;
   aadhaar: string;
+  aadhaarNumber?: string;
   pan: string;
   mobile: string;
+  mobileNumber?: string;
   address: string;
   department: string;
   designation: string;

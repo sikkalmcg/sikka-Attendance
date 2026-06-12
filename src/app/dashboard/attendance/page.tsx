@@ -15,7 +15,8 @@ import {
   Briefcase,
   Home,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  Calendar
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, formatHoursToHHMM, parseDateTime } from "@/lib/utils";
 import { 
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, parseISO, addHours, isAfter, isValid } from "date-fns";
+import { format, parseISO, addHours, isAfter, isValid, startOfMonth, endOfMonth, addDays, isSunday, isSameMonth } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -78,10 +79,60 @@ export default function AttendancePage() {
 
   const employeeRecords = useMemo(() => {
     if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") return [];
+    
+    const ninetyDaysAgo = getISTTime();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const ninetyDaysAgoStr = format(ninetyDaysAgo, "yyyy-MM-dd");
+
     return (attendanceRecords || [])
-      .filter(r => r.employeeId === effectiveEmployeeId && r.date >= PROJECT_START_DATE_STR)
+      .filter(r => r.employeeId === effectiveEmployeeId && r.date >= PROJECT_START_DATE_STR && r.date >= ninetyDaysAgoStr)
       .sort((a, b) => b.date.localeCompare(a.date) || (b.inTime || "").localeCompare(a.inTime || ""));
   }, [attendanceRecords, effectiveEmployeeId]);
+
+  const monthlySummaries = useMemo(() => {
+    const now = getISTTime();
+    const monthsMap = new Map<string, { presentDates: Set<string>; monthDate: Date }>();
+
+    // Ensure current month is always present even if no records yet
+    const currentMonthKey = format(now, "yyyy-MM");
+    monthsMap.set(currentMonthKey, { presentDates: new Set(), monthDate: startOfMonth(now) });
+
+    employeeRecords.forEach(r => {
+        const rDate = parseISO(r.date);
+        if (isValid(rDate)) {
+            const mKey = format(rDate, "yyyy-MM");
+            if (!monthsMap.has(mKey)) {
+                monthsMap.set(mKey, { presentDates: new Set(), monthDate: startOfMonth(rDate) });
+            }
+            if (r.inTime) {
+                monthsMap.get(mKey)!.presentDates.add(r.date);
+            }
+        }
+    });
+    
+    const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+
+    return sortedMonths.map(([mKey, data]) => {
+        const monthYearStr = format(data.monthDate, "MMM-yy");
+        const presentDays = data.presentDates.size;
+        
+        const start = data.monthDate;
+        const end = isSameMonth(data.monthDate, now) ? now : endOfMonth(data.monthDate);
+        
+        let workingDays = 0;
+        for (let d = start; d <= end; d = addDays(d, 1)) {
+            if (!isSunday(d)) workingDays++;
+        }
+        
+        const absentDays = Math.max(0, workingDays - presentDays);
+        
+        return {
+            monthYear: monthYearStr,
+            present: presentDays,
+            absent: absentDays
+        };
+    });
+  }, [employeeRecords]);
 
   // Derived State based on 16-Hour AUTO OUT rules + Cooldown restrictions
   const { activeRecord, todayRecord, isStale, nextInAvailableAt } = useMemo(() => {
@@ -188,7 +239,7 @@ export default function AttendancePage() {
       toast({
         variant: "destructive",
         title: "Next Mark IN Locked",
-        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM hh:mm a") : "later"}.`,
+        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "later"}.`,
         duration: 8000,
       });
       return;
@@ -229,8 +280,8 @@ export default function AttendancePage() {
             if (!components.state) components.state = "Uttar Pradesh";
           }
           
-          const displayAddress = plant?.address 
-            ? plant.address 
+          const displayAddress = (plant as any)?.address 
+            ? (plant as any).address 
             : ([components.street, components.area, components.city, components.state].filter(Boolean).join(", ") || backupAddress);
             
           setDetectedAddress(displayAddress);
@@ -243,7 +294,7 @@ export default function AttendancePage() {
           }
         } catch (e) {
           const coordAddr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-          const fallbackAddr = plant?.address || "Hapur Bypass, Industrial Area, NCR, Uttar Pradesh";
+          const fallbackAddr = (plant as any)?.address || "Hapur Bypass, Industrial Area, NCR, Uttar Pradesh";
           setDetectedAddress(fallbackAddr);
           setDetailedLocation({ street: "Hapur Bypass", area: "Industrial Area", city: "NCR", state: "Uttar Pradesh", pincode: "N/A" });
           
@@ -283,7 +334,7 @@ export default function AttendancePage() {
       toast({
         variant: "destructive",
         title: "Next Mark IN Locked",
-        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM hh:mm a") : "later"}.`,
+        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "later"}.`,
         duration: 8000,
       });
       return;
@@ -298,7 +349,7 @@ export default function AttendancePage() {
     const today = format(now, "yyyy-MM-dd");
     const timeStr = format(now, "HH:mm");
     const plantName = detectedPlant?.name || "Salt Plant"; 
-    const finalAddress = detectedPlant?.address || detectedAddress || "Hapur Bypass, Uttar Pradesh";
+    const finalAddress = (detectedPlant as any)?.address || detectedAddress || "Hapur Bypass, Uttar Pradesh";
 
     setIsMutatingAttendance(true);
     setActiveDialog("NONE");
@@ -356,7 +407,7 @@ export default function AttendancePage() {
     const plantName = detectedPlant?.name || "Remote";
     const nextEnableDT = addHours(outDT, 8); 
     const recordId = activeRecord.id || (activeRecord as any)._id;
-    const finalAddressOut = detectedPlant?.address || detectedAddress || "Remote Area";
+    const finalAddressOut = (detectedPlant as any)?.address || detectedAddress || "Remote Area";
 
     if (!recordId) {
       toast({ variant: "destructive", title: "Error", description: "Record ID not found." });
@@ -476,7 +527,7 @@ export default function AttendancePage() {
                   <p className="text-xs font-bold text-slate-500 max-w-[240px] leading-relaxed">
                     Check-in locked for 8 hours.<br />
                     <span className="text-primary font-extrabold text-[11px] uppercase tracking-wider block mt-1">
-                      Opens at: {nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM hh:mm a") : "N/A"}
+                      Opens at: {nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "N/A"}
                     </span>
                   </p>
                 </>
@@ -495,55 +546,93 @@ export default function AttendancePage() {
         </Card>
       </div>
 
-      <div className="space-y-4">
-         <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
-            <History className="w-5 h-5 text-primary" /> Session History
-         </h3>
-         <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200">
-            <ScrollArea className="h-[400px]">
-               {isLoading && employeeRecords.length === 0 ? (
-                 <div className="flex flex-col items-center justify-center py-20 space-y-3">
-                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Syncing Ledger History...</p>
-                 </div>
-               ) : (
-                 <Table>
-                    <TableHeader className="bg-slate-50">
-                       <TableRow>
-                          <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
-                          <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
-                          <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
-                          <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
-                          <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
-                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                       {employeeRecords.map((r: any) => (
-                          <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
-                             <TableCell className="text-xs font-bold text-slate-700 py-4">{formatDate(r.date)}</TableCell>
-                             <TableCell className="text-xs font-bold text-slate-500">{r.inTime}</TableCell>
-                             <TableCell className="text-xs font-bold text-slate-500">{r.outTime || "--:--"}</TableCell>
-                             <TableCell>
-                                <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
-                                   {formatHoursToHHMM(r.hours || 0)}
-                                </Badge>
-                             </TableCell>
-                             <TableCell className="text-right pr-6">
-                                <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5", 
-                                   r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700" : 
-                                   r.status === 'Open' ? "bg-blue-100 text-blue-700" :
-                                   "bg-emerald-100 text-emerald-700"
-                                )}>
-                                   {r.status}
-                                </Badge>
-                             </TableCell>
-                          </TableRow>
-                       ))}
-                    </TableBody>
-                 </Table>
-               )}
-            </ScrollArea>
-         </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+         <div className="lg:col-span-2 space-y-4">
+             <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
+                <History className="w-5 h-5 text-primary" /> Session History
+             </h3>
+             <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200">
+                <ScrollArea className="h-[400px]">
+                   {isLoading && employeeRecords.length === 0 ? (
+                     <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                       <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Syncing Ledger History...</p>
+                     </div>
+                   ) : (
+                     <Table>
+                        <TableHeader className="bg-slate-50">
+                           <TableRow>
+                              <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
+                              <TableHead className="font-black uppercase text-[10px]">Plant Name</TableHead>
+                              <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
+                              <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
+                              <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
+                              <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
+                           </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                           {employeeRecords.map((r: any) => (
+                              <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
+                                 <TableCell className="py-4">
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-bold text-slate-700">{formatDate(r.date)}</span>
+                                      <span className="text-[10px] font-semibold text-slate-400 mt-0.5">{format(parseISO(r.date), "EEEE")}</span>
+                                    </div>
+                                 </TableCell>
+                                 <TableCell className="text-xs font-bold text-slate-600">{r.inPlant || r.attendanceType || "N/A"}</TableCell>
+                                 <TableCell className="text-xs font-bold text-slate-500">{r.inTime}</TableCell>
+                                 <TableCell className="text-xs font-bold text-slate-500">{r.outTime || "--:--"}</TableCell>
+                                 <TableCell>
+                                    <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
+                                       {formatHoursToHHMM(r.hours || 0)}
+                                    </Badge>
+                                 </TableCell>
+                                 <TableCell className="text-right pr-6">
+                                    <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5", 
+                                       r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700" : 
+                                       r.status === 'Open' ? "bg-blue-100 text-blue-700" :
+                                       "bg-emerald-100 text-emerald-700"
+                                    )}>
+                                       {r.status}
+                                    </Badge>
+                                 </TableCell>
+                              </TableRow>
+                           ))}
+                        </TableBody>
+                     </Table>
+                   )}
+                </ScrollArea>
+             </Card>
+         </div>
+         
+         <div className="lg:col-span-1 space-y-4">
+             <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
+                <Calendar className="w-5 h-5 text-primary" /> Monthly Summary
+             </h3>
+             <ScrollArea className="h-[400px]">
+               <div className="space-y-4 pr-3">
+                 {monthlySummaries.map((summary, idx) => (
+                   <Card key={idx} className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
+                      <CardHeader className="bg-slate-50/50 border-b py-4 px-6">
+                         <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500 text-center">
+                            {summary.monthYear}
+                         </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-5 space-y-3">
+                         <div className="flex justify-between items-center bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Present Days</span>
+                            <span className="text-xl font-black text-emerald-600">{summary.present}</span>
+                         </div>
+                         <div className="flex justify-between items-center bg-rose-50 rounded-xl p-3 border border-rose-100">
+                            <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Absent Days</span>
+                            <span className="text-xl font-black text-rose-600">{summary.absent}</span>
+                         </div>
+                      </CardContent>
+                   </Card>
+                 ))}
+               </div>
+             </ScrollArea>
+         </div>
       </div>
 
       {/* Mark IN Confirmation */}
@@ -562,7 +651,7 @@ export default function AttendancePage() {
                </div>
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
-                  <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm a")}</p>
+                  <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy HH:mm")}</p>
                </div>
             </div>
 
@@ -576,7 +665,7 @@ export default function AttendancePage() {
                 <div className="grid grid-cols-[100px_1fr] items-baseline gap-2">
                   <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Plot No.:</span>
                   <span className="text-slate-800 break-words">
-                    {detectedPlant?.plotNo || "N/A"}
+                    {(detectedPlant as any)?.plotNo || "N/A"}
                   </span>
                 </div>
 
@@ -634,7 +723,7 @@ export default function AttendancePage() {
                </div>
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
-                  <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm a")}</p>
+                  <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy HH:mm")}</p>
                </div>
             </div>
 
@@ -648,7 +737,7 @@ export default function AttendancePage() {
                 <div className="grid grid-cols-[100px_1fr] items-baseline gap-2">
                   <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Plot No.:</span>
                   <span className="text-slate-800 break-words">
-                    {detectedPlant?.plotNo || "N/A"}
+                    {(detectedPlant as any)?.plotNo || "N/A"}
                   </span>
                 </div>
 

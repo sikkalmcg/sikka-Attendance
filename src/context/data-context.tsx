@@ -146,8 +146,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
       const loginIdent = currentUser.username?.replace(/\s/g, '');
       const dbEmp = (employees || []).find(e => {
-        const empAadhaar = String(e.aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
-        const empMobile = String(e.mobileNumber || e.mobile || '').replace(/\s/g, '');
+        const empAadhaar = String((e as any).aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
+        const empMobile = String((e as any).mobileNumber || e.mobile || '').replace(/\s/g, '');
         return empAadhaar === loginIdent || empMobile === loginIdent;
       });
       const fullName = dbEmp ? (dbEmp.firstName ? `${dbEmp.firstName} ${dbEmp.lastName || ''}`.trim() : dbEmp.name) : (currentUser.fullName || "Employee");
