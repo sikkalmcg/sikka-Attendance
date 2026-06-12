@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, parseISO, addHours, isAfter, isValid, startOfMonth, endOfMonth, addDays, isSunday, isSameMonth } from "date-fns";
+import { format, parseISO, addHours, isAfter, isValid, startOfMonth, endOfMonth, addDays, isSunday, isSameMonth, subMonths } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -93,19 +93,21 @@ export default function AttendancePage() {
     const now = getISTTime();
     const monthsMap = new Map<string, { presentDates: Set<string>; monthDate: Date }>();
 
-    // Ensure current month is always present even if no records yet
-    const currentMonthKey = format(now, "yyyy-MM");
-    monthsMap.set(currentMonthKey, { presentDates: new Set(), monthDate: startOfMonth(now) });
+    // Ensure only current, previous, and 2 months ago are present
+    for (let i = 0; i < 3; i++) {
+      const mDate = subMonths(now, i);
+      const mKey = format(mDate, "yyyy-MM");
+      monthsMap.set(mKey, { presentDates: new Set(), monthDate: startOfMonth(mDate) });
+    }
 
     employeeRecords.forEach(r => {
         const rDate = parseISO(r.date);
         if (isValid(rDate)) {
             const mKey = format(rDate, "yyyy-MM");
-            if (!monthsMap.has(mKey)) {
-                monthsMap.set(mKey, { presentDates: new Set(), monthDate: startOfMonth(rDate) });
-            }
-            if (r.inTime) {
-                monthsMap.get(mKey)!.presentDates.add(r.date);
+            if (monthsMap.has(mKey)) {
+                if (r.inTime) {
+                    monthsMap.get(mKey)!.presentDates.add(r.date);
+                }
             }
         }
     });
@@ -121,7 +123,7 @@ export default function AttendancePage() {
         
         let workingDays = 0;
         for (let d = start; d <= end; d = addDays(d, 1)) {
-            if (!isSunday(d)) workingDays++;
+            workingDays++;
         }
         
         const absentDays = Math.max(0, workingDays - presentDays);
@@ -452,7 +454,7 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+      <div className="max-w-xl mx-auto w-full">
         <Card className="shadow-2xl border-none overflow-hidden bg-white">
           <div className="h-1.5 bg-primary" />
           <CardHeader className="text-center py-6">
@@ -464,7 +466,7 @@ export default function AttendancePage() {
             <div className="py-8 px-10 rounded-[2.5rem] bg-slate-50 text-slate-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-slate-100 max-w-[300px] mx-auto group hover:bg-primary/5 transition-colors">
               {currentTime ? (
                 <div className="text-center">
-                  <h2 className="text-6xl font-black tracking-tighter font-mono leading-none text-slate-900">{format(currentTime, "HH:mm")}</h2>
+                  <h2 className="text-[55px] font-black tracking-tighter font-mono leading-none text-slate-900">{format(currentTime, "HH:mm")}</h2>
                   <p className="text-[11px] font-black text-primary mt-3 flex items-center justify-center gap-1.5 uppercase tracking-[0.2em]">{format(currentTime, "dd MMM yyyy")}</p>
                 </div>
               ) : (
@@ -493,56 +495,27 @@ export default function AttendancePage() {
               </Button>
             </div>
 
-            {todayRecord && (
-              <Alert className="bg-emerald-50 border-emerald-100 text-emerald-800 rounded-2xl py-3">
-                 <CheckCircle className="w-4 h-4 text-emerald-600" />
-                 <AlertDescription className="text-[10px] font-black uppercase tracking-widest leading-none">
-                    Session Recorded for Today ({formatDate(todayRecord.date)})
-                 </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-xl border-none overflow-hidden bg-white">
-           <CardHeader className="bg-slate-50/50 border-b flex flex-row items-center justify-between py-5 px-6">
-              <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500">Live Status</CardTitle>
-              <Badge variant="outline" className="font-black text-[10px] uppercase border-slate-200">{effectiveEmployeeId}</Badge>
-           </CardHeader>
-           <CardContent className="p-8 flex flex-col items-center justify-center h-full text-center space-y-4">
+            <div className="pt-6 border-t border-slate-100 flex flex-col items-center justify-center w-full">
               {activeRecord ? (
-                <>
-                  <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center border border-emerald-100 mb-2 animate-pulse">
-                    <ShieldCheck className="w-8 h-8 text-emerald-500" />
-                  </div>
-                  <h3 className="text-lg font-black text-emerald-600 uppercase tracking-tight">Shift Active</h3>
-                  <p className="text-xs font-bold text-slate-500 uppercase">Started at {activeRecord.inTime}</p>
-                </>
-              ) : isCooldownLocked ? (
-                <>
-                  <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center border border-amber-100 mb-2">
-                    <Clock className="w-8 h-8 text-amber-500 animate-spin [animation-duration:10s]" />
-                  </div>
-                  <h3 className="text-lg font-black text-amber-600 uppercase tracking-tight">Cooldown Active</h3>
-                  <p className="text-xs font-bold text-slate-500 max-w-[240px] leading-relaxed">
-                    Check-in locked for 8 hours.<br />
-                    <span className="text-primary font-extrabold text-[11px] uppercase tracking-wider block mt-1">
-                      Opens at: {nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "N/A"}
-                    </span>
-                  </p>
-                </>
+                <div className="flex items-center justify-center gap-2 text-emerald-600 bg-emerald-50 px-5 py-3 rounded-xl w-full border border-emerald-100">
+                  <ShieldCheck className="w-5 h-5" />
+                  <span className="text-sm font-black uppercase tracking-wider">Shift Active at {activeRecord.inTime}</span>
+                </div>
+              ) : todayRecord && todayRecord.outTime ? (
+                <div className="flex items-center justify-center gap-2 text-blue-600 bg-blue-50 px-5 py-3 rounded-xl w-full border border-blue-100">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="text-sm font-black uppercase tracking-wider">
+                    Shift Closed at {todayRecord.outTime} with working Hour {formatHoursToHHMM(todayRecord.hours || 0)}
+                  </span>
+                </div>
               ) : (
-                <>
-                  <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 mb-2">
-                    <Clock className="w-8 h-8 text-slate-300" />
-                  </div>
-                  <h3 className="text-lg font-black text-slate-400 uppercase tracking-tight">System Resting</h3>
-                  <p className="text-xs font-medium text-slate-400 max-w-[200px]">
-                    Gateway is ready for check-in.
-                  </p>
-                </>
+                <div className="flex items-center justify-center gap-2 text-slate-500 bg-slate-50 px-5 py-3 rounded-xl w-full border border-slate-200">
+                  <Clock className="w-5 h-5" />
+                  <span className="text-sm font-black uppercase tracking-wider">Shift Inactive</span>
+                </div>
               )}
-           </CardContent>
+            </div>
+          </CardContent>
         </Card>
       </div>
 
