@@ -223,7 +223,7 @@ export default function AttendancePage() {
       });
 
       toast({ 
-        title: "Auto OUT Triggered", 
+        title: "Auto OUT Trigered", 
         description: "Session closed after 16 hours limit. 8 hours credited to your ledger." 
       });
 
