@@ -101,7 +101,7 @@ function StandardPaginationFooter({ current, total, onPageChange }: { current: n
 }
 
 export default function ApprovalsPage() {
-  const { attendanceRecords = [], employees = [], updateRecord, addRecord, verifiedUser, holidays = [], plants = [], leaveRequests = [] } = useData();
+  const { attendanceRecords = [], employees = [], updateRecord, addRecord, refreshData, verifiedUser, holidays = [], plants = [], leaveRequests = [] } = useData();
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState("pending");
@@ -493,7 +493,7 @@ export default function ApprovalsPage() {
     toast({ title: `Bulk approved ${recordsToApprove.length} records successfully.` });
 
     const runBulkTask = async () => {
-      for (const rec of recordsToApprove) {
+      const promises = recordsToApprove.map(async (rec) => {
         try {
           let finalOutTime = rec.outTime;
           let finalOutDate = rec.outDate || rec.date;
@@ -521,7 +521,7 @@ export default function ApprovalsPage() {
               approved: true,
               approvedBy: approverName,
               remark: finalRemarks || "Approved as Absent",
-            });
+            }, true);
           } else {
             const finalDbId = rec.id || (rec as any)._id;
             await updateRecord('attendance', finalDbId, {
@@ -531,12 +531,14 @@ export default function ApprovalsPage() {
               approved: true,
               approvedBy: approverName,
               remark: finalRemarks,
-            });
+            }, true);
           }
         } catch (e) {
           console.error("Bulk approve failed for", rec.id || (rec as any)._id, e);
         }
-      }
+      });
+      await Promise.all(promises);
+      await refreshData();
     };
 
     runBulkTask();

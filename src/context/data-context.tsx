@@ -27,10 +27,10 @@ interface DataContextType {
   holidays: Holiday[];
   notifications: AppNotification[];
   leaveRequests: LeaveRequest[];
-  addRecord: (col: string, data: any) => Promise<void>;
-  updateRecord: (col: string, id: string, data: any) => Promise<void>;
-  deleteRecord: (col: string, id: string) => Promise<void>;
-  setRecord: (col: string, id: string, data: any) => Promise<void>;
+  addRecord: (col: string, data: any, skipRefresh?: boolean) => Promise<void>;
+  updateRecord: (col: string, id: string, data: any, skipRefresh?: boolean) => Promise<void>;
+  deleteRecord: (col: string, id: string, skipRefresh?: boolean) => Promise<void>;
+  setRecord: (col: string, id: string, data: any, skipRefresh?: boolean) => Promise<void>;
   currentUser: any;
   verifiedUser: any;
   isLoading: boolean;
@@ -163,7 +163,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return currentUser;
   }, [currentUser, employees, users]);
 
-  const addRecord = async (col: string, data: any) => {
+  const addRecord = async (col: string, data: any, skipRefresh = false) => {
     try {
       const res = await fetch(`/api/data/${col}`, {
         method: 'POST',
@@ -171,26 +171,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ ...data, createdAt: new Date().toISOString() })
       });
       if (!res.ok) console.warn(`Failed to append record in ${col}. Status: ${res.status}`);
-      await fetchData();
+      if (!skipRefresh) await fetchData();
     } catch (e) {
       console.error(e);
     }
   };
 
-  const updateRecord = async (col: string, id: string, data: any) => {
+  const updateRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
     try {
       await fetch(`/api/data/${col}?id=${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, updatedAt: new Date().toISOString() })
       });
-      await fetchData();
+      if (!skipRefresh) await fetchData();
     } catch (e) {
       console.error(e);
     }
   };
 
-  const deleteRecord = async (col: string, id: string) => {
+  const deleteRecord = async (col: string, id: string, skipRefresh = false) => {
     if (currentUser?.role !== 'SUPER_ADMIN') {
       toast({
         variant: "destructive",
@@ -201,20 +201,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await fetch(`/api/data/${col}?id=${id}`, { method: 'DELETE' });
-      await fetchData();
+      if (!skipRefresh) await fetchData();
     } catch (e) {
       console.error(e);
     }
   };
 
-  const setRecord = async (col: string, id: string, data: any) => {
+  const setRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
     try {
       await fetch(`/api/data/${col}?id=${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, id, updatedAt: new Date().toISOString() })
       });
-      await fetchData();
+      if (!skipRefresh) await fetchData();
     } catch (e) {
       console.error(e);
     }
