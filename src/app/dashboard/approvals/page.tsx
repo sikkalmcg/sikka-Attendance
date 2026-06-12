@@ -42,7 +42,8 @@ import {
   ChevronRight,
   FileSpreadsheet,
   UserCheck,
-  AlertCircle
+  AlertCircle,
+  CheckSquare
 } from "lucide-react";
 import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -106,10 +107,14 @@ export default function ApprovalsPage() {
   const [viewMode, setViewMode] = useState("pending");
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("ALL_ASSIGNED");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>("");
 
   const [historyMonthFilter, setHistoryMonthFilter] = useState("");
   const [pendingPage, setPendingPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
+
+  const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
+  const [isBulkApproveConfirmOpen, setIsBulkApproveConfirmOpen] = useState(false);
 
   const [selectedAttendance, setSelectedAttendance] = useState<AttendanceItem | null>(null);
   const [isApproveConfirmOpen, setIsApproveConfirmOpen] = useState(false);
@@ -154,7 +159,8 @@ export default function ApprovalsPage() {
   useEffect(() => {
     setPendingPage(1);
     setHistoryPage(1);
-  }, [viewMode, selectedPlantFilter, selectedStatusFilter, historyMonthFilter, searchTerm]);
+    setSelectedRecordIds(new Set());
+  }, [viewMode, selectedPlantFilter, selectedStatusFilter, historyMonthFilter, searchTerm, selectedDateFilter]);
 
   const userAssignedPlantIds = useMemo(() => {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
@@ -163,7 +169,7 @@ export default function ApprovalsPage() {
 
   const authorizedPlants = useMemo(() => {
     if (!userAssignedPlantIds) return plants;
-    return plants.filter(p => userAssignedPlantIds.includes(p.id));
+    return plants.filter(p => userAssignedPlantIds.includes(p.id || (p as any)._id));
   }, [userAssignedPlantIds, plants]);
 
   const approvedLeavesMap = useMemo(() => {
@@ -327,17 +333,21 @@ export default function ApprovalsPage() {
       );
     }
 
+    if (selectedDateFilter) {
+      combined = combined.filter(rec => rec.date === selectedDateFilter);
+    }
+
     if (selectedPlantFilter !== "ALL_ASSIGNED") {
       combined = combined.filter(rec => {
         if (!rec.isVirtual) return rec.inPlant === selectedPlantFilter;
         const emp = employeeMap.get(rec.employeeId);
         const targetPlant = plants.find(p => p.name === selectedPlantFilter);
-        return (emp?.unitIds || []).includes(targetPlant?.id || "");
+        return (emp?.unitIds || []).includes(targetPlant?.id || (targetPlant as any)?._id || "");
       });
     }
 
     return combined;
-  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, plants, approvedLeavesMap, historyMonthFilter, localApprovals, localEdits]);
+  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, selectedDateFilter, plants, approvedLeavesMap, historyMonthFilter, localApprovals, localEdits]);
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
@@ -440,6 +450,96 @@ export default function ApprovalsPage() {
     };
 
     runApprovalTask();
+  };
+
+  const toggleRecordSelection = (id: string) => {
+    const newSet = new Set(selectedRecordIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedRecordIds(newSet);
+  };
+
+  const toggleAllSelection = () => {
+    const selectableItems = currentData.items.filter((r: any) => r.isVirtual || (r.inTime && (r.outTime || r.autoCheckout)));
+    const allSelected = selectableItems.every((r: any) => selectedRecordIds.has(r.id || (r as any)._id || `${r.employeeId}:${r.date}`));
+    
+    if (allSelected && selectableItems.length > 0) {
+      setSelectedRecordIds(new Set());
+    } else {
+      const newSet = new Set<string>();
+      selectableItems.forEach((r: any) => {
+        newSet.add(r.id || (r as any)._id || `${r.employeeId}:${r.date}`);
+      });
+      setSelectedRecordIds(newSet);
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    setIsBulkApproveConfirmOpen(false);
+    const approverName = verifiedUser?.fullName || "HR_ADMIN";
+    
+    const recordsToApprove = pendingAttendanceList.filter(r => {
+      const rId = r.id || (r as any)._id || `${r.employeeId}:${r.date}`;
+      return selectedRecordIds.has(rId);
+    });
+
+    const newApprovals = { ...localApprovals };
+    recordsToApprove.forEach(r => {
+      const rId = r.id || (r as any)._id || `${r.employeeId}:${r.date}`;
+      newApprovals[rId] = true;
+    });
+    setLocalApprovals(newApprovals);
+    setSelectedRecordIds(new Set());
+    toast({ title: `Bulk approved ${recordsToApprove.length} records successfully.` });
+
+    const runBulkTask = async () => {
+      for (const rec of recordsToApprove) {
+        try {
+          let finalOutTime = rec.outTime;
+          let finalOutDate = rec.outDate || rec.date;
+          let finalHours = rec.hours || 0;
+
+          if (!rec.isVirtual && rec.autoCheckout && !rec.outTime) {
+            const inDT = parseISO(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}:00`);
+            if (inDT && isValid(inDT)) {
+              const autoOutDT = addHours(inDT, 16);
+              finalOutTime = format(autoOutDT, "HH:mm");
+              finalOutDate = format(autoOutDT, "yyyy-MM-dd");
+              finalHours = 16.0;
+            }
+          }
+
+          const finalRemarks = (rec.autoCheckout && !rec.remark) ? "System Auto-Logged OUT (16h Limit Threshold reached)" : rec.remark;
+
+          if (rec.isVirtual) {
+            await addRecord('attendance', {
+              employeeId: rec.employeeId,
+              employeeName: rec.employeeName,
+              date: rec.date,
+              status: 'ABSENT',
+              attendanceType: rec.attendanceType || 'ABSENT',
+              approved: true,
+              approvedBy: approverName,
+              remark: finalRemarks || "Approved as Absent",
+            });
+          } else {
+            const finalDbId = rec.id || (rec as any)._id;
+            await updateRecord('attendance', finalDbId, {
+              outTime: finalOutTime || null,
+              outDate: finalOutDate || null,
+              hours: finalHours,
+              approved: true,
+              approvedBy: approverName,
+              remark: finalRemarks,
+            });
+          }
+        } catch (e) {
+          console.error("Bulk approve failed for", rec.id || (rec as any)._id, e);
+        }
+      }
+    };
+
+    runBulkTask();
   };
 
   const formatLocation = (address?: string, lat?: number, lng?: number) => {
@@ -691,6 +791,19 @@ export default function ApprovalsPage() {
             </div>
           )}
           <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border shadow-sm">
+             <Input 
+               type="date" 
+               className="h-8 border-none text-xs font-black uppercase focus:ring-0 shadow-none bg-transparent w-[130px]" 
+               value={selectedDateFilter} 
+               onChange={(e) => setSelectedDateFilter(e.target.value)} 
+             />
+             {selectedDateFilter && (
+               <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-slate-600" onClick={() => setSelectedDateFilter("")}>
+                 <XCircle className="w-4 h-4" />
+               </Button>
+             )}
+          </div>
+          <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border shadow-sm">
              <Building2 className="w-4 h-4 text-primary ml-2" />
              <Select value={selectedPlantFilter} onValueChange={setSelectedPlantFilter}>
                 <SelectTrigger className="h-8 w-[200px] border-none font-black text-xs uppercase focus:ring-0 shadow-none bg-transparent">
@@ -715,6 +828,14 @@ export default function ApprovalsPage() {
             <TabsTrigger value="history" className="text-xs font-black uppercase">History Queue</TabsTrigger>
           </TabsList>
         </Tabs>
+        {viewMode === 'pending' && selectedRecordIds.size > 0 && (
+          <Button 
+            onClick={() => setIsBulkApproveConfirmOpen(true)}
+            className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase rounded-xl shadow-md px-5"
+          >
+            <CheckSquare className="w-4 h-4 mr-2" /> Bulk Approve ({selectedRecordIds.size})
+          </Button>
+        )}
       </div>
 
       {viewMode === 'history' && (
@@ -742,6 +863,16 @@ export default function ApprovalsPage() {
             <Table className="min-w-[2000px]">
               <TableHeader className="bg-slate-50">
                 <TableRow>
+                  {viewMode === 'pending' && (
+                    <TableHead className="w-12 text-center px-4">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-300 w-4 h-4 cursor-pointer accent-emerald-600"
+                        checked={currentData.items.length > 0 && currentData.items.filter((r: any) => r.isVirtual || (r.inTime && (r.outTime || r.autoCheckout))).every((r: any) => selectedRecordIds.has(r.id || (r as any)._id || `${r.employeeId}:${r.date}`))}
+                        onChange={toggleAllSelection}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500 py-4 px-6">Employee Name</TableHead>
                   <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Date</TableHead>
                   <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Attendance Status</TableHead>
@@ -758,7 +889,7 @@ export default function ApprovalsPage() {
               </TableHeader>
               <TableBody>
                 {currentData.items.length === 0 ? (
-                  <TableRow><TableCell colSpan={viewMode === 'history' ? 12 : 10} className="text-center py-20 text-muted-foreground font-bold italic">No logs matched criteria constraints bounds.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={viewMode === 'history' ? 12 : 11} className="text-center py-20 text-muted-foreground font-bold italic">No logs matched criteria constraints bounds.</TableCell></TableRow>
                 ) : (
                   currentData.items.map((rec: any) => {
                     const canApprove = rec.isVirtual || (rec.inTime && (rec.outTime || rec.autoCheckout));
@@ -779,6 +910,17 @@ export default function ApprovalsPage() {
 
                     return (
                     <TableRow key={rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`} className={cn("hover:bg-slate-50/50 transition-colors", rec.autoCheckout && "bg-amber-50/10")}>
+                      {viewMode === 'pending' && (
+                        <TableCell className="text-center px-4">
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-slate-300 w-4 h-4 cursor-pointer accent-emerald-600 disabled:opacity-50"
+                            disabled={!canApprove}
+                            checked={selectedRecordIds.has(rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
+                            onChange={() => toggleRecordSelection(rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-black text-slate-900 uppercase text-xs sm:text-sm">{rec.employeeName}</span>
@@ -899,6 +1041,32 @@ export default function ApprovalsPage() {
             <Button variant="ghost" className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" onClick={() => setIsApproveConfirmOpen(false)}>Cancel</Button>
             <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10" onClick={handleConfirmApproval}>
               Confirm Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* BULK APPROVE CONFIRMATION MODAL */}
+      <Dialog open={isBulkApproveConfirmOpen} onOpenChange={setIsBulkApproveConfirmOpen}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-0 overflow-hidden border-none shadow-2xl animate-in fade-in duration-300">
+          <DialogHeader className="p-6 bg-slate-900 text-white flex flex-row items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
+              <UserCheck className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle className="text-md font-black uppercase tracking-tight">Bulk Approve Logs</DialogTitle>
+              <DialogDescription className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Approve {selectedRecordIds.size} selected session(s)</DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <div className="p-6 space-y-4 bg-white text-xs font-bold text-slate-700 text-center">
+            <p className="text-sm">Are you sure you want to successfully approve all <span className="text-emerald-600 text-xl font-black">{selectedRecordIds.size}</span> selected records? They will automatically be moved to the History Queue.</p>
+          </div>
+
+          <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
+            <Button variant="ghost" className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" onClick={() => setIsBulkApproveConfirmOpen(false)}>Cancel</Button>
+            <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10" onClick={handleBulkApprove}>
+              Confirm Bulk Approve
             </Button>
           </DialogFooter>
         </DialogContent>

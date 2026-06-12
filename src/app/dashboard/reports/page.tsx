@@ -52,7 +52,7 @@ const formatLocation = (address?: string, lat?: number, lng?: number) => {
 };
 
 export default function ReportsPage() {
-  const { employees = [], attendanceRecords = [], verifiedUser, holidays = [], leaveRequests = [] } = useData();
+  const { employees = [], attendanceRecords = [], verifiedUser, holidays = [], leaveRequests = [], plants = [] } = useData();
   const { toast } = useToast();
 
   const [fromDate, setFromDate] = useState("");
@@ -76,6 +76,11 @@ export default function ReportsPage() {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
     return verifiedUser.plantIds || [];
   }, [verifiedUser]);
+
+  const authorizedPlants = useMemo(() => {
+    if (!userAssignedPlantIds) return plants || [];
+    return (plants || []).filter(p => userAssignedPlantIds.includes(p.id || (p as any)._id));
+  }, [userAssignedPlantIds, plants]);
 
   const paginatedData = useMemo(() => {
     if (!viewData) return [];
@@ -290,15 +295,11 @@ export default function ReportsPage() {
                 <SelectItem value="all" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
                   ALL AUTHORIZED PLANTS
                 </SelectItem>
-                <SelectItem value="TEA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                  TEA PLANT
-                </SelectItem>
-                <SelectItem value="SALT PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                  SALT PLANT
-                </SelectItem>
-                <SelectItem value="DASNA PLANT" className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
-                  DASNA PLANT
-                </SelectItem>
+                {authorizedPlants.map(p => (
+                  <SelectItem key={p.id || (p as any)._id} value={p.name} className="font-bold text-xs uppercase py-2 cursor-pointer hover:bg-slate-50 transition-colors">
+                    {p.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

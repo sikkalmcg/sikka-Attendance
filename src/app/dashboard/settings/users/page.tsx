@@ -149,7 +149,7 @@ export default function UserManagementPage() {
       return false;
     }
 
-    const exists = users.find(u => u.username === username && u.id !== editingUser?.id);
+    const exists = users.find(u => u.username === username && (u.id || (u as any)._id) !== (editingUser?.id || (editingUser as any)?._id));
     if (exists) {
       toast({ variant: "destructive", title: "Duplicate Username", description: "This username is already taken." });
       return false;
@@ -192,7 +192,8 @@ export default function UserManagementPage() {
       };
 
       if (editingUser) {
-        updateRecord('users', editingUser.id, userData);
+        const finalId = editingUser.id || (editingUser as any)._id;
+        updateRecord('users', finalId, userData);
         toast({ title: "User Updated", description: "Profile permissions saved successfully." });
       } else {
         addRecord('users', { ...userData, password: formData.password });
@@ -211,7 +212,8 @@ export default function UserManagementPage() {
     setIsProcessing(true);
     try {
       const newStatus = userToAction.status === 'Active' ? 'Inactive' : 'Active';
-      updateRecord('users', userToAction.id, { status: newStatus });
+      const finalId = userToAction.id || (userToAction as any)._id;
+      updateRecord('users', finalId, { status: newStatus });
       toast({ 
         title: newStatus === 'Active' ? "User Activated" : "User Deactivated", 
         description: `${userToAction.fullName} account is now ${newStatus.toLowerCase()}.` 
@@ -232,7 +234,8 @@ export default function UserManagementPage() {
     try {
       users.forEach(u => {
         if (u.role !== 'SUPER_ADMIN') {
-          updateRecord('users', u.id, { permissions: formData.permissions });
+          const finalId = u.id || (u as any)._id;
+          updateRecord('users', finalId, { permissions: formData.permissions });
         }
       });
       toast({ title: "Global Update Success", description: "Permissions applied to all managed users." });
@@ -266,7 +269,7 @@ export default function UserManagementPage() {
   };
 
   const selectAllPlants = () => {
-    setFormData(p => ({ ...p, plantIds: (plants || []).map(pl => pl.id) }));
+    setFormData(p => ({ ...p, plantIds: (plants || []).map(pl => pl.id || (pl as any)._id) }));
   };
 
   if (!isMounted) return null;
@@ -306,7 +309,7 @@ export default function UserManagementPage() {
               </TableHeader>
               <TableBody>
                 {filteredUsers.map((user) => (
-                  <TableRow key={user.id} className="hover:bg-slate-50/50">
+                  <TableRow key={user.id || (user as any)._id} className="hover:bg-slate-50/50">
                     <TableCell className="font-bold">{user.fullName}</TableCell>
                     <TableCell className="font-mono text-primary text-xs tracking-tight">{user.username}</TableCell>
                     <TableCell>
@@ -493,11 +496,12 @@ export default function UserManagementPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredPlants.map(plant => {
-                      const isSelected = formData.plantIds?.includes(plant.id);
+                      const plantId = plant.id || (plant as any)._id;
+                      const isSelected = formData.plantIds?.includes(plantId);
                       return (
                         <div 
-                          key={plant.id}
-                          onClick={() => !isProcessing && togglePlantAccess(plant.id)}
+                          key={plantId}
+                          onClick={() => !isProcessing && togglePlantAccess(plantId)}
                           className={cn(
                             "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
                             isSelected 
@@ -506,17 +510,17 @@ export default function UserManagementPage() {
                           )}
                         >
                           <Checkbox 
-                            id={`plant-${plant.id}`}
+                            id={`plant-${plantId}`}
                             checked={isSelected}
-                            onCheckedChange={() => togglePlantAccess(plant.id)}
+                            onCheckedChange={() => togglePlantAccess(plantId)}
                             disabled={isProcessing}
                             className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
                           />
                           <div className="flex-1">
                             <Label 
-                              htmlFor={`plant-${plant.id}`} 
+                              htmlFor={`plant-${plantId}`} 
                               className="text-sm font-bold text-slate-700 cursor-pointer block"
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePlantAccess(plant.id); }}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePlantAccess(plantId); }}
                             >
                               {plant.name}
                             </Label>
@@ -610,7 +614,7 @@ export default function UserManagementPage() {
                       </TableHeader>
                       <TableBody>
                         {users.map(u => (
-                          <TableRow key={u.id} className="hover:bg-slate-50/50">
+                          <TableRow key={u.id || (u as any)._id} className="hover:bg-slate-50/50">
                             <TableCell className="text-xs font-bold">{u.fullName}</TableCell>
                             <TableCell className="text-xs font-mono text-primary">{u.username}</TableCell>
                             <TableCell><Badge variant="outline" className="text-[8px] font-black uppercase py-0">{u.role}</Badge></TableCell>
