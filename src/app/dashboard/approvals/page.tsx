@@ -41,7 +41,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  Clock,
   UserCheck,
   AlertCircle
 } from "lucide-react";
@@ -382,7 +381,7 @@ export default function ApprovalsPage() {
     setIsApproveConfirmOpen(true);
   };
 
-  const handleConfirmApproval = () => {
+  const handleConfirmApproval = async () => {
     if (!selectedAttendance) return;
     
     const rec = selectedAttendance;
@@ -409,22 +408,30 @@ export default function ApprovalsPage() {
           }
         }
 
-        await fetch('/api/attendance/approve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recordId: (rec.id && rec.id.startsWith('v-')) ? undefined : (rec.id || (rec as any)._id),
-            firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
+        const finalRemarks = (rec.autoCheckout && !rec.remark) ? "System Auto-Logged OUT (16h Limit Threshold reached)" : rec.remark;
+
+        if (rec.isVirtual) {
+          await addRecord('attendance', {
             employeeId: rec.employeeId,
-            attendanceDate: rec.date,
+            employeeName: rec.employeeName,
+            date: rec.date,
+            status: 'ABSENT',
+            attendanceType: rec.attendanceType || 'ABSENT',
+            approved: true,
             approvedBy: approverName,
-            status: 'APPROVED',
-            remarks: (rec.autoCheckout && !rec.remark) ? "System Auto-Logged OUT (16h Limit Threshold reached)" : rec.remark,
-            isVirtual: !!rec.isVirtual,
-            virtualData: rec.isVirtual ? { employeeName: rec.employeeName, attendanceType: rec.attendanceType || 'ABSENT' } : null,
-            updateData: !rec.isVirtual ? { outTime: finalOutTime || null, outDate: finalOutDate || null, hours: finalHours } : null
-          })
-        });
+            remark: finalRemarks || "Approved as Absent",
+          });
+        } else {
+          const finalDbId = rec.id || (rec as any)._id;
+          await updateRecord('attendance', finalDbId, {
+            outTime: finalOutTime || null,
+            outDate: finalOutDate || null,
+            hours: finalHours,
+            approved: true,
+            approvedBy: approverName,
+            remark: finalRemarks,
+          });
+        }
       } catch (e) {
         setLocalApprovals(prev => ({ ...prev, [recId]: false }));
       } finally {
@@ -597,26 +604,28 @@ export default function ApprovalsPage() {
 
     const runSilentRejection = async () => {
       try {
-        const finalDbId = (rec.id && rec.id.startsWith('v-')) ? undefined : (rec.id || (rec as any)._id);
-
-        const response = await fetch('/api/attendance/approve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recordId: finalDbId, 
-            firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
+        if (rec.isVirtual) {
+          await addRecord('attendance', {
             employeeId: rec.employeeId,
-            attendanceDate: rec.date,
-            approvedBy: approver,
+            employeeName: rec.employeeName,
+            date: rec.date,
             status: 'REJECTED',
-            remarks: attendanceRejectReason,
-            isVirtual: !!rec.isVirtual,
-            virtualData: rec.isVirtual ? { employeeName: rec.employeeName, attendanceType: 'ABSENT' } : null,
-            updateData: !rec.isVirtual ? { status: 'ABSENT', hours: 0, attendanceType: 'ABSENT' } : null
-          })
-        });
-
-        if (!response.ok) throw new Error("API Rejection Call Failed");
+            attendanceType: 'ABSENT',
+            approved: true,
+            approvedBy: approver,
+            remark: attendanceRejectReason,
+          });
+        } else {
+          const finalDbId = rec.id || (rec as any)._id;
+          await updateRecord('attendance', finalDbId, {
+            status: 'REJECTED',
+            hours: 0,
+            attendanceType: 'ABSENT',
+            approved: true,
+            approvedBy: approver,
+            remark: attendanceRejectReason,
+          });
+        }
       } catch (e) {
         setLocalApprovals(prev => ({ ...prev, [recId]: false }));
         setLocalEdits(prev => {
@@ -642,19 +651,11 @@ export default function ApprovalsPage() {
 
     const runRestoreTask = async () => {
       try {
-        const approverName = verifiedUser?.fullName || "HR_ADMIN";
-        await fetch('/api/attendance/approve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recordId: rec.id || (rec as any)._id,
-            firmId: verifiedUser?.firmId || verifiedUser?.firm || 'DEFAULT_FIRM', 
-            employeeId: rec.employeeId,
-            attendanceDate: rec.date,
-            approvedBy: approverName,
-            status: 'RESTORE',
-            updateData: { editedBy: null }
-          })
+        const finalDbId = rec.id || (rec as any)._id;
+        await updateRecord('attendance', finalDbId, {
+          approved: false,
+          approvedBy: null,
+          editedBy: null
         });
       } catch (e) {
         setLocalApprovals(prev => ({ ...prev, [recId]: true }));

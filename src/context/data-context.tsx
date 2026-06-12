@@ -82,17 +82,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     
     setIsLoading(true);
     try {
-      // LIGHTWEIGHT ROUTING: Agar user ek employee hai, toh query loading parameters chote rakhein
       let collectionsToFetch: string[] = [];
 
       if (currentUserRole === 'EMPLOYEE') {
-        // Employee dashboard ke liye sirf itna hi kaafi hai
         collectionsToFetch = ['attendance', 'plants', 'holidays'];
       } else {
-        // Admin/HR ke liye saari collections fetch karein
-        collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests'];
-        if (isAdminRole) collectionsToFetch.push('payroll', 'notifications');
-        if (currentUserRole === 'SUPER_ADMIN') collectionsToFetch.push('users');
+        // Admin, SUPER_ADMIN aur HR teeno ke liye global core tables load karein
+        collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests', 'users'];
+        
+        // HR aur Admin verification aur logs ke liye payroll / notifications inject karein
+        if (isAdminRole) {
+          if (!collectionsToFetch.includes('payroll')) collectionsToFetch.push('payroll');
+          if (!collectionsToFetch.includes('notifications')) collectionsToFetch.push('notifications');
+        }
       }
 
       const results = await Promise.all(
@@ -104,7 +106,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         dataMap[col] = Array.isArray(results[index]) ? results[index] : (results[index]?.data || []);
       });
 
-      // Mapping state context arrays safely
+      // State Context allocation
       if (dataMap['employees']) setEmployees(dataMap['employees']);
       if (dataMap['attendance']) setAttendanceRecords(dataMap['attendance']);
       if (dataMap['vouchers']) setVouchers(dataMap['vouchers']);
@@ -115,7 +117,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (dataMap['holidays']) setHolidays(dataMap['holidays']);
       if (dataMap['leaveRequests']) setLeaveRequests(dataMap['leaveRequests']);
       
-      // Fetch user notifications efficiently
       if (dataMap['notifications']) {
         setNotifications(dataMap['notifications']);
       } else if (currentUserUsername) {
@@ -140,7 +141,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!currentUser) return null;
 
     if (currentUser.role === 'EMPLOYEE') {
-      // Agar employees state khali hai (un-fetched due to role segregation), use standard details session parameters
       if (employees.length === 0) {
         return { ...currentUser, fullName: currentUser.fullName || "Employee" };
       }
@@ -154,8 +154,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return dbEmp ? { ...currentUser, ...dbEmp, fullName, avatar: dbEmp.avatar } : currentUser;
     }
 
+    // HR aur Management users ke validation parameters ko filter out karein
     if (currentUser.role !== 'SUPER_ADMIN') {
-      const dbUser = (users || []).find(u => u.id === currentUser.id);
+      const dbUser = (users || []).find(u => u.id === currentUser.id || u.username === currentUser.username);
       return dbUser ? { ...currentUser, ...dbUser } : currentUser;
     }
 

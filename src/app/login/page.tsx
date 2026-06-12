@@ -14,6 +14,8 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'EMPLOYEE' | 'HR' | 'ADMIN'>('EMPLOYEE');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null); // For live database debugging
@@ -58,6 +60,7 @@ export default function LoginPage() {
         toast({ title: "Welcome back, Admin", description: "Login successful." });
         setTimeout(() => router.push("/dashboard"), 100);
         return;
+
       }
 
       let data: any = null;
@@ -69,7 +72,13 @@ export default function LoginPage() {
         const response = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: cleanUser, password: cleanPass, deviceId, deviceName }),
+          body: JSON.stringify({
+            username: cleanUser,
+            password: cleanPass,
+            role: selectedRole,
+            deviceId,
+            deviceName,
+          }),
         });
         data = await response.json();
         isSuccess = response.ok;
@@ -78,10 +87,12 @@ export default function LoginPage() {
         console.error("API login failed:", err);
       }
 
+
       // 3. Fallback to Employee Direct Check (Aadhaar & Mobile)
-      if (!isSuccess) {
+      if (!isSuccess && selectedRole === 'EMPLOYEE') {
         try {
           const empRes = await fetch('/api/data/employees');
+
           if (empRes.ok) {
             const empData = await empRes.json();
             const employees = Array.isArray(empData) ? empData : (empData?.data || []);
@@ -196,6 +207,21 @@ export default function LoginPage() {
 
             <div className="flex items-center gap-4">
               <label className="w-24 text-right text-sm font-semibold text-slate-600">
+                Role <span className="text-red-500">*</span>
+              </label>
+              <select
+                className="flex-1 h-8 bg-white border border-slate-300 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as any)}
+              >
+                <option value="EMPLOYEE">Employee</option>
+                <option value="HR">HR</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-right text-sm font-semibold text-slate-600">
                 User <span className="text-red-500">*</span>
               </label>
               <input 
@@ -206,6 +232,7 @@ export default function LoginPage() {
                 required
               />
             </div>
+
 
             <div className="flex items-center gap-4">
               <label className="w-24 text-right text-sm font-semibold text-slate-600">
