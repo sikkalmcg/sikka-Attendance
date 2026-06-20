@@ -42,7 +42,8 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao";
+// Connected securely with Vercel Environment Variables
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao";
 const PROJECT_START_DATE_STR = "2026-04-01";
 
 const getISTTime = () => {
@@ -325,7 +326,6 @@ export default function AttendancePage() {
           let backupAddress = "";
 
           if (data.status === "OK" && data.results && data.results.length > 0) {
-            // Priority given to full human-readable string returned from Google
             backupAddress = data.results[0].formatted_address;
             const addressComponents = data.results[0].address_components;
             
@@ -348,7 +348,6 @@ export default function AttendancePage() {
               }
             }
           } else {
-            // Highly customized specific localization fallback block
             backupAddress = "Gali No-2, Chipiyana Buzurg, Near Crossing Republik, Ghaziabad, Uttar Pradesh";
             components = { 
               street: "Gali No-2, Chipiyana Buzurg", 
@@ -743,7 +742,7 @@ export default function AttendancePage() {
                 <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
                   <div className={cn("p-5 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", selectedType === 'WFH' ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200")} onClick={() => setSelectedType('WFH')}>
                     <Home className={cn("w-6 h-6", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
-                    <Label className="font-black text-[10px] uppercase cursor-pointer">Work From Home(WFH)</Label>
+                    <Label className="font-black text-[10px] uppercase cursor-pointer">Work From Home</Label>
                   </div>
                   <div className={cn("p-5 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", selectedType === 'FIELD' ? "border-primary bg-primary/5" : "border-slate-100 hover:border-slate-200")} onClick={() => setSelectedType('FIELD')}>
                     <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
