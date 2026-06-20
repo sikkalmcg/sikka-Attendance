@@ -1,0 +1,308 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
+import { SUPER_ADMIN_USER } from "@/lib/constants";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
+import Cookies from 'js-cookie';
+import { getDeviceId, getDeviceName } from "@/lib/utils";
+
+export default function LoginPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'EMPLOYEE' | 'HR' | 'ADMIN'>('EMPLOYEE');
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null); // For live database debugging
+  const { toast } = useToast();
+  const router = useRouter();
+
+  useEffect(() => {
+    const session = Cookies.get('sikka_session');
+    if (session) {
+      router.push('/dashboard');
+    }
+  }, [router]);
+
+  const persistSession = (userData: any) => {
+    const sessionData = JSON.stringify(userData);
+    Cookies.set('sikka_session', sessionData, { expires: 365, path: '/' });
+    localStorage.setItem("user", sessionData);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setDebugInfo(null);
+
+    try {
+      const deviceId = getDeviceId();
+      const deviceName = getDeviceName();
+
+      const cleanUser = username.trim().replace(/\s/g, '');
+      const cleanPass = password.trim().replace(/\s/g, '');
+
+      // 1. Emergency Admin Fallback
+      if (SUPER_ADMIN_USER && cleanUser === SUPER_ADMIN_USER.username && cleanPass === SUPER_ADMIN_USER.password) {
+        if (selectedRole !== 'ADMIN') {
+          setError("Access Denied! Please select the 'Admin' role to log in with these credentials.");
+          setLoading(false);
+          return;
+        }
+        const adminData = {
+          id: "super_admin_id",
+          username: cleanUser,
+          role: "SUPER_ADMIN",
+          fullName: "System Admin"
+        };
+        persistSession(adminData);
+        toast({ title: "Welcome back, Admin", description: "Login successful." });
+        setTimeout(() => router.push("/dashboard"), 100);
+        return;
+
+      }
+
+      let data: any = null;
+      let isSuccess = false;
+      let errorMessage = "Invalid Credentials.";
+
+      // 2. Try Standard API Login
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: cleanUser,
+            password: cleanPass,
+            role: selectedRole,
+            deviceId,
+            deviceName,
+          }),
+        });
+        data = await response.json();
+        isSuccess = response.ok;
+        if (!isSuccess && data?.message) errorMessage = data.message;
+
+        // STRICT ROLE VERIFICATION: Ensure the API's role matches the dropdown role
+        if (isSuccess && data && data.role) {
+          const userActualRole = data.role === 'SUPER_ADMIN' ? 'ADMIN' : data.role;
+          if (userActualRole !== selectedRole) {
+            isSuccess = false;
+            errorMessage = `Access Denied! You selected ${selectedRole}, but your actual role is ${data.role}.`;
+            data = null;
+          }
+        }
+      } catch (err) {
+        console.error("API login failed:", err);
+      }
+
+
+      // 3. Fallback to Employee Direct Check (Aadhaar & Mobile)
+      if (!isSuccess && selectedRole === 'EMPLOYEE') {
+        try {
+          const empRes = await fetch('/api/data/employees');
+
+          if (empRes.ok) {
+            const empData = await empRes.json();
+            const employees = Array.isArray(empData) ? empData : (empData?.data || []);
+
+            if (employees.length > 0) {
+              // DEBUGGING AID: Catching exact key names from your database live
+              const sample = employees[0];
+              const availableKeys = Object.keys(sample).join(", ");
+              setDebugInfo(`DB Connected! Checked keys inside employee collection: [${availableKeys}].`);
+            } else {
+              setDebugInfo("DB Connected, but your 'employees' collection is completely empty!");
+            }
+
+            // Matching Logic using multiple flexible key name options
+            const employeeByEmployeeId = employees.find((e: any) => 
+              String(e.employeeId || e.id || e._id || '').replace(/\s/g, '') === cleanUser
+            );
+            
+            const employeeByAadhaarMobile = employees.find((e: any) => {
+              const dbAadhaar = String(e.aadhaarNumber || e.aadhaar || e.Aadhaar || '').replace(/\s/g, '');
+              const dbMobile = String(e.mobileNumber || e.mobile || e.Mobile || '').replace(/\s/g, '');
+              return dbAadhaar === cleanUser && dbMobile === cleanPass;
+            });
+
+            const employee = employeeByEmployeeId || employeeByAadhaarMobile;
+            
+            if (employee) {
+              const empFullName = employee.firstName 
+                ? `${employee.firstName} ${employee.lastName || ''}`.trim() 
+                : (employee.name || "Employee");
+                
+              data = { 
+                id: employee.id || employee._id, 
+                username: cleanUser, 
+                role: 'EMPLOYEE', 
+                fullName: empFullName, 
+                employeeId: employee.employeeId, 
+                firmId: employee.firmId 
+              };
+              isSuccess = true;
+            }
+          } else {
+            setDebugInfo(`Failed to load employee fallback database. Status code: ${empRes.status}`);
+          }
+        } catch (empErr) { 
+          console.error("Employee fallback check failed:", empErr); 
+        }
+      }
+
+      if (isSuccess && data) {
+        persistSession(data);
+        toast({
+          title: data.role === 'SUPER_ADMIN' ? "Welcome back, Admin" : "Login Successful",
+          description: data.role === 'SUPER_ADMIN' ? "Login successful." : `Welcome, ${data.fullName}`
+        });
+        const targetPath = data.role === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard";
+        setTimeout(() => {
+          router.push(targetPath);
+        }, 100);
+      } else {
+        setError(errorMessage);
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("An error occurred during login. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#E9EDF0] p-4 font-sans">
+      <div className="w-full max-w-[800px] aspect-[4/3] bg-[#E9EDF0] border-[12px] border-[#C59D2E] rounded-xl shadow-2xl relative flex flex-col p-12">
+        
+        <div className="text-center mb-12">
+          <div className="flex justify-center mb-6">
+            <div className="w-24 h-24 relative rounded-xl overflow-hidden shadow-lg border-2 border-white bg-white">
+              <Image 
+                src={logoUrl}
+                alt="Sikka Logo"
+                fill
+                className="object-cover"
+                priority
+              />
+            </div>
+          </div>
+          <h1 className="text-4xl font-bold text-[#C59D2E] tracking-tight">
+            Sikka Industries & Logistics
+          </h1>
+          <p className="text-[10px] font-black text-primary mt-2 uppercase tracking-[0.3em]">
+            Enterprise Portal
+          </p>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center">
+          <form onSubmit={handleLogin} className="w-full max-w-sm space-y-4">
+            {error && (
+              <Alert variant="destructive" className="mb-2 py-2 border-rose-200 bg-rose-50 text-rose-900">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Debug Monitor Box (Visible only during login issues) */}
+            {debugInfo && (
+              <div className="p-2 border border-blue-200 bg-blue-50 text-blue-900 rounded text-[11px] leading-relaxed break-all">
+                <strong>System Debug:</strong> {debugInfo}
+              </div>
+            )}
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-right text-sm font-semibold text-slate-600">
+                Role <span className="text-red-500">*</span>
+              </label>
+              <select
+                className="flex-1 h-8 bg-white border border-slate-300 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as any)}
+              >
+                <option value="EMPLOYEE">Employee</option>
+                <option value="HR">HR</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-right text-sm font-semibold text-slate-600">
+                User <span className="text-red-500">*</span>
+              </label>
+              <input 
+                type="text"
+                className="flex-1 h-8 bg-white border border-slate-300 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-right text-sm font-semibold text-slate-600">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <div className="flex-1 relative">
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  className="w-full h-8 bg-white border border-slate-300 px-2 pr-8 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button 
+                  type="button"
+                  className="absolute right-2 top-1.5 text-slate-400 hover:text-[#C59D2E] transition-colors"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-center pt-8">
+              <button 
+                type="submit"
+                disabled={loading}
+                className="px-10 py-1 bg-[#D1D9E0] border border-black text-sm font-medium hover:bg-[#C1C9D0] active:bg-[#B1B9C0] transition-colors flex items-center gap-2"
+              >
+                {loading && <Loader2 className="w-3 h-3 animate-spin" />}
+                Log On
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div className="mt-auto flex justify-between items-end border-t border-slate-300 pt-4">
+          <p className="text-[11px] text-slate-500 font-medium lowercase">
+            copyright@ Sikka Industries & Logistics All rights Reserved
+          </p>
+          
+          <div className="w-16 h-16 bg-[#1A1A3A] flex items-center justify-center rounded-sm overflow-hidden">
+            <div className="w-full h-full relative">
+              <Image 
+                src={logoUrl}
+                alt="Logo Small"
+                fill
+                className="object-cover"
+                />
+            </div>
+          </div>
+        </div>
+
+        <div className="absolute bottom-0 left-0 w-40 h-4 bg-[#C59D2E] rounded-tr-full opacity-80" />
+      </div>
+    </div>
+  );
+}

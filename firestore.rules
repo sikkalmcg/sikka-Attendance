@@ -1,0 +1,86 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // --- HELPER FUNCTIONS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmployee() {
+      return request.auth.token.role == 'employee';
+    }
+
+    function isHR() {
+      return request.auth.token.role == 'HR';
+    }
+
+    function isAdmin() {
+      return request.auth.token.role == 'Admin';
+    }
+
+    // Check if the requesting user belongs to the firm they are trying to access.
+    // It uses the firmId stored in the user's custom auth token.
+    function isOwnFirm(firmId) {
+      return request.auth.token.firmId == firmId;
+    }
+
+    // --- RULE DEFINITIONS ---
+
+    // Users can read their own user profile.
+    // Admins can read any user profile within their own firm.
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || (isAdmin() && isOwnFirm(resource.data.firmId)));
+      // Only Admins can create or update users.
+      allow write: if isSignedIn() && isAdmin() && isOwnFirm(resource.data.firmId);
+    }
+
+    // Rules for data within a firm. All subsequent matches are nested under a firm.
+    match /firms/{firmId} {
+      // Allow reading firm details only if the user belongs to that firm.
+      allow read: if isSignedIn() && isOwnFirm(firmId);
+      // Only Admins can modify firm details.
+      allow write: if isSignedIn() && isAdmin() && isOwnFirm(firmId);
+
+      // --- Plants Subcollection ---
+      match /plants/{plantId} {
+        // Any authenticated user of the firm can read plant data.
+        allow read: if isSignedIn() && isOwnFirm(firmId);
+        // Only Admins can manage plant records.
+        allow write: if isSignedIn() && isAdmin() && isOwnFirm(firmId);
+      }
+
+      // --- Holidays Subcollection ---
+      match /holidays/{holidayId} {
+        // Any authenticated user of the firm can read holiday data.
+        allow read: if isSignedIn() && isOwnFirm(firmId);
+        // Only Admins can manage holiday records.
+        allow write: if isSignedIn() && isAdmin() && isOwnFirm(firmId);
+      }
+
+      // --- Employees Subcollection ---
+      match /employees/{employeeId} {
+        // An employee can read their own data.
+        // HR and Admins can read any employee data within their firm.
+        allow read: if isSignedIn() && isOwnFirm(firmId) &&
+                       ((isEmployee() && request.auth.token.employeeId == employeeId) || isHR() || isAdmin());
+
+        // Only Admins can create or modify employee records.
+        allow write: if isSignedIn() && isAdmin() && isOwnFirm(firmId);
+
+        // --- Attendance Subcollection ---
+        match /attendance/{attendanceId} {
+          // Employee can read their own attendance.
+          // HR and Admins can read any attendance record within their firm.
+          allow read: if isSignedIn() && isOwnFirm(firmId) &&
+                         ((isEmployee() && request.auth.token.employeeId == employeeId) || isHR() || isAdmin());
+
+          // Employee can create their own attendance records.
+          // HR/Admins can update records (for approvals/edits).
+          allow create: if isSignedIn() && isOwnFirm(firmId) && isEmployee() && request.auth.token.employeeId == employeeId;
+          allow update: if isSignedIn() && isOwnFirm(firmId) && (isHR() || isAdmin());
+        }
+      }
+    }
+  }
+}

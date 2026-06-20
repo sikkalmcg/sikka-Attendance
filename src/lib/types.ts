@@ -1,0 +1,297 @@
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'HR' | 'EMPLOYEE';
+
+export interface User {
+  id: string;
+  username: string;
+  fullName: string;
+  role: Role;
+  password?: string;
+  permissions: string[];
+  plantIds?: string[]; 
+  status: 'Active' | 'Inactive';
+  avatar?: string;
+  sessionId?: string; 
+}
+
+export interface Plant {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radius: number; 
+  firmId: string;
+  active: boolean;
+  address?: string;
+  plotNo?: string;
+}
+
+export interface FirmUnit {
+  id: string;
+  name: string;
+  address: string;
+}
+
+export interface Firm {
+  id: string;
+  name: string;
+  logo?: string;
+  gstin: string;
+  pan: string;
+  pfNo: string;
+  esicNo: string;
+  bankName?: string;
+  accountNo?: string;
+  ifscCode?: string;
+  registeredAddress?: string;
+  stateName?: string;
+  stateCode?: string;
+  email?: string;
+  website?: string;
+  units: FirmUnit[];
+}
+
+export interface SalaryHistoryEntry {
+  fromMonth: string; 
+  toMonth: string;   
+  monthlyCTC: number;
+}
+
+export interface SalaryStructure {
+  basic: number;
+  hra: number;
+  da: number;
+  allowance: number;
+  monthlyCTC: number;
+  employeePF: number;
+  employeeESIC: number;
+  employerPF: number;
+  employerESIC: number;
+  grossSalary: number;
+  netSalary: number;
+  pfRateEmp: number;
+  esicRateEmp: number;
+  pfRateEx: number;
+  esicRateEx: number;
+}
+
+export interface DeviceHistoryEntry {
+  id: string;
+  from: string; 
+  to: string;   
+  deviceId: string;
+  deviceName: string;
+}
+
+export interface StatusHistoryEntry {
+  id: string;
+  oldStatus: string;
+  newStatus: string;
+  inactiveDate?: string;
+  activeDate?: string;
+  changedBy: string;
+  changedOn: string;
+}
+
+export interface AdvanceLeaveHistoryEntry {
+  id: string;
+  type: 'ADD' | 'ADJUST';
+  earnedMonth: string; // MMM-YY
+  earnedDays: number;
+  adjustedMonth: string | null; // MMM-YY
+  adjustedDays: number;
+  balanceAfter: number;
+  timestamp: string;
+}
+
+export interface Employee {
+  id: string;
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  name: string; 
+  fatherName: string;
+  aadhaar: string;
+  aadhaarNumber?: string;
+  pan: string;
+  mobile: string;
+  mobileNumber?: string;
+  address: string;
+  department: string;
+  designation: string;
+  joinDate: string;
+  firmId: string;
+  unitId?: string; 
+  unitIds: string[]; 
+  bankName: string;
+  accountNo: string;
+  ifscCode: string;
+  isGovComplianceEnabled: boolean;
+  pfNumber?: string;
+  esicNumber?: string;
+  salary: SalaryStructure;
+  salaryHistory: SalaryHistoryEntry[];
+  active: boolean;
+  inactiveDate?: string;
+  activeDate?: string;
+  statusUpdatedBy?: string;
+  statusUpdatedOn?: string;
+  statusHistory?: StatusHistoryEntry[];
+  advanceLeaveBalance?: number;
+  advanceLeaveHistory?: AdvanceLeaveHistoryEntry[];
+  avatar?: string;
+  deviceId?: string; 
+  deviceName?: string; 
+  deviceHistory?: DeviceHistoryEntry[];
+  sessionId?: string; 
+}
+
+export interface Holiday {
+  id: string;
+  date: string;
+  name: string;
+  type: 'FESTIVAL' | 'NATIONAL_HOLIDAY' | 'COMPANY_HOLIDAY' | 'WEEKLY_OFF';
+  auto?: boolean;
+  plantIds?: string[];
+}
+
+export interface Voucher {
+  id: string;
+  voucherNo: string;
+  employeeId: string;
+  date: string;
+  purpose: string;
+  amount: number;
+  status: 'PENDING' | 'APPROVED' | 'PAID' | 'CANCELLED' | 'REJECTED';
+  createdByName?: string;
+  approvedByName?: string;
+  rejectedByName?: string;
+  rejectionRemark?: string;
+  paymentMode?: 'CASH' | 'BANKING';
+  paymentReference?: string;
+  paidDate?: string;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string; 
+  inTime: string | null;
+  outTime: string | null;
+  inDate?: string;
+  outDate?: string;
+  hours: number;
+  status: 'Open' | 'Closed' | 'Auto OUT' | 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'FIELD' | 'WFH';
+  attendanceType: 'OFFICE' | 'FIELD' | 'WFH' | 'ABSENT';
+  attendanceTypeOut?: 'OFFICE' | 'FIELD' | 'WFH';
+  lat: number;
+  lng: number;
+  address: string;
+  latOut?: number;
+  lngOut?: number;
+  addressOut?: string;
+  inPlant?: string;
+  outPlant?: string;
+  approved: boolean;
+  approvedBy?: string; 
+  remark?: string;
+  rejectionCount?: number;
+  autoOut?: boolean;
+  autoCheckout?: boolean; 
+  
+  // New Business Fields
+  inDateTime?: string; 
+  outDateTime?: string;
+  outType?: 'MANUAL' | 'AUTO';
+  nextInEnableTime?: string;
+  street?: string;
+  area?: string;
+  city?: string;
+  state?: string;
+
+  unapprovedOutDuration?: number; 
+  lastDetectedOutAt?: string | null; 
+  lastOutCheckTime?: string; 
+}
+
+export interface LeaveRequest {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  designation: string;
+  plantName: string; 
+  fromDate: string;
+  toDate: string;
+  days: number;
+  purpose: string;
+  status: 'UNDER_PROCESS' | 'APPROVED' | 'REJECTED';
+  rejectReason?: string;
+  approvedBy?: string; 
+  createdAt: string;
+  leaveType: 'DAYS' | 'HALF_DAY';
+  reachTime?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  type?: string;
+  employeeId?: string;
+}
+
+export interface SalaryPaymentRecord {
+  amount: number;
+  date: string;
+  type: 'BANKING' | 'CASH' | 'CHEQUE';
+  reference: string;
+}
+
+export interface StatutoryPaymentRecord {
+  employeeAmt: number;
+  employerAmt: number;
+  date: string;
+  reference: string;
+}
+
+export interface PayrollRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  month: string; 
+  attendance: number;
+  absent: number;
+  adjustLeave: number;
+  addedLeave?: number; 
+  totalEarningDays: number;
+  incentivePct: number;
+  incentiveAmt: number;
+  holidayWorkDays: number;
+  holidayWorkAmt: number;
+  advanceRecovery?: number;
+  netPayable: number;
+  status: 'DRAFT' | 'FINALIZED' | 'PAID';
+  createdAt: string;
+  slipNo?: string;
+  slipDate?: string;
+
+  pfAmountEmployee: number;
+  pfAmountEmployer: number;
+  esicAmountEmployee: number;
+  esicAmountEmployer: number;
+
+  salaryPaidAmount: number;
+  salaryPaidDate?: string;
+  salaryHistory: SalaryPaymentRecord[];
+
+  pfPaidAmountEmployee: number;
+  pfPaidAmountEmployer: number;
+  pfPaidDate?: string;
+  pfHistory: StatutoryPaymentRecord[];
+
+  esicPaidAmountEmployee: number;
+  esicAmountEmployer: number;
+  esicHistory: StatutoryPaymentRecord[];
+}
