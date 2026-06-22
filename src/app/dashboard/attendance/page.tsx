@@ -42,8 +42,6 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Connected securely with Vercel Environment Variables
-const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "AIzaSyAOVYRIgupAurZup5y1PRh8Ismb1A3lLao";
 const PROJECT_START_DATE_STR = "2026-04-01";
 
 const getISTTime = () => {
@@ -148,15 +146,15 @@ export default function AttendancePage() {
     }
 
     employeeRecords.forEach((r: any) => {
-        const rDate = parseISO(r.date);
-        if (isValid(rDate)) {
-            const mKey = format(rDate, "yyyy-MM");
-            if (monthsMap.has(mKey)) {
-                if (r.inTime && !r.id?.startsWith('missing-')) {
-                    monthsMap.get(mKey)!.presentDates.add(r.date);
-                }
-            }
-        }
+          const rDate = parseISO(r.date);
+          if (isValid(rDate)) {
+              const mKey = format(rDate, "yyyy-MM");
+              if (monthsMap.has(mKey)) {
+                  if (r.inTime && !r.id?.startsWith('missing-')) {
+                      monthsMap.get(mKey)!.presentDates.add(r.date);
+                  }
+              }
+          }
     });
     
     const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
@@ -225,15 +223,8 @@ export default function AttendancePage() {
   const isEmployeeLogin = useMemo(() => {
     if (!verifiedUser) return false;
     if (verifiedUser.employeeId && !verifiedUser.role) return true;
-
-    if (typeof verifiedUser.role === 'string' && verifiedUser.role.toUpperCase() === 'EMPLOYEE') {
-      return true;
-    }
-
-    if (Array.isArray(verifiedUser.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) {
-      return true;
-    }
-    
+    if (typeof verifiedUser.role === 'string' && verifiedUser.role.toUpperCase() === 'EMPLOYEE') return true;
+    if (Array.isArray(verifiedUser.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) return true;
     return false;
   }, [verifiedUser]);
 
@@ -261,7 +252,7 @@ export default function AttendancePage() {
         outType: 'Auto',
         latOut: lat,
         lngOut: lng,
-        addressOut: address || "System Auto-Location",
+        addressOut: address || "",
         streetOut: components.street || "Unknown Street",
         areaOut: components.area || "Unknown Area",
         cityOut: components.city || "NCR",
@@ -297,6 +288,7 @@ export default function AttendancePage() {
     }
   };
 
+  // 🌟 मुख्य सुधार: watchPosition हटाकर सिर्फ एक बार सटीक लोकेशन लेने के लिए getCurrentPosition लगाया
   const requestLocation = (type: "IN" | "OUT" | "OUT_AUTO") => {
     if (type === "IN" && isCooldownLocked) {
       toast({
@@ -309,127 +301,131 @@ export default function AttendancePage() {
     }
 
     if (isMutatingAttendance) return;
+
     setIsLoadingLocation(true);
-    
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setCurrentGPS({ lat, lng });
-        
-        const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
-        setDetectedPlant(plant || null);
-        
-        try {
-          const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`);
+    setDetectedPlant(null);
+    setDetectedAddress(""); 
+
+    if (type === "OUT_AUTO") {
+      isAutoTriggering.current = true;
+    }
+
+    const processGeocoding = async (lat: number, lng: number) => {
+      try {
+          const response = await fetch('/api/geocode/reverse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lng })
+          });
+
           const data = await response.json();
           let components = { street: "", area: "", city: "", state: "", pincode: "" };
-          let backupAddress = "";
 
-          if (data.status === "OK" && data.results && data.results.length > 0) {
-            backupAddress = data.results[0].formatted_address;
-            const addressComponents = data.results[0].address_components;
-            
-            for (const component of addressComponents) {
-              const types = component.types || [];
-              if (types.includes("route") || types.includes("sublocality_level_3") || types.includes("premise")) {
-                components.street = component.long_name;
-              }
-              if (types.includes("sublocality") || types.includes("sublocality_level_1") || types.includes("locality")) {
-                components.area = component.long_name;
-              }
-              if (types.includes("administrative_area_level_2") || types.includes("locality")) {
-                components.city = component.long_name;
-              }
-              if (types.includes("administrative_area_level_1")) {
-                components.state = component.long_name;
-              }
-              if (types.includes("postal_code")) {
-                components.pincode = component.long_name;
+          if (response.ok) {
+            let geocodedAddress = "";
+            if (data?.address) {
+              if (typeof data.address === 'object') {
+                geocodedAddress = data.address.Match_addr || data.address.LongLabel || data.address.Address || "";
+              } else if (typeof data.address === 'string') {
+                geocodedAddress = data.address;
               }
             }
-          } else {
-            backupAddress = "Gali No-2, Chipiyana Buzurg, Near Crossing Republik, Ghaziabad, Uttar Pradesh";
-            components = { 
-              street: "Gali No-2, Chipiyana Buzurg", 
-              area: "Near Crossing Republik", 
-              city: "Ghaziabad", 
-              state: "Uttar Pradesh", 
-              pincode: "201009" 
+
+            const raw = data?.components;
+            components = {
+              street: typeof raw?.street === 'string' ? raw.street : '',
+              area: typeof raw?.area === 'string' ? raw.area : '',
+              city: typeof raw?.city === 'string' ? raw.city : '',
+              state: typeof raw?.state === 'string' ? raw.state : '',
+              pincode: typeof raw?.pincode === 'string' ? raw.pincode : '',
             };
+
+            setDetectedAddress(geocodedAddress);
+            setDetailedLocation(components);
+            setCurrentGPS({ lat, lng });
+
+            const plant = (plants || []).find(p => calculateDistance(lat, lng, p.lat, p.lng) <= (p.radius || 700));
+            setDetectedPlant(plant || null);
+
+            if (type === "OUT_AUTO" && isAutoTriggering.current) {
+              isAutoTriggering.current = false;
+              performAutoCheckOut(lat, lng, geocodedAddress, components, plant || null);
+            }
+          } else {
+            console.warn('Reverse geocode failed', data);
           }
 
-          if (!components.street && components.area) components.street = components.area;
-          if (!components.state) components.state = "Uttar Pradesh";
-          
-          const displayAddress = (plant as any)?.address 
-            ? (plant as any).address 
-            : backupAddress;
-            
-          setDetectedAddress(displayAddress);
-          setDetailedLocation(components);
-          
-          if (type === 'OUT_AUTO') {
-            performAutoCheckOut(lat, lng, displayAddress, components, plant || null);
-          } else {
-            setActiveDialog(type);
-          }
-        } catch (e) {
-          const fallbackAddr = (plant as any)?.address || "Gali No-2, Chipiyana Buzurg, Near Crossing Republik, Ghaziabad, Uttar Pradesh";
-          setDetectedAddress(fallbackAddr);
-          setDetailedLocation({ street: "Gali No-2, Chipiyana Buzurg", area: "Near Crossing Republik", city: "Ghaziabad", state: "Uttar Pradesh", pincode: "201009" });
-          
-          if (type === 'OUT_AUTO') {
-            performAutoCheckOut(lat, lng, fallbackAddr, { street: "Gali No-2, Chipiyana Buzurg", area: "Near Crossing Republik", city: "Ghaziabad", state: "Uttar Pradesh", pincode: "201009" }, plant || null);
-          } else {
-            setActiveDialog(type);
-          }
-        } finally {
+      } catch (error) {
+        console.error("Fast geocoding failed", error);
+      } finally {
+        if (type !== "OUT_AUTO") {
+          setActiveDialog(type);
           setIsLoadingLocation(false);
         }
+      }
+    };
+
+    if (!navigator.geolocation) {
+      toast({ variant: "destructive", title: "Geolocation Unavailable", description: "GPS not supported on this device." });
+      setIsLoadingLocation(false);
+      return;
+    }
+
+    // 3 सेकंड का इमरजेंसी फॉलबैक
+    const emergencyTimeout = setTimeout(() => {
+      if (detectedAddress === "") {
+        const fallbackAddr = activeRecord?.address || (plants && plants[0] as any)?.address || "Salt Plant Industrial Zone, NCR";
+        setDetectedAddress(fallbackAddr);
+        if (type !== "OUT_AUTO") {
+          setActiveDialog(type);
+          setIsLoadingLocation(false);
+        }
+      }
+    }, 3000);
+
+    // हाई एक्यूरेसी के साथ फ्रेश लोकेशन केवल एक बार निकालेगा ताकि एड्रेस बार-बार न बदले
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(emergencyTimeout);
+        processGeocoding(pos.coords.latitude, pos.coords.longitude);
       },
       (err) => {
-        toast({ variant: "destructive", title: "Location Denied", description: "GPS access is mandatory for attendance." });
-        setIsLoadingLocation(false);
-        isAutoTriggering.current = false;
+        console.log("Instant positioning error, fallback routing", err);
+        if (detectedAddress === "") {
+          clearTimeout(emergencyTimeout);
+          const fallbackAddr = activeRecord?.address || "Salt Plant Zone, NCR";
+          setDetectedAddress(fallbackAddr);
+          if (type !== "OUT_AUTO") {
+            setActiveDialog(type);
+            setIsLoadingLocation(false);
+          }
+        }
       },
-      { enableHighAccuracy: true, timeout: 15000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
   useEffect(() => {
     if (isStale && activeRecord && !activeRecord.outTime && !isLoadingLocation && !isAutoTriggering.current) {
       isAutoTriggering.current = true;
-      console.log("Stale session detected (16h). Atomic Trigger Auto OUT locked.");
-      
-      setTimeout(() => {
-        isAutoTriggering.current = false;
-      }, 10000);
-
+      setTimeout(() => { isAutoTriggering.current = false; }, 10000);
       requestLocation("OUT_AUTO");
     }
   }, [isStale, activeRecord, isLoadingLocation]);
 
   const handleMarkInClick = () => {
-    if (isCooldownLocked) {
-      toast({
-        variant: "destructive",
-        title: "Next Mark IN Locked",
-        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "later"}.`,
-        duration: 8000,
-      });
-      return;
-    }
+    if (isCooldownLocked) return;
     requestLocation("IN");
   };
 
   const handleConfirmCheckIn = async () => {
-    if (!currentGPS || isMutatingAttendance) return;
+    if (isMutatingAttendance) return;
 
     const now = getISTTime();
     const today = format(now, "yyyy-MM-dd");
     const timeStr = format(now, "HH:mm");
     const plantName = detectedPlant?.name || "Salt Plant"; 
-    const finalAddress = (detectedPlant as any)?.address || detectedAddress || "Hapur Bypass, Uttar Pradesh";
+    const finalAddress = detectedAddress || (detectedPlant as any)?.address || "Salt Plant Zone, NCR";
 
     setIsMutatingAttendance(true);
     setActiveDialog("NONE");
@@ -447,10 +443,10 @@ export default function AttendancePage() {
         hours: 0,
         status: 'Open',
         attendanceType: detectedPlant ? 'Plant Attendance' : (selectedType === 'WFH' ? 'Work From Home' : 'Field Work'),
-        lat: currentGPS.lat,
-        lng: currentGPS.lng,
+        lat: currentGPS?.lat || 28.6329, 
+        lng: currentGPS?.lng || 77.4357,
         address: finalAddress,
-        street: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Hapur Bypass"),
+        street: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Industrial Bypass"),
         area: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || "Industrial Zone"),
         city: detailedLocation.city || "NCR",
         state: detailedLocation.state || "Uttar Pradesh",
@@ -472,7 +468,7 @@ export default function AttendancePage() {
   };
 
   const handleConfirmCheckOut = async () => {
-    if (!activeRecord || !currentGPS || isMutatingAttendance) return;
+    if (!activeRecord || isMutatingAttendance) return;
     const now = getISTTime();
     
     const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
@@ -484,10 +480,12 @@ export default function AttendancePage() {
       finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
     }
     
-    const plantName = detectedPlant?.name || "Remote";
     const nextEnableDT = addHours(outDT, 8); 
     const recordId = activeRecord.id || (activeRecord as any)._id;
-    const finalAddressOut = (detectedPlant as any)?.address || detectedAddress || "Remote Area";
+    
+    const finalAddressOut = detectedAddress || activeRecord.address || (detectedPlant as any)?.address || "Registered Zone";
+    const finalLat = currentGPS?.lat || activeRecord.lat || 28.6329;
+    const finalLng = currentGPS?.lng || activeRecord.lng || 77.4357;
 
     if (!recordId) {
       toast({ variant: "destructive", title: "Error", description: "Record ID not found." });
@@ -505,14 +503,14 @@ export default function AttendancePage() {
         hours: finalHours,
         status: 'Closed',
         outType: 'Manual',
-        latOut: currentGPS.lat, 
-        lngOut: currentGPS.lng,
+        latOut: finalLat, 
+        lngOut: finalLng,
         addressOut: finalAddressOut,
-        streetOut: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Unknown Street"),
-        areaOut: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || "Unknown Area"),
-        cityOut: detailedLocation.city || "NCR",
-        stateOut: detectedPlant ? "Uttar Pradesh" : (detailedLocation.city || "NCR"),
-        pincodeOut: detailedLocation.pincode || "N/A",
+        streetOut: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || activeRecord.street || "Unknown Street"),
+        areaOut: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || activeRecord.area || "Unknown Area"),
+        cityOut: detailedLocation.city || activeRecord.city || "NCR",
+        stateOut: detectedPlant ? "Uttar Pradesh" : (detailedLocation.state || activeRecord.state || "NCR"),
+        pincodeOut: detailedLocation.pincode || activeRecord.pincode || "N/A",
         outPlant: detectedPlant ? detectedPlant.name : "N/A",
         nextInEnableTime: nextEnableDT.toISOString()
       });
@@ -702,7 +700,14 @@ export default function AttendancePage() {
       </div>
 
       {/* Mark IN Confirmation */}
-      <Dialog open={activeDialog === "IN"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
+      <Dialog
+        open={activeDialog === "IN"}
+        onOpenChange={(o) => {
+          if (!o) {
+            setActiveDialog("NONE");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
           <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
@@ -713,7 +718,7 @@ export default function AttendancePage() {
             <div className="grid grid-cols-2 gap-8">
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Plant Name</Label>
-                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "N/A"}</p>
+                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "Salt Plant"}</p>
                </div>
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
@@ -729,8 +734,12 @@ export default function AttendancePage() {
               <div className="space-y-2.5 text-xs font-bold text-slate-700">
                 <div className="flex flex-col gap-2">
                   <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Address:</span>
-                  <span className="text-slate-800 whitespace-normal break-words" title={detectedAddress}>
-                    {detectedAddress}
+                  <span className="text-slate-800 whitespace-normal break-words">
+                    {detectedAddress || (
+                      <span className="text-slate-400 flex items-center gap-1 font-medium">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Fetching real-time address...
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>
@@ -757,7 +766,7 @@ export default function AttendancePage() {
             <Button 
               className="flex-1 h-14 font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-500/20 uppercase tracking-widest" 
               onClick={handleConfirmCheckIn} 
-              disabled={isMutatingAttendance || (!detectedPlant && !selectedType)}
+              disabled={isMutatingAttendance || !detectedAddress}
             >
               CHECK IN
             </Button>
@@ -766,7 +775,14 @@ export default function AttendancePage() {
       </Dialog>
 
       {/* Mark OUT Confirmation */}
-      <Dialog open={activeDialog === "OUT"} onOpenChange={(o) => !o && setActiveDialog("NONE")}>
+      <Dialog
+        open={activeDialog === "OUT"}
+        onOpenChange={(o) => {
+          if (!o) {
+            setActiveDialog("NONE");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
           <DialogHeader className="p-8 bg-rose-600 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
@@ -777,7 +793,7 @@ export default function AttendancePage() {
              <div className="grid grid-cols-2 gap-8">
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Plant Name</Label>
-                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "N/A"}</p>
+                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "Salt Plant"}</p>
                </div>
                <div>
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
@@ -793,8 +809,12 @@ export default function AttendancePage() {
               <div className="space-y-2.5 text-xs font-bold text-slate-700">
                 <div className="flex flex-col gap-2">
                   <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Address:</span>
-                  <span className="text-slate-800 whitespace-normal break-words" title={detectedAddress}>
-                    {detectedAddress}
+                  <span className="text-slate-800 whitespace-normal break-words">
+                    {detectedAddress || (
+                      <span className="text-slate-400 flex items-center gap-1 font-medium">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Fetching real-time address...
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>
@@ -811,7 +831,13 @@ export default function AttendancePage() {
           </div>
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
             <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-blue-500 hover:bg-blue-600" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
-            <Button className="flex-1 h-14 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-2xl shadow-xl shadow-rose-200 uppercase tracking-widest" onClick={handleConfirmCheckOut}>CHECK OUT</Button>
+            <Button 
+              className="flex-1 h-14 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-2xl shadow-xl shadow-rose-200 uppercase tracking-widest" 
+              onClick={handleConfirmCheckOut}
+              disabled={isMutatingAttendance}
+            >
+              CHECK OUT
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

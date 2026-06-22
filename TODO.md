@@ -1,12 +1,11 @@
 # TODO
 
-- [ ] Understand current login flow + roles
-- [x] Update login UI to allow selecting login type/role (Employee / HR / Admin)
-
-- [ ] Update API login (and/or add endpoint) to authenticate for HR and ADMIN roles
-- [ ] Ensure sidebar/menu already respects role-based access (verify all routes)
-- [ ] Add client-side routing after login:
-  - EMPLOYEE -> /dashboard/attendance
-  - HR/ADMIN -> /dashboard
-- [ ] Add minimal tests/manual verification steps
+## ArcGIS reverse-geocoding integration
+- [ ] Inspect existing geocoding implementation (Google Maps in AttendancePage)
+- [ ] Implement server-side ArcGIS reverse geocoding API route
+- [ ] Move geo calls from client to the new API route
+- [ ] Remove hardcoded Google/ArcGIS keys from client code
+- [ ] Add .env usage guidance (do not commit secrets)
+- [ ] Run typecheck + lint
+- [ ] Smoke test IN/OUT address loading
 
