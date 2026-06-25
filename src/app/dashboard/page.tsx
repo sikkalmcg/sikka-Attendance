@@ -198,11 +198,11 @@ export default function DashboardHome() {
           </div>
           <ScrollArea className="flex-1 bg-white">
             <Table className="min-w-[1200px]">
-              <TableHeader className="bg-slate-50">
+                  <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead className="px-8 py-5 font-black text-[11px] uppercase tracking-widest text-slate-500">Employee Name</TableHead>
                   <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Dept/Desig</TableHead>
-                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">In Date time</TableHead>
+                  <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500">Time Location</TableHead>
                   <TableHead className="font-black text-[11px] uppercase tracking-widest text-slate-500 text-right pr-8">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -226,11 +226,23 @@ export default function DashboardHome() {
                       </TableCell>
                       <TableCell className="text-xs font-bold text-slate-600">
                         {rec.inTime ? (
-                          <div className="flex items-center gap-2">
-                             <Clock className="w-3.5 h-3.5 text-primary" />
-                             <span>{formatDate(rec.inDate || rec.date)} {rec.inTime}</span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-3.5 h-3.5 text-primary" />
+                              <span>
+                                {formatDate(rec.inDate || rec.date)} {rec.inTime}
+                              </span>
+                            </div>
+                            <div
+                              className="text-[10px] font-medium text-slate-500 truncate max-w-[220px]"
+                              title={rec.address || rec.addressOut || ""}
+                            >
+                              {rec.address || rec.addressOut || "N/A"}
+                            </div>
                           </div>
-                        ) : "--"}
+                        ) : (
+                          "--"
+                        )}
                       </TableCell>
                       <TableCell className="text-right pr-8">
                         {rec.displayStatus ? (

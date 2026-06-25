@@ -42,6 +42,15 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+// shadcn UI Select Component Imports
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 const PROJECT_START_DATE_STR = "2026-04-01";
 
 const getISTTime = () => {
@@ -49,7 +58,7 @@ const getISTTime = () => {
 };
 
 export default function AttendancePage() {
-  const { attendanceRecords = [], addRecord, updateRecord, refreshData, plants = [], verifiedUser, isLoading, holidays = [] } = useData();
+  const { attendanceRecords = [], addRecord, updateRecord, refreshData, plants = [], verifiedUser, isLoading, holidays = [], employees = [] } = useData();
   const [isMutatingAttendance, setIsMutatingAttendance] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -63,6 +72,9 @@ export default function AttendancePage() {
   const [detailedLocation, setDetailedLocation] = useState({ street: "", area: "", city: "", state: "", pincode: "" });
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH" | "">("");
 
+  // HR/Admin can select an employee; EMPLOYEE self uses their own employeeId.
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("N/A");
+
   const isAutoTriggering = useRef(false);
   const { toast } = useToast();
 
@@ -73,8 +85,35 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
-  const effectiveEmployeeId = useMemo(() => verifiedUser?.employeeId || verifiedUser?.username || "N/A", [verifiedUser]);
-  const effectiveEmployeeName = useMemo(() => verifiedUser?.fullName || "N/A", [verifiedUser]);
+  const isHRorAdmin = useMemo(() => {
+    if (!verifiedUser) return false;
+    if (typeof verifiedUser.role === "string") {
+      const role = verifiedUser.role.toUpperCase();
+      return role === "HR" || role === "ADMIN" || role === "SUPER_ADMIN";
+    }
+    return false;
+  }, [verifiedUser]);
+
+  // HR/Admin के लिए पहला एम्प्लोई ऑटो-सिलेक्ट करने के लिए useEffect
+  useEffect(() => {
+    if (isHRorAdmin && employees.length > 0 && (selectedEmployeeId === "N/A" || selectedEmployeeId === "")) {
+      setSelectedEmployeeId(employees[0].employeeId);
+    }
+  }, [isHRorAdmin, employees, selectedEmployeeId]);
+
+  const effectiveEmployeeId = useMemo(() => {
+    if (!verifiedUser) return "N/A";
+    if (isHRorAdmin) return selectedEmployeeId || "N/A";
+    return verifiedUser?.employeeId || verifiedUser?.username || "N/A";
+  }, [verifiedUser, isHRorAdmin, selectedEmployeeId]);
+
+  const effectiveEmployeeName = useMemo(() => {
+    if (isHRorAdmin) {
+      const emp = employees.find((e: any) => e.employeeId === selectedEmployeeId);
+      return emp ? (emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : (emp.name || emp.employeeId)) : "N/A";
+    }
+    return verifiedUser?.fullName || "N/A";
+  }, [verifiedUser, isHRorAdmin, selectedEmployeeId, employees]);
 
   const employeeRecords = useMemo(() => {
     if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") return [];
@@ -288,7 +327,6 @@ export default function AttendancePage() {
     }
   };
 
-  // 🌟 मुख्य सुधार: watchPosition हटाकर सिर्फ एक बार सटीक लोकेशन लेने के लिए getCurrentPosition लगाया
   const requestLocation = (type: "IN" | "OUT" | "OUT_AUTO") => {
     if (type === "IN" && isCooldownLocked) {
       toast({
@@ -371,7 +409,6 @@ export default function AttendancePage() {
       return;
     }
 
-    // 3 सेकंड का इमरजेंसी फॉलबैक
     const emergencyTimeout = setTimeout(() => {
       if (detectedAddress === "") {
         const fallbackAddr = activeRecord?.address || (plants && plants[0] as any)?.address || "Salt Plant Industrial Zone, NCR";
@@ -383,7 +420,6 @@ export default function AttendancePage() {
       }
     }, 3000);
 
-    // हाई एक्यूरेसी के साथ फ्रेश लोकेशन केवल एक बार निकालेगा ताकि एड्रेस बार-बार न बदले
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(emergencyTimeout);
@@ -529,7 +565,7 @@ export default function AttendancePage() {
   return (
     <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
       {isEmployeeLogin && (
-      <div className="max-w-xl mx-auto w-full">
+      <div className="max-w-xl mx-auto w-full space-y-6">
         <Card className="shadow-2xl border-none overflow-hidden bg-white">
           <div className="h-1.5 bg-primary" />
           <CardHeader className="text-center py-6">
@@ -601,8 +637,44 @@ export default function AttendancePage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-         <div className="lg:col-span-2 space-y-4">
-             <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
+          <div className="lg:col-span-2 space-y-4">
+             
+             {/* HR/ADMIN EMPLOYEE SELECT PANEL */}
+             {isHRorAdmin && (
+               <Card className="p-4 rounded-2xl border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border">
+                 <div>
+                   <h4 className="text-sm font-black uppercase text-slate-700 tracking-tight">Employee Attendance Ledger</h4>
+                   <p className="text-xs text-slate-400 font-medium mt-0.5">Select an employee to view their real-time logs.</p>
+                 </div>
+                 <div className="w-full sm:w-72">
+                   <Select
+                     value={selectedEmployeeId}
+                     onValueChange={(value) => setSelectedEmployeeId(value)}
+                   >
+                     <SelectTrigger className="w-full h-11 rounded-xl bg-white border-slate-200 font-bold text-xs text-slate-700 shadow-sm">
+                       <SelectValue placeholder="Choose an Employee..." />
+                     </SelectTrigger>
+                     <SelectContent className="rounded-xl max-h-60">
+                       {employees.length === 0 ? (
+                         <SelectItem value="NONE" disabled>No employees found</SelectItem>
+                       ) : (
+                         employees.map((emp: any) => (
+                           <SelectItem 
+                             key={emp.employeeId} 
+                             value={emp.employeeId}
+                             className="font-bold text-xs text-slate-600"
+                           >
+                             {emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : (emp.name || emp.employeeId)} ({emp.employeeId})
+                           </SelectItem>
+                         ))
+                       )}
+                     </SelectContent>
+                   </Select>
+                 </div>
+               </Card>
+             )}
+
+             <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight pt-2">
                 <History className="w-5 h-5 text-primary" /> Session History
              </h3>
              <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200">
@@ -615,18 +687,18 @@ export default function AttendancePage() {
                    ) : (
                      <Table>
                         <TableHeader className="bg-slate-50">
-                           <TableRow>
-                              <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
-                              <TableHead className="font-black uppercase text-[10px] hidden xl:table-cell">Employee</TableHead>
-                              <TableHead className="font-black uppercase text-[10px]">Plant Name</TableHead>
-                              <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
-                              <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
-                              <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">In Address</TableHead>
-                              <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Out Address</TableHead>
-                              <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
-                              <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">Remarks</TableHead>
-                              <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
-                           </TableRow>
+                            <TableRow>
+                               <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
+                               <TableHead className="font-black uppercase text-[10px] hidden xl:table-cell">Employee</TableHead>
+                               <TableHead className="font-black uppercase text-[10px]">Plant Name</TableHead>
+                               <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
+                               <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
+                               <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">In Address</TableHead>
+                               <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Out Address</TableHead>
+                               <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
+                               <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">Remarks</TableHead>
+                               <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
+                            </TableRow>
                         </TableHeader>
                         <TableBody>
                            {employeeRecords.map((r: any) => (
