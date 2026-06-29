@@ -34,6 +34,7 @@ import {
 import { format, subDays, isAfter, eachDayOfInterval, isSunday, startOfDay, isValid, addHours, parseISO } from "date-fns";
 import { useData } from "@/context/data-context";
 import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 
 type ReportType = "ATTENDANCE";
@@ -52,6 +53,9 @@ const formatLocation = (address?: string, lat?: number, lng?: number) => {
 };
 
 export default function ReportsPage() {
+  // NOTE: Attendance History Ledger has been implemented as a dedicated route:
+  // /dashboard/reports/attendance-history-ledger
+  const router = useRouter();
   const { employees = [], attendanceRecords = [], verifiedUser, holidays = [], leaveRequests = [], plants = [] } = useData();
   const { toast } = useToast();
 
@@ -261,11 +265,24 @@ export default function ReportsPage() {
           <h1 className="text-3xl font-black uppercase flex items-center gap-3">Analytics & Reports</h1>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">Compile Audited Shift Records and History Ledgers</p>
         </div>
-        {viewData && (
-          <Button variant="ghost" onClick={() => setViewData(null)} className="gap-2 font-black text-xs uppercase text-slate-500 hover:bg-slate-100 rounded-xl px-4 h-10 border">
-            <X className="w-4 h-4" /> Clear Report
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => router.push("/dashboard/reports/attendance-history-ledger")}
+            className="gap-2 font-black text-xs uppercase bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-4 h-10 shadow-lg"
+          >
+            <FileBarChart2 className="w-4 h-4" />
+            Attendance History Ledger
           </Button>
-        )}
+          {viewData && (
+            <Button
+              variant="ghost"
+              onClick={() => setViewData(null)}
+              className="gap-2 font-black text-xs uppercase text-slate-500 hover:bg-slate-100 rounded-xl px-4 h-10 border"
+            >
+              <X className="w-4 h-4" /> Clear Report
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* PARAMETERS SECTION */}
@@ -327,10 +344,10 @@ export default function ReportsPage() {
         <Card className="border-none shadow-2xl overflow-hidden rounded-2xl bg-white">
           <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between p-6 shrink-0">
             <div>
-              <CardTitle className="uppercase font-black tracking-tight text-lg">Attendance History Ledger Preview</CardTitle>
+Attendance History Ledger (legacy preview)
               <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">Filter Period: {formatDate(fromDate)} to {formatDate(toDate)}</p>
             </div>
-            <Button onClick={handleExport} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-8 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10"><Download className="w-4 h-4" /> Export CSV Sheet</Button>
+Export CSV Sheet (legacy)
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="w-full">

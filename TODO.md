@@ -1,11 +1,13 @@
-# TODO
+# TODO - Attendance Ledger search dropdown
 
-## ArcGIS reverse-geocoding integration
-- [ ] Inspect existing geocoding implementation (Google Maps in AttendancePage)
-- [ ] Implement server-side ArcGIS reverse geocoding API route
-- [ ] Move geo calls from client to the new API route
-- [ ] Remove hardcoded Google/ArcGIS keys from client code
-- [ ] Add .env usage guidance (do not commit secrets)
-- [ ] Run typecheck + lint
-- [ ] Smoke test IN/OUT address loading
+- [ ] Update Attendance History Ledger UI to provide employee dropdown (scrollable list) similar to Reports screen.
+  - Selected behavior: dropdown shows Employee Name and sets `search` to employee `name` (as user requested).
+
+  - [ ] Create memo list of employees allowed to user (allowedEmployees).
+  - [ ] Replace/free-text search with searchable Select/Combobox OR add Select dropdown below search.
+  - [ ] On select, set `search` value to chosen employeeId (or name) so backend returns correct rows.
+  - [ ] Keep existing `employeeId exact` filter as-is (optional).
+- [ ] Test: open Attendance History Ledger page.
+  - [ ] Dropdown me employee select -> data loads.
+  - [ ] Department/designation filters + dropdown together still work.
 
