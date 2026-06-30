@@ -20,6 +20,7 @@ export async function GET(
 }
 
 // 2. POST HANDLER: Naya data insert karne ke liye
+// For `attendance` we MUST prevent duplicates for same employee+date.
 export async function POST(
   req: Request,
   { params }: { params: { collection: string } }
@@ -29,11 +30,88 @@ export async function POST(
     const body = await req.json();
     const db = await getDb();
 
+    if (collection === 'attendance') {
+      const employeeId = body?.employeeId;
+      const date = body?.date;
+
+      if (!employeeId || !date) {
+        return NextResponse.json({ error: 'Missing employeeId/date for attendance upsert' }, { status: 400 });
+      }
+
+      const attendanceCol = db.collection(collection);
+
+      // Upsert by (employeeId, date)
+      const existing = await attendanceCol.findOne({ employeeId, date });
+      if (!existing) {
+        const result = await attendanceCol.insertOne(body);
+        return NextResponse.json({ success: true, id: result.insertedId });
+      }
+
+      // Merge: always keep one record per employee+date.
+      // - If Mark IN payload has inTime/inDate..., merge those.
+      // - If Mark OUT payload has outTime/outDate..., merge those.
+      // - Update status/hours if provided.
+      const mergeUpdate: any = {};
+
+      const candidateKeys = [
+        'inTime',
+        'inDate',
+        'inDateTime',
+        'inPlant',
+        'address',
+        'street',
+        'area',
+        'city',
+        'state',
+        'pincode',
+        'attendanceType',
+        'remark',
+        'status',
+        'approved',
+        'unapprovedOutDuration',
+        'hours',
+        'outTime',
+        'outDate',
+        'outDateTime',
+        'outPlant',
+        'addressOut',
+        'streetOut',
+        'areaOut',
+        'cityOut',
+        'stateOut',
+        'pincodeOut',
+        'outType',
+        'latOut',
+        'lngOut',
+        'nextInEnableTime',
+        'autoCheckout',
+        'autoOut',
+        'autoTriggerTime',
+      ];
+
+      for (const k of candidateKeys) {
+        if (Object.prototype.hasOwnProperty.call(body, k) && body[k] !== undefined) {
+          mergeUpdate[k] = body[k];
+        }
+      }
+
+      // Do not allow accidental overwriting of employeeId/date.
+      mergeUpdate.employeeId = employeeId;
+      mergeUpdate.date = date;
+
+      await attendanceCol.updateOne(
+        { _id: existing._id },
+        { $set: mergeUpdate }
+      );
+
+      return NextResponse.json({ success: true, id: existing._id });
+    }
+
     const result = await db.collection(collection).insertOne(body);
     return NextResponse.json({ success: true, id: result.insertedId });
   } catch (error) {
     console.error(`POST Error in ${params.collection}:`, error);
-    return NextResponse.json({ error: "Failed to insert data" }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to insert data' }, { status: 500 });
   }
 }
 

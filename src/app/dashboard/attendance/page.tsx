@@ -176,51 +176,69 @@ export default function AttendancePage() {
 
   const monthlySummaries = useMemo(() => {
     const now = getISTTime();
-    const monthsMap = new Map<string, { presentDates: Set<string>; monthDate: Date }>();
+    const monthsMap = new Map<
+      string,
+      { presentDates: Set<string>; monthDate: Date; totalMinutes: number }
+    >();
 
     for (let i = 0; i < 3; i++) {
       const mDate = subMonths(now, i);
       const mKey = format(mDate, "yyyy-MM");
-      monthsMap.set(mKey, { presentDates: new Set(), monthDate: startOfMonth(mDate) });
+      monthsMap.set(mKey, {
+        presentDates: new Set(),
+        monthDate: startOfMonth(mDate),
+        totalMinutes: 0,
+      });
     }
 
     employeeRecords.forEach((r: any) => {
-          const rDate = parseISO(r.date);
-          if (isValid(rDate)) {
-              const mKey = format(rDate, "yyyy-MM");
-              if (monthsMap.has(mKey)) {
-                  if (r.inTime && !r.id?.startsWith('missing-')) {
-                      monthsMap.get(mKey)!.presentDates.add(r.date);
-                  }
-              }
-          }
+      const rDate = parseISO(r.date);
+      if (!isValid(rDate)) return;
+
+      const mKey = format(rDate, "yyyy-MM");
+      if (!monthsMap.has(mKey)) return;
+
+      const isMissing = String(r.id || "").startsWith("missing-");
+      const hasWorkedHours = !isMissing && typeof r.hours === "number" && r.hours > 0;
+
+      if (r.inTime && !isMissing) {
+        monthsMap.get(mKey)!.presentDates.add(r.date);
+      }
+
+      if (hasWorkedHours) {
+        // r.hours is already in hours (float like 8.0/7.5)
+        const minutes = Math.round(r.hours * 60);
+        monthsMap.get(mKey)!.totalMinutes += minutes;
+      }
     });
-    
+
     const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
 
     return sortedMonths.map(([mKey, data]) => {
-        const monthYearStr = format(data.monthDate, "MMM-yy");
-        const presentDays = data.presentDates.size;
-        
-        const start = data.monthDate;
-        const end = isSameMonth(data.monthDate, now) ? now : endOfMonth(data.monthDate);
-        
-        let workingDays = 0;
-        for (let d = start; d <= end; d = addDays(d, 1)) {
-            workingDays++;
-        }
-        
-        const absentDays = Math.max(0, workingDays - presentDays);
-        
-        return {
-            monthYear: monthYearStr,
-            present: presentDays,
-            absent: absentDays
-        };
+      const monthYearStr = format(data.monthDate, "MMM-yy");
+      const presentDays = data.presentDates.size;
+
+      const start = data.monthDate;
+      const end = isSameMonth(data.monthDate, now) ? now : endOfMonth(data.monthDate);
+
+      let workingDays = 0;
+      for (let d = start; d <= end; d = addDays(d, 1)) {
+        workingDays++;
+      }
+
+      const absentDays = Math.max(0, workingDays - presentDays);
+      const totalHoursFloat = data.totalMinutes / 60;
+
+      return {
+        monthYear: monthYearStr,
+        present: presentDays,
+        absent: absentDays,
+        workedHours: formatHoursToHHMM(totalHoursFloat),
+      };
     });
   }, [employeeRecords]);
 
-  const { activeRecord, todayRecord, isStale, nextInAvailableAt } = useMemo(() => {
+  const { activeRecord, todayRecord, isStale, nextInAvailableAt, canMarkOut, nextOutAvailableAt } = useMemo(() => {
     const now = currentTime || getISTTime();
     const todayStr = format(now, "yyyy-MM-dd");
 
@@ -238,7 +256,19 @@ export default function AttendancePage() {
       })[0];
 
     const nextIn = lastClosed?.nextInEnableTime ? parseISO(lastClosed.nextInEnableTime) : null;
-    const inDT = active?.inDateTime ? parseISO(active.inDateTime) : (active?.inDate && active?.inTime ? parseDateTime(active.inDate, active.inTime) : null);
+
+    // OUT should be allowed only after IN + 2 hours
+    const inDT = active?.inDateTime
+      ? parseISO(active.inDateTime)
+      : (active?.inDate && active?.inTime ? parseDateTime(active.inDate, active.inTime) : null);
+
+    let canOut = false;
+    let nextOutAt: Date | null = null;
+
+    if (active && inDT && isValid(inDT)) {
+      nextOutAt = addHours(inDT, 2);
+      canOut = !isAfter(nextOutAt, now);
+    }
 
     let stale = false;
     if (active && inDT && isValid(inDT)) {
@@ -251,8 +281,11 @@ export default function AttendancePage() {
       todayRecord: todayRec || null,
       isStale: stale,
       nextInAvailableAt: nextIn && isValid(nextIn) ? nextIn : null,
+      canMarkOut: !!(active && canOut),
+      nextOutAvailableAt: nextOutAt && isValid(nextOutAt) ? nextOutAt : null,
     };
   }, [employeeRecords, currentTime]);
+
 
   const isCooldownLocked = useMemo(() => {
     if (!nextInAvailableAt || !currentTime) return false;
@@ -505,20 +538,41 @@ export default function AttendancePage() {
 
   const handleConfirmCheckOut = async () => {
     if (!activeRecord || isMutatingAttendance) return;
+
+    // Hard validation: Mark OUT is only allowed after valid Mark IN is stored
+    if (!activeRecord.inTime) {
+      toast({
+        variant: "destructive",
+        title: "Mark IN Required",
+        description: "Cannot Mark OUT because no valid Mark IN record exists for today.",
+      });
+      return;
+    }
+
     const now = getISTTime();
-    
-    const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
+    const inDT = activeRecord.inDateTime
+      ? parseISO(activeRecord.inDateTime)
+      : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
     const outDT = now;
-    
+
+    if (!inDT || !isValid(inDT)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Mark IN",
+        description: "Stored Mark IN date/time is invalid. Please Mark IN again.",
+      });
+      return;
+    }
+
     let finalHours = 0;
-    if (inDT && isValid(inDT) && isValid(outDT)) {
+    if (isValid(inDT) && isValid(outDT)) {
       const diffHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
       finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
     }
-    
-    const nextEnableDT = addHours(outDT, 8); 
+
+    const nextEnableDT = addHours(outDT, 8);
     const recordId = activeRecord.id || (activeRecord as any)._id;
-    
+
     const finalAddressOut = detectedAddress || activeRecord.address || (detectedPlant as any)?.address || "Registered Zone";
     const finalLat = currentGPS?.lat || activeRecord.lat || 28.6329;
     const finalLng = currentGPS?.lng || activeRecord.lng || 77.4357;
@@ -596,13 +650,18 @@ export default function AttendancePage() {
                 {isLoadingLocation && activeDialog === 'NONE' ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Mark IN"}
               </Button>
               <Button 
-                className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
-                  activeRecord ? "bg-rose-600 text-white shadow-rose-200 hover:bg-rose-700" : "bg-slate-100 text-slate-400"
+                className={cn(
+                  "flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest",
+                  activeRecord ? "bg-rose-600 text-white shadow-rose-200 hover:bg-rose-700" : "bg-slate-100 text-slate-400",
+                  activeRecord && !canMarkOut ? "opacity-70 hover:bg-rose-600/90" : ""
                 )} 
-                disabled={isLoadingLocation || isMutatingAttendance || !activeRecord} 
+                disabled={isLoadingLocation || isMutatingAttendance || !activeRecord || (activeRecord ? !canMarkOut : false)} 
                 onClick={() => requestLocation("OUT")}
               >
-                {isLoadingLocation && activeDialog === 'NONE' ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Mark OUT"}
+                {activeRecord && !canMarkOut ? "Mark OUT (Locked)" : (isLoadingLocation && activeDialog === 'NONE' ? <>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  Mark OUT
+                </> : "Mark OUT")}
               </Button>
             </div>
 
@@ -613,11 +672,19 @@ export default function AttendancePage() {
                   <span className="text-xs font-bold text-center">Next Mark IN will be available on {format(nextInAvailableAt, "dd-MMM-yyyy HH:mm")}</span>
                 </div>
               ) : activeRecord ? (
-                <div className="flex items-center justify-center gap-2 text-emerald-600 bg-emerald-50 px-5 py-3 rounded-xl w-full border border-emerald-100">
-                  <ShieldCheck className="w-5 h-5" />
-                  <span className="text-sm font-black uppercase tracking-wider">Active Shift since {activeRecord.inTime}</span>
-                </div>
+                canMarkOut ? (
+                  <div className="flex items-center justify-center gap-2 text-emerald-600 bg-emerald-50 px-5 py-3 rounded-xl w-full border border-emerald-100">
+                    <ShieldCheck className="w-5 h-5" />
+                    <span className="text-sm font-black uppercase tracking-wider">Active Shift since {activeRecord.inTime}</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-1 text-amber-700 bg-amber-50 px-5 py-3 rounded-xl w-full border border-amber-200">
+                    <span className="text-sm font-black uppercase tracking-wider">Active Shift since {activeRecord.inTime}</span>
+                    <span className="text-xs font-bold text-center">Mark OUT will be available on {nextOutAvailableAt ? format(nextOutAvailableAt, "dd-MMM-yyyy HH:mm") : "later"}</span>
+                  </div>
+                )
               ) : todayRecord && todayRecord.outTime ? (
+
                 <div className="flex items-center justify-center gap-2 text-blue-600 bg-blue-50 px-5 py-3 rounded-xl w-full border border-blue-100">
                   <CheckCircle className="w-5 h-5" />
                   <span className="text-sm font-black uppercase tracking-wider">
@@ -762,6 +829,10 @@ export default function AttendancePage() {
                          <div className="flex justify-between items-center bg-rose-50 rounded-xl p-3 border border-rose-100">
                             <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Absent Days</span>
                             <span className="text-xl font-black text-rose-600">{summary.absent}</span>
+                         </div>
+                         <div className="flex justify-between items-center bg-slate-50 rounded-xl p-3 border border-slate-100">
+                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Worked Hours</span>
+                            <span className="text-xl font-black text-slate-900">{summary.workedHours}</span>
                          </div>
                       </CardContent>
                     </Card>

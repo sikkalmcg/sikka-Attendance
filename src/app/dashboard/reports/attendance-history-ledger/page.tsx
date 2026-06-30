@@ -41,10 +41,12 @@ type LedgerRow = {
   workingHours: string;
   inLocation: string;
   outLocation: string;
+  inPlant: string;
   attendanceStatus: LedgerAttendanceStatus;
   shiftType: "Day Shift" | "Night Shift";
   processedBy: string;
 };
+
 
 type SortBy =
   | "employeeId"
@@ -208,15 +210,16 @@ export default function AttendanceHistoryLedgerPage() {
     setPage(1);
   };
 
-  const exportCSV = async () => {
+  const exportReport = async (format: "csv" | "excel" | "pdf") => {
     const params = new URLSearchParams();
     params.set("fromDate", fromDate);
     params.set("toDate", toDate);
     params.set("export", "true");
-    params.set("format", "csv");
+    params.set("format", format);
 
+    // Saara data export chahiye: pageSize always ALL
     params.set("page", String(page));
-    if (pageSize !== "ALL") params.set("pageSize", "ALL");
+    params.set("pageSize", "ALL");
 
     params.set("sortBy", sortBy);
     params.set("sortDir", sortDir);
@@ -407,33 +410,22 @@ export default function AttendanceHistoryLedgerPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={exportCSV} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10">
+          <Button onClick={() => exportReport("csv")} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10">
             <Download className="w-4 h-4" /> Export CSV
           </Button>
           <Button
-            onClick={() => {
-              toast({
-                variant: "destructive",
-                title: "Excel export not enabled",
-                description: "Backend export is currently implemented for CSV only.",
-              });
-            }}
+            onClick={() => exportReport("excel")}
             className="bg-emerald-500/10 hover:bg-emerald-500/15 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl border border-emerald-200 text-emerald-700"
           >
             <Download className="w-4 h-4" /> Export Excel
           </Button>
           <Button
-            onClick={() => {
-              toast({
-                variant: "destructive",
-                title: "PDF export not enabled",
-                description: "Backend export is currently implemented for CSV only.",
-              });
-            }}
+            onClick={() => exportReport("pdf")}
             className="bg-emerald-500/10 hover:bg-emerald-500/15 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl border border-emerald-200 text-emerald-700"
           >
             <Download className="w-4 h-4" /> Export PDF
           </Button>
+
 
           <Button onClick={printReport} className="bg-slate-900 hover:bg-slate-800 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg">
             <Printer className="w-4 h-4" /> Print
@@ -622,8 +614,10 @@ export default function AttendanceHistoryLedgerPage() {
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">In Date & Time</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Out Date & Time</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Working Hours</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">In Plant</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">In Location</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Out Location</TableHead>
+
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer" onClick={() => onToggleSort("attendanceStatus")}>
                     Attendance Status <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
@@ -662,8 +656,10 @@ export default function AttendanceHistoryLedgerPage() {
                         <TableCell className="px-4 py-3">
                           <span className="font-mono font-black text-slate-900">{r.workingHours}</span>
                         </TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inPlant || "--"}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inLocation}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.outLocation}</TableCell>
+
                         <TableCell className="px-4 py-3">
                           <Badge className={`font-black text-[10px] px-2 py-1 border ${statusBadgeClasses(r.attendanceStatus)}`}>
                             {r.attendanceStatus}

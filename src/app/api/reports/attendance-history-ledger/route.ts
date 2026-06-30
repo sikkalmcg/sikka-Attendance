@@ -2,7 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { cookies } from 'next/headers';
 
+import { Workbook } from 'exceljs';
+
 import type { Holiday, AttendanceRecord, Employee, Plant } from '@/lib/types';
+
+// Note: this route is used for Attendance History Ledger (Session History).
+// It must correctly aggregate multiple punch documents for the same employee+date
+// so that Mark IN and Mark OUT both appear accurately without incorrect/missing pairing.
+
 
 // Ensure Next.js does not attempt static rendering for this API route.
 export const dynamic = 'force-dynamic';
@@ -261,19 +268,81 @@ export async function GET(req: Request) {
 
     const attendancePunches = await attendanceCol.find(attendanceQuery).toArray();
 
-    // Build quick lookup per employee+date
-    const punchByEmpDate = new Map<string, AttendanceRecord>();
+    // Build quick lookup per employee+date (aggregate all punches so IN/OUT pair is correct)
+    type AggregatedPunch = {
+      inTime: string | null;
+      outTime: string | null;
+      inLocation: string;
+      outLocation: string;
+      inPlant: string;
+      approvedBy: string;
+      outDate: string | null;
+    };
+
+
+    const punchByEmpDate = new Map<string, AggregatedPunch>();
+
+    const compareTimeHHMM = (a: string, b: string) => {
+      // expects "HH:mm"; returns -1/0/1
+      const [ah, am] = a.split(':').map((x) => parseInt(x, 10));
+      const [bh, bm] = b.split(':').map((x) => parseInt(x, 10));
+      const av = (ah || 0) * 60 + (am || 0);
+      const bv = (bh || 0) * 60 + (bm || 0);
+      return av < bv ? -1 : av > bv ? 1 : 0;
+    };
+
     for (const rec of attendancePunches) {
       const key = `${rec.employeeId}:${rec.date}`;
       const existing = punchByEmpDate.get(key);
+
+      const candidateIn = rec.inTime ?? null;
+      const candidateOut = rec.outTime ?? null;
+
       if (!existing) {
-        punchByEmpDate.set(key, rec);
-      } else {
-        const existingIn = existing.inTime ? 1 : 0;
-        const recIn = rec.inTime ? 1 : 0;
-        if (recIn > existingIn) punchByEmpDate.set(key, rec);
+        punchByEmpDate.set(key, {
+          inTime: candidateIn,
+          outTime: candidateOut,
+          inLocation: rec.address ? rec.address : '--',
+          outLocation: rec.addressOut ? rec.addressOut : '--',
+          inPlant: rec.inPlant ? rec.inPlant : '--',
+          approvedBy: rec.approvedBy || '--',
+          outDate: rec.outDate ?? null,
+        });
+        continue;
       }
+
+      // IN: keep earliest non-null inTime
+      if (candidateIn) {
+        if (!existing.inTime) {
+          existing.inTime = candidateIn;
+          existing.inLocation = rec.address ? rec.address : '--';
+          // approvedBy should reflect the punch that actually set the IN
+          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
+        } else if (compareTimeHHMM(candidateIn, existing.inTime) < 0) {
+          existing.inTime = candidateIn;
+          existing.inLocation = rec.address ? rec.address : '--';
+          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
+        }
+      }
+
+      // OUT: keep latest non-null outTime
+      if (candidateOut) {
+        if (!existing.outTime) {
+          existing.outTime = candidateOut;
+          existing.outLocation = rec.addressOut ? rec.addressOut : '--';
+          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
+          existing.outDate = rec.outDate ?? existing.outDate;
+        } else if (compareTimeHHMM(candidateOut, existing.outTime) > 0) {
+          existing.outTime = candidateOut;
+          existing.outLocation = rec.addressOut ? rec.addressOut : '--';
+          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
+          existing.outDate = rec.outDate ?? existing.outDate;
+        }
+      }
+
+      punchByEmpDate.set(key, existing);
     }
+
 
     // Create date array (calendar days)
     const start = new Date(`${fromDate}T00:00:00.000Z`);
@@ -316,11 +385,21 @@ export async function GET(req: Request) {
         const inDT = rec?.inTime ? rec.inTime : null;
         const outDT = rec?.outTime ? rec.outTime : null;
 
-        // hours sometimes stored as string/number; normalize safely
-        const workingHoursNum = typeof rec?.hours === 'string' ? parseFloat(rec.hours) : rec?.hours;
-        const workingHours = workingHoursNum && workingHoursNum > 0 ? workingHoursNum : 0;
+        // Compute working hours from IN/OUT times (same-day assumption).
+        // If no OUT punch is available, hours remain 0.
+        let workingHHMM = '00:00';
+        if (rec?.inTime && rec?.outTime) {
+          // rec.inTime/outTime are "HH:mm" strings
+          const [inH, inM] = rec.inTime.split(':').map((x) => parseInt(x, 10));
+          const [outH, outM] = rec.outTime.split(':').map((x) => parseInt(x, 10));
+          const inMinutes = (inH || 0) * 60 + (inM || 0);
+          const outMinutes = (outH || 0) * 60 + (outM || 0);
+          // If out is earlier than in, assume next day
+          const deltaMinutes = outMinutes >= inMinutes ? outMinutes - inMinutes : outMinutes + 24 * 60 - inMinutes;
+          const hoursFloat = deltaMinutes / 60;
+          workingHHMM = fmtHoursToHHMM(hoursFloat);
+        }
 
-        const workingHHMM = workingHours > 0 ? fmtHoursToHHMM(Number(workingHours)) : '00:00';
 
 
         // Shift type heuristic: day shift if inTime before 18:00, else night
@@ -343,8 +422,10 @@ export async function GET(req: Request) {
           inDateTime,
           outDateTime,
           workingHours: workingHHMM,
-          inLocation: rec?.address ? rec.address : '--',
-          outLocation: rec?.addressOut ? rec.addressOut : '--',
+          inLocation: rec?.inLocation ? rec.inLocation : '--',
+          outLocation: rec?.outLocation ? rec.outLocation : '--',
+          inPlant: rec?.inPlant ? rec.inPlant : '--',
+
           attendanceStatus: status,
           shiftType,
           processedBy: rec?.approvedBy || '--',
@@ -365,9 +446,10 @@ export async function GET(req: Request) {
 
     if (exportMode || printMode) {
       if (exportMode) {
-        if (exportFormat !== 'csv') {
-          return NextResponse.json({ error: `format ${exportFormat} not implemented yet; use format=csv` }, { status: 400 });
+        if (exportFormat !== 'csv' && exportFormat !== 'excel' && exportFormat !== 'xlsx') {
+          return NextResponse.json({ error: `format ${exportFormat} not supported. Use csv or excel.` }, { status: 400 });
         }
+
 
         const rows = allRows;
         const headers = [
@@ -396,8 +478,10 @@ export async function GET(req: Request) {
               r.inDateTime,
               r.outDateTime,
               r.workingHours,
+              r.inPlant,
               r.inLocation,
               r.outLocation,
+
               r.attendanceStatus,
               r.shiftType,
               r.processedBy,
