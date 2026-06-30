@@ -675,11 +675,11 @@ export default function AttendancePage() {
                 canMarkOut ? (
                   <div className="flex items-center justify-center gap-2 text-emerald-600 bg-emerald-50 px-5 py-3 rounded-xl w-full border border-emerald-100">
                     <ShieldCheck className="w-5 h-5" />
-                    <span className="text-sm font-black uppercase tracking-wider">Active Shift since {activeRecord.inTime}</span>
+                    <span className="text-sm font-black uppercase tracking-wider">Active Shift since {activeRecord.inDateTime ? ` ${format(parseISO(activeRecord.inDateTime), "dd-MMM, hh:mm a")}` : ` ${activeRecord.inTime}`}</span>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-1 text-amber-700 bg-amber-50 px-5 py-3 rounded-xl w-full border border-amber-200">
-                    <span className="text-sm font-black uppercase tracking-wider">Active Shift since {activeRecord.inTime}</span>
+                    <span className="text-sm font-black uppercase tracking-wider">Active Shift since {activeRecord.inDateTime ? ` ${format(parseISO(activeRecord.inDateTime), "dd-MMM, hh:mm a")}` : ` ${activeRecord.inTime}`}</span>
                     <span className="text-xs font-bold text-center">Mark OUT will be available on {nextOutAvailableAt ? format(nextOutAvailableAt, "dd-MMM-yyyy HH:mm") : "later"}</span>
                   </div>
                 )
