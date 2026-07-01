@@ -45,7 +45,7 @@ import {
   Clock,
   UserCheck,
   UserX,
-  XCircle
+  XCircle,
   TrendingUp
 } from "lucide-react";
 import { 
