@@ -817,6 +817,81 @@
         "updatedAt"
       ]
     },
+    "LeaveRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "LeaveRequest",
+      "type": "object",
+      "description": "Manages employee leave requests, including purpose, dates, and approval status.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the LeaveRequest entity."
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Reference to the Employee who is requesting leave. (Relationship: Employee 1:N LeaveRequest)"
+        },
+        "firmId": {
+          "type": "string",
+          "description": "Reference to the Firm for reporting and scoping. (Derived from Employee)"
+        },
+        "purpose": {
+          "type": "string",
+          "description": "The reason or type of leave being requested."
+        },
+        "fromDate": {
+          "type": "string",
+          "description": "The start date of the leave period.",
+          "format": "date"
+        },
+        "toDate": {
+          "type": "string",
+          "description": "The end date of the leave period.",
+          "format": "date"
+        },
+        "days": {
+          "type": "number",
+          "description": "Total number of leave days, auto-calculated."
+        },
+        "remark": {
+          "type": "string",
+          "description": "Optional remarks from the employee (max 20 words)."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the leave request.",
+          "enum": ["Pending", "Approved", "Rejected"]
+        },
+        "processedByUserId": {
+          "type": "string",
+          "description": "Reference to the User who approved or rejected the request. (Relationship: User 1:N LeaveRequest)"
+        },
+        "processedAt": {
+          "type": "string",
+          "description": "Timestamp when the request was approved or rejected.",
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the leave request was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when the leave request was last updated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "employeeId",
+        "purpose",
+        "fromDate",
+        "toDate",
+        "days",
+        "status"
+      ]
+    },
     "VoucherPayment": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "VoucherPayment",

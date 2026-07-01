@@ -39,12 +39,14 @@ import {
   User as UserIcon,
   Loader2,
   CheckCircle2,
+  Download,
   Info,
   History,
   Clock,
   UserCheck,
   UserX,
   XCircle
+  TrendingUp
 } from "lucide-react";
 import { 
   Select, 
@@ -122,7 +124,9 @@ export default function EmployeesPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isSalaryHistoryOpen, setIsSalaryHistoryOpen] = useState(false);
   const [historyEmp, setHistoryEmp] = useState<Employee | null>(null);
+  const [salaryHistoryEmp, setSalaryHistoryEmp] = useState<Employee | null>(null);
   
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState<Partial<Employee>>({ ...INITIAL_FORM_DATA });
@@ -292,6 +296,20 @@ export default function EmployeesPage() {
       const finalData: any = { 
         ...formData, 
         name: `${formData.firstName || ""} ${formData.lastName || ""}`.trim(),
+        // Add salary to history if it has changed
+        salaryHistory: (() => {
+          const history = formData.salaryHistory || [];
+          const currentSalary = formData.salary;
+          const lastSalaryInHistory = history.length > 0 ? history[history.length - 1] : null;
+
+          if (!lastSalaryInHistory || lastSalaryInHistory.monthlyCTC !== currentSalary?.monthlyCTC) {
+            return [...history, {
+              ...currentSalary,
+              effectiveDate: format(new Date(), "yyyy-MM-dd"),
+            }];
+          }
+          return history;
+        })(),
         firstName: formData.firstName || "",
         lastName: formData.lastName || "",
         fatherName: formData.fatherName || "",
@@ -395,6 +413,62 @@ export default function EmployeesPage() {
 
   if (!isMounted) return null;
 
+  const exportToExcel = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Employees');
+
+      worksheet.columns = [
+        { header: 'Employee ID', key: 'employeeId', width: 15 },
+        { header: 'Name', key: 'name', width: 25 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Department', key: 'department', width: 20 },
+        { header: 'Designation', key: 'designation', width: 20 },
+        { header: 'Aadhaar', key: 'aadhaar', width: 15 },
+        { header: 'PAN', key: 'pan', width: 15 },
+        { header: 'Mobile', key: 'mobile', width: 15 },
+        { header: 'Join Date', key: 'joinDate', width: 15 },
+        { header: 'Net Salary', key: 'netSalary', width: 15 },
+      ];
+
+      filtered.forEach(emp => {
+        worksheet.addRow({
+          employeeId: emp.employeeId,
+          name: emp.name,
+          status: emp.active ? 'Active' : 'Inactive',
+          department: emp.department,
+          designation: emp.designation,
+          aadhaar: emp.aadhaar,
+          pan: emp.pan,
+          mobile: emp.mobile,
+          joinDate: emp.joinDate ? formatDate(emp.joinDate) : '',
+          netSalary: emp.salary?.netSalary || 0,
+        });
+      });
+
+      worksheet.getRow(1).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Sikka-Employees-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({ title: "Export Successful", description: `${filtered.length} employee records exported.` });
+    } catch (error) {
+      console.error("Failed to export to Excel", error);
+      toast({ variant: "destructive", title: "Export Failed", description: "Could not generate the Excel file." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <TooltipProvider>
       <div className="space-y-6 pb-12">
@@ -403,9 +477,14 @@ export default function EmployeesPage() {
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Workforce Directory</h1>
             <p className="text-muted-foreground text-sm font-medium uppercase tracking-widest mt-1">Managed Staff Registry</p>
           </div>
-          <Button className="bg-primary font-black shadow-xl shadow-primary/20 h-12 px-8 rounded-xl" onClick={openNewEmployeeModal}>
-            <UserPlus className="w-5 h-5 mr-2" /> Register New Staff
-          </Button>
+          <div className="flex items-center gap-4">
+            <Button variant="outline" className="h-12 px-6 rounded-xl font-black gap-2" onClick={exportToExcel} disabled={isProcessing}>
+              <Download className="w-4 h-4" /> Export Excel
+            </Button>
+            <Button className="bg-primary font-black shadow-xl shadow-primary/20 h-12 px-8 rounded-xl" onClick={openNewEmployeeModal}>
+              <UserPlus className="w-5 h-5 mr-2" /> Register New Staff
+            </Button>
+          </div>
         </div>
 
         <Card className="border-slate-200 overflow-hidden shadow-xl rounded-2xl">
@@ -535,6 +614,20 @@ export default function EmployeesPage() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Audit History</TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-slate-400 hover:text-primary"
+                                  onClick={() => { setSalaryHistoryEmp(emp); setIsSalaryHistoryOpen(true); }}
+                                >
+                                  <TrendingUp className="w-3.5 h-3.5"/>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Salary Revision History</TooltipContent>
                             </Tooltip>
 
                             <Tooltip>
