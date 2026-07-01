@@ -45,11 +45,14 @@ import {
   UserCheck,
   AlertCircle,
   CheckSquare,
-  CalendarDays
+  CalendarDays,
+  LogOut,
+  Eye,
+  MapPin
 } from "lucide-react";
 import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, isValid, startOfDay, endOfMonth } from "date-fns";
+import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, isValid, startOfDay, endOfMonth, startOfToday } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -123,12 +126,11 @@ export default function ApprovalsPage() {
   const contextData = useData();
   const { attendanceRecords = [], employees = [], updateRecord, addRecord, refreshData, verifiedUser, holidays = [], plants = [], leaveRequests = [] } = contextData;
   
-  // Safe extraction for updateLeaveRequest from context
   const updateLeaveRequest = (contextData as any).updateLeaveRequest || (contextData as any).updateRecord;
 
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState("attendance"); // attendance, leaves
+  const [viewMode, setViewMode] = useState("attendance"); // attendance, leaves, exits
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>("");
@@ -163,6 +165,10 @@ export default function ApprovalsPage() {
     remark: "" 
   });
 
+  // Exit Tracking State
+  const [selectedExitEvent, setSelectedExitEvent] = useState<any>(null);
+  const [isExitDetailsOpen, setIsExitDetailsOpen] = useState(false);
+
   const [localApprovals, setLocalApprovals] = useState<Record<string, boolean>>({});
   const [localEdits, setLocalEdits] = useState<Record<string, Partial<AttendanceItem>>>({});
 
@@ -189,6 +195,13 @@ export default function ApprovalsPage() {
   }, []);
 
   useEffect(() => {
+    setSelectedDateFilter("");
+    setSelectedStatusFilter("ALL");
+    setSelectedRecordIds(new Set());
+    setSearchTerm("");
+  }, [viewMode]);
+
+  useEffect(() => {
     setPendingPage(1);
     setHistoryPage(1);
     setSelectedRecordIds(new Set());
@@ -209,7 +222,7 @@ export default function ApprovalsPage() {
     if (!leaveRequests) return map;
     leaveRequests.filter(l => {
       const statusStr = String(l.status).toUpperCase();
-      return statusStr === 'APPROVED' || statusStr === 'APPROVED';
+      return statusStr === 'APPROVED';
     }).forEach(l => {
       const start = startOfDay(parseISO(l.fromDate));
       const end = startOfDay(parseISO(l.toDate));
@@ -409,6 +422,51 @@ export default function ApprovalsPage() {
       return true;
     }).sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
   }, [allAttendanceList, historyMonthFilter]);
+
+  const allPlantExitHistory = useMemo(() => {
+    const exits: any[] = [];
+    const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
+
+    (attendanceRecords || []).forEach((record: any) => {
+      const emp = employeeMap.get(record.employeeId);
+      if (userAssignedPlantIds) {
+        const hasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId || "");
+        if (!hasAccess) return;
+      }
+
+      if (record.exitEvents && Array.isArray(record.exitEvents)) {
+        record.exitEvents.forEach((event: any) => {
+          exits.push({
+            ...event,
+            employeeId: record.employeeId,
+            employeeName: record.employeeName,
+            date: record.date,
+            inTime: record.inTime,
+            outTime: record.outTime,
+            plantName: record.inPlant || "Salt Plant",
+            attendanceId: record.id || record._id
+          });
+        });
+      }
+    });
+
+    let filteredExits = exits;
+    if (searchTerm) {
+      const s = searchTerm.toLowerCase();
+      filteredExits = filteredExits.filter(e => 
+        (e.employeeName || "").toLowerCase().includes(s) || 
+        (e.employeeId || "").toLowerCase().includes(s)
+      );
+    }
+    if (selectedPlantFilter !== "ALL") {
+      filteredExits = filteredExits.filter(e => e.plantName === selectedPlantFilter);
+    }
+    if (selectedDateFilter) {
+      filteredExits = filteredExits.filter(e => e.date === selectedDateFilter);
+    }
+
+    return filteredExits.sort((a, b) => b.exitTime.localeCompare(a.exitTime));
+  }, [attendanceRecords, employees, userAssignedPlantIds, searchTerm, selectedPlantFilter, selectedDateFilter]);
 
   const currentData = useMemo(() => {
     const list = attendanceView === 'pending' ? pendingAttendanceList : historyAttendanceList;
@@ -797,6 +855,11 @@ export default function ApprovalsPage() {
     runRestoreTask();
   };
 
+  const handleOpenExitDetails = (event: any) => {
+    setSelectedExitEvent(event);
+    setIsExitDetailsOpen(true);
+  };
+
   // --- Leave Management Handlers ---
 
   const pendingLeaveRequests = useMemo(() => {
@@ -809,7 +872,7 @@ export default function ApprovalsPage() {
   const approvedLeaveRequests = useMemo(() => {
     return (leaveRequests || []).filter(l => {
       const status = String(l.status).toUpperCase();
-      return status === 'APPROVED' || status === 'APPROVED';
+      return status === 'APPROVED';
     }) as LeaveRequestItem[];
   }, [leaveRequests]);
 
@@ -887,7 +950,7 @@ export default function ApprovalsPage() {
               </Select>
             </div>
           )}
-          {viewMode === 'attendance' && <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border shadow-sm">
+          {(viewMode === 'attendance' || viewMode === 'exits') && <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border shadow-sm">
              <Input 
                type="date" 
                className="h-8 border-none text-xs font-black uppercase focus:ring-0 shadow-none bg-transparent w-[130px]" 
@@ -920,9 +983,10 @@ export default function ApprovalsPage() {
       <div className="flex flex-col md:flex-row items-center gap-4">
         <div className="relative flex-1 w-full"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or Employee ID..." className="pl-10 h-10 bg-white shadow-sm rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
         <Tabs value={viewMode} onValueChange={setViewMode} className="w-full md:w-auto">
-          <TabsList className="grid w-full grid-cols-2 bg-slate-100 h-10 p-1 rounded-xl">
+          <TabsList className="grid w-full grid-cols-3 bg-slate-100 h-10 p-1 rounded-xl w-[450px]">
             <TabsTrigger value="attendance" className="text-xs font-black uppercase">Attendance</TabsTrigger>
             <TabsTrigger value="leaves" className="text-xs font-black uppercase">Leave Requests</TabsTrigger>
+            <TabsTrigger value="exits" className="text-xs font-black uppercase">Facility Exits</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -992,26 +1056,39 @@ export default function ApprovalsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingLeaveRequests.map((leave: any) => (
-                  <TableRow key={leave.id}>
-                    <TableCell>
-                      <div className="font-bold">{leave.employeeName}</div>
-                      <div className="text-xs text-muted-foreground">{leave.employeeId}</div>
-                    </TableCell>
-                    <TableCell>{leave.department}</TableCell>
-                    <TableCell>{leave.purpose}</TableCell>
-                    <TableCell>{formatDate(leave.fromDate)}</TableCell>
-                    <TableCell>{formatDate(leave.toDate)}</TableCell>
-                    <TableCell>{leave.days}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{leave.remark || '-'}</TableCell>
-                    <TableCell className="text-right pr-6">
-                      <div className="flex gap-2 justify-end">
-                        <Button size="sm" variant="outline" className="h-8 text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => handleOpenLeaveReject(leave)}>Reject</Button>
-                        <Button size="sm" className="h-8 bg-emerald-600 hover:bg-emerald-700" onClick={() => handleOpenLeaveApprove(leave)}>Approve</Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {pendingLeaveRequests.map((leave: any) => {
+                  // Strict Check: Kya leave ki 'To Date' aaj se purani ho chuki hai?
+                  const isLeavePastThreshold = leave.toDate ? isBefore(startOfDay(parseISO(leave.toDate)), startOfToday()) : false;
+
+                  return (
+                    <TableRow key={leave.id}>
+                      <TableCell>
+                        <div className="font-bold">{leave.employeeName}</div>
+                        <div className="text-xs text-muted-foreground">{leave.employeeId}</div>
+                      </TableCell>
+                      <TableCell>{leave.department}</TableCell>
+                      <TableCell>{leave.purpose}</TableCell>
+                      <TableCell>{formatDate(leave.fromDate)}</TableCell>
+                      <TableCell>{formatDate(leave.toDate)}</TableCell>
+                      <TableCell>{leave.days}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">{leave.remark || '-'}</TableCell>
+                      <TableCell className="text-right pr-6">
+                        <div className="flex gap-2 justify-end">
+                          <Button size="sm" variant="outline" className="h-8 text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => handleOpenLeaveReject(leave)}>Reject</Button>
+                          <Button 
+                            size="sm" 
+                            className={cn("h-8 bg-emerald-600 hover:bg-emerald-700", isLeavePastThreshold && "opacity-40 hover:bg-emerald-600 cursor-not-allowed")} 
+                            onClick={() => !isLeavePastThreshold && handleOpenLeaveApprove(leave)}
+                            disabled={isLeavePastThreshold}
+                            title={isLeavePastThreshold ? "Leave date purani ho chuki hai, ise ab approve nahi kiya ja sakta." : "Approve leave"}
+                          >
+                            {isLeavePastThreshold ? "Expired" : "Approve"}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                  {pendingLeaveRequests.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
@@ -1167,7 +1244,130 @@ export default function ApprovalsPage() {
       </Card>
       )}
 
+      {/* --- EMPLOYEE PLANT EXIT HISTORY SECTION --- */}
+      {viewMode === 'exits' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 text-rose-600 bg-rose-50/50 p-4 rounded-2xl border border-rose-100 shadow-sm">
+            <LogOut className="w-5 h-5 shrink-0" />
+            <span className="text-xs font-black uppercase tracking-wider text-rose-800">Geofence Compliance Monitoring: Real-time logs for off-perimeter coordinate traversal.</span>
+          </div>
+          <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
+            <CardContent className="p-0">
+              <ScrollArea className="w-full">
+                <Table className="min-w-[1200px]">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider py-4 px-6 text-slate-500">Employee</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Attendance Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Plant</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Mark IN</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Mark OUT</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-rose-600">Exit Time</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-emerald-600">Return Time</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Outside Duration</TableHead>
+                      <TableHead className="text-right font-black text-[10px] uppercase tracking-wider pr-6 text-slate-500">Action Matrix</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allPlantExitHistory.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-20 text-muted-foreground font-bold uppercase tracking-wider italic">
+                          No Geofence Exit violations logged for the current filter scope bounds.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      allPlantExitHistory.map((event: any, index: number) => (
+                        <TableRow key={index} className="hover:bg-slate-50/50 transition-colors">
+                          <TableCell className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="font-black text-slate-800 uppercase text-xs">{event.employeeName}</span>
+                              <span className="text-[10px] font-mono font-bold text-primary">{event.employeeId}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-slate-600">{formatDate(event.date)}</TableCell>
+                          <TableCell className="text-xs font-black text-slate-700 uppercase">{event.plantName}</TableCell>
+                          <TableCell className="text-xs font-medium text-slate-500">{event.inTime || "--:--"}</TableCell>
+                          <TableCell className="text-xs font-medium text-slate-500">{event.outTime || "--:--"}</TableCell>
+                          <TableCell className="text-xs font-extrabold text-rose-600">{event.exitTime.split(" ")[1] || event.exitTime}</TableCell>
+                          <TableCell className="text-xs font-extrabold text-emerald-600">{event.returnTime ? event.returnTime.split(" ")[1] : "Still Outside"}</TableCell>
+                          <TableCell className="text-xs font-black text-slate-800 font-mono">{event.outsideDuration || "--"}</TableCell>
+                          <TableCell className="text-right pr-6">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8 rounded-lg font-black text-[10px] uppercase border-primary/20 text-primary hover:bg-primary/5 flex items-center gap-1.5 ml-auto"
+                              onClick={() => handleOpenExitDetails(event)}
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View Details
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* --- MODALS --- */}
+
+      {/* VIEW DETAILS: GEOFENCE LOCATION TRAJECTORY DIALOG */}
+      <Dialog open={isExitDetailsOpen} onOpenChange={setIsExitDetailsOpen}>
+        <DialogContent className="sm:max-w-2xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl animate-in fade-in duration-200">
+          <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
+              <MapPin className="w-6 h-6 text-primary" /> Exit Trajectory Logs
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+              Recorded outside boundary logs for {selectedExitEvent?.employeeName} ({selectedExitEvent?.employeeId})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-8">
+            <ScrollArea className="h-[320px] rounded-xl border border-slate-100 p-2 bg-slate-50/50">
+              <Table>
+                <TableHeader className="bg-slate-100 sticky top-0 z-10">
+                  <TableRow>
+                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500 py-3">Date & Time</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Full Address</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Latitude</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Longitude</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-rose-600 text-right pr-4">Distance from Plant</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedExitEvent?.locationHistory && selectedExitEvent.locationHistory.length > 0 ? (
+                    selectedExitEvent.locationHistory.map((loc: any, idx: number) => (
+                      <TableRow key={idx} className="bg-white hover:bg-slate-50 transition-colors">
+                        <TableCell className="text-xs font-bold text-slate-700 whitespace-nowrap">{loc.time}</TableCell>
+                        <TableCell className="text-xs text-slate-600 max-w-[220px] break-words font-medium leading-relaxed" title={loc.address}>{loc.address}</TableCell>
+                        <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lat?.toFixed(5) || "0.00"}</TableCell>
+                        <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lng?.toFixed(5) || "0.00"}</TableCell>
+                        <TableCell className="text-xs font-black text-rose-600 text-right pr-4 font-mono">{loc.distance !== undefined ? `${loc.distance} m` : "Unresolved"}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-10 text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        No historical perimeter violations coordinate blocks captured.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
+          </div>
+          <DialogFooter className="p-6 bg-slate-50 border-t">
+            <Button className="w-full h-12 font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl uppercase tracking-widest text-xs shadow-md" onClick={() => setIsExitDetailsOpen(false)}>
+              CLOSE LEDGER VIEWER
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* LEAVE APPROVE MODAL */}
       <Dialog open={isLeaveApproveOpen} onOpenChange={setIsLeaveApproveOpen}>
@@ -1217,6 +1417,7 @@ export default function ApprovalsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* CONFIRM APPROVAL MODAL */}
       <Dialog open={isApproveConfirmOpen} onOpenChange={setIsApproveConfirmOpen}>
         <DialogContent className="sm:max-w-md rounded-3xl p-0 overflow-hidden border-none shadow-2xl animate-in fade-in duration-300">
