@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
-import { format, parseISO, addHours, isAfter, isValid, startOfMonth, endOfMonth, addDays, isSunday, isSameMonth, subMonths, differenceInMinutes, differenceInCalendarDays, isBefore, startOfToday } from "date-fns";
+import { format, parseISO, addHours, isAfter, isValid, startOfMonth, endOfMonth, addDays, isSunday, isSameMonth, subMonths, differenceInMinutes, differenceInCalendarDays, isBefore, startOfToday, startOfDay } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -87,6 +87,17 @@ function LeaveRequestForm() {
   const [toDate, setToDate] = useState("");
   const [remark, setRemark] = useState("");
 
+  const todayStr = format(startOfToday(), "yyyy-MM-dd");
+
+  // Recommended leave types data options
+  const recommendedLeaves = [
+    "Sick Leave",
+    "Casual Leave",
+    "Earned Leave",
+    "Emergency Leave",
+    "Privilege Leave"
+  ];
+
   const totalDays = fromDate && toDate && !isBefore(new Date(toDate), new Date(fromDate))
     ? differenceInCalendarDays(new Date(toDate), new Date(fromDate)) + 1
     : 0;
@@ -106,16 +117,22 @@ function LeaveRequestForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const today = startOfToday();
+    const today = startOfToday(); 
+    
     if (!purpose || !fromDate || !toDate) {
       toast({ variant: "destructive", title: "Incomplete Form", description: "Please fill all required fields." });
       return;
     }
-    if (isBefore(new Date(fromDate), today)) {
-      toast({ variant: "destructive", title: "Invalid Date", description: "From date cannot be in the past." });
+
+    const selectedFromDate = startOfDay(new Date(fromDate));
+    const selectedToDate = startOfDay(new Date(toDate));
+
+    if (isBefore(selectedFromDate, today)) {
+      toast({ variant: "destructive", title: "Invalid Date", description: "Leave request past date se allow nahi hai. Kripya aaj ki ya bhavishya ki date chunein." });
       return;
     }
-    if (isBefore(new Date(toDate), new Date(fromDate))) {
+
+    if (isBefore(selectedToDate, selectedFromDate)) {
       toast({ variant: "destructive", title: "Invalid Date Range", description: "To Date cannot be before From Date." });
       return;
     }
@@ -171,18 +188,38 @@ function LeaveRequestForm() {
           <DialogDescription className="text-xs text-slate-400 uppercase font-semibold">Fill in the details below to apply for leave.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          <div className="space-y-1.5">
+          
+          {/* Leave Purpose / Type Field with Suggestions */}
+          <div className="space-y-2">
             <Label htmlFor="purpose" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Leave Purpose / Type</Label>
             <Input id="purpose" placeholder="e.g. Sick Leave, Casual Leave" value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
+            
+            {/* Recommendation Badges UI implementation block */}
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {recommendedLeaves.map((leaveType) => (
+                <Badge
+                  key={leaveType}
+                  variant="secondary"
+                  className={cn(
+                    "cursor-pointer text-[10px] font-bold uppercase rounded-lg px-2 py-1 transition-all border border-slate-200/60 bg-white text-slate-600 hover:bg-slate-100",
+                    purpose === leaveType && "bg-primary text-white border-primary hover:bg-primary/90"
+                  )}
+                  onClick={() => setPurpose(leaveType)}
+                >
+                  {leaveType}
+                </Badge>
+              ))}
+            </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="fromDate" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">From Date</Label>
-              <Input id="fromDate" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
+              <Input id="fromDate" type="date" min={todayStr} value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="toDate" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">To Date</Label>
-              <Input id="toDate" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
+              <Input id="toDate" type="date" min={fromDate || todayStr} value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
             </div>
           </div>
           <div className="space-y-1.5">
