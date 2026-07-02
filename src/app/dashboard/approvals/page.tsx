@@ -130,7 +130,7 @@ export default function ApprovalsPage() {
 
   const [isMounted, setIsMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState("attendance"); // attendance, leaves, exits
+  const [viewMode, setViewMode] = useState("attendance"); 
   const [selectedPlantFilter, setSelectedPlantFilter] = useState<string>("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>("");
@@ -138,8 +138,8 @@ export default function ApprovalsPage() {
   const [historyMonthFilter, setHistoryMonthFilter] = useState("");
   const [pendingPage, setPendingPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
-  const [attendanceView, setAttendanceView] = useState("pending"); // pending, history
-  const [leaveView, setLeaveView] = useState("pending"); // pending, history
+  const [attendanceView, setAttendanceView] = useState("pending"); 
+  const [leaveView, setLeaveView] = useState("pending"); 
 
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
   const [isBulkApproveConfirmOpen, setIsBulkApproveConfirmOpen] = useState(false);
@@ -165,7 +165,6 @@ export default function ApprovalsPage() {
     remark: "" 
   });
 
-  // Exit Tracking State
   const [selectedExitEvent, setSelectedExitEvent] = useState<any>(null);
   const [isExitDetailsOpen, setIsExitDetailsOpen] = useState(false);
 
@@ -495,54 +494,51 @@ export default function ApprovalsPage() {
     setLocalApprovals(prev => ({ ...prev, [recId]: true }));
     toast({ title: "Attendance approved successfully and moved to History." });
 
-    const runApprovalTask = async () => {
-      try {
-        let finalOutTime = rec.outTime;
-        let finalOutDate = rec.outDate || rec.date;
-        let finalHours = rec.hours || 0;
+    try {
+      let finalOutTime = rec.outTime;
+      let finalOutDate = rec.outDate || rec.date;
+      let finalHours = rec.hours || 0;
 
-        if (!rec.isVirtual && rec.autoCheckout && !rec.outTime) {
-          const inDT = parseISO(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}:00`);
-          if (inDT && isValid(inDT)) {
-            const autoOutDT = addHours(inDT, 16);
-            finalOutTime = format(autoOutDT, "HH:mm");
-            finalOutDate = format(autoOutDT, "yyyy-MM-dd");
-            finalHours = 16.0;
-          }
+      if (!rec.isVirtual && rec.autoCheckout && !rec.outTime) {
+        const inDT = parseISO(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}:00`);
+        if (inDT && isValid(inDT)) {
+          const autoOutDT = addHours(inDT, 16);
+          finalOutTime = format(autoOutDT, "HH:mm");
+          finalOutDate = format(autoOutDT, "yyyy-MM-dd");
+          finalHours = 16.0;
         }
-
-        const finalRemarks = (rec.autoCheckout && !rec.remark) ? "System Auto-Logged OUT (16h Limit Threshold reached)" : rec.remark;
-
-        if (rec.isVirtual) {
-          await addRecord('attendance', {
-            employeeId: rec.employeeId,
-            employeeName: rec.employeeName,
-            date: rec.date,
-            status: 'ABSENT',
-            attendanceType: rec.attendanceType || 'ABSENT',
-            approved: true,
-            approvedBy: approverName,
-            remark: finalRemarks || "Approved as Absent",
-          });
-        } else {
-          const finalDbId = rec.id || (rec as any)._id;
-          await updateRecord('attendance', finalDbId, {
-            outTime: finalOutTime || null,
-            outDate: finalOutDate || null,
-            hours: finalHours,
-            approved: true,
-            approvedBy: approverName,
-            remark: finalRemarks,
-          });
-        }
-      } catch (e) {
-        setLocalApprovals(prev => ({ ...prev, [recId]: false }));
-      } finally {
-        setSelectedAttendance(null);
       }
-    };
 
-    runApprovalTask();
+      const finalRemarks = (rec.autoCheckout && !rec.remark) ? "System Auto-Logged OUT (16h Limit Threshold reached)" : rec.remark;
+
+      if (rec.isVirtual) {
+        await addRecord('attendance', {
+          employeeId: rec.employeeId,
+          employeeName: rec.employeeName,
+          date: rec.date,
+          status: 'ABSENT',
+          attendanceType: rec.attendanceType || 'ABSENT',
+          approved: true,
+          approvedBy: approverName,
+          remark: finalRemarks || "Approved as Absent",
+        });
+      } else {
+        const finalDbId = rec.id || (rec as any)._id;
+        await updateRecord('attendance', finalDbId, {
+          outTime: finalOutTime || null,
+          outDate: finalOutDate || null,
+          hours: finalHours,
+          approved: true,
+          approvedBy: approverName,
+          remark: finalRemarks,
+        });
+      }
+      await refreshData();
+    } catch (e) {
+      setLocalApprovals(prev => ({ ...prev, [recId]: false }));
+    } finally {
+      setSelectedAttendance(null);
+    }
   };
 
   const toggleRecordSelection = (id: string) => {
@@ -585,56 +581,52 @@ export default function ApprovalsPage() {
     setSelectedRecordIds(new Set());
     toast({ title: `Bulk approved ${recordsToApprove.length} records successfully.` });
 
-    const runBulkTask = async () => {
+    try {
       const promises = recordsToApprove.map(async (rec) => {
-        try {
-          let finalOutTime = rec.outTime;
-          let finalOutDate = rec.outDate || rec.date;
-          let finalHours = rec.hours || 0;
+        let finalOutTime = rec.outTime;
+        let finalOutDate = rec.outDate || rec.date;
+        let finalHours = rec.hours || 0;
 
-          if (!rec.isVirtual && rec.autoCheckout && !rec.outTime) {
-            const inDT = parseISO(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}:00`);
-            if (inDT && isValid(inDT)) {
-              const autoOutDT = addHours(inDT, 16);
-              finalOutTime = format(autoOutDT, "HH:mm");
-              finalOutDate = format(autoOutDT, "yyyy-MM-dd");
-              finalHours = 16.0;
-            }
+        if (!rec.isVirtual && rec.autoCheckout && !rec.outTime) {
+          const inDT = parseISO(`${rec.inDate || rec.date}T${rec.inTime || "00:00"}:00`);
+          if (inDT && isValid(inDT)) {
+            const autoOutDT = addHours(inDT, 16);
+            finalOutTime = format(autoOutDT, "HH:mm");
+            finalOutDate = format(autoOutDT, "yyyy-MM-dd");
+            finalHours = 16.0;
           }
+        }
 
-          const finalRemarks = (rec.autoCheckout && !rec.remark) ? "System Auto-Logged OUT (16h Limit Threshold reached)" : rec.remark;
+        const finalRemarks = (rec.autoCheckout && !rec.remark) ? "System Auto-Logged OUT (16h Limit Threshold reached)" : rec.remark;
 
-          if (rec.isVirtual) {
-            await addRecord('attendance', {
-              employeeId: rec.employeeId,
-              employeeName: rec.employeeName,
-              date: rec.date,
-              status: 'ABSENT',
-              attendanceType: rec.attendanceType || 'ABSENT',
-              approved: true,
-              approvedBy: approverName,
-              remark: finalRemarks || "Approved as Absent",
-            }, true);
-          } else {
-            const finalDbId = rec.id || (rec as any)._id;
-            await updateRecord('attendance', finalDbId, {
-              outTime: finalOutTime || null,
-              outDate: finalOutDate || null,
-              hours: finalHours,
-              approved: true,
-              approvedBy: approverName,
-              remark: finalRemarks,
-            }, true);
-          }
-        } catch (e) {
-          console.error("Bulk approve failed for", rec.id || (rec as any)._id, e);
+        if (rec.isVirtual) {
+          await addRecord('attendance', {
+            employeeId: rec.employeeId,
+            employeeName: rec.employeeName,
+            date: rec.date,
+            status: 'ABSENT',
+            attendanceType: rec.attendanceType || 'ABSENT',
+            approved: true,
+            approvedBy: approverName,
+            remark: finalRemarks || "Approved as Absent",
+          }, true);
+        } else {
+          const finalDbId = rec.id || (rec as any)._id;
+          await updateRecord('attendance', finalDbId, {
+            outTime: finalOutTime || null,
+            outDate: finalOutDate || null,
+            hours: finalHours,
+            approved: true,
+            approvedBy: approverName,
+            remark: finalRemarks,
+          }, true);
         }
       });
       await Promise.all(promises);
       await refreshData();
-    };
-
-    runBulkTask();
+    } catch (e) {
+      console.error("Bulk approve synchronization failure", e);
+    }
   };
 
   const formatLocation = (address?: string, lat?: number, lng?: number) => {
@@ -720,53 +712,51 @@ export default function ApprovalsPage() {
     
     toast({ title: "Attendance Entry Verified & Updated" });
 
-    const commitSilentUpdate = async () => {
-      try {
-        const modifierName = verifiedUser?.fullName || "HR_ADMIN";
-        const finalDbId = selectedAttendance.id && !selectedAttendance.id.startsWith('v-') ? selectedAttendance.id : ((selectedAttendance as any)._id || '');
+    try {
+      const modifierName = verifiedUser?.fullName || "HR_ADMIN";
+      const finalDbId = selectedAttendance.id && !selectedAttendance.id.startsWith('v-') ? selectedAttendance.id : ((selectedAttendance as any)._id || '');
 
-        if (selectedAttendance.isVirtual) {
-          await addRecord('attendance', {
-            inPlant: editData.plant,
-            inDate: editData.inDate,
-            inTime: editData.inTime,
-            outDate: editData.outDate,
-            outTime: editData.outTime,
-            hours: calculatedHours,
-            remark: editData.remark,
-            employeeId: selectedAttendance.employeeId,
-            employeeName: selectedAttendance.employeeName,
-            date: selectedAttendance.date,
-            status: 'PRESENT',
-            attendanceType: 'OFFICE',
-            approved: false,
-            address: 'Manually Created Log',
-            unapprovedOutDuration: 0
-          });
-        } else {
-          await updateRecord('attendance', finalDbId, {
-            inPlant: editData.plant,
-            inDate: editData.inDate,
-            inTime: editData.inTime,
-            outDate: editData.outDate,
-            outTime: editData.outTime,
-            hours: calculatedHours,
-            remark: editData.remark,
-            editedBy: modifierName,
-            editedAt: new Date().toISOString()
-          });
-        }
-      } catch (e) {
-        setLocalEdits(prev => {
-          const fresh = { ...prev };
-          delete fresh[recId];
-          return fresh;
+      if (selectedAttendance.isVirtual) {
+        await addRecord('attendance', {
+          inPlant: editData.plant,
+          inDate: editData.inDate,
+          inTime: editData.inTime,
+          outDate: editData.outDate,
+          outTime: editData.outTime,
+          hours: calculatedHours,
+          remark: editData.remark,
+          employeeId: selectedAttendance.employeeId,
+          employeeName: selectedAttendance.employeeName,
+          date: selectedAttendance.date,
+          status: 'PRESENT',
+          attendanceType: 'OFFICE',
+          approved: false,
+          address: 'Manually Created Log',
+          unapprovedOutDuration: 0
+        });
+      } else {
+        await updateRecord('attendance', finalDbId, {
+          inPlant: editData.plant,
+          inDate: editData.inDate,
+          inTime: editData.inTime,
+          outDate: editData.outDate,
+          outTime: editData.outTime,
+          hours: calculatedHours,
+          remark: editData.remark,
+          editedBy: modifierName,
+          editedAt: new Date().toISOString()
         });
       }
-    };
-
-    setTimeout(commitSilentUpdate, 0);
-    setSelectedAttendance(null);
+      await refreshData();
+    } catch (e) {
+      setLocalEdits(prev => {
+        const fresh = { ...prev };
+        delete fresh[recId];
+        return fresh;
+      });
+    } finally {
+      setSelectedAttendance(null);
+    }
   };
 
   const handlePostAttendanceReject = async () => {
@@ -792,75 +782,68 @@ export default function ApprovalsPage() {
     
     toast({ title: "Log Rejected Successfully", description: "Record has been invalidated and moved to History Queue." });
 
-    const runSilentRejection = async () => {
-      try {
-        if (rec.isVirtual) {
-          await addRecord('attendance', {
-            employeeId: rec.employeeId,
-            employeeName: rec.employeeName,
-            date: rec.date,
-            status: 'REJECTED',
-            attendanceType: 'ABSENT',
-            approved: true,
-            approvedBy: approver,
-            remark: attendanceRejectReason,
-          });
-        } else {
-          const finalDbId = rec.id || (rec as any)._id;
-          await updateRecord('attendance', finalDbId, {
-            status: 'REJECTED',
-            hours: 0,
-            attendanceType: 'ABSENT',
-            approved: true,
-            approvedBy: approver,
-            remark: attendanceRejectReason,
-          });
-        }
-      } catch (e) {
-        setLocalApprovals(prev => ({ ...prev, [recId]: false }));
-        setLocalEdits(prev => {
-          const fresh = { ...prev };
-          delete fresh[recId];
-          return fresh;
+    try {
+      if (rec.isVirtual) {
+        await addRecord('attendance', {
+          employeeId: rec.employeeId,
+          employeeName: rec.employeeName,
+          date: rec.date,
+          status: 'REJECTED',
+          attendanceType: 'ABSENT',
+          approved: true,
+          approvedBy: approver,
+          remark: attendanceRejectReason,
         });
-        toast({ variant: "destructive", title: "Action Failed", description: "Rejection failed to sync." });
+      } else {
+        const finalDbId = rec.id || (rec as any)._id;
+        await updateRecord('attendance', finalDbId, {
+          status: 'REJECTED',
+          hours: 0,
+          attendanceType: 'ABSENT',
+          approved: true,
+          approvedBy: approver,
+          remark: attendanceRejectReason,
+        });
       }
-    };
-
-    setTimeout(runSilentRejection, 0);
-    setAttendanceRejectReason("");
-    setSelectedAttendance(null);
+      await refreshData();
+    } catch (e) {
+      setLocalApprovals(prev => ({ ...prev, [recId]: false }));
+      setLocalEdits(prev => {
+        const fresh = { ...prev };
+        delete fresh[recId];
+        return fresh;
+      });
+      toast({ variant: "destructive", title: "Action Failed", description: "Rejection failed to sync." });
+    } finally {
+      setAttendanceRejectReason("");
+      setSelectedAttendance(null);
+    }
   };
 
-  const handleRestoreAttendance = (rec: AttendanceItem) => {
+  const handleRestoreAttendance = async (rec: AttendanceItem) => {
     if (rec.isVirtual) return; 
     const recId = rec.id || (rec as any)._id || '';
 
     setLocalApprovals(prev => ({ ...prev, [recId]: false }));
     toast({ title: "Record Restored", description: "Moved back to Pending queue." });
 
-    const runRestoreTask = async () => {
-      try {
-        const finalDbId = rec.id || (rec as any)._id;
-        await updateRecord('attendance', finalDbId, {
-          approved: false,
-          approvedBy: null,
-          editedBy: null
-        });
-      } catch (e) {
-        setLocalApprovals(prev => ({ ...prev, [recId]: true }));
-      }
-    };
-
-    runRestoreTask();
+    try {
+      const finalDbId = rec.id || (rec as any)._id;
+      await updateRecord('attendance', finalDbId, {
+        approved: false,
+        approvedBy: null,
+        editedBy: null
+      });
+      await refreshData();
+    } catch (e) {
+      setLocalApprovals(prev => ({ ...prev, [recId]: true }));
+    }
   };
 
   const handleOpenExitDetails = (event: any) => {
     setSelectedExitEvent(event);
     setIsExitDetailsOpen(true);
   };
-
-  // --- Leave Management Handlers ---
 
   const pendingLeaveRequests = useMemo(() => {
     return (leaveRequests || []).filter(l => {
@@ -897,6 +880,7 @@ export default function ApprovalsPage() {
     });
 
     toast({ title: "Leave Approved", description: "The leave request has been approved." });
+    await refreshData();
     setIsLeaveApproveOpen(false);
     setSelectedLeaveRequest(null);
   };
@@ -920,6 +904,7 @@ export default function ApprovalsPage() {
     } as any);
 
     toast({ title: "Leave Rejected", description: "The leave request has been rejected." });
+    await refreshData();
     setIsLeaveRejectOpen(false);
     setSelectedLeaveRequest(null);
     setLeaveRejectReason("");
@@ -1057,7 +1042,6 @@ export default function ApprovalsPage() {
               </TableHeader>
               <TableBody>
                 {pendingLeaveRequests.map((leave: any) => {
-                  // Strict Check: Kya leave ki 'To Date' aaj se purani ho chuki hai?
                   const isLeavePastThreshold = leave.toDate ? isBefore(startOfDay(parseISO(leave.toDate)), startOfToday()) : false;
 
                   return (
@@ -1363,7 +1347,7 @@ export default function ApprovalsPage() {
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t">
             <Button className="w-full h-12 font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl uppercase tracking-widest text-xs shadow-md" onClick={() => setIsExitDetailsOpen(false)}>
-              CLOSE LEDGER VIEWER
+              CLOSE
             </Button>
           </DialogFooter>
         </DialogContent>
