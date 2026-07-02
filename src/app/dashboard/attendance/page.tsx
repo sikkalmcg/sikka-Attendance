@@ -89,7 +89,6 @@ function LeaveRequestForm() {
 
   const todayStr = format(startOfToday(), "yyyy-MM-dd");
 
-  // Recommended leave types data options
   const recommendedLeaves = [
     "Sick Leave",
     "Casual Leave",
@@ -188,13 +187,10 @@ function LeaveRequestForm() {
           <DialogDescription className="text-xs text-slate-400 uppercase font-semibold">Fill in the details below to apply for leave.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          
-          {/* Leave Purpose / Type Field with Suggestions */}
           <div className="space-y-2">
             <Label htmlFor="purpose" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Leave Purpose / Type</Label>
             <Input id="purpose" placeholder="e.g. Sick Leave, Casual Leave" value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
             
-            {/* Recommendation Badges UI implementation block */}
             <div className="flex flex-wrap gap-1.5 pt-0.5">
               {recommendedLeaves.map((leaveType) => (
                 <Badge
@@ -501,6 +497,14 @@ export default function AttendancePage() {
     return false;
   }, [verifiedUser]);
 
+  // --- AUTOMATIC AUTO-OUT EFFECT LAYER ---
+  useEffect(() => {
+    if (isStale && activeRecord && !isMutatingAttendance && !isAutoTriggering.current) {
+      requestLocation("OUT_AUTO");
+    }
+  }, [isStale, activeRecord]);
+
+  // --- REWORKED HIGH-RESPONSE GEOFENCE TRACKER WITH SYNC ---
   useEffect(() => {
     if (!activeRecord || activeRecord.status !== "Open" || !navigator.geolocation) return;
 
@@ -560,10 +564,12 @@ export default function AttendancePage() {
               }
             }
 
+            // Sync with backend & force reload states for real-time approval lists
             await updateRecord('attendance', activeRecord.id || activeRecord._id, {
               exitEvents: currentEvents,
               currentGeofenceStatus: "Outside Plant"
             });
+            await refreshData();
           } else {
             if (currentActiveEvent) {
               const exitTimeParsed = parseISO(currentActiveEvent.exitTime.replace(" ", "T"));
@@ -581,6 +587,7 @@ export default function AttendancePage() {
                 title: "Returned to Plant",
                 description: `Welcome back inside the geofence perimeter.`
               });
+              await refreshData();
             }
           }
         },
@@ -591,7 +598,8 @@ export default function AttendancePage() {
       );
     };
 
-    const geofenceWorkerId = setInterval(trackGeofenceBoundary, 30 * 60 * 1000);
+    // Tracking loop performance calibrated to 2 minutes for immediate visual response
+    const geofenceWorkerId = setInterval(trackGeofenceBoundary, 2 * 60 * 1000);
     return () => clearInterval(geofenceWorkerId);
   }, [activeRecord, plants]);
 
@@ -833,6 +841,7 @@ export default function AttendancePage() {
         remark: remark,
         approved: false,
         unapprovedOutDuration: 0,
+        currentGeofenceStatus: detectedPlant ? "Inside Plant" : "Outside Plant",
         exitEvents: []
       });
 
@@ -1185,7 +1194,7 @@ export default function AttendancePage() {
           </div>
       </div>
 
-      {/* --- PERSONAL LEAVE REQUEST APPROVAL HISTORY SECTION --- */}
+      {/* --- LEAVE APPROVAL HISTORY SECTION --- */}
       <div className="space-y-4 pt-4">
         <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
           <CalendarDays className="w-5 h-5 text-primary" /> Leave Approval History
@@ -1367,14 +1376,11 @@ export default function AttendancePage() {
             </DialogTitle>
           </DialogHeader>
           <div className="p-10 space-y-6">
-            
-            {/* Employee Name */}
             <div>
               <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee Name</Label>
               <p className="text-md font-black text-slate-900 uppercase mt-0.5">{effectiveEmployeeName}</p>
             </div>
 
-            {/* Current Date & Time */}
             <div>
               <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
               <p className="text-sm font-bold text-slate-700 mt-0.5">
@@ -1382,7 +1388,6 @@ export default function AttendancePage() {
               </p>
             </div>
 
-            {/* Current Employee Location */}
             <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 shadow-inner">
               <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-3">
                 <Navigation className="w-3.5 h-3.5" /> Captured GPS Address
@@ -1398,7 +1403,6 @@ export default function AttendancePage() {
               </div>
             </div>
 
-            {/* Plant Location Verification */}
             {detectedPlant ? (
               <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-3">
                 <div className="bg-emerald-500 p-2 rounded-xl text-white">
@@ -1410,7 +1414,6 @@ export default function AttendancePage() {
                 </div>
               </div>
             ) : (
-              /* Outside Plant Radius */
               detectedAddress && (
                 <div className="space-y-4 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
                   <div className="flex items-start gap-2 text-rose-600 bg-rose-50/50 p-3 rounded-xl border border-rose-100">
@@ -1458,7 +1461,7 @@ export default function AttendancePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Mark OUT Confirmation / Locked Banner Section */}
+      {/* Mark OUT Confirmation Dialog */}
       <Dialog
         open={activeDialog === "OUT"}
         onOpenChange={(o) => {
