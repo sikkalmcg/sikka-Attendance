@@ -43,6 +43,7 @@ import {
   ChevronRight,
   FileSpreadsheet,
   UserCheck,
+  FileDown,
   AlertCircle,
   CheckSquare,
   CalendarDays,
@@ -56,7 +57,6 @@ import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOf
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
-const LEAVE_ITEMS_PER_PAGE = 10;
 const PROJECT_START_DATE_STR = "2026-04-01";
 
 interface AttendanceItem {
@@ -97,6 +97,7 @@ interface AttendanceItem {
 
 interface LeaveRequestItem {
   id: string;
+  _id?: string;
   employeeId: string;
   employeeName: string;
   department?: string;
@@ -106,8 +107,8 @@ interface LeaveRequestItem {
   toDate: string;
   days: number;
   remark?: string;
-  status: 'Pending' | 'Approved' | 'Rejected' | 'UNDER_PROCESS' | 'APPROVED' | 'REJECTED';
-  processedByUserId?: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | 'UNDER_PROCESS' | 'APPROVED' | 'REJECTED' | 'Expired';
+  processedByUserId?: string | null;
   processedAt?: string;
 }
 
@@ -172,6 +173,7 @@ export default function ApprovalsPage() {
   const [localEdits, setLocalEdits] = useState<Record<string, Partial<AttendanceItem>>>({});
 
   const { toast } = useToast();
+  
   const filterMonths = useMemo(() => {
     const options = [];
     const date = new Date();
@@ -844,20 +846,46 @@ export default function ApprovalsPage() {
     setSelectedExitEvent(event);
     setIsExitDetailsOpen(true);
   };
+  
+  const enrichedLeaveRequests = useMemo(() => {
+    const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
+    return (leaveRequests || []).map(l => {
+      const employee = employeeMap.get(l.employeeId);
+      return {
+        ...l,
+        department: employee?.department || "N/A",
+        designation: employee?.designation || "N/A",
+      };
+    });
+  }, [leaveRequests, employees]);
 
   const pendingLeaveRequests = useMemo(() => {
-    return (leaveRequests || []).filter(l => {
+    const today = startOfToday();
+    return enrichedLeaveRequests.map(l => {
       const status = String(l.status).toUpperCase();
-      return status === 'PENDING' || status === 'UNDER_PROCESS';
+      if ((status === 'PENDING' || status === 'UNDER_PROCESS') && isBefore(startOfDay(parseISO(l.toDate)), today)) {
+        return { ...l, status: 'Expired' };
+      }
+      return l;
+    }).filter(l => {
+      const upperStatus = String(l.status).toUpperCase();
+      return upperStatus === 'PENDING' || upperStatus === 'UNDER_PROCESS';
     }) as LeaveRequestItem[];
-  }, [leaveRequests]);
+  }, [enrichedLeaveRequests]);
 
-  const approvedLeaveRequests = useMemo(() => {
-    return (leaveRequests || []).filter(l => {
+  const historyLeaveRequests = useMemo(() => {
+    const today = startOfToday();
+    return enrichedLeaveRequests.map(l => {
       const status = String(l.status).toUpperCase();
-      return status === 'APPROVED';
+      if ((status === 'PENDING' || status === 'UNDER_PROCESS') && isBefore(startOfDay(parseISO(l.toDate)), today)) {
+        return { ...l, status: 'Expired' };
+      }
+      return l;
+    }).filter(l => {
+      const upperStatus = String(l.status).toUpperCase();
+      return upperStatus === 'APPROVED' || upperStatus === 'REJECTED' || upperStatus === 'EXPIRED';
     }) as LeaveRequestItem[];
-  }, [leaveRequests]);
+  }, [enrichedLeaveRequests]);
 
   const handleOpenLeaveApprove = (leave: LeaveRequestItem) => {
     setSelectedLeaveRequest(leave);
@@ -869,20 +897,26 @@ export default function ApprovalsPage() {
     if (!selectedLeaveRequest || !updateLeaveRequest) return;
   
     const days = differenceInCalendarDays(new Date(editLeaveData.toDate), new Date(editLeaveData.fromDate)) + 1;
+    const reqId = selectedLeaveRequest.id || (selectedLeaveRequest as any)._id;
   
-    await updateLeaveRequest('leaveRequests', selectedLeaveRequest.id, {
-      status: "APPROVED",
-      fromDate: editLeaveData.fromDate,
-      toDate: editLeaveData.toDate,
-      days,
-      processedByUserId: verifiedUser?.fullName || "HR_ADMIN",
-      processedAt: new Date().toISOString(),
-    });
+    try {
+      await updateLeaveRequest('leaveRequests', reqId, {
+        status: "APPROVED",
+        fromDate: editLeaveData.fromDate,
+        toDate: editLeaveData.toDate,
+        days,
+        processedByUserId: verifiedUser?.fullName || "HR_ADMIN",
+        processedAt: new Date().toISOString(),
+      });
 
-    toast({ title: "Leave Approved", description: "The leave request has been approved." });
-    await refreshData();
-    setIsLeaveApproveOpen(false);
-    setSelectedLeaveRequest(null);
+      toast({ title: "Leave Approved", description: "The leave request has been approved successfully." });
+      await refreshData();
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to update leave status sync." });
+    } finally {
+      setIsLeaveApproveOpen(false);
+      setSelectedLeaveRequest(null);
+    }
   };
 
   const handleOpenLeaveReject = (leave: LeaveRequestItem) => {
@@ -896,19 +930,28 @@ export default function ApprovalsPage() {
       return;
     }
 
-    await updateLeaveRequest('leaveRequests', selectedLeaveRequest.id, {
-      status: "REJECTED",
-      remark: leaveRejectReason, 
-      processedByUserId: verifiedUser?.fullName || "HR_ADMIN",
-      processedAt: new Date().toISOString(),
-    } as any);
+    const reqId = selectedLeaveRequest.id || (selectedLeaveRequest as any)._id;
 
-    toast({ title: "Leave Rejected", description: "The leave request has been rejected." });
-    await refreshData();
-    setIsLeaveRejectOpen(false);
-    setSelectedLeaveRequest(null);
-    setLeaveRejectReason("");
+    try {
+      await updateLeaveRequest('leaveRequests', reqId, {
+        status: "REJECTED",
+        remark: leaveRejectReason, 
+        processedByUserId: verifiedUser?.fullName || "HR_ADMIN",
+        processedAt: new Date().toISOString(),
+      });
+  
+      toast({ title: "Leave Rejected", description: "The leave request has been rejected and moved to history." });
+      await refreshData();
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to reject leave request." });
+    } finally {
+      setIsLeaveRejectOpen(false);
+      setSelectedLeaveRequest(null);
+      setLeaveRejectReason("");
+    }
   };
+
+  if (!isMounted) return null;
 
   return (
     <div className="space-y-8 pb-12 px-4 max-w-7xl mx-auto">
@@ -1024,6 +1067,14 @@ export default function ApprovalsPage() {
           </Tabs>
       )}
 
+      {viewMode === 'leaves' && leaveView === 'history' && (
+          <div className="w-full flex justify-end">
+            <Button variant="outline" className="h-10 font-black text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 px-6 rounded-xl uppercase tracking-wider">
+              <FileDown className="w-4 h-4" /> Export Excel
+            </Button>
+          </div>
+      )}
+
       {viewMode === 'leaves' && leaveView === 'pending' && (
         <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
           <CardContent className="p-0">
@@ -1031,7 +1082,7 @@ export default function ApprovalsPage() {
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
+                  <TableHead>Department / Designation</TableHead>
                   <TableHead>Leave Type</TableHead>
                   <TableHead>From</TableHead>
                   <TableHead>To</TableHead>
@@ -1045,17 +1096,20 @@ export default function ApprovalsPage() {
                   const isLeavePastThreshold = leave.toDate ? isBefore(startOfDay(parseISO(leave.toDate)), startOfToday()) : false;
 
                   return (
-                    <TableRow key={leave.id}>
+                    <TableRow key={leave.id || leave._id}>
                       <TableCell>
                         <div className="font-bold">{leave.employeeName}</div>
                         <div className="text-xs text-muted-foreground">{leave.employeeId}</div>
                       </TableCell>
-                      <TableCell>{leave.department}</TableCell>
+                      <TableCell>
+                        <div className="font-bold">{leave.department}</div>
+                        <div className="text-xs text-muted-foreground">{leave.designation}</div>
+                      </TableCell>
                       <TableCell>{leave.purpose}</TableCell>
                       <TableCell>{formatDate(leave.fromDate)}</TableCell>
                       <TableCell>{formatDate(leave.toDate)}</TableCell>
                       <TableCell>{leave.days}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{leave.remark || '-'}</TableCell>
+                      <TableCell className="max-w-[200px] truncate" title={leave.remark}>{leave.remark || '-'}</TableCell>
                       <TableCell className="text-right pr-6">
                         <div className="flex gap-2 justify-end">
                           <Button size="sm" variant="outline" className="h-8 text-rose-600 border-rose-200 hover:bg-rose-50" onClick={() => handleOpenLeaveReject(leave)}>Reject</Button>
@@ -1077,6 +1131,62 @@ export default function ApprovalsPage() {
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                       No pending leave requests.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {viewMode === 'leaves' && leaveView === 'history' && (
+        <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Department / Designation</TableHead>
+                  <TableHead>Leave Type</TableHead>
+                  <TableHead>From</TableHead>
+                  <TableHead>To</TableHead>
+                  <TableHead>Days</TableHead>
+                  <TableHead>Remarks</TableHead>
+                  <TableHead>Approved Date</TableHead>
+                  <TableHead>Approved By</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {historyLeaveRequests.map((leave: any) => (
+                  <TableRow key={leave.id || leave._id}>
+                    <TableCell><div className="font-bold">{leave.employeeName}</div><div className="text-xs text-muted-foreground">{leave.employeeId}</div></TableCell>
+                    <TableCell>
+                      <div className="font-bold">{leave.department}</div>
+                      <div className="text-xs text-muted-foreground">{leave.designation}</div>
+                    </TableCell>
+                    <TableCell>{leave.purpose}</TableCell>
+                    <TableCell>{formatDate(leave.fromDate)}</TableCell>
+                    <TableCell>{formatDate(leave.toDate)}</TableCell>
+                    <TableCell>{leave.days}</TableCell>
+                    <TableCell className="max-w-[200px] truncate" title={leave.remark}>{leave.remark || '-'}</TableCell>
+                    <TableCell>{leave.processedAt ? formatDate(leave.processedAt) : '-'}</TableCell>
+                    <TableCell>{leave.processedByUserId || '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant={
+                        String(leave.status).toUpperCase() === 'APPROVED' ? 'default' : 
+                        String(leave.status).toUpperCase() === 'REJECTED' ? 'destructive' : 'secondary'
+                      }>
+                        {leave.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                 {historyLeaveRequests.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
+                      No leave requests history found.
                     </TableCell>
                   </TableRow>
                 )}
@@ -1228,7 +1338,6 @@ export default function ApprovalsPage() {
       </Card>
       )}
 
-      {/* --- EMPLOYEE PLANT EXIT HISTORY SECTION --- */}
       {viewMode === 'exits' && (
         <div className="space-y-4 animate-in fade-in duration-200">
           <div className="flex items-center gap-2 text-rose-600 bg-rose-50/50 p-4 rounded-2xl border border-rose-100 shadow-sm">
@@ -1296,8 +1405,6 @@ export default function ApprovalsPage() {
           </Card>
         </div>
       )}
-
-      {/* --- MODALS --- */}
 
       {/* VIEW DETAILS: GEOFENCE LOCATION TRAJECTORY DIALOG */}
       <Dialog open={isExitDetailsOpen} onOpenChange={setIsExitDetailsOpen}>
@@ -1487,7 +1594,7 @@ export default function ApprovalsPage() {
           </DialogHeader>
           <div className="p-6 space-y-4 bg-white">
              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Rejection Reason * (Mandatory)</Label>
-             <Textarea placeholder="Specify exact correction discrepancy details for record rejection..." value={attendanceRejectReason} onChange={(e) => setAttendanceRejectReason(e.target.value)} className="min-h-[100px] border-slate-200 bg-slate-50 rounded-xl font-medium" />
+             <Textarea placeholder="Specify exact discrepancy details for record rejection..." value={attendanceRejectReason} onChange={(e) => setAttendanceRejectReason(e.target.value)} className="min-h-[100px] border-slate-200 bg-slate-50 rounded-xl font-medium" />
           </div>
           <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
              <Button variant="ghost" onClick={() => { setIsAttendanceRejectOpen(false); setSelectedAttendance(null); }} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>

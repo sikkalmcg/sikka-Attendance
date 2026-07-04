@@ -85,7 +85,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       let collectionsToFetch: string[] = [];
 
       if (currentUserRole === 'EMPLOYEE') {
-        collectionsToFetch = ['attendance', 'plants', 'holidays'];
+        collectionsToFetch = ['attendance', 'plants', 'holidays', 'leaveRequests'];
       } else {
         // Admin, SUPER_ADMIN aur HR teeno ke liye global core tables load karein
         collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests', 'users'];

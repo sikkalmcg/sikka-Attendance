@@ -80,7 +80,7 @@ const getPreciseDistance = (lat1: number, lon1: number, lat2: number, lon2: numb
 // --- LEAVE REQUEST FORM COMPONENT ---
 function LeaveRequestForm() {
   const [open, setOpen] = useState(false);
-  const { addRecord, verifiedUser, leaveRequests } = useData();
+  const { addRecord, verifiedUser, leaveRequests, refreshData } = useData();
   const { toast } = useToast();
   const [purpose, setPurpose] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -163,6 +163,7 @@ function LeaveRequestForm() {
         status: 'UNDER_PROCESS',
         createdAt: new Date().toISOString()
       });
+      await refreshData();
       toast({ title: "Leave Request Submitted", description: "Your request has been sent for approval." });
       setOpen(false);
       setPurpose("");
@@ -351,11 +352,20 @@ export default function AttendancePage() {
     return fullHistory;
   }, [attendanceRecords, effectiveEmployeeId, holidays, effectiveEmployeeName]);
 
-  const userLeaveRequests = useMemo(() => {
-    return (leaveRequests || [])
-      .filter((l: any) => l.employeeId === effectiveEmployeeId)
-      .sort((a: any, b: any) => new Date(b.createdAt || b.fromDate).getTime() - new Date(a.createdAt || a.fromDate).getTime());
-  }, [leaveRequests, effectiveEmployeeId]);
+  // Leave requests are now filtered directly on each render without memoization.
+  const currentEmpIdForLeaves = String(effectiveEmployeeId || "").trim().toUpperCase();
+  const userLeaveRequests = (!currentEmpIdForLeaves || currentEmpIdForLeaves === "N/A")
+    ? []
+    : (leaveRequests || [])
+        .filter((l: any) => {
+          const targetEmpId = String(l.employeeId || (l as any).employeeID || "").trim().toUpperCase();
+          return targetEmpId === currentEmpIdForLeaves;
+        })
+        .sort((a: any, b: any) => {
+          const dateA = a.createdAt ? new Date(a.createdAt) : new Date(a.fromDate);
+          const dateB = b.createdAt ? new Date(b.createdAt) : new Date(b.fromDate);
+          return dateB.getTime() - dateA.getTime();
+        });
 
   const allPlantExitHistory = useMemo(() => {
     const exits: any[] = [];
@@ -1194,10 +1204,10 @@ export default function AttendancePage() {
           </div>
       </div>
 
-      {/* --- LEAVE APPROVAL HISTORY SECTION --- */}
+      {/* --- LEAVE HISTORY SECTION --- */}
       <div className="space-y-4 pt-4">
         <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
-          <CalendarDays className="w-5 h-5 text-primary" /> Leave Approval History
+          <CalendarDays className="w-5 h-5 text-primary" /> Leave History
         </h3>
         <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
           <Table>
@@ -1222,7 +1232,7 @@ export default function AttendancePage() {
                 </TableRow>
               ) : (
                 userLeaveRequests.map((leave: any) => (
-                  <TableRow key={leave.id || leave._id} className="hover:bg-slate-50/50">
+                  <TableRow key={leave.id || leave._id}>
                     <TableCell className="text-xs font-bold text-slate-700">{leave.employeeName || effectiveEmployeeName}</TableCell>
                     <TableCell className="text-xs font-bold text-slate-600">{leave.purpose}</TableCell>
                     <TableCell className="text-xs font-bold text-slate-500">{formatDate(leave.fromDate)}</TableCell>
@@ -1235,7 +1245,8 @@ export default function AttendancePage() {
                         String(leave.status).toUpperCase() === 'REJECTED' ? "bg-rose-100 text-rose-700 border-none" :
                         "bg-amber-100 text-amber-700 border-none"
                       )}>
-                        {String(leave.status).toUpperCase() === 'APPROVED' ? 'Approved' : String(leave.status).toUpperCase() === 'REJECTED' ? 'Rejected' : 'Pending'}
+                        {String(leave.status).toUpperCase() === 'APPROVED' ? 'Approved' : 
+                         String(leave.status).toUpperCase() === 'REJECTED' ? 'Rejected' : 'Under Process'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-[10px] font-bold text-slate-600 uppercase font-mono">

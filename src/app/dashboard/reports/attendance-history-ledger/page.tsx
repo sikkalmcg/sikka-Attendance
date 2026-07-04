@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/context/data-context";
 import { format } from "date-fns";
 import { Download, Filter, Printer, Search, ArrowUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const ROWS_PAGE_SIZES = [50, 100, 250, 500] as const;
 const PROJECT_START_DATE_STR = "2026-04-01";
@@ -46,7 +47,6 @@ type LedgerRow = {
   shiftType: "Day Shift" | "Night Shift";
   processedBy: string;
 };
-
 
 type SortBy =
   | "employeeId"
@@ -83,6 +83,22 @@ function statusBadgeClasses(status: string) {
   }
 }
 
+// --- NEW UTILITY FOR EXCEL-BASED WORKING HOUR LEDGER COLOR CRITERIA ---
+function getWorkingHoursColorClass(hoursStr: string) {
+  if (!hoursStr || hoursStr === "--" || hoursStr === "00:00") {
+    return "text-slate-400 font-medium";
+  }
+  
+  // "HH:MM" ko separate out karke decimal duration nikalne ke liye
+  const [hrs, mins] = hoursStr.split(":").map(Number);
+  const totalHours = hrs + (mins || 0) / 60;
+
+  if (totalHours < 8.0) {
+    return "text-rose-600 bg-rose-50/60 px-2 py-0.5 rounded-md font-black border border-rose-100"; // < 8 hours is Red
+  }
+  return "text-emerald-600 bg-emerald-50/60 px-2 py-0.5 rounded-md font-black border border-emerald-100"; // >= 8 hours is Green
+}
+
 export default function AttendanceHistoryLedgerPage() {
   const { employees = [], plants = [], verifiedUser } = useData();
   const { toast } = useToast();
@@ -98,7 +114,6 @@ export default function AttendanceHistoryLedgerPage() {
   const [attendanceStatus, setAttendanceStatus] = useState("ALL_ATTENDANCE");
 
   const [processedBy, setProcessedBy] = useState("");
-  // FIX: Khali string "" ki jagah default value "all" rakhi h Radix component crash se bachne ke liye
   const [search, setSearch] = useState("all"); 
 
   const [sortBy, setSortBy] = useState<SortBy>("employeeId");
@@ -150,7 +165,6 @@ export default function AttendanceHistoryLedgerPage() {
     if (attendanceStatus && attendanceStatus !== "ALL_ATTENDANCE") params.set("attendanceStatus", attendanceStatus);
     if (processedBy) params.set("processedBy", processedBy);
     
-    // FIX: URL parameter me tabhi bhejein agar value "all" na ho aur vastav me search keyword ho
     if (search && search !== "all") params.set("search", search);
 
     return `/api/reports/attendance-history-ledger?${params.toString()}`;
@@ -217,7 +231,6 @@ export default function AttendanceHistoryLedgerPage() {
     params.set("export", "true");
     params.set("format", format);
 
-    // Saara data export chahiye: pageSize always ALL
     params.set("page", String(page));
     params.set("pageSize", "ALL");
 
@@ -391,7 +404,7 @@ export default function AttendanceHistoryLedgerPage() {
   }, [employees, verifiedUser]);
 
   const attendanceStatusOptions: string[] = [
-    "ALL_ATTENDANCE", // FIX: Alag explicit string default identify karne ke liye
+    "ALL_ATTENDANCE", 
     "Present",
     "Absent",
     "Holiday",
@@ -404,13 +417,13 @@ export default function AttendanceHistoryLedgerPage() {
     <div className="space-y-8 pb-20 px-4 max-w-7xl mx-auto">
       <div className="flex justify-between items-center border-b pb-5">
         <div>
-          <h1 className="text-3xl font-black uppercase">Reports → Attendance History Ledger</h1>
+          <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">Reports → Attendance History Ledger</h1>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">
             One record per employee per calendar day (server-side pagination)
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={() => exportReport("csv")} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10">
+          <Button onClick={() => exportReport("csv")} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 text-white">
             <Download className="w-4 h-4" /> Export CSV
           </Button>
           <Button
@@ -426,8 +439,7 @@ export default function AttendanceHistoryLedgerPage() {
             <Download className="w-4 h-4" /> Export PDF
           </Button>
 
-
-          <Button onClick={printReport} className="bg-slate-900 hover:bg-slate-800 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg">
+          <Button onClick={printReport} className="bg-slate-900 hover:bg-slate-800 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg text-white">
             <Printer className="w-4 h-4" /> Print
           </Button>
         </div>
@@ -442,16 +454,16 @@ export default function AttendanceHistoryLedgerPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">From Date</label>
-            <Input type="date" value={fromDate} onChange={(e) => (setFromDate(e.target.value), setPage(1))} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
+            <Input type="date" value={fromDate} onChange={(e) => (setFromDate(e.target.value), setPage(1))} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50 text-slate-700" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">To Date</label>
-            <Input type="date" value={toDate} onChange={(e) => (setToDate(e.target.value), setPage(1))} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
+            <Input type="date" value={toDate} onChange={(e) => (setToDate(e.target.value), setPage(1))} className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50 text-slate-700" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Scope Filter by Plant</label>
             <Select value={plant} onValueChange={(v) => (setPlant(v), setPage(1))}>
-              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase">
+              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase text-slate-700">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl">
@@ -476,11 +488,10 @@ export default function AttendanceHistoryLedgerPage() {
                   setPage(1);
                 }}
               >
-                <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase">
+                <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase text-slate-700">
                   <SelectValue placeholder="Select employee..." />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl">
-                  {/* FIX: value="" ko badalkar "all" kiya h runtime crash rokne ke liye */}
                   <SelectItem value="all" className="font-bold text-xs uppercase">
                     All Employees
                   </SelectItem>
@@ -508,12 +519,12 @@ export default function AttendanceHistoryLedgerPage() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Employee ID (exact)</label>
-            <Input value={employeeId} onChange={(e) => (setEmployeeId(e.target.value), setPage(1))} placeholder="e.g. EMP001" className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
+            <Input value={employeeId} onChange={(e) => (setEmployeeId(e.target.value), setPage(1))} placeholder="e.g. EMP001" className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50 text-slate-700" />
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Department</label>
             <Select value={department} onValueChange={(v) => (setDepartment(v), setPage(1))}>
-              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase">
+              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase text-slate-700">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
               <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl">
@@ -529,7 +540,7 @@ export default function AttendanceHistoryLedgerPage() {
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Designation</label>
             <Select value={designation} onValueChange={(v) => (setDesignation(v), setPage(1))}>
-              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase">
+              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase text-slate-700">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
               <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl">
@@ -545,7 +556,7 @@ export default function AttendanceHistoryLedgerPage() {
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Attendance Status</label>
             <Select value={attendanceStatus} onValueChange={(v) => (setAttendanceStatus(v), setPage(1))}>
-              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase">
+              <SelectTrigger className="h-12 bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs uppercase text-slate-700">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
               <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl">
@@ -563,7 +574,7 @@ export default function AttendanceHistoryLedgerPage() {
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Processed By</label>
-            <Input value={processedBy} onChange={(e) => (setProcessedBy(e.target.value), setPage(1))} placeholder="e.g. HR/ADMIN/Name" className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50" />
+            <Input value={processedBy} onChange={(e) => (setProcessedBy(e.target.value), setPage(1))} placeholder="e.g. HR/ADMIN/Name" className="h-12 font-bold rounded-xl border-slate-200 bg-slate-50 text-slate-700" />
           </div>
         </div>
       </Card>
@@ -578,7 +589,7 @@ export default function AttendanceHistoryLedgerPage() {
           </div>
           <div className="flex items-center gap-3">
             <Select value={String(pageSize)} onValueChange={(v) => (setPageSize(v as any), setPage(1))}>
-              <SelectTrigger className="h-10 bg-white/10 border-white/20 rounded-xl w-[160px]">
+              <SelectTrigger className="h-10 bg-white/10 border-white/20 rounded-xl w-[160px] text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="rounded-xl border border-slate-200 bg-white shadow-xl">
@@ -600,31 +611,31 @@ export default function AttendanceHistoryLedgerPage() {
             <Table className="min-w-[1400px]">
               <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">#</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer" onClick={() => onToggleSort("employeeId")}>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">#</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("employeeId")}>
                     Employee ID <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer" onClick={() => onToggleSort("employeeName")}>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("employeeName")}>
                     Employee Name <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Department / Designation</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer" onClick={() => onToggleSort("date")}>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Department / Designation</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("date")}>
                     Date <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">In Date & Time</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Out Date & Time</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Working Hours</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">In Plant</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">In Location</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Out Location</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Date & Time</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Date & Time</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-primary">Working Hours</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Plant</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Location</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Location</TableHead>
 
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer" onClick={() => onToggleSort("attendanceStatus")}>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("attendanceStatus")}>
                     Attendance Status <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer" onClick={() => onToggleSort("shiftType")}>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("shiftType")}>
                     Shift Type <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4">Processed By</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Processed By</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -651,22 +662,27 @@ export default function AttendanceHistoryLedgerPage() {
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.employeeName}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.department} / {r.designation}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.date}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-600">{r.inDateTime}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-600">{r.outDateTime}</TableCell>
-                        <TableCell className="px-4 py-3">
-                          <span className="font-mono font-black text-slate-900">{r.workingHours}</span>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.inDateTime}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.outDateTime}</TableCell>
+                        
+                        {/* --- EXCEL CONDITIONAL FORMATTING IMPLEMENTATION BLOCK --- */}
+                        <TableCell className="px-4 py-3 whitespace-nowrap">
+                          <span className={cn("font-mono text-xs shadow-none", getWorkingHoursColorClass(r.workingHours))}>
+                            {r.workingHours}
+                          </span>
                         </TableCell>
+                        
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inPlant || "--"}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inLocation}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.outLocation}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500 max-w-[200px] truncate" title={r.inLocation}>{r.inLocation}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500 max-w-[200px] truncate" title={r.outLocation}>{r.outLocation}</TableCell>
 
                         <TableCell className="px-4 py-3">
-                          <Badge className={`font-black text-[10px] px-2 py-1 border ${statusBadgeClasses(r.attendanceStatus)}`}>
+                          <Badge className={cn("font-black text-[10px] px-2 py-1 border shadow-none whitespace-nowrap", statusBadgeClasses(r.attendanceStatus))}>
                             {r.attendanceStatus}
                           </Badge>
                         </TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.shiftType}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.processedBy}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 whitespace-nowrap">{r.shiftType}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 whitespace-nowrap">{r.processedBy}</TableCell>
                       </TableRow>
                     );
                   })

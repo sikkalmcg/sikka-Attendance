@@ -30,7 +30,7 @@ function MarkAttendancePage() {
 
 function LeaveRequestForm() {
   const [open, setOpen] = useState(false);
-  const { addRecord, verifiedUser, leaveRequests } = useData();
+  const { addRecord, verifiedUser, leaveRequests, refreshData } = useData();
   const { toast } = useToast();
   const [purpose, setPurpose] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -96,6 +96,7 @@ function LeaveRequestForm() {
         status: 'UNDER_PROCESS',
       });
       toast({ title: "Leave Request Submitted", description: "Your request has been sent for approval." });
+      await refreshData(); // Refresh data to show the new request in history
       setOpen(false); // Close dialog on success
       setPurpose("");
       setFromDate("");
