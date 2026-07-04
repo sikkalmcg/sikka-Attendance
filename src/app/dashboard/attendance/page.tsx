@@ -245,6 +245,10 @@ export default function AttendancePage() {
   
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT" | "DETAILS">("NONE");
+
+  // Leave history pagination
+  const LEAVE_ROWS_PER_PAGE = 4;
+  const [leavePage, setLeavePage] = useState(1);
   
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
@@ -1206,10 +1210,36 @@ export default function AttendancePage() {
 
       {/* --- LEAVE HISTORY SECTION --- */}
       <div className="space-y-4 pt-4">
-        <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
-          <CalendarDays className="w-5 h-5 text-primary" /> Leave History
-        </h3>
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
+            <CalendarDays className="w-5 h-5 text-primary" /> Leave History
+          </h3>
+        </div>
         <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
+          <div className="flex justify-end gap-2 p-3 border-b bg-slate-50">
+            {userLeaveRequests.length > LEAVE_ROWS_PER_PAGE && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 font-bold text-xs border-slate-200"
+                  disabled={leavePage <= 1}
+                  onClick={() => setLeavePage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 font-bold text-xs border-emerald-200 text-emerald-700"
+                  disabled={leavePage >= Math.ceil(userLeaveRequests.length / LEAVE_ROWS_PER_PAGE)}
+                  onClick={() => setLeavePage((p) => Math.min(Math.ceil(userLeaveRequests.length / LEAVE_ROWS_PER_PAGE), p + 1))}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
@@ -1226,12 +1256,15 @@ export default function AttendancePage() {
             <TableBody>
               {userLeaveRequests.length === 0 ? (
                 <TableRow>
+
                   <TableCell colSpan={8} className="text-center py-8 text-xs font-bold text-slate-400 uppercase tracking-wider">
                     No leave requests logged for this employee context.
                   </TableCell>
                 </TableRow>
               ) : (
-                userLeaveRequests.map((leave: any) => (
+                userLeaveRequests
+                  .slice((leavePage - 1) * LEAVE_ROWS_PER_PAGE, leavePage * LEAVE_ROWS_PER_PAGE)
+                  .map((leave: any) => (
                   <TableRow key={leave.id || leave._id}>
                     <TableCell className="text-xs font-bold text-slate-700">{leave.employeeName || effectiveEmployeeName}</TableCell>
                     <TableCell className="text-xs font-bold text-slate-600">{leave.purpose}</TableCell>
