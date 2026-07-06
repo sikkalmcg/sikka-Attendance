@@ -119,10 +119,11 @@ export async function GET(req: Request) {
     const exportMode = q.get('export') === 'true';
     const exportFormat = String(q.get('format') || 'csv').toLowerCase();
 
-    // Excel/PDF are not implemented in this codebase yet.
-    // We keep exportFormat to unblock UI; only csv works for now.
-
     const printMode = q.get('print') === 'true';
+
+    // exportFormat: csv | excel | xlsx (UI uses "excel")
+    // We implement excel/xlsx using exceljs below.
+
 
     const pageStr = q.get('page') || '1';
     const page = Math.max(1, parseInt(pageStr, 10) || 1);

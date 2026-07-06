@@ -526,18 +526,23 @@ export default function AttendancePage() {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude: lat, longitude: lng } = position.coords;
-          const assignedPlant = plants.find(p => p.name === (activeRecord.inPlant || "Salt Plant")) || plants[0];
-          
-          if (!assignedPlant) return;
-
-          const distance = getPreciseDistance(lat, lng, assignedPlant.lat, assignedPlant.lng);
-          const allowedRadius = assignedPlant.radius || 700;
           const timeNowStr = format(getISTTime(), "yyyy-MM-dd HH:mm");
 
           let currentEvents = activeRecord.exitEvents ? [...activeRecord.exitEvents] : [];
           let currentActiveEvent = currentEvents.find(e => !e.returnTime);
 
-          if (distance > allowedRadius) {
+          // Spec: outside a 700m radius of ALL registered plant locations.
+          // Compute distance to the nearest plant.
+          const plantDistances = (plants || []).map(p => ({
+            plant: p,
+            distanceM: getPreciseDistance(lat, lng, p.lat, p.lng)
+          }));
+
+          const nearest = plantDistances.sort((a, b) => a.distanceM - b.distanceM)[0];
+          const allowedRadiusM = 700; // spec radius
+          const isOutsideAllPlants = !nearest || nearest.distanceM > allowedRadiusM;
+
+          if (isOutsideAllPlants) {
             let geocodedAddress = "Location Unavailable";
             try {
               const res = await fetch('/api/geocode/reverse', {
@@ -563,9 +568,12 @@ export default function AttendancePage() {
 
             if (!currentActiveEvent) {
               currentActiveEvent = {
+                // Spec: create a new Facility Exit record per outside->return cycle.
                 exitTime: timeNowStr,
                 returnTime: null,
                 outsideDuration: null,
+                returnPlantName: null,
+                markInPlantName: activeRecord.inPlant || "Salt Plant",
                 locationHistory: [newLocationHistoryPoint]
               };
               currentEvents.push(currentActiveEvent);
@@ -584,18 +592,28 @@ export default function AttendancePage() {
               currentGeofenceStatus: "Outside Plant"
             });
             await refreshData();
-          } else {
-            if (currentActiveEvent) {
-              const exitTimeParsed = parseISO(currentActiveEvent.exitTime.replace(" ", "T"));
-              const duration = differenceInMinutes(getISTTime(), exitTimeParsed);
+            } else {
+              if (currentActiveEvent) {
+                const exitTimeParsed = parseISO(currentActiveEvent.exitTime.replace(" ", "T"));
+                const duration = differenceInMinutes(getISTTime(), exitTimeParsed);
               
+              
+              // Spec: when re-entering ANY plant radius, update same exit record with return details.
+              const qualifyingPlants = (plants || [])
+                .map(p => ({ plant: p, distanceM: getPreciseDistance(lat, lng, p.lat, p.lng) }))
+                .filter(x => x.distanceM <= (x.plant.radius || 700))
+                .sort((a, b) => a.distanceM - b.distanceM);
+
+              const returnPlant = qualifyingPlants[0]?.plant;
+
               currentActiveEvent.returnTime = timeNowStr;
+              currentActiveEvent.returnPlantName = returnPlant?.name || null;
               currentActiveEvent.outsideDuration = `${Math.floor(duration / 60)}h ${duration % 60}m`;
 
               await updateRecord('attendance', activeRecord.id || activeRecord._id, {
-                exitEvents: currentEvents,
-                currentGeofenceStatus: "Inside Plant"
-              });
+              exitEvents: currentEvents,
+              currentGeofenceStatus: "Inside Plant"
+            });
 
               toast({
                 title: "Returned to Plant",
@@ -612,8 +630,10 @@ export default function AttendancePage() {
       );
     };
 
-    // Tracking loop performance calibrated to 2 minutes for immediate visual response
-    const geofenceWorkerId = setInterval(trackGeofenceBoundary, 2 * 60 * 1000);
+    // Spec: capture GPS every 1 hour while Marked IN
+    const geofenceWorkerId = setInterval(trackGeofenceBoundary, 60 * 60 * 1000);
+    // Also capture immediately on entering Open state so the first exit can be detected without waiting.
+    trackGeofenceBoundary();
     return () => clearInterval(geofenceWorkerId);
   }, [activeRecord, plants]);
 
@@ -1329,8 +1349,30 @@ export default function AttendancePage() {
                       <TableCell className="text-xs font-bold text-slate-600 uppercase">{event.plantName}</TableCell>
                       <TableCell className="text-xs font-medium text-slate-500">{event.inTime || "--:--"}</TableCell>
                       <TableCell className="text-xs font-medium text-slate-500">{event.outTime || "--:--"}</TableCell>
-                      <TableCell className="text-xs font-bold text-rose-600">{event.exitTime.split(" ")[1] || event.exitTime}</TableCell>
-                      <TableCell className="text-xs font-bold text-emerald-600">{event.returnTime ? event.returnTime.split(" ")[1] : "Still Outside"}</TableCell>
+                      <TableCell className="text-xs font-bold text-rose-600">
+                        {(() => {
+                          const t = event?.exitTime;
+                          if (!t) return "--";
+                          const s = String(t);
+                          // ISO => split out the HH:mm part
+                          if (s.includes('T')) {
+                            const d = new Date(s);
+                            if (!isNaN(d.getTime())) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+                          }
+                          return s.includes(' ') ? (s.split(' ')[1] || s) : s;
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-xs font-bold text-emerald-600">
+                        {event.returnTime ? (() => {
+                          const t = event.returnTime;
+                          const s = String(t);
+                          if (s.includes('T')) {
+                            const d = new Date(s);
+                            if (!isNaN(d.getTime())) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+                          }
+                          return s.includes(' ') ? (s.split(' ')[1] || s) : s;
+                        })() : "Still Outside"}
+                      </TableCell>
                       <TableCell className="text-xs font-black text-slate-700">{event.outsideDuration || "--"}</TableCell>
                       <TableCell className="text-right pr-6">
                         <Button 

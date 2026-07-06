@@ -46,7 +46,6 @@ import {
   FileDown,
   AlertCircle,
   CheckSquare,
-  CalendarDays,
   LogOut,
   Eye,
   MapPin
@@ -154,6 +153,7 @@ export default function ApprovalsPage() {
   const [isLeaveApproveOpen, setIsLeaveApproveOpen] = useState(false);
   const [isLeaveRejectOpen, setIsLeaveRejectOpen] = useState(false);
   const [leaveRejectReason, setLeaveRejectReason] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
   const [editLeaveData, setEditLeaveData] = useState<{ fromDate: string, toDate: string, days?: number }>({ fromDate: "", toDate: "" });
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -951,6 +951,47 @@ export default function ApprovalsPage() {
     }
   };
 
+  const handleExportLeaveHistory = async () => {
+    setIsExporting(true);
+    toast({ title: "Exporting...", description: "Generating leave history Excel file. Please wait." });
+
+    try {
+      const response = await fetch('/api/reports/leave-history');
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "Unreadable Error Chunk");
+        console.error(`Export Endpoint Error | Status: ${response.status} | Details:`, errorBody);
+        throw new Error(`HTTP Endpoint Status Error ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const contentDisposition = response.headers.get('content-disposition');
+      const filename = contentDisposition?.split('filename=')[1]?.replace(/"/g, '') || 'leave-history.xlsx';
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast({ title: "Success", description: "Leave history ledger structured and downloaded successfully." });
+
+    } catch (error: any) {
+      console.error("CRITICAL CLIENT SIDE EXPORT ACTION CATCH:", error);
+      toast({ 
+        variant: "destructive", 
+        title: "Export Failed", 
+        description: error.message || "Could not export leave history. Open console logs for structure mismatch trace." 
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!isMounted) return null;
 
   return (
@@ -1069,8 +1110,13 @@ export default function ApprovalsPage() {
 
       {viewMode === 'leaves' && leaveView === 'history' && (
           <div className="w-full flex justify-end">
-            <Button variant="outline" className="h-10 font-black text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 px-6 rounded-xl uppercase tracking-wider">
-              <FileDown className="w-4 h-4" /> Export Excel
+            <Button 
+              variant="outline" 
+              className="h-10 font-black text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 gap-2 px-6 rounded-xl uppercase tracking-wider"
+              onClick={handleExportLeaveHistory}
+              disabled={isExporting}
+            >
+              {isExporting ? <RotateCcw className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} {isExporting ? "Exporting..." : "Export Excel"}
             </Button>
           </div>
       )}
@@ -1443,7 +1489,7 @@ export default function ApprovalsPage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-10 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                        No historical perimeter violations coordinate blocks captured.
+                        No historical perimeter coordinate blocks captured.
                       </TableCell>
                     </TableRow>
                   )}
