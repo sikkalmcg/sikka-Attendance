@@ -1,30 +1,41 @@
-// Application constants
-export const ITEMS_PER_PAGE = 15;
-export const PROJECT_START_DATE_STR = "2026-04-01";
+// === नीचे ये मिसिंग कॉन्स्टेंट्स जोड़ें ===
 
-// Status constants
-export const STATUS_FILTER_OPTIONS = [
-  "ALL",
-  "Present",
-  "Absent on Leave",
-  "Absent",
-  "Weekly Off",
-  "Holiday",
+// 1. Statutory Rates (इसमें PF_EMPLOYEE_RATE होना अनिवार्य है)
+export const STATUTORY_RATES = {
+  PF_EMPLOYEE_RATE: 0.12, // उदाहरण के लिए 12% (अपने हिसाब से बदल लें)
+  PF_EMPLOYER_RATE: 0.12,
+  ESI_EMPLOYEE_RATE: 0.0075,
+  ESI_EMPLOYER_RATE: 0.0325,
+};
+
+// 2. Departments
+export const DEPARTMENTS = [
+  "HR",
+  "Operations",
+  "Sales",
+  "IT",
+  "Finance"
 ] as const;
 
-export const LEAVE_STATUS_FILTER_OPTIONS = [
-  "PENDING",
-  "UNDER_PROCESS",
-  "APPROVED",
-  "REJECTED",
-  "EXPIRED",
+// 3. Designations
+export const DESIGNATIONS = [
+  "Manager",
+  "Developer",
+  "Executive",
+  "Analyst",
+  "Team Lead"
 ] as const;
 
-// Month names for parsing
-export const MONTH_NAMES = [
-  "jan", "feb", "mar", "apr", "may", "jun",
-  "jul", "aug", "sep", "oct", "nov", "dec"
-] as const;
+// 4. App Permissions
+export const APP_PERMISSIONS = {
+  VIEW_DASHBOARD: "view:dashboard",
+  MANAGE_EMPLOYEES: "manage:employees",
+  MANAGE_ATTENDANCE: "manage:attendance",
+  MANAGE_SETTINGS: "manage:settings",
+};
 
-// Default approver name
-export const DEFAULT_APPROVER_NAME = "HR_ADMIN";
+// 5. Super Admin User
+export const SUPER_ADMIN_USER = {
+  email: "admin@sikka.com", // अपनी सही ईमेल डालें
+  role: "SUPER_ADMIN",
+};
