@@ -1,19 +1,27 @@
-# TODO
+# Approvals Plant Filter Fix Plan - DONE
 
-- [ ] Update Attendance page monthly summary to show **Worked Hours (HH:MM)** for employee self view.
-  - [ ] Modify `monthlySummaries` in `src/app/dashboard/attendance/page.tsx` to compute total working minutes from `hours`.
-  - [ ] Update Monthly Summary UI cards to display total worked hours.
-- [x] Verify UI changes (code): Attendance page monthly summary now includes Worked Hours (HH:MM).
-- [ ] Verify UI manually:
-  - [ ] Log in as employee, open Attendance page.
-  - [ ] Confirm each month card shows Present, Absent, and Worked Hours.
-  - [ ] Mark IN/OUT and ensure totals update after refresh.
+## Problem
+Approvals page plant filter dropdown only shows "Tea Plant" but "Salt Plant" and "DASNA Plant" are missing. This happens because:
+- In the database, only "Tea Plant" has an explicit `id` field
+- "Salt Plant" and "DASNA Plant" only have MongoDB `_id` (no explicit `id`)
+- The `authorizedPlants` filter uses `p.id` which is `undefined` for Salt & DASNA
+- When a user's `plantIds` contain the `_id` values, the `.includes(p.id)` check fails
 
-- [x] Implement 2-hour gating for Mark OUT on Attendance page
-  - [x] Update `src/app/dashboard/attendance/page.tsx` to compute `canMarkOut` = now >= inDateTime + 2 hours
-  - [x] Disable Mark OUT button when locked, and show message in bottom banner
-  - [x] Ensure “Active Shift since …” section still displays for the open session
-  - [ ] Verify no session-history duplicates for Mark IN (already handled by attendance upsert)
+## Changes Completed
 
+### ✅ `src/app/dashboard/approvals/page.tsx`
 
+**Fix A:** `authorizedPlants` filter - Now checks both `p.id` AND `(p as any)._id`
+- Old: `return plants.filter(p => userAssignedPlantIds.includes(p.id));`
+- New: `return plants.filter(p => userAssignedPlantIds.includes(p.id) || userAssignedPlantIds.includes((p as any)._id));`
+
+**Fix B:** Plant filter dropdown `SelectItem` key - Now uses fallback `_id`
+- Old: `key={p.id}` 
+- New: `key={p.id || (p as any)._id}`
+
+## Testing
+- ✅ Login as SUPER_ADMIN/HR user with access to all plants
+- ✅ Open Approvals page
+- ✅ Verify plant filter dropdown shows "Tea Plant", "Salt Plant", and "DASNA Plant"
+- ✅ Verify filtering by each plant works correctly
 

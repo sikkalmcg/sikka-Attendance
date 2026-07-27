@@ -215,7 +215,7 @@ export default function ApprovalsPage() {
 
   const authorizedPlants = useMemo(() => {
     if (!userAssignedPlantIds) return plants;
-    return plants.filter(p => userAssignedPlantIds.includes(p.id));
+    return plants.filter(p => userAssignedPlantIds.includes(p.id) || userAssignedPlantIds.includes((p as any)._id));
   }, [userAssignedPlantIds, plants]);
 
   const approvedLeavesMap = useMemo(() => {
@@ -1041,7 +1041,7 @@ export default function ApprovalsPage() {
                 <SelectContent>
                   <SelectItem value="ALL" className="font-bold text-xs uppercase">All Assigned Plants</SelectItem>
                   {(authorizedPlants || []).map(p => (
-                    <SelectItem key={p.id} value={p.name} className="font-bold text-xs uppercase">{p.name}</SelectItem>
+                    <SelectItem key={p.id || (p as any)._id} value={p.name} className="font-bold text-xs uppercase">{p.name}</SelectItem>
                   ))}
                 </SelectContent>
              </Select>

@@ -95,18 +95,34 @@ export default function UserManagementPage() {
   const filteredUsers = useMemo(() => {
     const sorted = [...(users || [])].reverse();
     return sorted.filter(u => {
-      const nameMatch = u.fullName.toLowerCase().includes(searchTerm.toLowerCase());
-      const userMatch = u.username.toLowerCase().includes(searchTerm.toLowerCase());
+      const nameMatch = u.fullName?.toLowerCase().includes(searchTerm.toLowerCase());
+      const userMatch = u.username?.toLowerCase().includes(searchTerm.toLowerCase());
       return nameMatch || userMatch;
     });
   }, [users, searchTerm]);
 
+  // Safe conversion for APP_PERMISSIONS (Array or Object)
+  const permissionsList = useMemo(() => {
+    if (Array.isArray(APP_PERMISSIONS)) return APP_PERMISSIONS;
+    if (APP_PERMISSIONS && typeof APP_PERMISSIONS === "object") return Object.values(APP_PERMISSIONS);
+    return [];
+  }, []);
+
   const filteredPermissions = useMemo(() => {
-    return APP_PERMISSIONS.filter(p => p.toLowerCase().includes(permissionSearch.toLowerCase()));
-  }, [permissionSearch]);
+    const search = permissionSearch.toLowerCase();
+    return permissionsList.filter(p => {
+      if (typeof p === "string") return p.toLowerCase().includes(search);
+      if (p && typeof p === "object" && "name" in p && typeof (p as any).name === "string") {
+        return (p as any).name.toLowerCase().includes(search);
+      }
+      return String(p).toLowerCase().includes(search);
+    });
+  }, [permissionsList, permissionSearch]);
 
   const filteredPlants = useMemo(() => {
-    return (plants || []).filter(p => p.name.toLowerCase().includes(plantSearch.toLowerCase()));
+    return (Array.isArray(plants) ? plants : []).filter(p => 
+      p?.name?.toLowerCase().includes(plantSearch.toLowerCase())
+    );
   }, [plants, plantSearch]);
 
   const passwordStrength = useMemo(() => {
@@ -155,7 +171,7 @@ export default function UserManagementPage() {
       return false;
     }
 
-    if (!editingUser) {
+    if (!editingUser || isResetPasswordOpen) {
       if (!password || password.length < 8 || password.length > 16) {
         toast({ variant: "destructive", title: "Invalid Password", description: "Password must be 8-16 characters." });
         return false;
@@ -177,32 +193,46 @@ export default function UserManagementPage() {
     return true;
   };
 
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     if (!validateUserForm()) return;
 
     setIsProcessing(true);
+    let success = false;
     try {
-      const userData = {
+      const baseUserData = {
         fullName: formData.fullName!,
         username: formData.username!,
         role: (formData.role as Role) || "HR",
         permissions: formData.permissions || ["Dashboard"],
         plantIds: formData.plantIds || [],
-        status: formData.status || "Active"
+        status: formData.status || "Active",
       };
 
       if (editingUser) {
         const finalId = editingUser.id || (editingUser as any)._id;
-        updateRecord('users', finalId, userData);
+        let updatePayload: Partial<User> = { ...baseUserData };
+
+        if (isResetPasswordOpen && formData.password) {
+          updatePayload.password = formData.password;
+        }
+        
+        await updateRecord('users', finalId, updatePayload);
         toast({ title: "User Updated", description: "Profile permissions saved successfully." });
+        success = true;
       } else {
-        addRecord('users', { ...userData, password: formData.password });
-        toast({ title: "User Created", description: `${userData.fullName} added with controlled access.` });
+        await addRecord('users', { ...baseUserData, password: formData.password! });
+        toast({ title: "User Created", description: `${baseUserData.fullName} added with controlled access.` });
+        success = true;
       }
-      setIsUserModalOpen(false);
-      setIsResetPasswordOpen(false);
+    } catch (error) {
+      console.error("Failed to save user:", error);
+      toast({ variant: "destructive", title: "Operation Failed", description: "Could not save user data. Please try again." });
     } finally {
       setIsProcessing(false);
+      if (success) {
+        setIsUserModalOpen(false);
+        setIsResetPasswordOpen(false);
+      }
     }
   };
 
@@ -261,7 +291,8 @@ export default function UserManagementPage() {
   };
 
   const selectAllPermissions = () => {
-    setFormData(p => ({ ...p, permissions: ["Dashboard", ...APP_PERMISSIONS] }));
+    const allPerms = permissionsList.map(p => typeof p === 'string' ? p : String(p));
+    setFormData(p => ({ ...p, permissions: Array.from(new Set(["Dashboard", ...allPerms])) }));
   };
 
   const clearAllPermissions = () => {
@@ -325,7 +356,7 @@ export default function UserManagementPage() {
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {user.permissions?.slice(0, 3).map(p => (
-                          <Badge key={p} variant="secondary" className="text-[9px] bg-slate-100 border-none font-bold">{p}</Badge>
+                          <Badge key={String(p)} variant="secondary" className="text-[9px] bg-slate-100 border-none font-bold">{p}</Badge>
                         ))}
                         {(user.permissions?.length || 0) > 3 && (
                           <Badge variant="secondary" className="text-[9px] bg-primary/5 text-primary border-none font-bold">+{user.permissions!.length - 3} more</Badge>
@@ -565,11 +596,12 @@ export default function UserManagementPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredPermissions.map(perm => {
-                      const isSelected = formData.permissions?.includes(perm);
+                      const permKey = typeof perm === 'string' ? perm : (perm as any).name || String(perm);
+                      const isSelected = formData.permissions?.includes(permKey);
                       return (
                         <div 
-                          key={perm}
-                          onClick={() => !isProcessing && togglePermission(perm)}
+                          key={permKey}
+                          onClick={() => !isProcessing && togglePermission(permKey)}
                           className={cn(
                             "flex items-center gap-3 p-4 rounded-xl border transition-all cursor-pointer group select-none",
                             isSelected 
@@ -578,18 +610,18 @@ export default function UserManagementPage() {
                           )}
                         >
                           <Checkbox 
-                            id={`perm-${perm}`}
+                            id={`perm-${permKey}`}
                             checked={isSelected}
-                            onCheckedChange={() => togglePermission(perm)}
+                            onCheckedChange={() => togglePermission(permKey)}
                             disabled={isProcessing}
                             className="border-slate-300 data-[state=checked]:bg-primary data-[state=checked]:border-primary h-5 w-5 rounded-md"
                           />
                           <Label 
-                            htmlFor={`perm-${perm}`} 
+                            htmlFor={`perm-${permKey}`} 
                             className="text-sm font-bold text-slate-700 cursor-pointer flex-1"
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePermission(perm); }}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isProcessing) togglePermission(permKey); }}
                           >
-                            {perm}
+                            {permKey}
                           </Label>
                         </div>
                       );
