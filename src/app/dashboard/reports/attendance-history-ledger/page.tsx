@@ -17,7 +17,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/context/data-context";
 import { format } from "date-fns";
-import { Download, Filter, Printer, Search, ArrowUpDown } from "lucide-react";
+import { Download, Filter, Printer, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROWS_PAGE_SIZES = [50, 100, 250, 500] as const;
@@ -83,20 +83,18 @@ function statusBadgeClasses(status: string) {
   }
 }
 
-// --- NEW UTILITY FOR EXCEL-BASED WORKING HOUR LEDGER COLOR CRITERIA ---
 function getWorkingHoursColorClass(hoursStr: string) {
   if (!hoursStr || hoursStr === "--" || hoursStr === "00:00") {
     return "text-slate-400 font-medium";
   }
   
-  // "HH:MM" ko separate out karke decimal duration nikalne ke liye
   const [hrs, mins] = hoursStr.split(":").map(Number);
   const totalHours = hrs + (mins || 0) / 60;
 
   if (totalHours < 8.0) {
-    return "text-rose-600 bg-rose-50/60 px-2 py-0.5 rounded-md font-black border border-rose-100"; // < 8 hours is Red
+    return "text-rose-600 bg-rose-50/60 px-2 py-0.5 rounded-md font-black border border-rose-100";
   }
-  return "text-emerald-600 bg-emerald-50/60 px-2 py-0.5 rounded-md font-black border border-emerald-100"; // >= 8 hours is Green
+  return "text-emerald-600 bg-emerald-50/60 px-2 py-0.5 rounded-md font-black border border-emerald-100";
 }
 
 export default function AttendanceHistoryLedgerPage() {
@@ -245,6 +243,26 @@ export default function AttendanceHistoryLedgerPage() {
     if (processedBy) params.set("processedBy", processedBy);
     if (search && search !== "all") params.set("search", search);
 
+    if (format === "csv" || format === "excel") {
+      const columnOrder = [
+        "employeeId",
+        "employeeName",
+        "department",
+        "designation",
+        "date",
+        "inDateTime",
+        "outDateTime",
+        "workingHours",
+        "inPlant",
+        "inLocation",
+        "outLocation",
+        "attendanceStatus",
+        "shiftType",
+        "processedBy",
+      ].join(",");
+      params.set("columns", columnOrder);
+    }
+
     const url = `/api/reports/attendance-history-ledger?${params.toString()}`;
     window.open(url, "_blank");
   };
@@ -333,6 +351,7 @@ export default function AttendanceHistoryLedgerPage() {
                 <th>In Date & Time</th>
                 <th>Out Date & Time</th>
                 <th>Working Hours</th>
+                <th>In Plant</th>
                 <th>In Location</th>
                 <th>Out Location</th>
                 <th>Attendance Status</th>
@@ -360,6 +379,7 @@ export default function AttendanceHistoryLedgerPage() {
                       <td>${r.inDateTime}</td>
                       <td>${r.outDateTime}</td>
                       <td>${r.workingHours}</td>
+                      <td>${r.inPlant || "--"}</td>
                       <td>${r.inLocation || "--"}</td>
                       <td>${r.outLocation || "--"}</td>
                       <td><span class="${cls}">${r.attendanceStatus}</span></td>
@@ -642,13 +662,13 @@ export default function AttendanceHistoryLedgerPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-20 text-slate-400 font-bold">
+                    <TableCell colSpan={14} className="text-center py-20 text-slate-400 font-bold">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center py-20 text-slate-400 font-bold italic">
+                    <TableCell colSpan={14} className="text-center py-20 text-slate-400 font-bold italic">
                       No records found for current selection.
                     </TableCell>
                   </TableRow>
@@ -665,7 +685,6 @@ export default function AttendanceHistoryLedgerPage() {
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.inDateTime}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.outDateTime}</TableCell>
                         
-                        {/* --- EXCEL CONDITIONAL FORMATTING IMPLEMENTATION BLOCK --- */}
                         <TableCell className="px-4 py-3 whitespace-nowrap">
                           <span className={cn("font-mono text-xs shadow-none", getWorkingHoursColorClass(r.workingHours))}>
                             {r.workingHours}
