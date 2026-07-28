@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 
 import { Workbook } from 'exceljs';
 
-import type { Holiday, AttendanceRecord, Employee, Plant } from '@/lib/types';
+import type { Holiday, AttendanceRecord, Employee, Plant, LeaveRequest } from '@/lib/types';
 
 // Note: this route is used for Attendance History Ledger (Session History).
 // It must correctly aggregate multiple punch documents for the same employee+date
@@ -86,8 +86,9 @@ function attendanceStatusFromRules(params: {
   inTime?: string | null;
   isSunday: boolean;
   isHoliday: boolean;
+  hasLeave?: boolean;
 }) {
-  const { hasPunch, isSunday: sun, isHoliday } = params;
+  const { hasPunch, isSunday: sun, isHoliday, hasLeave } = params;
 
   if (hasPunch) {
     if (isHoliday) return 'Present on Holiday';
@@ -95,9 +96,42 @@ function attendanceStatusFromRules(params: {
     return 'Present';
   }
 
+  if (hasLeave) return 'Leave';
   if (sun) return 'Weekly Off';
   if (isHoliday) return 'Holiday';
   return 'Absent';
+}
+
+function computeRemarks(params: {
+  leaveType?: string;
+  autoCheckout?: boolean;
+  autoOut?: boolean;
+  editedBy?: string | null;
+  inPlant: string;
+  outPlant: string | null;
+  hasOutTime: boolean;
+}): string {
+  const { leaveType, autoCheckout, autoOut, editedBy, inPlant, outPlant, hasOutTime } = params;
+
+  // 1. Leave Type
+  if (leaveType) return leaveType;
+
+  // 2. System Auto Out
+  if (autoCheckout || autoOut) return 'System Auto Out';
+
+  // 3. Manual Entry by (Username)
+  if (editedBy) return `Manual Entry by ${editedBy}`;
+
+  // 4. Out Not from Plant - when employee checked out from outside plant radius
+  if (hasOutTime && outPlant && (outPlant === '--' || outPlant === 'N/A' || !outPlant)) {
+    return 'Out Not from Plant';
+  }
+
+  // 5. Not In from Plant - when employee checked in from outside plant radius
+  if (inPlant === '--' || inPlant === 'N/A') return 'Not In from Plant';
+
+  // 6. Blank
+  return '';
 }
 
 export async function GET(req: Request) {
@@ -120,10 +154,6 @@ export async function GET(req: Request) {
     const exportFormat = String(q.get('format') || 'csv').toLowerCase();
 
     const printMode = q.get('print') === 'true';
-
-    // exportFormat: csv | excel | xlsx (UI uses "excel")
-    // We implement excel/xlsx using exceljs below.
-
 
     const pageStr = q.get('page') || '1';
     const page = Math.max(1, parseInt(pageStr, 10) || 1);
@@ -157,10 +187,11 @@ export async function GET(req: Request) {
 
     const db = await getDb();
 
-    // Load reference tables (employees, plants, holidays) scoped by plants
+    // Load reference tables (employees, plants, holidays, leaveRequests) scoped by plants
     const holidaysCol = db.collection<Holiday>('holidays');
     const employeesCol = db.collection<Employee>('employees');
     const attendanceCol = db.collection<AttendanceRecord>('attendance');
+    const leaveRequestsCol = db.collection<LeaveRequest>('leaveRequests');
 
     let plantIdsFilter: string[] | null = null;
     if (isAdmin && allowedPlantIds?.length) plantIdsFilter = allowedPlantIds;
@@ -186,11 +217,9 @@ export async function GET(req: Request) {
     }
 
     // employees scope config
-    // Humne direct `active: true` thoda loose kiya h taaki purana historical data block na ho
     const employeeQuery: any = {};
 
     if (plantIdsFilter?.length) {
-      // Fallback fallback add kiye hain agar DB me ID ki jagah string Name ho
       employeeQuery.$or = [
         { unitIds: { $in: plantIdsFilter } },
         { unitId: { $in: plantIdsFilter } },
@@ -199,7 +228,6 @@ export async function GET(req: Request) {
       ];
     }
 
-    // Safely apply dropdown filters only if they are not set to 'ALL' or 'all'
     if (department && department !== 'ALL' && department !== 'all') {
       employeeQuery.department = department;
     }
@@ -212,9 +240,6 @@ export async function GET(req: Request) {
 
     if (search) {
       const searchRegex = { $regex: search, $options: 'i' };
-
-      // DB sample ke hisaab se fields: employeeId, name, firstName, lastName (plus department/designation etc.)
-      // Strict exact match ki jagah partial/regex match use karenge taa-ke no-results na aaye.
       const searchQuery = {
         $or: [
           { employeeId: { $regex: String(search), $options: 'i' } },
@@ -223,9 +248,6 @@ export async function GET(req: Request) {
           { lastName: searchRegex },
         ],
       };
-
-      // plant scope (employeeQuery.$or) ke sath combine na ho, isliye single $and pattern use karte hain.
-      // Agar employeeQuery me $or already hai, we wrap it into $and safely.
       if (employeeQuery.$or) {
         employeeQuery.$and = [{ $or: employeeQuery.$or }, searchQuery];
         delete employeeQuery.$or;
@@ -234,10 +256,8 @@ export async function GET(req: Request) {
       }
     }
 
-
     const employees = await employeesCol.find(employeeQuery).toArray();
 
-    // Verification check - agar criteria matching koi employee nahi mila to early exit response
     if (!employees.length) {
       return NextResponse.json({
         rows: [],
@@ -269,6 +289,36 @@ export async function GET(req: Request) {
 
     const attendancePunches = await attendanceCol.find(attendanceQuery).toArray();
 
+    // Load leave requests for the date range and employee scope
+    const leaveRequestsData = await leaveRequestsCol
+      .find({
+        employeeId: { $in: empIds },
+        status: { $regex: /^APPROVED$/i },
+        $or: [
+          { fromDate: { $gte: fromDate, $lte: toDate } },
+          { toDate: { $gte: fromDate, $lte: toDate } },
+          { fromDate: { $lte: fromDate }, toDate: { $gte: toDate } },
+        ]
+      })
+      .toArray();
+
+    // Build leave lookup: employeeId:date -> leaveRequest
+    const leaveByEmpDate = new Map<string, any>();
+    for (const lr of leaveRequestsData) {
+      const lStart = new Date(`${lr.fromDate}T00:00:00.000Z`);
+      const lEnd = new Date(`${lr.toDate}T00:00:00.000Z`);
+      for (let d = new Date(lStart); d <= lEnd; d.setUTCDate(d.getUTCDate() + 1)) {
+        const yyyy = d.getUTCFullYear();
+        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(d.getUTCDate()).padStart(2, '0');
+        const dateKey = `${yyyy}-${mm}-${dd}`;
+        const key = `${lr.employeeId}:${dateKey}`;
+        if (!leaveByEmpDate.has(key)) {
+          leaveByEmpDate.set(key, lr);
+        }
+      }
+    }
+
     // Build quick lookup per employee+date (aggregate all punches so IN/OUT pair is correct)
     type AggregatedPunch = {
       inTime: string | null;
@@ -276,15 +326,20 @@ export async function GET(req: Request) {
       inLocation: string;
       outLocation: string;
       inPlant: string;
+      outPlant: string | null;
+      approved: boolean;
       approvedBy: string;
+      editedBy: string | null;
+      autoOut: boolean;
+      autoCheckout: boolean;
       outDate: string | null;
+      hours: number;
+      status: string;
     };
-
 
     const punchByEmpDate = new Map<string, AggregatedPunch>();
 
     const compareTimeHHMM = (a: string, b: string) => {
-      // expects "HH:mm"; returns -1/0/1
       const [ah, am] = a.split(':').map((x) => parseInt(x, 10));
       const [bh, bm] = b.split(':').map((x) => parseInt(x, 10));
       const av = (ah || 0) * 60 + (am || 0);
@@ -306,8 +361,15 @@ export async function GET(req: Request) {
           inLocation: rec.address ? rec.address : '--',
           outLocation: rec.addressOut ? rec.addressOut : '--',
           inPlant: rec.inPlant ? rec.inPlant : '--',
+          outPlant: rec.outPlant ? rec.outPlant : null,
+          approved: rec.approved === true || String(rec.approved) === 'true',
           approvedBy: rec.approvedBy || '--',
+          editedBy: (rec as any).editedBy || null,
+          autoOut: rec.autoOut === true || rec.autoCheckout === true,
+          autoCheckout: rec.autoCheckout === true,
           outDate: rec.outDate ?? null,
+          hours: rec.hours || 0,
+          status: rec.status || 'Open',
         });
         continue;
       }
@@ -317,7 +379,6 @@ export async function GET(req: Request) {
         if (!existing.inTime) {
           existing.inTime = candidateIn;
           existing.inLocation = rec.address ? rec.address : '--';
-          // approvedBy should reflect the punch that actually set the IN
           if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
         } else if (compareTimeHHMM(candidateIn, existing.inTime) < 0) {
           existing.inTime = candidateIn;
@@ -343,7 +404,6 @@ export async function GET(req: Request) {
 
       punchByEmpDate.set(key, existing);
     }
-
 
     // Create date array (calendar days)
     const start = new Date(`${fromDate}T00:00:00.000Z`);
@@ -371,26 +431,31 @@ export async function GET(req: Request) {
         const isHoliday = !!holidayObj;
 
         const hasPunch = !!rec?.inTime;
+        const leaveKey = `${emp.employeeId}:${dateStr}`;
+        const approvedLeave = leaveByEmpDate.get(leaveKey);
+        const hasLeave = !!approvedLeave;
 
         const status = attendanceStatusFromRules({
           hasPunch,
           inTime: rec?.inTime,
           isSunday: sun,
           isHoliday,
+          hasLeave,
         });
 
+        // If status is absent but has leave, override to Leave
+        const finalStatus = hasLeave && !hasPunch ? 'Leave' : status;
+
         if (attendanceStatus && attendanceStatus !== 'ALL' && attendanceStatus !== 'all') {
-          if (status !== attendanceStatus) continue;
+          if (finalStatus !== attendanceStatus) continue;
         }
 
         const inDT = rec?.inTime ? rec.inTime : null;
         const outDT = rec?.outTime ? rec.outTime : null;
 
         // Compute working hours from IN/OUT times (same-day assumption).
-        // If no OUT punch is available, hours remain 0.
         let workingHHMM = '00:00';
         if (rec?.inTime && rec?.outTime) {
-          // rec.inTime/outTime are "HH:mm" strings
           const [inH, inM] = rec.inTime.split(':').map((x) => parseInt(x, 10));
           const [outH, outM] = rec.outTime.split(':').map((x) => parseInt(x, 10));
           const inMinutes = (inH || 0) * 60 + (inM || 0);
@@ -401,35 +466,50 @@ export async function GET(req: Request) {
           workingHHMM = fmtHoursToHHMM(hoursFloat);
         }
 
-
-
-        // Shift type heuristic: day shift if inTime before 18:00, else night
-        let shiftType: 'Day Shift' | 'Night Shift' = 'Day Shift';
-        if (rec?.inTime) {
-          const t = rec.inTime.split(':');
-          const hh = parseInt(t[0] || '0', 10);
-          shiftType = hh >= 18 || hh < 6 ? 'Night Shift' : 'Day Shift';
+        // Approval Status
+        let approvalStatus = 'Pending';
+        if (rec?.approved === true || String(rec?.approved) === 'true') {
+          approvalStatus = 'Approved';
+        } else if (String(rec?.status || '').toUpperCase() === 'REJECTED') {
+          approvalStatus = 'Rejected';
         }
+
+        // Approved By (Username)
+        const approvedBy = rec?.approvedBy && rec.approvedBy !== '--' ? rec.approvedBy : '--';
+
+        // Compute remarks
+        const remarks = computeRemarks({
+          leaveType: approvedLeave ? approvedLeave.purpose : undefined,
+          autoCheckout: rec?.autoCheckout,
+          autoOut: rec?.autoOut,
+          editedBy: rec?.editedBy || null,
+          inPlant: rec?.inPlant || '--',
+          outPlant: rec?.outPlant || null,
+          hasOutTime: !!rec?.outTime,
+        });
 
         const inDateTime = inDT ? `${dateStr} ${inDT}` : '--';
         const outDateTime = outDT ? `${rec?.outDate || dateStr} ${outDT}` : '--';
+
+        // Out Plant
+        const outPlant = rec?.outPlant || '--';
 
         allRows.push({
           employeeId: emp.employeeId,
           employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : (emp.name || ''),
           department: emp.department || '--',
           designation: emp.designation || '--',
-          date: dateStr,
+          inPlant: rec?.inPlant ? rec.inPlant : '--',
           inDateTime,
           outDateTime,
           workingHours: workingHHMM,
           inLocation: rec?.inLocation ? rec.inLocation : '--',
           outLocation: rec?.outLocation ? rec.outLocation : '--',
-          inPlant: rec?.inPlant ? rec.inPlant : '--',
-
-          attendanceStatus: status,
-          shiftType,
-          processedBy: rec?.approvedBy || '--',
+          outPlant,
+          attendanceStatus: finalStatus,
+          approvalStatus,
+          approvedBy,
+          remarks,
         });
       }
     }
@@ -451,21 +531,22 @@ export async function GET(req: Request) {
           return NextResponse.json({ error: `format ${exportFormat} not supported. Use csv or excel.` }, { status: 400 });
         }
 
-
         const rows = allRows;
         const headers = [
           'Employee ID',
           'Employee Name',
           'Department / Designation',
-          'Date',
+          'In Plant',
           'In Date & Time',
           'Out Date & Time',
           'Working Hours',
           'In Location',
           'Out Location',
+          'Out Plant',
           'Attendance Status',
-          'Shift Type',
-          'Processed By',
+          'Approval Status',
+          'Approved By',
+          'Remarks',
         ];
 
         const csv = [
@@ -475,17 +556,17 @@ export async function GET(req: Request) {
               r.employeeId,
               r.employeeName,
               `${r.department} / ${r.designation}`,
-              r.date,
+              r.inPlant,
               r.inDateTime,
               r.outDateTime,
               r.workingHours,
-              r.inPlant,
               r.inLocation,
               r.outLocation,
-
+              r.outPlant,
               r.attendanceStatus,
-              r.shiftType,
-              r.processedBy,
+              r.approvalStatus,
+              r.approvedBy,
+              r.remarks,
             ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`);
             return line.join(',');
           }),

@@ -16,46 +16,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { useData } from "@/context/data-context";
-import { format } from "date-fns";
+import { format, getDaysInMonth, startOfMonth, isAfter, subMonths } from "date-fns";
 import { Download, Filter, Printer, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROWS_PAGE_SIZES = [50, 100, 250, 500] as const;
 const PROJECT_START_DATE_STR = "2026-04-01";
 
-type LedgerAttendanceStatus =
-  | "Present"
-  | "Absent"
-  | "Holiday"
-  | "Weekly Off"
-  | "Present on Holiday"
-  | "Present on Weekly Off";
-
 type LedgerRow = {
   employeeId: string;
   employeeName: string;
   department: string;
   designation: string;
-  date: string;
+  inPlant: string;
   inDateTime: string;
   outDateTime: string;
   workingHours: string;
   inLocation: string;
   outLocation: string;
-  inPlant: string;
-  attendanceStatus: LedgerAttendanceStatus;
-  shiftType: "Day Shift" | "Night Shift";
-  processedBy: string;
+  outPlant: string;
+  attendanceStatus: string;
+  approvalStatus: string;
+  approvedBy: string;
+  remarks: string;
 };
 
-type SortBy =
-  | "employeeId"
-  | "employeeName"
-  | "department"
-  | "date"
-  | "attendanceStatus"
-  | "shiftType";
-
+type SortBy = "employeeId" | "employeeName" | "department" | "attendanceStatus";
 type SortDir = "asc" | "desc";
 
 function getISTNow() {
@@ -66,31 +52,34 @@ function yyyyMMdd(d: Date) {
   return format(d, "yyyy-MM-dd");
 }
 
-function statusBadgeClasses(status: string) {
+const approvalBadgeClasses = (status: string) => {
   switch (status) {
-    case "Present":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "Absent":
-      return "bg-rose-50 text-rose-700 border-rose-200";
-    case "Present on Holiday":
-    case "Present on Weekly Off":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "Holiday":
-    case "Weekly Off":
-      return "bg-slate-50 text-slate-700 border-slate-200";
-    default:
-      return "bg-slate-50 text-slate-700 border-slate-200";
+    case "Approved": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "Rejected": return "bg-rose-50 text-rose-700 border-rose-200";
+    case "Pending": return "bg-amber-50 text-amber-700 border-amber-200";
+    default: return "bg-slate-50 text-slate-700 border-slate-200";
   }
-}
+};
+
+const attendanceBadgeClasses = (status: string) => {
+  switch (status) {
+    case "Present": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "Absent": return "bg-rose-50 text-rose-700 border-rose-200";
+    case "Leave": return "bg-purple-50 text-purple-700 border-purple-200";
+    case "Present on Holiday":
+    case "Present on Weekly Off": return "bg-amber-50 text-amber-700 border-amber-200";
+    case "Holiday":
+    case "Weekly Off": return "bg-slate-50 text-slate-700 border-slate-200";
+    default: return "bg-slate-50 text-slate-700 border-slate-200";
+  }
+};
 
 function getWorkingHoursColorClass(hoursStr: string) {
   if (!hoursStr || hoursStr === "--" || hoursStr === "00:00") {
     return "text-slate-400 font-medium";
   }
-  
   const [hrs, mins] = hoursStr.split(":").map(Number);
   const totalHours = hrs + (mins || 0) / 60;
-
   if (totalHours < 8.0) {
     return "text-rose-600 bg-rose-50/60 px-2 py-0.5 rounded-md font-black border border-rose-100";
   }
@@ -103,23 +92,17 @@ export default function AttendanceHistoryLedgerPage() {
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-
   const [plant, setPlant] = useState("all");
-
   const [employeeId, setEmployeeId] = useState("");
   const [department, setDepartment] = useState("ALL");
   const [designation, setDesignation] = useState("ALL");
   const [attendanceStatus, setAttendanceStatus] = useState("ALL_ATTENDANCE");
-
   const [processedBy, setProcessedBy] = useState("");
-  const [search, setSearch] = useState("all"); 
-
+  const [search, setSearch] = useState("all");
   const [sortBy, setSortBy] = useState<SortBy>("employeeId");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<(typeof ROWS_PAGE_SIZES)[number] | "ALL">(100);
-
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [meta, setMeta] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -137,11 +120,9 @@ export default function AttendanceHistoryLedgerPage() {
 
   useEffect(() => {
     const now = getISTNow();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const floor = new Date(PROJECT_START_DATE_STR + "T00:00:00.000Z");
-
     const startClamped = start < floor ? floor : start;
-
     setFromDate(yyyyMMdd(startClamped));
     setToDate(yyyyMMdd(now));
   }, []);
@@ -245,20 +226,21 @@ export default function AttendanceHistoryLedgerPage() {
 
     if (format === "csv" || format === "excel") {
       const columnOrder = [
-        "employeeId",
-        "employeeName",
-        "department",
-        "designation",
-        "date",
-        "inDateTime",
-        "outDateTime",
-        "workingHours",
-        "inPlant",
-        "inLocation",
-        "outLocation",
-        "attendanceStatus",
-        "shiftType",
-        "processedBy",
+        'employeeId',
+        'employeeName',
+        'department',
+        'designation',
+        'inPlant',
+        'inDateTime',
+        'outDateTime',
+        'workingHours',
+        'inLocation',
+        'outLocation',
+        'outPlant',
+        'attendanceStatus',
+        'approvalStatus',
+        'approvedBy',
+        'remarks',
       ].join(",");
       params.set("columns", columnOrder);
     }
@@ -346,17 +328,18 @@ export default function AttendanceHistoryLedgerPage() {
               <tr>
                 <th>Employee ID</th>
                 <th>Employee Name</th>
-                <th>Department / Designation</th>
-                <th>Date</th>
+                <th>Department / Designation</th>                
+                <th>In Plant</th>
                 <th>In Date & Time</th>
                 <th>Out Date & Time</th>
                 <th>Working Hours</th>
-                <th>In Plant</th>
                 <th>In Location</th>
                 <th>Out Location</th>
+                <th>Out Plant</th>
                 <th>Attendance Status</th>
-                <th>Shift Type</th>
-                <th>Processed By</th>
+                <th>Approval Status</th>
+                <th>Approved By</th>
+                <th>Remarks</th>
               </tr>
             </thead>
             <tbody>
@@ -374,17 +357,18 @@ export default function AttendanceHistoryLedgerPage() {
                     <tr>
                       <td>${r.employeeId}</td>
                       <td>${r.employeeName}</td>
-                      <td>${r.department} / ${r.designation}</td>
-                      <td>${r.date}</td>
+                      <td>${r.department} / ${r.designation}</td>                      
+                      <td>${r.inPlant || '--'}</td>
                       <td>${r.inDateTime}</td>
                       <td>${r.outDateTime}</td>
                       <td>${r.workingHours}</td>
-                      <td>${r.inPlant || "--"}</td>
                       <td>${r.inLocation || "--"}</td>
                       <td>${r.outLocation || "--"}</td>
+                      <td>${r.outPlant || '--'}</td>
                       <td><span class="${cls}">${r.attendanceStatus}</span></td>
-                      <td>${r.shiftType}</td>
-                      <td>${r.processedBy}</td>
+                      <td>${r.approvalStatus}</td>
+                      <td>${r.approvedBy}</td>
+                      <td>${r.remarks}</td>
                     </tr>`;
                 })
                 .join("")}
@@ -432,6 +416,7 @@ export default function AttendanceHistoryLedgerPage() {
     "Present on Holiday",
     "Present on Weekly Off",
   ];
+  attendanceStatusOptions.push("Leave");
 
   return (
     <div className="space-y-8 pb-20 px-4 max-w-7xl mx-auto">
@@ -443,20 +428,8 @@ export default function AttendanceHistoryLedgerPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={() => exportReport("csv")} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 text-white">
+          <Button onClick={() => exportReport("csv")} className="bg-emerald-600 hover:bg-emerald-700 h-11 px-4 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 text-white">
             <Download className="w-4 h-4" /> Export CSV
-          </Button>
-          <Button
-            onClick={() => exportReport("excel")}
-            className="bg-emerald-500/10 hover:bg-emerald-500/15 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl border border-emerald-200 text-emerald-700"
-          >
-            <Download className="w-4 h-4" /> Export Excel
-          </Button>
-          <Button
-            onClick={() => exportReport("pdf")}
-            className="bg-emerald-500/10 hover:bg-emerald-500/15 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl border border-emerald-200 text-emerald-700"
-          >
-            <Download className="w-4 h-4" /> Export PDF
           </Button>
 
           <Button onClick={printReport} className="bg-slate-900 hover:bg-slate-800 h-11 px-6 font-black gap-2 uppercase text-xs tracking-wider rounded-xl shadow-lg text-white">
@@ -639,23 +612,20 @@ export default function AttendanceHistoryLedgerPage() {
                     Employee Name <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Department / Designation</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("date")}>
-                    Date <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
-                  </TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Plant</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Date & Time</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Date & Time</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-primary">Working Hours</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Plant</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Location</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Location</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Plant</TableHead>
 
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("attendanceStatus")}>
                     Attendance Status <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("shiftType")}>
-                    Shift Type <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
-                  </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Processed By</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Approval Status</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Approved By</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Remarks</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -663,13 +633,13 @@ export default function AttendanceHistoryLedgerPage() {
                 {loading ? (
                   <TableRow>
                     <TableCell colSpan={14} className="text-center py-20 text-slate-400 font-bold">
-                      Loading...
+                      Loading Report Data...
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={14} className="text-center py-20 text-slate-400 font-bold italic">
-                      No records found for current selection.
+                      No records found for the current selection.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -680,8 +650,8 @@ export default function AttendanceHistoryLedgerPage() {
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{rowIndex}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.employeeId}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.employeeName}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.department} / {r.designation}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.date}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 max-w-[200px] truncate">{r.department} / {r.designation}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inPlant || "--"}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.inDateTime}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.outDateTime}</TableCell>
                         
@@ -691,17 +661,20 @@ export default function AttendanceHistoryLedgerPage() {
                           </span>
                         </TableCell>
                         
-                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inPlant || "--"}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500 max-w-[200px] truncate" title={r.inLocation}>{r.inLocation}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500 max-w-[200px] truncate" title={r.outLocation}>{r.outLocation}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.outPlant || "--"}</TableCell>
 
                         <TableCell className="px-4 py-3">
-                          <Badge className={cn("font-black text-[10px] px-2 py-1 border shadow-none whitespace-nowrap", statusBadgeClasses(r.attendanceStatus))}>
+                          <Badge className={cn("font-black text-[10px] px-2 py-1 border shadow-none whitespace-nowrap", attendanceBadgeClasses(r.attendanceStatus))}>
                             {r.attendanceStatus}
                           </Badge>
                         </TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 whitespace-nowrap">{r.shiftType}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 whitespace-nowrap">{r.processedBy}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge className={cn("font-black text-[10px] px-2 py-1 border shadow-none whitespace-nowrap", approvalBadgeClasses(r.approvalStatus))}>{r.approvalStatus}</Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 whitespace-nowrap">{r.approvedBy}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500 whitespace-nowrap">{r.remarks}</TableCell>
                       </TableRow>
                     );
                   })
