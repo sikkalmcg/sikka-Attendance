@@ -344,10 +344,20 @@ export default function ReportsPage() {
         <Card className="border-none shadow-2xl overflow-hidden rounded-2xl bg-white">
           <CardHeader className="bg-slate-900 text-white flex flex-row items-center justify-between p-6 shrink-0">
             <div>
-Attendance History Ledger (legacy preview)
-              <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">Filter Period: {formatDate(fromDate)} to {formatDate(toDate)}</p>
+              <CardTitle className="text-lg font-black uppercase text-white">
+                Attendance History Ledger (legacy preview)
+              </CardTitle>
+              <p className="text-[10px] text-primary font-black uppercase tracking-widest mt-1">
+                Filter Period: {formatDate(fromDate)} to {formatDate(toDate)}
+              </p>
             </div>
-Export CSV Sheet (legacy)
+            <Button
+              onClick={handleExport}
+              className="gap-2 font-black text-xs uppercase bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl px-4 h-10 shadow-lg border-none"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV Sheet (legacy)
+            </Button>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="w-full">
