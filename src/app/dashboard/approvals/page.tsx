@@ -111,6 +111,16 @@ interface LeaveRequestItem {
   processedAt?: string;
 }
 
+function formatTime(t: any): string {
+  if (!t) return "--";
+  const s = String(t);
+  if (s.includes('T')) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  return s.includes(' ') ? (s.split(' ')[1] || s) : s;
+}
+
 function StandardPaginationFooter({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) {
   if (total <= 1) return null;
   return (
@@ -424,7 +434,7 @@ export default function ApprovalsPage() {
     }).sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
   }, [allAttendanceList, historyMonthFilter]);
 
-  const allPlantExitHistory = useMemo(() => {
+const allPlantExitHistory = useMemo(() => {
     const exits: any[] = [];
     const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
 
@@ -440,11 +450,14 @@ export default function ApprovalsPage() {
           exits.push({
             ...event,
             employeeId: record.employeeId,
-            employeeName: record.employeeName,
-            date: record.date,
+            employeeCode: event.employeeCode || record.employeeId,
+            employeeName: event.employeeName || record.employeeName,
+            designation: event.designation || emp?.designation || "Staff",
+            date: event.date || record.date,
+            plant: event.plant || record.inPlant || "Salt Plant",
+            plantName: event.plant || record.inPlant || "Salt Plant",
             inTime: record.inTime,
             outTime: record.outTime,
-            plantName: record.inPlant || "Salt Plant",
             attendanceId: record.id || record._id
           });
         });
@@ -456,7 +469,8 @@ export default function ApprovalsPage() {
       const s = searchTerm.toLowerCase();
       filteredExits = filteredExits.filter(e => 
         (e.employeeName || "").toLowerCase().includes(s) || 
-        (e.employeeId || "").toLowerCase().includes(s)
+        (e.employeeId || "").toLowerCase().includes(s) || 
+        (e.employeeCode || "").toLowerCase().includes(s)
       );
     }
     if (selectedPlantFilter !== "ALL") {
@@ -466,7 +480,7 @@ export default function ApprovalsPage() {
       filteredExits = filteredExits.filter(e => e.date === selectedDateFilter);
     }
 
-    return filteredExits.sort((a, b) => b.exitTime.localeCompare(a.exitTime));
+    return filteredExits.sort((a, b) => String(b.outPlantTime || "").localeCompare(String(a.outPlantTime || "")));
   }, [attendanceRecords, employees, userAssignedPlantIds, searchTerm, selectedPlantFilter, selectedDateFilter]);
 
   const currentData = useMemo(() => {
@@ -1390,27 +1404,30 @@ export default function ApprovalsPage() {
             <LogOut className="w-5 h-5 shrink-0" />
             <span className="text-xs font-black uppercase tracking-wider text-rose-800">Geofence Compliance Monitoring: Real-time logs for off-perimeter coordinate traversal.</span>
           </div>
-          <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
+<Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1200px]">
+                <Table className="min-w-[1700px]">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="font-black text-[10px] uppercase tracking-wider py-4 px-6 text-slate-500">Employee</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Attendance Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider py-4 px-6 text-slate-500">Employee Name</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Employee Code</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Designation</TableHead>
                       <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Plant</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Mark IN</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Mark OUT</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-rose-600">Exit Time</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-emerald-600">Return Time</TableHead>
-                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Outside Duration</TableHead>
-                      <TableHead className="text-right font-black text-[10px] uppercase tracking-wider pr-6 text-slate-500">Action Matrix</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Date</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-rose-600">Out Plant Time</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-emerald-600">In Plant Time</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Out Duration</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Distance (KM)</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Out Location</TableHead>
+                      <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-500">Status</TableHead>
+                      <TableHead className="text-right font-black text-[10px] uppercase tracking-wider pr-6 text-slate-500">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {allPlantExitHistory.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-20 text-muted-foreground font-bold uppercase tracking-wider italic">
+                        <TableCell colSpan={12} className="text-center py-20 text-muted-foreground font-bold uppercase tracking-wider italic">
                           No Geofence Exit violations logged for the current filter scope bounds.
                         </TableCell>
                       </TableRow>
@@ -1420,25 +1437,52 @@ export default function ApprovalsPage() {
                           <TableCell className="px-6 py-4">
                             <div className="flex flex-col">
                               <span className="font-black text-slate-800 uppercase text-xs">{event.employeeName}</span>
-                              <span className="text-[10px] font-mono font-bold text-primary">{event.employeeId}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs font-bold text-slate-600">{formatDate(event.date)}</TableCell>
+                          <TableCell className="text-[10px] font-mono font-bold text-primary">{event.employeeCode || event.employeeId}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-600">{event.designation || "Staff"}</TableCell>
                           <TableCell className="text-xs font-black text-slate-700 uppercase">{event.plantName}</TableCell>
-                          <TableCell className="text-xs font-medium text-slate-500">{event.inTime || "--:--"}</TableCell>
-                          <TableCell className="text-xs font-medium text-slate-500">{event.outTime || "--:--"}</TableCell>
-                          <TableCell className="text-xs font-extrabold text-rose-600">{event.exitTime.split(" ")[1] || event.exitTime}</TableCell>
-                          <TableCell className="text-xs font-extrabold text-emerald-600">{event.returnTime ? event.returnTime.split(" ")[1] : "Still Outside"}</TableCell>
-                          <TableCell className="text-xs font-black text-slate-800 font-mono">{event.outsideDuration || "--"}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-600">{formatDate(event.date)}</TableCell>
+                          <TableCell className="text-xs font-extrabold whitespace-nowrap text-rose-600">{formatTime(event.outPlantTime)}</TableCell>
+                          <TableCell className="text-xs font-extrabold whitespace-nowrap text-emerald-600">{event.inPlantTime ? formatTime(event.inPlantTime) : "Still Outside"}</TableCell>
+                          <TableCell className="text-xs font-black text-slate-800 font-mono">{event.totalOutDuration || "--"}</TableCell>
+                          <TableCell className="text-xs font-black text-slate-700 font-mono">
+                            {event.distanceFromPlant != null ? `${(event.distanceFromPlant / 1000).toFixed(2)}` : "--"}
+                          </TableCell>
+                          <TableCell className="text-[10px] font-medium text-slate-500 max-w-[180px] truncate" title={event.completeAddress || event.address}>
+                            {event.completeAddress && event.completeAddress !== "Location Not Available" 
+                              ? event.completeAddress 
+                              : (event.gpsLatitude != null ? `${event.gpsLatitude.toFixed(6)}, ${event.gpsLongitude?.toFixed(6)}` : "Location Not Available")}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={cn(
+                              "text-[9px] font-black uppercase px-3 py-1 shadow-none border-none",
+                              event.trackingStatus === "Outside Plant" && "bg-rose-50 text-rose-700",
+                              event.trackingStatus === "Returned" && "bg-emerald-50 text-emerald-700",
+                              event.trackingStatus === "Location Not Available" && "bg-amber-50 text-amber-700"
+                            )}>
+                              {event.trackingStatus || "Outside Plant"}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="text-right pr-6">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="h-8 rounded-lg font-black text-[10px] uppercase border-primary/20 text-primary hover:bg-primary/5 flex items-center gap-1.5 ml-auto"
-                              onClick={() => handleOpenExitDetails(event)}
-                            >
-                              <Eye className="w-3.5 h-3.5" /> View Details
-                            </Button>
+                            <div className="flex justify-end items-center gap-1.5">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="h-8 rounded-lg font-black text-[10px] uppercase border-primary/20 text-primary hover:bg-primary/5 flex items-center gap-1.5"
+                                onClick={() => handleOpenExitDetails(event)}
+                              >
+                                <MapPin className="w-3.5 h-3.5" /> View Location
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-8 rounded-lg font-black text-[10px] uppercase border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+                                onClick={() => handleOpenExitDetails(event)}
+                              >
+                                <Eye className="w-3.5 h-3.5" /> View History
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -1452,51 +1496,102 @@ export default function ApprovalsPage() {
         </div>
       )}
 
-      {/* VIEW DETAILS: GEOFENCE LOCATION TRAJECTORY DIALOG */}
+{/* VIEW DETAILS: GEOFENCE LOCATION TRAJECTORY DIALOG */}
       <Dialog open={isExitDetailsOpen} onOpenChange={setIsExitDetailsOpen}>
         <DialogContent className="sm:max-w-2xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl animate-in fade-in duration-200">
           <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <MapPin className="w-6 h-6 text-primary" /> Exit Trajectory Logs
+              <MapPin className="w-6 h-6 text-primary" /> Facility Exit Details
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-              Recorded outside boundary logs for {selectedExitEvent?.employeeName} ({selectedExitEvent?.employeeId})
+              Location & duration audit for {selectedExitEvent?.employeeName} ({selectedExitEvent?.employeeId})
             </DialogDescription>
           </DialogHeader>
-          <div className="p-8">
-            <ScrollArea className="h-[320px] rounded-xl border border-slate-100 p-2 bg-slate-50/50">
-              <Table>
-                <TableHeader className="bg-slate-100 sticky top-0 z-10">
-                  <TableRow>
-                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500 py-3">Date & Time</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Full Address</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Latitude</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Longitude</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] tracking-wider text-rose-600 text-right pr-4">Distance from Plant</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedExitEvent?.locationHistory && selectedExitEvent.locationHistory.length > 0 ? (
-                    selectedExitEvent.locationHistory.map((loc: any, idx: number) => (
-                      <TableRow key={idx} className="bg-white hover:bg-slate-50 transition-colors">
-                        <TableCell className="text-xs font-bold text-slate-700 whitespace-nowrap">{loc.time}</TableCell>
-                        <TableCell className="text-xs text-slate-600 max-w-[220px] break-words font-medium leading-relaxed" title={loc.address}>{loc.address}</TableCell>
-                        <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lat?.toFixed(5) || "0.00"}</TableCell>
-                        <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lng?.toFixed(5) || "0.00"}</TableCell>
-                        <TableCell className="text-xs font-black text-rose-600 text-right pr-4 font-mono">{loc.distance !== undefined ? `${loc.distance} m` : "Unresolved"}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
+          <div className="p-8 space-y-6">
+            {/* Summary card with all required fields */}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Employee Name</span>
+                  <p className="font-black text-slate-900 uppercase">{selectedExitEvent?.employeeName || "--"}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Plant Name</span>
+                  <p className="font-black text-slate-900 uppercase">{selectedExitEvent?.plantName || selectedExitEvent?.plant || "--"}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Date</span>
+                  <p className="font-bold text-slate-700">{formatDate(selectedExitEvent?.date)}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Out Time</span>
+                  <p className="font-black text-rose-600 font-mono">{formatTime(selectedExitEvent?.outPlantTime)}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Return Time</span>
+                  <p className="font-black text-emerald-600 font-mono">{selectedExitEvent?.inPlantTime ? formatTime(selectedExitEvent.inPlantTime) : "Still Outside"}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Out Duration</span>
+                  <p className="font-black text-slate-800 font-mono">{selectedExitEvent?.totalOutDuration || "--"}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Latitude</span>
+                  <p className="font-bold text-slate-600 font-mono">{selectedExitEvent?.gpsLatitude?.toFixed(6) ?? selectedExitEvent?.lat?.toFixed(6) ?? "--"}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Longitude</span>
+                  <p className="font-bold text-slate-600 font-mono">{selectedExitEvent?.gpsLongitude?.toFixed(6) ?? selectedExitEvent?.lng?.toFixed(6) ?? "--"}</p>
+                </div>
+                <div className="space-y-0.5 col-span-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Full Address</span>
+                  <p className="font-medium text-slate-700 leading-relaxed">{selectedExitEvent?.completeAddress || selectedExitEvent?.address || "Location Not Available"}</p>
+                </div>
+                <div className="space-y-0.5 col-span-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Distance from Plant</span>
+                  <p className="font-black text-rose-600 font-mono">
+                    {selectedExitEvent?.distanceFromPlant != null ? `${(selectedExitEvent.distanceFromPlant / 1000).toFixed(2)} KM` : "--"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Location Trajectory History</h4>
+              <ScrollArea className="h-[240px] rounded-xl border border-slate-100 p-2 bg-slate-50/50">
+                <Table>
+                  <TableHeader className="bg-slate-100 sticky top-0 z-10">
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-10 text-xs text-slate-400 font-bold uppercase tracking-wider">
-                        No historical perimeter coordinate blocks captured.
-                      </TableCell>
+                      <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500 py-3">Date & Time</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Full Address</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Latitude</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Longitude</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-wider text-rose-600 text-right pr-4">Distance</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-              <ScrollBar orientation="horizontal" />
-            </ScrollArea>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedExitEvent?.outLocationHistory && selectedExitEvent.outLocationHistory.length > 0 ? (
+                      selectedExitEvent.outLocationHistory.map((loc: any, idx: number) => (
+                        <TableRow key={idx} className="bg-white hover:bg-slate-50 transition-colors">
+                          <TableCell className="text-xs font-bold text-slate-700 whitespace-nowrap">{loc.time}</TableCell>
+                          <TableCell className="text-xs text-slate-600 max-w-[220px] break-words font-medium leading-relaxed" title={loc.address}>{loc.address}</TableCell>
+                          <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lat?.toFixed(5) || "0.00"}</TableCell>
+                          <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lng?.toFixed(5) || "0.00"}</TableCell>
+                          <TableCell className="text-xs font-black text-rose-600 text-right pr-4 font-mono">{loc.distance !== undefined ? `${(loc.distance / 1000).toFixed(2)} KM` : "Unresolved"}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-10 text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          No historical perimeter coordinate blocks captured.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            </div>
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t">
             <Button className="w-full h-12 font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl uppercase tracking-widest text-xs shadow-md" onClick={() => setIsExitDetailsOpen(false)}>

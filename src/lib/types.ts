@@ -171,11 +171,49 @@ export interface Voucher {
   paidDate?: string;
 }
 
+export interface ExitEvent {
+  id?: string;
+  // Employee details
+  employeeCode: string;
+  employeeName: string;
+  designation: string;
+  plant: string;
+  date: string;
+  // Out track
+  outPlantTime: string;
+  gpsLatitude: number;
+  gpsLongitude: number;
+  completeAddress: string;
+  distanceFromPlant: number; // in meters
+  outLocationHistory?: LocationTrackPoint[];
+  // Return track
+  inPlantTime?: string | null;
+  totalOutDuration?: string | null; // HH:MM format
+  currentPlant?: string | null;
+  // Status
+  trackingStatus: 'Outside Plant' | 'Returned' | 'Location Not Available';
+  // Audit
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LocationTrackPoint {
+  time: string;
+  address: string;
+  lat: number;
+  lng: number;
+  distance: number; // meters from plant
+}
+
+export interface FacilityExitRecord extends ExitEvent {
+  id: string;
+}
+
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
   employeeName: string;
-  date: string; 
+  date: string;
   inTime: string | null;
   outTime: string | null;
   inDate?: string;
@@ -209,9 +247,11 @@ export interface AttendanceRecord {
   city?: string;
   state?: string;
 
-  unapprovedOutDuration?: number; 
+unapprovedOutDuration?: number; 
   lastDetectedOutAt?: string | null; 
   lastOutCheckTime?: string; 
+  exitEvents?: ExitEvent[];
+  currentGeofenceStatus?: string;
 }
 
 export interface LeaveRequest {

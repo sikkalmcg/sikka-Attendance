@@ -1,22 +1,19 @@
-# Attendance History Ledger - Enhancement Plan
+# Facility Exits Tracking Enhancement - Implementation Plan
 
-## Backend API Route (`src/app/api/reports/attendance-history-ledger/route.ts`)
-- [x] **Step 1:** Load leaveRequests collection for the date range
-- [x] **Step 2:** Build leave lookup map (employeeId:date → leave type/status)
-- [x] **Step 3:** Extract outPlant from attendance punches
-- [x] **Step 4:** Determine approvalStatus (Approved/Pending/Rejected)
-- [x] **Step 5:** Determine approvedBy (username)
-- [x] **Step 6:** Implement remarks logic (Leave Type, System Auto Out, Manual Entry, Out Not from Plant, Not In from Plant, blank)
-- [x] **Step 7:** Add "Leave" attendance status logic
-- [x] **Step 8:** Update CSV/Excel export headers and data
+## Backend & Data Layer
+- [x] **Step 1:** Add `ExitEvent`/`FacilityExitRecord` interface and `exitEvents`/`currentGeofenceStatus` to `types.ts`
+- [x] **Step 2:** Rewrite `/api/exit-tracking/route.ts` to use MongoDB `getDb()` and store facility exit records per spec (POST + GET)
+- [x] **Step 3:** Rewrite `/api/approvals/plant-exits/route.ts` to fetch from MongoDB `plantExits` collection
 
-## Frontend Page (`src/app/dashboard/reports/attendance-history-ledger/page.tsx`)
-- [x] **Step 9:** Update LedgerRow type with new fields
-- [x] **Step 10:** Fix From Date default to 1st of previous month
-- [x] **Step 11:** Update attendanceStatusOptions to include "Leave"
-- [x] **Step 12:** Update table headers (remove Date, Shift Type, Processed By; add Out Plant, Approval Status, Approved By, Remarks)
-- [x] **Step 13:** Update cell rendering with proper badges
-- [x] **Step 14:** Update exportReport function
-- [x] **Step 15:** Update print template
-- [x] **Step 16:** Simplify export buttons (Download icon at top-right)
+## Frontend - Attendance Page
+- [x] **Step 4:** Enhance geofence tracker to store employee code, name, designation, plant, distance, tracking status
+- [x] **Step 5:** Compute total out duration in HH:MM format and set trackingStatus (Outside Plant / Returned)
+- [x] **Step 6:** Add periodic 15-30 min polling fallback and GPS-unavailable fallback
 
+## Frontend - Approvals Page
+- [x] **Step 7:** Update Facility Exits tab headers (Employee Name, Code, Designation, Plant, Date, Out Plant Time, In Plant Time, Out Duration, Distance KM, Out Location, Status, Action)
+- [x] **Step 8:** Update View Location popup with all required fields
+- [x] **Step 9:** Add View History action
+
+## Verification
+- [x] **Step 10:** Run typecheck/build to verify no errors (only pre-existing errors remain in unrelated files)
