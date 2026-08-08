@@ -713,8 +713,10 @@ const allPlantExitHistory = useMemo(() => {
         autoCheckout: true,
         autoOut: true,
         autoTriggerTime: getISTTime().toISOString(),
-        nextInEnableTime: addHours(creditOutDT, 8).toISOString(),
-        remark: "System Auto-Logged OUT (16h Limit Threshold reached); stored OUT = IN + 8h"
+        // Spec: Cool-off = 1 hour after the 16h auto Mark-OUT => next IN available at IN + 17h.
+        // stored OUT is credited at IN + 8h, so next IN = creditOutDT + 9h (== IN + 17h).
+        nextInEnableTime: addHours(creditOutDT, 9).toISOString(),
+        remark: "System Auto-Logged OUT (16h Limit Threshold reached); stored OUT = IN + 8h; next IN = IN + 17h (1h cooldown)"
       });
 
       await addRecord('notifications', {
@@ -727,7 +729,7 @@ const allPlantExitHistory = useMemo(() => {
 
       toast({ 
         title: "Auto OUT Triggered", 
-        description: "Session closed after 16 hours limit. 8 hours credited to your ledger." 
+        description: "Session auto-closed at 16h limit (8h credited). Next Mark IN opens 1h later (IN + 17h)." 
       });
 
       await refreshData();
@@ -744,7 +746,7 @@ const allPlantExitHistory = useMemo(() => {
       toast({
         variant: "destructive",
         title: "Next Mark IN Locked",
-        description: `Your 8-hour check-in restriction is active. Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "later"}.`,
+        description: `Cool-off period active (auto-OUT + 1h). Access opens at ${nextInAvailableAt ? format(nextInAvailableAt, "dd-MMM HH:mm") : "later"}.`,
         duration: 8000,
       });
       return;
