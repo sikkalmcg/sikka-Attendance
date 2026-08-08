@@ -242,6 +242,7 @@ export default function AttendancePage() {
   const [isMutatingAttendance, setIsMutatingAttendance] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [cooldownRemaining, setCooldownRemaining] = useState<string>("");
   
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT" | "DETAILS">("NONE");
@@ -505,6 +506,30 @@ const allPlantExitHistory = useMemo(() => {
     if (!nextInAvailableAt || !currentTime) return false;
     return isAfter(nextInAvailableAt, currentTime);
   }, [nextInAvailableAt, currentTime]);
+
+  // Live countdown for the Mark IN cool-off period (updates every second, no refresh needed).
+  useEffect(() => {
+    if (!isCooldownLocked || !nextInAvailableAt) {
+      setCooldownRemaining("");
+      return;
+    }
+    const tick = () => {
+      const now = currentTime || getISTTime();
+      if (!isAfter(nextInAvailableAt, now)) {
+        setCooldownRemaining("");
+        return;
+      }
+      const diffMs = nextInAvailableAt.getTime() - now.getTime();
+      const totalSec = Math.max(0, Math.floor(diffMs / 1000));
+      const hh = String(Math.floor(totalSec / 3600)).padStart(2, "0");
+      const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
+      const ss = String(totalSec % 60).padStart(2, "0");
+      setCooldownRemaining(`${hh}:${mm}:${ss}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isCooldownLocked, nextInAvailableAt, currentTime]);
 
   const isEmployeeLogin = useMemo(() => {
     if (!verifiedUser) return false;
@@ -961,7 +986,10 @@ const allPlantExitHistory = useMemo(() => {
       finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
     }
 
-    const nextEnableDT = addHours(outDT, 8);
+    // Spec: After a manual Mark OUT, next Mark IN opens exactly 1 hour after the actual
+    // Mark OUT time (Mark OUT Time + 1 Hour). UI liveness (button disable + countdown)
+    // is driven by nextInEnableTime / isCooldownLocked below.
+    const nextEnableDT = addHours(outDT, 1);
     const recordId = activeRecord.id || (activeRecord as any)._id;
 
     const finalAddressOut = detectedAddress || activeRecord.address || (detectedPlant as any)?.address || "Registered Zone";
@@ -1094,10 +1122,13 @@ try {
             </div>
 
             <div className="pt-6 border-t border-slate-100 flex flex-col items-center justify-center w-full">
-              {isCooldownLocked && nextInAvailableAt ? (
+{isCooldownLocked && nextInAvailableAt ? (
                 <div className="flex flex-col items-center justify-center gap-1 text-amber-700 bg-amber-50 px-5 py-3 rounded-xl w-full border border-amber-200">
                   <span className="text-sm font-black uppercase tracking-wider">Rest Period Active</span>
-                  <span className="text-xs font-bold text-center">Next Mark IN will be available on {format(nextInAvailableAt, "dd-MMM-yyyy HH:mm")}</span>
+                  <span className="text-xs font-bold text-center">Mark IN will be available at {format(nextInAvailableAt, "dd-MMM-yyyy HH:mm")}</span>
+                  <span className="text-lg font-black font-mono tracking-widest text-amber-800">
+                    {cooldownRemaining || "00:00:00"}
+                  </span>
                 </div>
               ) : activeRecord ? (
                 <div className="w-full space-y-3">
