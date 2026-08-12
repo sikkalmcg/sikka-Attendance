@@ -1,19 +1,18 @@
-# Facility Exits Tracking Enhancement - Implementation Plan
+# TODO: Multi-Session Attendance Report (Mark IN / Mark OUT multiple times per day)
 
-## Backend & Data Layer
-- [x] **Step 1:** Add `ExitEvent`/`FacilityExitRecord` interface and `exitEvents`/`currentGeofenceStatus` to `types.ts`
-- [x] **Step 2:** Rewrite `/api/exit-tracking/route.ts` to use MongoDB `getDb()` and store facility exit records per spec (POST + GET)
-- [x] **Step 3:** Rewrite `/api/approvals/plant-exits/route.ts` to fetch from MongoDB `plantExits` collection
+## Goal
+Support displaying and exporting **multiple Mark IN / Mark OUT sessions** for the same employee on the same date in the Attendance History Ledger report, with Day Total working hours.
 
-## Frontend - Attendance Page
-- [x] **Step 4:** Enhance geofence tracker to store employee code, name, designation, plant, distance, tracking status
-- [x] **Step 5:** Compute total out duration in HH:MM format and set trackingStatus (Outside Plant / Returned)
-- [x] **Step 6:** Add periodic 15-30 min polling fallback and GPS-unavailable fallback
-
-## Frontend - Approvals Page
-- [x] **Step 7:** Update Facility Exits tab headers (Employee Name, Code, Designation, Plant, Date, Out Plant Time, In Plant Time, Out Duration, Distance KM, Out Location, Status, Action)
-- [x] **Step 8:** Update View Location popup with all required fields
-- [x] **Step 9:** Add View History action
-
-## Verification
-- [x] **Step 10:** Run typecheck/build to verify no errors (only pre-existing errors remain in unrelated files)
+## Steps
+- [x] Explore codebase (reports UI, API route, data model)
+- [x] Confirm plan with user
+- [x] API route: replace merged punch logic with per-session logic (preserve all sessions)
+- [x] API route: compute per-session working hours + Day Total row
+- [x] API route: update CSV export to include Session column + Day Total
+- [ ] UI page: add `session`/`isDayTotal` to LedgerRow type
+- [ ] UI page: add Session column header + render Day Total row
+- [ ] UI page: update exportReport columnOrder to include session
+- [ ] UI page: update Print report to include Session column
+- [ ] UI page: fix colSpan counts (loading/empty states)
+- [ ] Update module README.md note
+- [ ] Type-check / build the project to verify no errors

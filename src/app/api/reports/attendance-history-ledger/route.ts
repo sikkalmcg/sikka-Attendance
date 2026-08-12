@@ -319,8 +319,10 @@ export async function GET(req: Request) {
       }
     }
 
-    // Build quick lookup per employee+date (aggregate all punches so IN/OUT pair is correct)
-    type AggregatedPunch = {
+    // Build per-session lookup per employee+date.
+    // Each attendance punch document represents ONE Mark IN / Mark OUT session.
+    // All sessions for the same employee+date must be preserved (NOT merged/overwritten).
+    type SessionPunch = {
       inTime: string | null;
       outTime: string | null;
       inLocation: string;
@@ -337,8 +339,36 @@ export async function GET(req: Request) {
       status: string;
     };
 
-    const punchByEmpDate = new Map<string, AggregatedPunch>();
+    const sessionsByEmpDate = new Map<string, SessionPunch[]>();
 
+    for (const rec of attendancePunches) {
+      const key = `${rec.employeeId}:${rec.date}`;
+      const session: SessionPunch = {
+        inTime: rec.inTime ?? null,
+        outTime: rec.outTime ?? null,
+        inLocation: rec.address ? rec.address : '--',
+        outLocation: rec.addressOut ? rec.addressOut : '--',
+        inPlant: rec.inPlant ? rec.inPlant : '--',
+        outPlant: rec.outPlant ? rec.outPlant : null,
+        approved: rec.approved === true || String(rec.approved) === 'true',
+        approvedBy: rec.approvedBy || '--',
+        editedBy: (rec as any).editedBy || null,
+        autoOut: rec.autoOut === true || rec.autoCheckout === true,
+        autoCheckout: rec.autoCheckout === true,
+        outDate: rec.outDate ?? null,
+        hours: rec.hours || 0,
+        status: rec.status || 'Open',
+      };
+
+      const existing = sessionsByEmpDate.get(key);
+      if (existing) {
+        existing.push(session);
+      } else {
+        sessionsByEmpDate.set(key, [session]);
+      }
+    }
+
+    // Sort sessions per employee+date by Mark IN time (chronological).
     const compareTimeHHMM = (a: string, b: string) => {
       const [ah, am] = a.split(':').map((x) => parseInt(x, 10));
       const [bh, bm] = b.split(':').map((x) => parseInt(x, 10));
@@ -346,63 +376,15 @@ export async function GET(req: Request) {
       const bv = (bh || 0) * 60 + (bm || 0);
       return av < bv ? -1 : av > bv ? 1 : 0;
     };
-
-    for (const rec of attendancePunches) {
-      const key = `${rec.employeeId}:${rec.date}`;
-      const existing = punchByEmpDate.get(key);
-
-      const candidateIn = rec.inTime ?? null;
-      const candidateOut = rec.outTime ?? null;
-
-      if (!existing) {
-        punchByEmpDate.set(key, {
-          inTime: candidateIn,
-          outTime: candidateOut,
-          inLocation: rec.address ? rec.address : '--',
-          outLocation: rec.addressOut ? rec.addressOut : '--',
-          inPlant: rec.inPlant ? rec.inPlant : '--',
-          outPlant: rec.outPlant ? rec.outPlant : null,
-          approved: rec.approved === true || String(rec.approved) === 'true',
-          approvedBy: rec.approvedBy || '--',
-          editedBy: (rec as any).editedBy || null,
-          autoOut: rec.autoOut === true || rec.autoCheckout === true,
-          autoCheckout: rec.autoCheckout === true,
-          outDate: rec.outDate ?? null,
-          hours: rec.hours || 0,
-          status: rec.status || 'Open',
-        });
-        continue;
-      }
-
-      // IN: keep earliest non-null inTime
-      if (candidateIn) {
-        if (!existing.inTime) {
-          existing.inTime = candidateIn;
-          existing.inLocation = rec.address ? rec.address : '--';
-          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
-        } else if (compareTimeHHMM(candidateIn, existing.inTime) < 0) {
-          existing.inTime = candidateIn;
-          existing.inLocation = rec.address ? rec.address : '--';
-          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
-        }
-      }
-
-      // OUT: keep latest non-null outTime
-      if (candidateOut) {
-        if (!existing.outTime) {
-          existing.outTime = candidateOut;
-          existing.outLocation = rec.addressOut ? rec.addressOut : '--';
-          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
-          existing.outDate = rec.outDate ?? existing.outDate;
-        } else if (compareTimeHHMM(candidateOut, existing.outTime) > 0) {
-          existing.outTime = candidateOut;
-          existing.outLocation = rec.addressOut ? rec.addressOut : '--';
-          if (rec.approvedBy) existing.approvedBy = rec.approvedBy;
-          existing.outDate = rec.outDate ?? existing.outDate;
-        }
-      }
-
-      punchByEmpDate.set(key, existing);
+    for (const sessions of sessionsByEmpDate.values()) {
+      sessions.sort((a, b) => {
+        const aIn = a.inTime ?? '';
+        const bIn = b.inTime ?? '';
+        if (aIn === bIn) return 0;
+        if (!aIn) return 1;
+        if (!bIn) return -1;
+        return compareTimeHHMM(aIn, bIn);
+      });
     }
 
     // Create date array (calendar days)
@@ -424,20 +406,20 @@ export async function GET(req: Request) {
         if (!isEmployeeActiveOnDate(emp, dateStr)) continue;
 
         const key = `${emp.employeeId}:${dateStr}`;
-        const rec = punchByEmpDate.get(key);
+        const sessions = sessionsByEmpDate.get(key) || [];
 
         const sun = isSunday(dateStr);
         const holidayObj = holidayByDate.get(dateStr);
         const isHoliday = !!holidayObj;
 
-        const hasPunch = !!rec?.inTime;
+        // A day is considered "has punch" if ANY session has a Mark IN time.
+        const hasPunch = sessions.some((s) => !!s.inTime);
         const leaveKey = `${emp.employeeId}:${dateStr}`;
         const approvedLeave = leaveByEmpDate.get(leaveKey);
         const hasLeave = !!approvedLeave;
 
         const status = attendanceStatusFromRules({
           hasPunch,
-          inTime: rec?.inTime,
           isSunday: sun,
           isHoliday,
           hasLeave,
@@ -450,67 +432,149 @@ export async function GET(req: Request) {
           if (finalStatus !== attendanceStatus) continue;
         }
 
-        const inDT = rec?.inTime ? rec.inTime : null;
-        const outDT = rec?.outTime ? rec.outTime : null;
-
-        // Compute working hours from IN/OUT times (same-day assumption).
-        let workingHHMM = '00:00';
-        if (rec?.inTime && rec?.outTime) {
-          const [inH, inM] = rec.inTime.split(':').map((x) => parseInt(x, 10));
-          const [outH, outM] = rec.outTime.split(':').map((x) => parseInt(x, 10));
-          const inMinutes = (inH || 0) * 60 + (inM || 0);
-          const outMinutes = (outH || 0) * 60 + (outM || 0);
-          // If out is earlier than in, assume next day
-          const deltaMinutes = outMinutes >= inMinutes ? outMinutes - inMinutes : outMinutes + 24 * 60 - inMinutes;
-          const hoursFloat = deltaMinutes / 60;
-          workingHHMM = fmtHoursToHHMM(hoursFloat);
-        }
-
-        // Approval Status
-        let approvalStatus = 'Pending';
-        if (rec?.approved === true || String(rec?.approved) === 'true') {
-          approvalStatus = 'Approved';
-        } else if (String(rec?.status || '').toUpperCase() === 'REJECTED') {
-          approvalStatus = 'Rejected';
-        }
-
-        // Approved By (Username)
-        const approvedBy = rec?.approvedBy && rec.approvedBy !== '--' ? rec.approvedBy : '--';
-
-        // Compute remarks
-        const remarks = computeRemarks({
-          leaveType: approvedLeave ? approvedLeave.purpose : undefined,
-          autoCheckout: rec?.autoCheckout,
-          autoOut: rec?.autoOut,
-          editedBy: rec?.editedBy || null,
-          inPlant: rec?.inPlant || '--',
-          outPlant: rec?.outPlant || null,
-          hasOutTime: !!rec?.outTime,
-        });
-
-        const inDateTime = inDT ? `${dateStr} ${inDT}` : '--';
-        const outDateTime = outDT ? `${rec?.outDate || dateStr} ${outDT}` : '--';
-
-        // Out Plant
-        const outPlant = rec?.outPlant || '--';
-
-        allRows.push({
+        const baseRow = {
           employeeId: emp.employeeId,
           employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : (emp.name || ''),
           department: emp.department || '--',
           designation: emp.designation || '--',
-          inPlant: rec?.inPlant ? rec.inPlant : '--',
-          inDateTime,
-          outDateTime,
-          workingHours: workingHHMM,
-          inLocation: rec?.inLocation ? rec.inLocation : '--',
-          outLocation: rec?.outLocation ? rec.outLocation : '--',
-          outPlant,
           attendanceStatus: finalStatus,
-          approvalStatus,
-          approvedBy,
-          remarks,
+        };
+
+        // Case: no completed sessions -> single absent/holiday/weekly-off/leave row (existing format).
+        const completedSessions = sessions.filter((s) => !!s.inTime);
+        if (completedSessions.length === 0) {
+          const rec = sessions[0];
+
+          // Approval Status
+          let approvalStatus = 'Pending';
+          if (rec?.approved === true || String(rec?.approved) === 'true') {
+            approvalStatus = 'Approved';
+          } else if (String(rec?.status || '').toUpperCase() === 'REJECTED') {
+            approvalStatus = 'Rejected';
+          }
+
+          // Approved By (Username)
+          const approvedBy = rec?.approvedBy && rec.approvedBy !== '--' ? rec.approvedBy : '--';
+
+          // Compute remarks
+          const remarks = computeRemarks({
+            leaveType: approvedLeave ? approvedLeave.purpose : undefined,
+            autoCheckout: rec?.autoCheckout,
+            autoOut: rec?.autoOut,
+            editedBy: rec?.editedBy || null,
+            inPlant: rec?.inPlant || '--',
+            outPlant: rec?.outPlant || null,
+            hasOutTime: !!rec?.outTime,
+          });
+
+          allRows.push({
+            ...baseRow,
+            session: '1',
+            isDayTotal: false,
+            inPlant: rec?.inPlant ? rec.inPlant : '--',
+            inDateTime: '--',
+            outDateTime: '--',
+            workingHours: '00:00',
+            inLocation: rec?.inLocation ? rec.inLocation : '--',
+            outLocation: rec?.outLocation ? rec.outLocation : '--',
+            outPlant: rec?.outPlant ? rec.outPlant : '--',
+            approvalStatus,
+            approvedBy,
+            remarks,
+          });
+          continue;
+        }
+
+        // Case: sessions exist. Compute per-session working hours and sum.
+        const sessionRows: any[] = [];
+        let dayTotalMinutes = 0;
+
+        completedSessions.forEach((rec, idx) => {
+          // Compute working hours from IN/OUT times (same-day assumption).
+          let workingHHMM = '00:00';
+          if (rec.inTime && rec.outTime) {
+            const [inH, inM] = rec.inTime.split(':').map((x) => parseInt(x, 10));
+            const [outH, outM] = rec.outTime.split(':').map((x) => parseInt(x, 10));
+            const inMinutes = (inH || 0) * 60 + (inM || 0);
+            const outMinutes = (outH || 0) * 60 + (outM || 0);
+            // If out is earlier than in, assume next day
+            const deltaMinutes = outMinutes >= inMinutes ? outMinutes - inMinutes : outMinutes + 24 * 60 - inMinutes;
+            dayTotalMinutes += deltaMinutes;
+            const hoursFloat = deltaMinutes / 60;
+            workingHHMM = fmtHoursToHHMM(hoursFloat);
+          }
+
+          // Approval Status
+          let approvalStatus = 'Pending';
+          if (rec.approved === true || String(rec.approved) === 'true') {
+            approvalStatus = 'Approved';
+          } else if (String(rec.status || '').toUpperCase() === 'REJECTED') {
+            approvalStatus = 'Rejected';
+          }
+
+          // Approved By (Username)
+          const approvedBy = rec.approvedBy && rec.approvedBy !== '--' ? rec.approvedBy : '--';
+
+          // Compute remarks
+          const remarks = computeRemarks({
+            leaveType: approvedLeave ? approvedLeave.purpose : undefined,
+            autoCheckout: rec.autoCheckout,
+            autoOut: rec.autoOut,
+            editedBy: rec.editedBy || null,
+            inPlant: rec.inPlant || '--',
+            outPlant: rec.outPlant || null,
+            hasOutTime: !!rec.outTime,
+          });
+
+          const inDateTime = rec.inTime ? `${dateStr} ${rec.inTime}` : '--';
+          const outDateTime = rec.outTime ? `${rec.outDate || dateStr} ${rec.outTime}` : '--';
+
+          sessionRows.push({
+            ...baseRow,
+            session: String(idx + 1),
+            isDayTotal: false,
+            inPlant: rec.inPlant ? rec.inPlant : '--',
+            inDateTime,
+            outDateTime,
+            workingHours: workingHHMM,
+            inLocation: rec.inLocation,
+            outLocation: rec.outLocation,
+            outPlant: rec.outPlant ? rec.outPlant : '--',
+            approvalStatus,
+            approvedBy,
+            remarks,
+          });
         });
+
+        allRows.push(...sessionRows);
+
+        // If a day has 2+ sessions, append a Day Total row (sum of completed sessions).
+        if (sessionRows.length > 1) {
+          const dayTotalHHMM = fmtHoursToHHMM(dayTotalMinutes / 60);
+          const dayTotalApproval = sessionRows.every((r) => r.approvalStatus === 'Approved')
+            ? 'Approved'
+            : sessionRows.some((r) => r.approvalStatus === 'Rejected')
+              ? 'Rejected'
+              : 'Pending';
+          const dayTotalApprovedBy = '--';
+          const dayTotalRemarks = `Day Total (${sessionRows.length} sessions)`;
+
+          allRows.push({
+            ...baseRow,
+            session: 'TOTAL',
+            isDayTotal: true,
+            inPlant: '--',
+            inDateTime: '--',
+            outDateTime: '--',
+            workingHours: dayTotalHHMM,
+            inLocation: '--',
+            outLocation: '--',
+            outPlant: '--',
+            approvalStatus: dayTotalApproval,
+            approvedBy: dayTotalApprovedBy,
+            remarks: dayTotalRemarks,
+          });
+        }
       }
     }
 
@@ -535,7 +599,8 @@ export async function GET(req: Request) {
         const headers = [
           'Employee ID',
           'Employee Name',
-          'Department / Designation',
+'Department / Designation',
+          'Session',
           'In Plant',
           'In Date & Time',
           'Out Date & Time',
@@ -552,10 +617,11 @@ export async function GET(req: Request) {
         const csv = [
           headers.join(','),
           ...rows.map(r => {
-            const line = [
+const line = [
               r.employeeId,
               r.employeeName,
               `${r.department} / ${r.designation}`,
+              r.isDayTotal ? 'Day Total' : (r.session || '1'),
               r.inPlant,
               r.inDateTime,
               r.outDateTime,

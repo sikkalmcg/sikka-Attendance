@@ -252,6 +252,7 @@ export default function AttendancePage() {
   const [leavePage, setLeavePage] = useState(1);
   
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
   const [detailedLocation, setDetailedLocation] = useState({ street: "", area: "", city: "", state: "", pincode: "" });
@@ -787,8 +788,23 @@ const allPlantExitHistory = useMemo(() => {
       isAutoTriggering.current = true;
     }
 
-    const processGeocoding = async (lat: number, lng: number) => {
+    const processGeocoding = async (lat: number, lng: number, accuracy: number) => {
       try {
+          setGpsAccuracy(accuracy);
+          if (accuracy > 100) {
+            toast({
+              variant: "destructive",
+              title: "Poor GPS Signal",
+              description: `Your location accuracy is ${accuracy.toFixed(0)} meters. We need accuracy better than 100m to proceed.`,
+              duration: 8000
+            });
+            setIsLoadingLocation(false);
+            if (type === "OUT_AUTO") {
+              isAutoTriggering.current = false;
+            }
+            return;
+          }
+
           const response = await fetch('/api/geocode/reverse', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -872,7 +888,7 @@ const allPlantExitHistory = useMemo(() => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(emergencyTimeout);
-        processGeocoding(pos.coords.latitude, pos.coords.longitude);
+        processGeocoding(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
       },
       (err) => {
         console.log("Instant positioning error, fallback routing", err);
@@ -1548,6 +1564,13 @@ try {
               </p>
             </div>
 
+            <div>
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GPS Accuracy</Label>
+              <p className="text-sm font-bold text-slate-700 mt-0.5">
+                {gpsAccuracy ? `${gpsAccuracy.toFixed(2)} meters` : "N/A"}
+              </p>
+            </div>
+
             <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 shadow-inner">
               <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-3">
                 <Navigation className="w-3.5 h-3.5" /> Captured GPS Address
@@ -1644,6 +1667,10 @@ try {
                   <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
                   <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy HH:mm")}</p>
                </div>
+                <div>
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GPS Accuracy</Label>
+                    <p className="text-sm font-bold text-slate-700 mt-1">{gpsAccuracy ? `${gpsAccuracy.toFixed(2)} meters` : "N/A"}</p>
+                </div>
             </div>
 
             {activeRecord && !canMarkOut && nextOutAvailableAt && (

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,6 @@ import {
   Building2,
   Clock,
   PartyPopper,
-  ChevronRight,
   CalendarCheck,
   Pencil,
   Trash2,
@@ -23,9 +22,6 @@ import {
 } from "lucide-react";
 import { 
   format, 
-  eachDayOfInterval, 
-  startOfYear, 
-  endOfYear, 
   isSunday, 
   parseISO, 
   isSameDay,
@@ -33,7 +29,6 @@ import {
   isBefore,
   startOfMonth
 } from "date-fns";
-import { cn } from "@/lib/utils";
 import { Holiday } from "@/lib/types";
 import { useData } from "@/context/data-context";
 import {
@@ -61,16 +56,19 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const PROJECT_START_DATE = new Date(2026, 3, 1); // April 1, 2026
 
 export default function HolidaysPage() {
   const { toast } = useToast();
-  const { plants, holidays, addRecord, updateRecord, deleteRecord, setRecord } = useData();
+  const { plants, holidays, addRecord, updateRecord, deleteRecord } = useData();
   
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date() < PROJECT_START_DATE ? PROJECT_START_DATE : new Date());
   const [isMounted, setIsMounted] = useState(false);
-  
+  const [sundays, setSundays] = useState<Holiday[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   // Dialog State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [targetDate, setTargetDate] = useState<Date | null>(null);
@@ -83,39 +81,31 @@ export default function HolidaysPage() {
 
   useEffect(() => {
     setIsMounted(true);
+    fetchSundays(currentMonth.getFullYear());
   }, []);
 
-  // Auto-generate Sundays for current year - Optimized to prevent infinite loop
-  useEffect(() => {
-    if (!isMounted || plants.length === 0) return;
-    
-    const year = currentMonth.getFullYear();
-    const start = startOfYear(new Date(year, 0, 1));
-    const end = endOfYear(new Date(year, 11, 31));
-    const days = eachDayOfInterval({ start, end });
-    
-    const allPlantIds = plants.map(p => p.id);
-    
-    days
-      .filter(d => isSunday(d) && !isBefore(d, PROJECT_START_DATE))
-      .forEach(d => {
-        const dateStr = format(d, "yyyy-MM-dd");
-        const id = `sun-${dateStr}`;
-        if (!holidays.some(h => h.date === dateStr)) {
-          setRecord('holidays', id, {
-            id,
-            date: dateStr,
-            name: "Weekly Off",
-            type: "WEEKLY_OFF",
-            auto: true,
-            plantIds: allPlantIds
-          });
-        }
-      });
-  }, [plants.length, currentMonth.getFullYear(), holidays.length, isMounted]);
+  const fetchSundays = async (year: number) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/holidays/sundays?year=${year}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch Sundays');
+      }
+      const data: Holiday[] = await response.json();
+      const allPlantIds = plants.map(p => p.id);
+      const sundaysWithPlants = data.map(sunday => ({ ...sunday, plantIds: allPlantIds }));
+      setSundays(sundaysWithPlants);
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Error", description: "Could not load weekly offs." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const allHolidays = useMemo(() => [...holidays, ...sundays], [holidays, sundays]);
 
   const handleDayClick = (date: Date) => {
-    // RESTRICTION: No holidays before project start
     if (isBefore(date, PROJECT_START_DATE)) {
       toast({ variant: "destructive", title: "Access Denied", description: "Project boundary is April-2026." });
       return;
@@ -126,7 +116,7 @@ export default function HolidaysPage() {
       return;
     }
     const dateStr = format(date, "yyyy-MM-dd");
-    const existing = holidays.find(h => h.date === dateStr && !h.auto);
+    const existing = allHolidays.find(h => h.date === dateStr && !h.auto);
     
     setTargetDate(date);
     if (existing) {
@@ -196,15 +186,23 @@ export default function HolidaysPage() {
 
   const monthlyData = useMemo(() => {
     if (!isMounted) return { custom: [], weeklyOffs: [], total: 0 };
-    const currentItems = holidays.filter(h => isSameMonth(parseISO(h.date), currentMonth));
+    const currentItems = allHolidays.filter(h => isSameMonth(parseISO(h.date), currentMonth));
     return {
       custom: currentItems.filter(h => !h.auto),
       weeklyOffs: currentItems.filter(h => h.auto),
       total: currentItems.length
     };
-  }, [holidays, currentMonth, isMounted]);
+  }, [allHolidays, currentMonth, isMounted]);
 
-  if (!isMounted) return null;
+  const handleMonthChange = (month: Date) => {
+    const newMonth = isBefore(startOfMonth(month), startOfMonth(PROJECT_START_DATE)) ? PROJECT_START_DATE : month;
+    setCurrentMonth(newMonth);
+    if (newMonth.getFullYear() !== currentMonth.getFullYear()) {
+      fetchSundays(newMonth.getFullYear());
+    }
+  };
+
+  if (!isMounted) return <HolidaysPageSkeleton />;
 
   return (
     <TooltipProvider>
@@ -226,31 +224,27 @@ export default function HolidaysPage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
               <div className="lg:col-span-7 flex justify-center p-6 lg:p-0">
                 <div className="w-full max-w-md">
-                  <Calendar
-                    mode="single"
-                    onDayClick={handleDayClick}
-                    month={currentMonth}
-                    onMonthChange={(m) => {
-                      if (!isBefore(startOfMonth(m), startOfMonth(PROJECT_START_DATE))) {
-                        setCurrentMonth(m);
-                      } else {
-                        setCurrentMonth(PROJECT_START_DATE);
-                      }
-                    }}
-                    className="rounded-3xl border-2 border-slate-100 p-8 bg-white shadow-xl w-full"
-                    modifiers={{
-                      sunday: (date) => isSunday(date),
-                      holiday: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && !h.auto),
-                      autoWeekly: (date) => holidays.some(h => isSameDay(parseISO(h.date), date) && h.auto),
-                      restricted: (date) => isBefore(date, PROJECT_START_DATE)
-                    }}
-                    modifiersClassNames={{
-                      sunday: "text-rose-500 font-black",
-                      holiday: "bg-primary text-white hover:bg-primary/90 rounded-2xl font-bold",
-                      autoWeekly: "bg-slate-50 text-slate-400 cursor-help rounded-xl",
-                      restricted: "opacity-20 pointer-events-none grayscale"
-                    }}
-                  />
+                   {isLoading ? <Skeleton className="h-[400px] w-full" /> : 
+                    <Calendar
+                      mode="single"
+                      onDayClick={handleDayClick}
+                      month={currentMonth}
+                      onMonthChange={handleMonthChange}
+                      className="rounded-3xl border-2 border-slate-100 p-8 bg-white shadow-xl w-full"
+                      modifiers={{
+                        sunday: (date) => isSunday(date),
+                        holiday: (date) => allHolidays.some(h => isSameDay(parseISO(h.date), date) && !h.auto),
+                        autoWeekly: (date) => allHolidays.some(h => isSameDay(parseISO(h.date), date) && h.auto),
+                        restricted: (date) => isBefore(date, PROJECT_START_DATE)
+                      }}
+                      modifiersClassNames={{
+                        sunday: "text-rose-500 font-black",
+                        holiday: "bg-primary text-white hover:bg-primary/90 rounded-2xl font-bold",
+                        autoWeekly: "bg-slate-50 text-slate-400 cursor-help rounded-xl",
+                        restricted: "opacity-20 pointer-events-none grayscale"
+                      }}
+                    />
+                   }
                 </div>
               </div>
 
@@ -263,6 +257,7 @@ export default function HolidaysPage() {
                 </div>
 
                 <ScrollArea className="flex-1 max-h-[600px] pr-4">
+                  {isLoading ? <HolidayListSkeleton /> : (
                   <div className="space-y-10">
                     <div className="space-y-4">
                       <div className="flex items-center gap-2">
@@ -330,6 +325,7 @@ export default function HolidaysPage() {
                       </div>
                     </div>
                   </div>
+                  )}
                 </ScrollArea>
               </div>
             </div>
@@ -396,5 +392,58 @@ export default function HolidaysPage() {
         </AlertDialog>
       </div>
     </TooltipProvider>
+  );
+}
+
+function HolidaysPageSkeleton() {
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 px-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <Skeleton className="w-12 h-12 rounded-2xl" />
+          <div>
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-48 mt-2" />
+          </div>
+        </div>
+      </div>
+      <Card className="shadow-2xl border-none overflow-hidden bg-white">
+        <CardContent className="p-0 lg:p-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <div className="lg:col-span-7 flex justify-center p-6 lg:p-0">
+              <Skeleton className="h-[400px] w-full max-w-md" />
+            </div>
+            <div className="lg:col-span-5 flex flex-col h-full border-t lg:border-t-0 lg:border-l border-slate-100 p-6 lg:pl-10">
+              <HolidayListSkeleton />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function HolidayListSkeleton() {
+  return (
+    <>
+      <div className="flex items-center justify-between mb-8">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-6 w-16 rounded-full" />
+      </div>
+      <div className="space-y-10">
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-24 w-full rounded-3xl" />
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-48" />
+          <div className="space-y-2">
+            <Skeleton className="h-12 w-full rounded-xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

@@ -28,6 +28,8 @@ type LedgerRow = {
   employeeName: string;
   department: string;
   designation: string;
+  session?: string;
+  isDayTotal?: boolean;
   inPlant: string;
   inDateTime: string;
   outDateTime: string;
@@ -225,11 +227,12 @@ export default function AttendanceHistoryLedgerPage() {
     if (search && search !== "all") params.set("search", search);
 
     if (format === "csv" || format === "excel") {
-      const columnOrder = [
+const columnOrder = [
         'employeeId',
         'employeeName',
         'department',
         'designation',
+        'session',
         'inPlant',
         'inDateTime',
         'outDateTime',
@@ -328,7 +331,8 @@ export default function AttendanceHistoryLedgerPage() {
               <tr>
                 <th>Employee ID</th>
                 <th>Employee Name</th>
-                <th>Department / Designation</th>                
+                <th>Department / Designation</th>
+                <th>Session</th>
                 <th>In Plant</th>
                 <th>In Date & Time</th>
                 <th>Out Date & Time</th>
@@ -357,7 +361,8 @@ export default function AttendanceHistoryLedgerPage() {
                     <tr>
                       <td>${r.employeeId}</td>
                       <td>${r.employeeName}</td>
-                      <td>${r.department} / ${r.designation}</td>                      
+                      <td>${r.department} / ${r.designation}</td>
+                      <td><strong>${r.isDayTotal ? 'Day Total' : (r.session || '1')}</strong></td>
                       <td>${r.inPlant || '--'}</td>
                       <td>${r.inDateTime}</td>
                       <td>${r.outDateTime}</td>
@@ -611,7 +616,8 @@ export default function AttendanceHistoryLedgerPage() {
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("employeeName")}>
                     Employee Name <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Department / Designation</TableHead>
+<TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Department / Designation</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Session</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Plant</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Date & Time</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Date & Time</TableHead>
@@ -632,13 +638,13 @@ export default function AttendanceHistoryLedgerPage() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-20 text-slate-400 font-bold">
+                    <TableCell colSpan={15} className="text-center py-20 text-slate-400 font-bold">
                       Loading Report Data...
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-20 text-slate-400 font-bold italic">
+                    <TableCell colSpan={15} className="text-center py-20 text-slate-400 font-bold italic">
                       No records found for the current selection.
                     </TableCell>
                   </TableRow>
@@ -650,7 +656,10 @@ export default function AttendanceHistoryLedgerPage() {
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{rowIndex}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.employeeId}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.employeeName}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 max-w-[200px] truncate">{r.department} / {r.designation}</TableCell>
+<TableCell className="px-4 py-3 text-xs font-bold text-slate-700 max-w-[200px] truncate">{r.department} / {r.designation}</TableCell>
+                        <TableCell className={cn("px-4 py-3 text-xs font-black", r.isDayTotal ? "text-primary uppercase" : "text-slate-600")}>
+                          {r.isDayTotal ? "Day Total" : (r.session || "1")}
+                        </TableCell>
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inPlant || "--"}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.inDateTime}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.outDateTime}</TableCell>
