@@ -1442,25 +1442,27 @@ try {
 <TableCell className="text-xs font-bold text-rose-600">
                         {(() => {
                           const t = event?.outPlantTime;
-                          if (!t) return "--";
+                          if (!t) return "--:--";
                           const s = String(t);
-                          // ISO => split out the HH:mm part
-                          if (s.includes('T')) {
-                            const d = new Date(s);
-                            if (!isNaN(d.getTime())) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+                          try {
+                            const d = parseISO(s.replace(" ", "T"));
+                            if (isValid(d)) return format(d, "HH:mm");
+                          } catch (e) {
+                            // Fallback for non-standard formats
+                            return s.includes(' ') ? (s.split(' ')[1] || s) : s;
                           }
-                          return s.includes(' ') ? (s.split(' ')[1] || s) : s;
                         })()}
                       </TableCell>
                       <TableCell className="text-xs font-bold text-emerald-600">
                         {event.inPlantTime ? (() => {
                           const t = event.inPlantTime;
                           const s = String(t);
-                          if (s.includes('T')) {
-                            const d = new Date(s);
-                            if (!isNaN(d.getTime())) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+                          try {
+                            const d = parseISO(s.replace(" ", "T"));
+                            if (isValid(d)) return format(d, "HH:mm");
+                          } catch (e) {
+                            return s.includes(' ') ? (s.split(' ')[1] || s) : s;
                           }
-                          return s.includes(' ') ? (s.split(' ')[1] || s) : s;
                         })() : "Still Outside"}
                       </TableCell>
                       <TableCell className="text-xs font-black text-slate-700">{event.totalOutDuration || "--"}</TableCell>
