@@ -30,6 +30,7 @@ type LedgerRow = {
   designation: string;
   session?: string;
   isDayTotal?: boolean;
+  date: string;
   inPlant: string;
   inDateTime: string;
   outDateTime: string;
@@ -672,7 +673,7 @@ const columnOrder = [
                         
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500 max-w-[200px] truncate" title={r.inLocation}>{r.inLocation}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500 max-w-[200px] truncate" title={r.outLocation}>{r.outLocation}</TableCell>
-                        <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.outPlant || "--"}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-500">{r.outPlant || "--"}</TableCell>
 
                         <TableCell className="px-4 py-3">
                           <Badge className={cn("font-black text-[10px] px-2 py-1 border shadow-none whitespace-nowrap", attendanceBadgeClasses(r.attendanceStatus))}>

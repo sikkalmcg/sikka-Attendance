@@ -708,7 +708,12 @@ const allPlantExitHistory = useMemo(() => {
   const performAutoCheckOut = async (lat: number, lng: number, address: string, components: any, plant: Plant | null) => {
     if (!activeRecord || isMutatingAttendance) return;
     
-    const inDT = activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
+    let inDT: Date | null = null;
+    if (activeRecord.inDateTime) {
+      inDT = parseISO(activeRecord.inDateTime);
+    } else if (activeRecord.inDate && activeRecord.inTime) {
+      inDT = parseDateTime(activeRecord.inDate, activeRecord.inTime);
+    }
     if (!inDT || !isValid(inDT)) return;
 
     const creditOutDT = addHours(inDT, 8); 
@@ -916,16 +921,18 @@ const allPlantExitHistory = useMemo(() => {
     const today = format(now, "yyyy-MM-dd");
     const timeStr = format(now, "HH:mm");
     
-    const plantName = detectedPlant ? detectedPlant.name : "N/A"; 
-    const finalAddress = detectedAddress || "Salt Plant Zone, NCR";
+    const plantName = detectedPlant ? detectedPlant.name : "N/A";
     
-    const attendanceType = detectedPlant 
-      ? 'Plant Attendance' 
-      : (selectedType === 'WFH' ? 'Work From Home' : 'Field Work');
-      
-    const remark = detectedPlant 
-      ? `Checked IN at ${plantName}` 
-      : `Checked IN for ${attendanceType}`;
+    let finalInPlant = "N/A";
+    let attendanceType = "N/A";
+    
+    if (detectedPlant) {
+      finalInPlant = detectedPlant.name;
+      attendanceType = 'Plant Attendance';
+    } else {
+      finalInPlant = selectedType === 'WFH' ? 'Outside-WFM' : 'Outside-Field Work';
+      attendanceType = selectedType === 'WFH' ? 'Work From Home' : 'Field Work';
+    }
 
     setIsMutatingAttendance(true);
     setActiveDialog("NONE");
@@ -945,14 +952,14 @@ const allPlantExitHistory = useMemo(() => {
         attendanceType: attendanceType,
         lat: currentGPS?.lat || 28.6329, 
         lng: currentGPS?.lng || 77.4357,
-        address: finalAddress,
+        address: detectedAddress || "Salt Plant Zone, NCR",
         street: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Industrial Bypass"),
         area: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || "Industrial Zone"),
         city: detailedLocation.city || "NCR",
         state: detailedLocation.state || "Uttar Pradesh",
         pincode: detailedLocation.pincode || "N/A",
-        inPlant: plantName,
-        remark: remark,
+        inPlant: finalInPlant,
+        remark: `Checked IN for ${attendanceType}`,
         approved: false,
         unapprovedOutDuration: 0,
         currentGeofenceStatus: detectedPlant ? "Inside Plant" : "Outside Plant",
@@ -960,7 +967,7 @@ const allPlantExitHistory = useMemo(() => {
       });
 
       await refreshData();
-      setSelectedType(""); 
+      setSelectedType("");
       toast({ title: "Mark IN Successful", description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
     } catch (e) {
       toast({ variant: "destructive", title: "Error", description: "Failed to process database entry register log." });
@@ -1008,10 +1015,6 @@ const allPlantExitHistory = useMemo(() => {
     const nextEnableDT = addHours(outDT, 1);
     const recordId = activeRecord.id || (activeRecord as any)._id;
 
-    const finalAddressOut = detectedAddress || activeRecord.address || (detectedPlant as any)?.address || "Registered Zone";
-    const finalLat = currentGPS?.lat || activeRecord.lat || 28.6329;
-    const finalLng = currentGPS?.lng || activeRecord.lng || 77.4357;
-
     if (!recordId) {
       toast({ variant: "destructive", title: "Error", description: "Record ID not found." });
       return;
@@ -1020,7 +1023,7 @@ const allPlantExitHistory = useMemo(() => {
     setIsMutatingAttendance(true);
     setActiveDialog("NONE");
 
-try {
+    try {
       let finalExitEvents = activeRecord.exitEvents ? [...activeRecord.exitEvents] : [];
       let incompleteEvent = finalExitEvents.find(e => !e.inPlantTime && e.trackingStatus === "Outside Plant");
       if (incompleteEvent) {
@@ -1042,15 +1045,15 @@ try {
         hours: finalHours,
         status: 'Closed',
         outType: 'Manual',
-        latOut: finalLat, 
-        lngOut: finalLng,
-        addressOut: finalAddressOut,
+        latOut: currentGPS?.lat || activeRecord.lat || 28.6329,
+        lngOut: currentGPS?.lng || activeRecord.lng || 77.4357,
+        addressOut: detectedAddress || activeRecord.address || (detectedPlant as any)?.address || "Registered Zone",
         streetOut: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || activeRecord.street || "Unknown Street"),
         areaOut: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || activeRecord.area || "Unknown Area"),
         cityOut: detailedLocation.city || activeRecord.city || "NCR",
         stateOut: detectedPlant ? "Uttar Pradesh" : (detailedLocation.state || activeRecord.state || "NCR"),
         pincodeOut: detailedLocation.pincode || activeRecord.pincode || "N/A",
-        outPlant: detectedPlant ? detectedPlant.name : "N/A",
+        outPlant: detectedPlant ? detectedPlant.name : "Outside",
         nextInEnableTime: nextEnableDT.toISOString(),
         exitEvents: finalExitEvents,
         currentGeofenceStatus: "Shift Closed"
