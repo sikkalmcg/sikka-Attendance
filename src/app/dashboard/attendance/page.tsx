@@ -1443,30 +1443,28 @@ const allPlantExitHistory = useMemo(() => {
                       <TableCell className="text-xs font-medium text-slate-500">{event.inTime || "--:--"}</TableCell>
                       <TableCell className="text-xs font-medium text-slate-500">{event.outTime || "--:--"}</TableCell>
 <TableCell className="text-xs font-bold text-rose-600">
-                        {(() => {
-                          const t = event?.outPlantTime;
-                          if (!t) return "--:--";
-                          const s = String(t);
-                          try {
-                            const d = parseISO(s.replace(" ", "T"));
-                            if (isValid(d)) return format(d, "HH:mm");
-                          } catch (e) {
-                            // Fallback for non-standard formats
-                            return s.includes(' ') ? (s.split(' ')[1] || s) : s;
-                          }
-                        })()}
+                        {event.outPlantTime
+                          ? (() => {
+                              try {
+                                // Handles both "YYYY-MM-DD HH:mm" and ISO "YYYY-MM-DDTHH:mm:ss.sssZ"
+                                const d = parseISO(String(event.outPlantTime).replace(" ", "T"));
+                                return isValid(d) ? format(d, "HH:mm") : "--:--";
+                              } catch (e) {
+                                return "--:--";
+                              }
+                            })()
+                          : "--:--"}
                       </TableCell>
                       <TableCell className="text-xs font-bold text-emerald-600">
                         {event.inPlantTime ? (() => {
-                          const t = event.inPlantTime;
-                          const s = String(t);
                           try {
-                            const d = parseISO(s.replace(" ", "T"));
-                            if (isValid(d)) return format(d, "HH:mm");
+                            // Handles both "YYYY-MM-DD HH:mm" and ISO "YYYY-MM-DDTHH:mm:ss.sssZ"
+                            const d = parseISO(String(event.inPlantTime).replace(" ", "T"));
+                            return isValid(d) ? format(d, "HH:mm") : "Invalid Time";
                           } catch (e) {
-                            return s.includes(' ') ? (s.split(' ')[1] || s) : s;
+                            return "Invalid Time";
                           }
-                        })() : "Still Outside"}
+                        })() : <span className="text-amber-600">Still Outside</span>}
                       </TableCell>
                       <TableCell className="text-xs font-black text-slate-700">{event.totalOutDuration || "--"}</TableCell>
                       <TableCell className="text-right pr-6">
