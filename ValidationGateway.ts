@@ -105,19 +105,12 @@ export async function validationGateway(req: AttendanceRequestPayload, authToken
     throw new Error('Validation Failed: Plant location data is incomplete.');
   }
 
-  // 4. GPS Location & Plant Radius Validation (REMOVED)
-  // This server-side validation is being removed as per the new requirement.
-  // The frontend will now handle the logic for being inside or outside the radius
-  // without blocking the transaction. The location data is still captured and passed.
-  // const distance = getDistanceInMeters(
-  //   req.currentLatitude,
-  //   req.currentLongitude,
-  //   plant.latitude,
-  //   plant.longitude
-  // );
-  // if (distance > plant.allowedRadius) {
-  //   throw new Error(`Location Validation Failed: You are ${Math.round(distance)}m away from the plant, which exceeds the allowed radius of ${plant?.allowedRadius}m.`);
-  // }
+  // 4. GPS Location & Plant Radius Validation (REMOVED as per requirement)
+  // The server-side validation for geofence and GPS accuracy is now removed.
+  // This change allows users to check-out even if they are outside the plant's
+  // allowed radius or have a poor GPS signal. The frontend is expected to handle
+  // warnings and capture remarks for out-of-radius check-outs, but the backend
+  // will no longer block the transaction.
 
   // 5. Attendance Mark IN / Mark OUT validation
   const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD

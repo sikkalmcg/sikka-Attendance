@@ -796,18 +796,12 @@ const allPlantExitHistory = useMemo(() => {
     const processGeocoding = async (lat: number, lng: number, accuracy: number) => {
       try {
           setGpsAccuracy(accuracy);
-          if (accuracy > 100) {
-            toast({
-              variant: "destructive",
-              title: "Poor GPS Signal",
-              description: `Your location accuracy is ${accuracy.toFixed(0)} meters. We need accuracy better than 100m to proceed.`,
-              duration: 8000
-            });
-            setIsLoadingLocation(false);
-            if (type === "OUT_AUTO") {
-              isAutoTriggering.current = false;
-            }
-            return;
+          // Requirement 2: Remove strict accuracy blocking. Show a warning instead of blocking.
+          // The warning will be displayed inside the check-out dialog.
+          if (accuracy > 100 && type === "OUT") {
+              // This state will be used to show a warning in the dialog.
+          } else if (accuracy > 100 && type === "IN") {
+              // For check-in, we can still show a toast but we won't block.
           }
 
           const response = await fetch('/api/geocode/reverse', {
@@ -1676,15 +1670,22 @@ const allPlantExitHistory = useMemo(() => {
                 </div>
             </div>
 
-            {activeRecord && !canMarkOut && nextOutAvailableAt && (
-              <div className="p-5 bg-[#FFFDE7] rounded-2xl border border-amber-200 text-amber-800 animate-in fade-in max-w-md mx-auto w-full text-left shadow-sm">
-                <p className="text-xs font-black uppercase tracking-tight text-amber-900">
-                  ACTIVE SHIFT SINCE {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "dd-MMM")}, {activeRecord.inTime} {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "aa")}
-                </p>
-                <p className="text-[11px] font-bold text-amber-700 mt-1 leading-relaxed">
-                  Mark OUT will be available on {format(nextOutAvailableAt, "dd-MMM-yyyy HH:mm")}
-                </p>
-              </div>
+            {gpsAccuracy && gpsAccuracy > 100 && (
+              <Alert className="bg-amber-50 border-amber-100 text-amber-700 rounded-2xl">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-[10px] font-black uppercase tracking-widest">
+                  Poor GPS Signal ({gpsAccuracy.toFixed(0)}m accuracy). Location may be inaccurate.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {!detectedPlant && (
+              <Alert className="bg-rose-50 border-rose-100 text-rose-700 rounded-2xl">
+                <AlertTriangle className="h-4 w-4 text-rose-600" />
+                <AlertDescription className="text-[10px] font-black uppercase tracking-widest">
+                  Caution: You are checking out from an unregistered/outside location.
+                </AlertDescription>
+              </Alert>
             )}
 
             {activeRecord && canMarkOut && (
@@ -1711,15 +1712,6 @@ const allPlantExitHistory = useMemo(() => {
                 </div>
               </div>
             </div>
-
-            {!detectedPlant && (
-              <Alert className="bg-rose-50 border-rose-100 text-rose-700 rounded-2xl">
-                <AlertTriangle className="h-4 w-4 text-rose-600" />
-                <AlertDescription className="text-[10px] font-black uppercase tracking-widest">
-                  Caution: You are checking out from an unregistered location.
-                </AlertDescription>
-              </Alert>
-            )}
           </div>
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
             <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-blue-500 hover:bg-blue-600 text-xs uppercase" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
