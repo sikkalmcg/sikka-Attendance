@@ -262,6 +262,7 @@ export default function AttendancePage() {
   const [selectedExitEvent, setSelectedExitEvent] = useState<any>(null);
 
   const isAutoTriggering = useRef(false);
+  const activeRecordRef = useRef<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -503,6 +504,10 @@ const allPlantExitHistory = useMemo(() => {
     };
   }, [employeeRecords, currentTime]);
 
+  useEffect(() => {
+    activeRecordRef.current = activeRecord;
+  }, [activeRecord]);
+
   const isCooldownLocked = useMemo(() => {
     if (!nextInAvailableAt || !currentTime) return false;
     return isAfter(nextInAvailableAt, currentTime);
@@ -547,7 +552,7 @@ const allPlantExitHistory = useMemo(() => {
     }
   }, [isStale, activeRecord]);
 
-// --- HIGH-RESPONSE GEOFENCE TRACKER WITH SYNC (SPEC-COMPLIANT) ---
+  // --- HIGH-RESPONSE GEOFENCE TRACKER WITH SYNC (SPEC-COMPLIANT) ---
   useEffect(() => {
     if (!activeRecord || activeRecord.status !== "Open" || !navigator.geolocation) return;
 
@@ -558,12 +563,15 @@ const allPlantExitHistory = useMemo(() => {
     const trackGeofenceBoundary = async () => {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
+          const latestRecord = activeRecordRef.current;
+          if (!latestRecord || latestRecord.status !== "Open") return;
+
           const { latitude: lat, longitude: lng } = position.coords;
           const timeNowStr = format(getISTTime(), "yyyy-MM-dd HH:mm");
 
-          let currentEvents = activeRecord.exitEvents ? [...activeRecord.exitEvents] : [];
+          let currentEvents = latestRecord.exitEvents ? [...latestRecord.exitEvents] : [];
           // Spec: match the active (open / not returned) exit event.
-          let currentActiveEvent = currentEvents.find(e => !e.inPlantTime && e.trackingStatus === "Outside Plant");
+          let currentActiveEvent = currentEvents.find((e: any) => !e.inPlantTime && e.trackingStatus === "Outside Plant");
 
           // Spec: outside a 700m radius of ALL registered plant locations.
           const plantDistances = (plants || []).map(p => ({
@@ -599,14 +607,15 @@ const allPlantExitHistory = useMemo(() => {
               distance: nearest ? parseFloat(nearest.distanceM.toFixed(1)) : 0
             };
 
+            let shouldUpdate = false;
             if (!currentActiveEvent) {
               // Spec: create a new Facility Exit record per outside->return cycle.
               currentActiveEvent = {
                 employeeCode: effectiveEmployeeId,
                 employeeName: effectiveEmployeeName,
                 designation: empDesignation,
-                plant: activeRecord.inPlant || "Salt Plant",
-                date: activeRecord.date,
+                plant: latestRecord.inPlant || "Salt Plant",
+                date: latestRecord.date,
                 outPlantTime: timeNowStr,
                 gpsLatitude: lat,
                 gpsLongitude: lng,
@@ -619,6 +628,7 @@ const allPlantExitHistory = useMemo(() => {
                 trackingStatus: "Outside Plant"
               };
               currentEvents.push(currentActiveEvent);
+              shouldUpdate = true;
             } else {
               const history = currentActiveEvent.outLocationHistory || [];
               const lastPoint = history[history.length - 1];
@@ -630,15 +640,18 @@ const allPlantExitHistory = useMemo(() => {
               if (!lastPoint || lastPoint.address !== geocodedAddress || lastPoint.lat !== lat) {
                 history.push(newLocationHistoryPoint);
                 currentActiveEvent.outLocationHistory = history;
+                shouldUpdate = true;
               }
             }
 
-            // Sync with backend & force reload states for real-time approval lists
-            await updateRecord('attendance', activeRecord.id || activeRecord._id, {
-              exitEvents: currentEvents,
-              currentGeofenceStatus: "Outside Plant"
-            });
-            await refreshData();
+            if (shouldUpdate) {
+              // Sync with backend & force reload states for real-time approval lists
+              await updateRecord('attendance', latestRecord.id || latestRecord._id, {
+                exitEvents: currentEvents,
+                currentGeofenceStatus: "Outside Plant"
+              });
+              await refreshData();
+            }
           } else {
             if (currentActiveEvent) {
               const exitTimeParsed = parseISO(currentActiveEvent.outPlantTime.replace(" ", "T"));
@@ -657,10 +670,10 @@ const allPlantExitHistory = useMemo(() => {
 
               currentActiveEvent.inPlantTime = timeNowStr;
               currentActiveEvent.totalOutDuration = `${hh}:${mm}`;
-              currentActiveEvent.currentPlant = returnPlant?.name || activeRecord.inPlant || "Salt Plant";
+              currentActiveEvent.currentPlant = returnPlant?.name || latestRecord.inPlant || "Salt Plant";
               currentActiveEvent.trackingStatus = "Returned";
 
-              await updateRecord('attendance', activeRecord.id || activeRecord._id, {
+              await updateRecord('attendance', latestRecord.id || latestRecord._id, {
                 exitEvents: currentEvents,
                 currentGeofenceStatus: "Inside Plant"
               });
@@ -676,12 +689,15 @@ const allPlantExitHistory = useMemo(() => {
         async (error) => {
           // Spec: If GPS is unavailable, record Location Not Available and retry at next scheduled interval.
           console.error("Geofence verification dynamic lookup failed", error);
-          let currentEvents = activeRecord.exitEvents ? [...activeRecord.exitEvents] : [];
-          let currentActiveEvent = currentEvents.find(e => !e.inPlantTime && e.trackingStatus === "Outside Plant");
+          const latestRecord = activeRecordRef.current;
+          if (!latestRecord || latestRecord.status !== "Open") return;
+          
+          let currentEvents = latestRecord.exitEvents ? [...latestRecord.exitEvents] : [];
+          let currentActiveEvent = currentEvents.find((e: any) => !e.inPlantTime && e.trackingStatus === "Outside Plant");
           if (currentActiveEvent) {
             currentActiveEvent.completeAddress = "Location Not Available";
             currentActiveEvent.trackingStatus = "Location Not Available";
-            await updateRecord('attendance', activeRecord.id || activeRecord._id, {
+            await updateRecord('attendance', latestRecord.id || latestRecord._id, {
               exitEvents: currentEvents,
               currentGeofenceStatus: "Location Not Available"
             });
@@ -698,7 +714,7 @@ const allPlantExitHistory = useMemo(() => {
     // Also capture immediately on entering Open state so the first exit can be detected without waiting.
     trackGeofenceBoundary();
     return () => clearInterval(geofenceWorkerId);
-  }, [activeRecord, plants, employees, effectiveEmployeeId, effectiveEmployeeName, verifiedUser]);
+  }, [activeRecord?.id, activeRecord?.status, plants, employees, effectiveEmployeeId, effectiveEmployeeName, verifiedUser]);
 
   const handleMarkInClick = () => {
     if (isCooldownLocked) return;
@@ -899,7 +915,7 @@ const allPlantExitHistory = useMemo(() => {
           description: "Please verify GPS system permissions are enabled to continue." 
         });
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
     );
   };
 
