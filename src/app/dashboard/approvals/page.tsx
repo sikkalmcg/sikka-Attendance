@@ -134,7 +134,7 @@ function formatTime(t: any): string {
  *  - 'inOnly'  : Mark IN not from Plant, Mark OUT from Plant => edit Mark IN only
  *  - 'both'    : neither from Plant (undefined case) => full edit access (default)
  */
-function getEditAccess(rec: any): 'none' | 'outOnly' | 'inOnly' | 'both' {
+function getEditAccess(rec: any): 'outOnly' | 'inOnly' | 'both' | 'none' {
   const isFromPlant = (val: any) => {
     if (!val) return false;
     const s = String(val).trim();
@@ -144,9 +144,13 @@ function getEditAccess(rec: any): 'none' | 'outOnly' | 'inOnly' | 'both' {
   const inFromPlant = isFromPlant(rec?.inPlant);
   const outFromPlant = isFromPlant(rec?.outPlant);
 
+  // Both IN and OUT are from a plant: no edit allowed (approve only)
   if (inFromPlant && outFromPlant) return 'none';
+  // IN from plant, OUT not from plant: edit OUT only
   if (inFromPlant && !outFromPlant) return 'outOnly';
+  // IN not from plant, OUT from plant: edit IN only
   if (!inFromPlant && outFromPlant) return 'inOnly';
+  // Neither from plant: full edit access
   return 'both';
 }
 
