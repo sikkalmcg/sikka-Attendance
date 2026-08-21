@@ -121,38 +121,7 @@ function formatTime(t: any): string {
   return s.includes(' ') ? (s.split(' ')[1] || s) : s;
 }
 
-/**
- * Determines the field-level edit access for an attendance pending log based on
- * the employee's Mark IN and Mark OUT locations.
- *
- * "From Plant" = inPlant/outPlant is a real plant name (non-empty, not "N/A").
- * "Not from Plant" = inPlant/outPlant is empty or "N/A".
- *
- * Returns:
- *  - 'none'    : both Mark IN & Mark OUT from Plant => no edit allowed (Approve only)
- *  - 'outOnly' : Mark IN from Plant, Mark OUT not from Plant => edit Mark OUT only
- *  - 'inOnly'  : Mark IN not from Plant, Mark OUT from Plant => edit Mark IN only
- *  - 'both'    : neither from Plant (undefined case) => full edit access (default)
- */
-function getEditAccess(rec: any): 'outOnly' | 'inOnly' | 'both' | 'none' {
-  const isFromPlant = (val: any) => {
-    if (!val) return false;
-    const s = String(val).trim();
-    return s !== "" && s.toUpperCase() !== "N/A";
-  };
 
-  const inFromPlant = isFromPlant(rec?.inPlant);
-  const outFromPlant = isFromPlant(rec?.outPlant);
-
-  // Both IN and OUT are from a plant: no edit allowed (approve only)
-  if (inFromPlant && outFromPlant) return 'none';
-  // IN from plant, OUT not from plant: edit OUT only
-  if (inFromPlant && !outFromPlant) return 'outOnly';
-  // IN not from plant, OUT from plant: edit IN only
-  if (!inFromPlant && outFromPlant) return 'inOnly';
-  // Neither from plant: full edit access
-  return 'both';
-}
 
 function StandardPaginationFooter({ current, total, onPageChange }: { current: number, total: number, onPageChange: (p: number) => void }) {
   if (total <= 1) return null;
@@ -689,18 +658,15 @@ const allPlantExitHistory = useMemo(() => {
     return address || "Location Not Available";
   };
 
-const handleOpenEditModal = (rec: AttendanceItem) => {
-    const access = getEditAccess(rec);
-    // If no edit access is allowed, do not open the edit modal at all.
-    if (access === 'none') return;
+  const handleOpenEditModal = (rec: AttendanceItem) => {
     setSelectedAttendance(rec);
     setEditData({
-      plant: rec.inPlant || "Salt Plant",
+      plant: rec.inPlant || (authorizedPlants[0]?.name || "Salt Plant"),
       inDate: rec.inDate || rec.date,
-      inTime: rec.inTime || "",
+      inTime: rec.inTime || "09:00",
       outDate: rec.outDate || rec.date,
-      outTime: rec.outTime || "",
-      remark: ""
+      outTime: rec.outTime || "18:00",
+      remark: rec.remark || ""
     });
     setIsEditModalOpen(true);
   };
@@ -720,31 +686,10 @@ const handleOpenEditModal = (rec: AttendanceItem) => {
 
     const recId = selectedAttendance.id || (selectedAttendance as any)._id || `${selectedAttendance.employeeId}:${selectedAttendance.date}`;
 
-    // Enforce field-level access rules based on Mark IN / Mark OUT locations.
-    // Locked date/time values are forced back to their original record values so a
-    // user cannot tamper with them via the UI or any other available action.
-    const access = getEditAccess(selectedAttendance);
-
-    let finalInDate = editData.inDate;
-    let finalInTime = editData.inTime;
-    let finalOutDate = editData.outDate;
-    let finalOutTime = editData.outTime;
-
-    if (access === 'outOnly') {
-      // Mark IN from Plant + Mark OUT not from Plant => edit Mark OUT only.
-      // Mark IN date/time is locked to the original record.
-      finalInDate = selectedAttendance.inDate || selectedAttendance.date;
-      finalInTime = selectedAttendance.inTime || "";
-    } else if (access === 'inOnly') {
-      // Mark IN not from Plant + Mark OUT from Plant => edit Mark IN only.
-      // Mark OUT date/time is locked to the original record.
-      finalOutDate = selectedAttendance.outDate || selectedAttendance.date;
-      finalOutTime = selectedAttendance.outTime || "";
-    } else if (access === 'none') {
-      // Mark IN from Plant + Mark OUT from Plant => no manual edit allowed.
-      toast({ variant: "destructive", title: "Edit Not Allowed", description: "This record is fully plant-verified. Only Approval is available." });
-      return;
-    }
+    const finalInDate = editData.inDate;
+    const finalInTime = editData.inTime;
+    const finalOutDate = editData.outDate;
+    const finalOutTime = editData.outTime;
 
     const inDT = parseISO(`${finalInDate}T${finalInTime}:00`);
     const outDT = parseISO(`${finalOutDate}T${finalOutTime}:00`);
@@ -776,7 +721,7 @@ const handleOpenEditModal = (rec: AttendanceItem) => {
 
     setIsEditModalOpen(false);
 
-setLocalEdits(prev => ({
+    setLocalEdits(prev => ({
       ...prev,
       [recId]: {
         inPlant: editData.plant,
@@ -785,6 +730,8 @@ setLocalEdits(prev => ({
         outDate: finalOutDate,
         outTime: finalOutTime,
         hours: calculatedHours,
+        status: 'PRESENT',
+        displayStatus: 'Present',
         remark: editData.remark
       }
     }));
@@ -814,13 +761,14 @@ setLocalEdits(prev => ({
           unapprovedOutDuration: 0
         });
       } else {
-await updateRecord('attendance', finalDbId, {
+        await updateRecord('attendance', finalDbId, {
           inPlant: editData.plant,
           inDate: finalInDate,
           inTime: finalInTime,
           outDate: finalOutDate,
           outTime: finalOutTime,
           hours: calculatedHours,
+          status: 'PRESENT',
           remark: editData.remark,
           editedBy: modifierName,
           editedAt: new Date().toISOString()
@@ -1428,9 +1376,7 @@ await updateRecord('attendance', finalDbId, {
                           <div className="flex justify-end items-center gap-1.5">
                             {attendanceView === 'pending' ? (
                               <>
-                                {getEditAccess(rec) !== 'none' && (
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" onClick={() => handleOpenEditModal(rec)}><Pencil className="w-3.5 h-3.5" /></Button>
-                                )}
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" onClick={() => handleOpenEditModal(rec)} title="Edit Attendance Entry"><Pencil className="w-3.5 h-3.5" /></Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
                                 <Button 
                                   size="sm" 
@@ -1823,75 +1769,46 @@ await updateRecord('attendance', finalDbId, {
           </DialogHeader>
           
           <div className="p-6 space-y-4 bg-white max-h-[60vh] overflow-y-auto">
-             {(() => {
-               const editAccess = getEditAccess(selectedAttendance);
-               const inLocked = editAccess === 'outOnly';
-               const outLocked = editAccess === 'inOnly';
+            <div className="space-y-2 flex flex-col">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Plant Facility</Label>
+              <Select value={editData.plant} onValueChange={(v) => setEditData(prev => ({ ...prev, plant: v }))}>
+                <SelectTrigger className="h-10 border-slate-200 font-bold bg-slate-50 rounded-xl focus:ring-0 shadow-none text-xs">
+                  <SelectValue placeholder="Select Plant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {authorizedPlants.map(p => (
+                    <SelectItem key={p.id || (p as any)._id} value={p.name} className="font-bold text-xs uppercase">{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-               return (
-                 <>
-                   {editAccess === 'outOnly' && (
-                     <div className="flex items-center gap-2 text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] font-black uppercase tracking-wider">
-                       <AlertCircle className="w-4 h-4 shrink-0" /> Mark IN Locked — Only Mark OUT Date/Time is editable.
-                     </div>
-                   )}
-                   {editAccess === 'inOnly' && (
-                     <div className="flex items-center gap-2 text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] font-black uppercase tracking-wider">
-                       <AlertCircle className="w-4 h-4 shrink-0" /> Mark OUT Locked — Only Mark IN Date/Time is editable.
-                     </div>
-                   )}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Date</Label>
+                <Input type="date" value={editData.inDate} onChange={(e) => setEditData(prev => ({ ...prev, inDate: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Time</Label>
+                <Input type="time" value={editData.inTime} onChange={(e) => setEditData(prev => ({ ...prev, inTime: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+              </div>
+            </div>
 
-                   <div className="space-y-2 flex flex-col">
-                     <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Plant Facility</Label>
-                     <Select value={editData.plant} onValueChange={(v) => setEditData(prev => ({ ...prev, plant: v }))}>
-                        <SelectTrigger className="h-10 border-slate-200 font-bold bg-slate-50 rounded-xl focus:ring-0 shadow-none text-xs">
-                          <SelectValue placeholder="Select Plant" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {authorizedPlants.map(p => (
-                            <SelectItem key={p.id} value={p.name} className="font-bold text-xs uppercase">{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                     </Select>
-                   </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Date</Label>
+                <Input type="date" value={editData.outDate} onChange={(e) => setEditData(prev => ({ ...prev, outDate: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Time</Label>
+                <Input type="time" value={editData.outTime} onChange={(e) => setEditData(prev => ({ ...prev, outTime: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+              </div>
+            </div>
 
-                   <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                       <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1">
-                         {inLocked ? <AlertCircle className="w-3 h-3 text-amber-500" /> : null} IN Date
-                       </Label>
-                       <Input type="date" value={editData.inDate} disabled={inLocked} onChange={(e) => setEditData(prev => ({ ...prev, inDate: e.target.value }))} className={cn("h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold", inLocked && "opacity-60 cursor-not-allowed")} />
-                     </div>
-                     <div className="space-y-2">
-                       <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1">
-                         {inLocked ? <AlertCircle className="w-3 h-3 text-amber-500" /> : null} IN Time
-                       </Label>
-                       <Input type="time" value={editData.inTime} disabled={inLocked} onChange={(e) => setEditData(prev => ({ ...prev, inTime: e.target.value }))} className={cn("h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold", inLocked && "opacity-60 cursor-not-allowed")} />
-                     </div>
-                   </div>
-
-                   <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                       <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1">
-                         {outLocked ? <AlertCircle className="w-3 h-3 text-amber-500" /> : null} OUT Date
-                       </Label>
-                       <Input type="date" value={editData.outDate} disabled={outLocked} onChange={(e) => setEditData(prev => ({ ...prev, outDate: e.target.value }))} className={cn("h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold", outLocked && "opacity-60 cursor-not-allowed")} />
-                     </div>
-                     <div className="space-y-2">
-                       <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-1">
-                         {outLocked ? <AlertCircle className="w-3 h-3 text-amber-500" /> : null} OUT Time
-                       </Label>
-                       <Input type="time" value={editData.outTime} disabled={outLocked} onChange={(e) => setEditData(prev => ({ ...prev, outTime: e.target.value }))} className={cn("h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold", outLocked && "opacity-60 cursor-not-allowed")} />
-                     </div>
-                   </div>
-                 </>
-               );
-             })()}
-
-<div className="space-y-2 flex flex-col">
-               <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Remark / Reason *</Label>
-               <Textarea placeholder="Explain reason for manual modification..." value={editData.remark} onChange={(e) => setEditData(prev => ({ ...prev, remark: e.target.value }))} className="min-h-[80px] border-slate-200 bg-slate-50 rounded-xl font-medium text-xs" />
-             </div>
+            <div className="space-y-2 flex flex-col">
+              <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Remark / Reason *</Label>
+              <Textarea placeholder="Explain reason for manual modification..." value={editData.remark} onChange={(e) => setEditData(prev => ({ ...prev, remark: e.target.value }))} className="min-h-[80px] border-slate-200 bg-slate-50 rounded-xl font-medium text-xs" />
+            </div>
           </div>
           
           <div className="p-4 bg-slate-50 border-t flex flex-row gap-3">
