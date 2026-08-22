@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -263,7 +263,21 @@ export default function AttendancePage() {
 
   const isAutoTriggering = useRef(false);
   const activeRecordRef = useRef<any>(null);
+  const watchIdRef = useRef<number | null>(null);
   const { toast } = useToast();
+
+  const clearActiveWatch = useCallback(() => {
+    if (watchIdRef.current !== null && typeof window !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearActiveWatch();
+    };
+  }, [clearActiveWatch]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -716,9 +730,20 @@ const allPlantExitHistory = useMemo(() => {
     return () => clearInterval(geofenceWorkerId);
   }, [activeRecord?.id, activeRecord?.status, plants, employees, effectiveEmployeeId, effectiveEmployeeName, verifiedUser]);
 
-  const handleMarkInClick = () => {
-    if (isCooldownLocked) return;
+  const handleMarkInClick = (e?: React.MouseEvent | React.FormEvent) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    if (isCooldownLocked || isLoadingLocation || isMutatingAttendance) return;
+    clearActiveWatch();
     requestLocation("IN");
+  };
+
+  const handleMarkOutClick = (e?: React.MouseEvent | React.FormEvent) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    if (!activeRecord || !canMarkOut || isLoadingLocation || isMutatingAttendance) return;
+    clearActiveWatch();
+    requestLocation("OUT");
   };
 
   const performAutoCheckOut = async (lat: number, lng: number, address: string, components: any, plant: Plant | null) => {
@@ -801,9 +826,10 @@ const allPlantExitHistory = useMemo(() => {
 
     if (isMutatingAttendance) return;
 
+    clearActiveWatch();
     setIsLoadingLocation(true);
     setDetectedPlant(null);
-    setDetectedAddress(""); 
+    setDetectedAddress("");
 
     if (type === "OUT_AUTO") {
       isAutoTriggering.current = true;
@@ -811,67 +837,75 @@ const allPlantExitHistory = useMemo(() => {
 
     const processGeocoding = async (lat: number, lng: number, accuracy: number) => {
       try {
-          setGpsAccuracy(accuracy);
-          // Requirement 2: Remove strict accuracy blocking. Show a warning instead of blocking.
-          // The warning will be displayed inside the check-out dialog.
-          if (accuracy > 100 && type === "OUT") {
-              // This state will be used to show a warning in the dialog.
-          } else if (accuracy > 100 && type === "IN") {
-              // For check-in, we can still show a toast but we won't block.
-          }
+        setGpsAccuracy(accuracy);
 
-          const response = await fetch('/api/geocode/reverse', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lat, lng })
+        // Fallback accuracy threshold check: allow 50-100m, notify if > 100m without failing
+        if (accuracy > 100) {
+          toast({
+            variant: "default",
+            title: "GPS Accuracy Notice",
+            description: `Current GPS accuracy is ±${accuracy.toFixed(1)}m. Proceeding with best available signal.`,
           });
+        }
 
-          const data = await response.json();
-          let components = { street: "", area: "", city: "", state: "", pincode: "" };
+        const response = await fetch('/api/geocode/reverse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat, lng })
+        });
 
-          if (response.ok) {
-            let geocodedAddress = "";
-            if (data?.address) {
-              if (typeof data.address === 'object') {
-                geocodedAddress = data.address.Match_addr || data.address.LongLabel || data.address.Address || "";
-              } else if (typeof data.address === 'string') {
-                geocodedAddress = data.address;
-              }
+        const data = await response.json();
+        let components = { street: "", area: "", city: "", state: "", pincode: "" };
+
+        if (response.ok) {
+          let geocodedAddress = "";
+          if (data?.address) {
+            if (typeof data.address === 'object') {
+              geocodedAddress = data.address.Match_addr || data.address.LongLabel || data.address.Address || "";
+            } else if (typeof data.address === 'string') {
+              geocodedAddress = data.address;
             }
-
-            const raw = data?.components;
-            components = {
-              street: typeof raw?.street === 'string' ? raw.street : '',
-              area: typeof raw?.area === 'string' ? raw.area : '',
-              city: typeof raw?.city === 'string' ? raw.city : '',
-              state: typeof raw?.state === 'string' ? raw.state : '',
-              pincode: typeof raw?.pincode === 'string' ? raw.pincode : '',
-            };
-
-            setDetectedAddress(geocodedAddress);
-            setDetailedLocation(components);
-            setCurrentGPS({ lat, lng });
-
-            const qualifiedPlants = (plants || [])
-              .map(p => ({ plant: p, distance: getPreciseDistance(lat, lng, p.lat, p.lng) }))
-              .filter(p => p.distance <= (p.plant.radius || 700))
-              .sort((a, b) => a.distance - b.distance);
-
-            if (qualifiedPlants.length > 0) {
-              setDetectedPlant(qualifiedPlants[0].plant);
-            } else {
-              setDetectedPlant(null);
-            }
-
-            if (type === "OUT_AUTO" && isAutoTriggering.current) {
-              isAutoTriggering.current = false;
-              performAutoCheckOut(lat, lng, geocodedAddress, components, qualifiedPlants.length > 0 ? qualifiedPlants[0].plant : null);
-            }
-          } else {
-            console.warn('Reverse geocode failed', data);
-            toast({ variant: "destructive", title: "Location Error", description: "Could not resolve readable address coordinates." });
           }
 
+          const raw = data?.components;
+          components = {
+            street: typeof raw?.street === 'string' ? raw.street : '',
+            area: typeof raw?.area === 'string' ? raw.area : '',
+            city: typeof raw?.city === 'string' ? raw.city : '',
+            state: typeof raw?.state === 'string' ? raw.state : '',
+            pincode: typeof raw?.pincode === 'string' ? raw.pincode : '',
+          };
+
+          setDetectedAddress(geocodedAddress);
+          setDetailedLocation(components);
+          setCurrentGPS({ lat, lng });
+
+          const qualifiedPlants = (plants || [])
+            .map(p => ({ plant: p, distance: getPreciseDistance(lat, lng, p.lat, p.lng) }))
+            .filter(p => p.distance <= (p.plant.radius || 700))
+            .sort((a, b) => a.distance - b.distance);
+
+          if (qualifiedPlants.length > 0) {
+            setDetectedPlant(qualifiedPlants[0].plant);
+          } else {
+            setDetectedPlant(null);
+            if (type !== "OUT_AUTO") {
+              toast({
+                variant: "default",
+                title: "Outside Plant Radius",
+                description: `You are outside the plant radius. Current coordinates accuracy: ${accuracy ? accuracy.toFixed(1) : "0"} meters.`,
+              });
+            }
+          }
+
+          if (type === "OUT_AUTO" && isAutoTriggering.current) {
+            isAutoTriggering.current = false;
+            performAutoCheckOut(lat, lng, geocodedAddress, components, qualifiedPlants.length > 0 ? qualifiedPlants[0].plant : null);
+          }
+        } else {
+          console.warn('Reverse geocode failed', data);
+          toast({ variant: "destructive", title: "Location Error", description: "Could not resolve readable address coordinates." });
+        }
       } catch (error) {
         console.error("Fast geocoding failed", error);
         toast({ variant: "destructive", title: "Location Timeout", description: "Network error occurred while fetching position parameters." });
@@ -884,20 +918,19 @@ const allPlantExitHistory = useMemo(() => {
     };
 
     if (!navigator.geolocation) {
-      toast({ variant: "destructive", title: "Geolocation Unavailable", description: "GPS not supported on this device." });
+      toast({ variant: "destructive", title: "Geolocation Unavailable", description: "GPS is not supported on this device/browser." });
       setIsLoadingLocation(false);
       return;
     }
 
     const emergencyTimeout = setTimeout(() => {
-      if (detectedAddress === "") {
-        setIsLoadingLocation(false);
-        toast({ 
-          variant: "destructive", 
-          title: "GPS Tracking Failed", 
-          description: "System could not securely identify device coordinates. Action rejected." 
-        });
-      }
+      setIsLoadingLocation(false);
+      clearActiveWatch();
+      toast({ 
+        variant: "destructive", 
+        title: "GPS Tracking Timeout", 
+        description: "System could not identify device coordinates in time. Please retry." 
+      });
     }, 12000);
 
     navigator.geolocation.getCurrentPosition(
@@ -905,21 +938,45 @@ const allPlantExitHistory = useMemo(() => {
         clearTimeout(emergencyTimeout);
         processGeocoding(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
       },
-      (err) => {
-        console.log("Instant positioning error, fallback routing", err);
+      (err: GeolocationPositionError) => {
         clearTimeout(emergencyTimeout);
         setIsLoadingLocation(false);
-        toast({ 
-          variant: "destructive", 
-          title: "Location Denied", 
-          description: "Please verify GPS system permissions are enabled to continue." 
+        clearActiveWatch();
+
+        let title = "Location Error";
+        let description = "Unable to retrieve device location. Please try again.";
+
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            title = "Location Permission Denied";
+            description = "Location access was denied. Please allow GPS permissions in your browser or device settings to mark attendance.";
+            break;
+          case err.POSITION_UNAVAILABLE:
+            title = "GPS Signal Unavailable";
+            description = "GPS position is unavailable. Please verify your device's location services and retry.";
+            break;
+          case err.TIMEOUT:
+            title = "Location Request Timed Out";
+            description = "GPS acquisition timed out. Please check your GPS signal and retry.";
+            break;
+          default:
+            description = err.message || "An unexpected error occurred while retrieving GPS coordinates.";
+            break;
+        }
+
+        toast({
+          variant: "destructive",
+          title,
+          description,
         });
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
-  const handleConfirmCheckIn = async () => {
+  const handleConfirmCheckIn = async (e?: React.MouseEvent | React.FormEvent) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     if (isMutatingAttendance) return;
 
     if (!detectedPlant && !selectedType) {
@@ -945,7 +1002,6 @@ const allPlantExitHistory = useMemo(() => {
     }
 
     setIsMutatingAttendance(true);
-    setActiveDialog("NONE");
 
     try {
       await addRecord('attendance', {
@@ -978,15 +1034,19 @@ const allPlantExitHistory = useMemo(() => {
 
       await refreshData();
       setSelectedType("");
+      setActiveDialog("NONE");
       toast({ title: "Mark IN Successful", description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
     } catch (e) {
+      console.error("Check-in error:", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to process database entry register log." });
     } finally {
       setIsMutatingAttendance(false);
     }
   };
 
-  const handleConfirmCheckOut = async () => {
+  const handleConfirmCheckOut = async (e?: React.MouseEvent | React.FormEvent) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     if (!activeRecord || isMutatingAttendance) return;
 
     if (!activeRecord.inTime) {
@@ -1031,7 +1091,6 @@ const allPlantExitHistory = useMemo(() => {
     }
 
     setIsMutatingAttendance(true);
-    setActiveDialog("NONE");
 
     try {
       let finalExitEvents = activeRecord.exitEvents ? [...activeRecord.exitEvents] : [];
@@ -1070,8 +1129,10 @@ const allPlantExitHistory = useMemo(() => {
       });
 
       await refreshData();
+      setActiveDialog("NONE");
       toast({ title: "Mark OUT Successful" });
     } catch (e) {
+      console.error("Check-out error:", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to Mark OUT" });
     } finally {
       setIsMutatingAttendance(false);
@@ -1124,6 +1185,7 @@ const allPlantExitHistory = useMemo(() => {
 
             <div className="flex gap-4">
               <Button 
+                type="button"
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
                   (!activeRecord && !isCooldownLocked) ? "bg-primary text-white shadow-primary/20 hover:bg-primary/90" : "bg-slate-100 text-slate-400"
                 )} 
@@ -1135,13 +1197,14 @@ const allPlantExitHistory = useMemo(() => {
                 ) : "Mark IN"}
               </Button>
               <Button 
+                type="button"
                 className={cn(
                   "flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest",
                   activeRecord ? "bg-rose-600 text-white shadow-rose-200 hover:bg-rose-700" : "bg-slate-100 text-slate-400",
                   activeRecord && !canMarkOut ? "opacity-70 hover:bg-rose-600/90" : ""
                 )} 
                 disabled={isLoadingLocation || isMutatingAttendance || !activeRecord || (activeRecord ? !canMarkOut : false)} 
-                onClick={() => requestLocation("OUT")}
+                onClick={handleMarkOutClick}
               >
                 {activeRecord && !canMarkOut ? "Mark OUT (Locked)" : (isLoadingLocation && activeDialog === 'NONE' ? <>
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -1645,13 +1708,18 @@ const allPlantExitHistory = useMemo(() => {
             )}
           </div>
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
-            <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-rose-500 hover:bg-rose-600 uppercase tracking-widest text-xs" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
+            <Button type="button" variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-rose-500 hover:bg-rose-600 uppercase tracking-widest text-xs" onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}>CANCEL</Button>
             <Button 
+              type="button"
               className="flex-1 h-14 font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-500/20 uppercase tracking-widest text-xs" 
               onClick={handleConfirmCheckIn} 
               disabled={isMutatingAttendance || !detectedAddress || (!detectedPlant && !selectedType)}
             >
-              {isMutatingAttendance ? "PROCESSING..." : "MARK IN"}
+              {isMutatingAttendance ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> PROCESSING...
+                </span>
+              ) : "MARK IN"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1661,7 +1729,11 @@ const allPlantExitHistory = useMemo(() => {
       <Dialog
         open={activeDialog === "OUT"}
         onOpenChange={(o) => {
-          if (!o) setActiveDialog("NONE");
+          if (!o) {
+            clearActiveWatch();
+            setActiveDialog("NONE");
+            setIsLoadingLocation(false);
+          }
         }}
       >
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
@@ -1699,7 +1771,7 @@ const allPlantExitHistory = useMemo(() => {
               <Alert className="bg-rose-50 border-rose-100 text-rose-700 rounded-2xl">
                 <AlertTriangle className="h-4 w-4 text-rose-600" />
                 <AlertDescription className="text-[10px] font-black uppercase tracking-widest">
-                  Caution: You are checking out from an unregistered/outside location.
+                  You are outside the plant radius. Current coordinates accuracy: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} meters.` : "N/A"}
                 </AlertDescription>
               </Alert>
             )}
@@ -1730,13 +1802,18 @@ const allPlantExitHistory = useMemo(() => {
             </div>
           </div>
           <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
-            <Button variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-blue-500 hover:bg-blue-600 text-xs uppercase" onClick={() => setActiveDialog("NONE")}>CANCEL</Button>
+            <Button type="button" variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-blue-500 hover:bg-blue-600 text-xs uppercase" onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}>CANCEL</Button>
             <Button 
+              type="button"
               className="flex-1 h-14 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-2xl shadow-xl shadow-rose-200 uppercase tracking-widest text-xs" 
               onClick={handleConfirmCheckOut}
               disabled={isMutatingAttendance || !canMarkOut}
             >
-              CHECK OUT
+              {isMutatingAttendance ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> PROCESSING...
+                </span>
+              ) : "CHECK OUT"}
             </Button>
           </DialogFooter>
         </DialogContent>
