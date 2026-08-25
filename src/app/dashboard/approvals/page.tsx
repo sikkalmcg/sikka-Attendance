@@ -48,11 +48,12 @@ import {
   CheckSquare,
   LogOut,
   Eye,
-  MapPin
+  MapPin,
+  SlidersHorizontal
 } from "lucide-react";
 import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, isSunday, isBefore, startOfMonth, eachDayOfInterval, isValid, startOfDay, endOfMonth, startOfToday } from "date-fns";
+import { parseISO, format, addHours, addDays, isSunday, isBefore, startOfMonth, eachDayOfInterval, isValid, startOfDay, endOfMonth, startOfToday } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -153,8 +154,30 @@ export default function ApprovalsPage() {
   const [attendanceView, setAttendanceView] = useState("pending"); 
   const [leaveView, setLeaveView] = useState("pending"); 
 
+interface BulkEditRow {
+  id: string;
+  _id?: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  plant: string;
+  inTime: string;
+  outTime: string;
+  remark: string;
+  isVirtual?: boolean;
+}
+
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
   const [isBulkApproveConfirmOpen, setIsBulkApproveConfirmOpen] = useState(false);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [bulkEditRows, setBulkEditRows] = useState<BulkEditRow[]>([]);
+  const [bulkQuickFill, setBulkQuickFill] = useState({
+    plant: "",
+    inTime: "09:00",
+    outTime: "18:00",
+    remark: "Timing adjustment by HR"
+  });
 
   const [selectedAttendance, setSelectedAttendance] = useState<AttendanceItem | null>(null);
   const [isApproveConfirmOpen, setIsApproveConfirmOpen] = useState(false);
@@ -559,6 +582,29 @@ const allPlantExitHistory = useMemo(() => {
     }
   };
 
+  const selectedRecordsList = useMemo(() => {
+    return pendingAttendanceList.filter(r => {
+      const rId = r.id || (r as any)._id || `${r.employeeId}:${r.date}`;
+      return selectedRecordIds.has(rId);
+    });
+  }, [pendingAttendanceList, selectedRecordIds]);
+
+  const selectedEmployeeIds = useMemo(() => {
+    const empIds = new Set<string>();
+    selectedRecordsList.forEach(r => {
+      if (r.employeeId) empIds.add(r.employeeId);
+    });
+    return Array.from(empIds);
+  }, [selectedRecordsList]);
+
+  const isSingleEmployeeSelected = selectedEmployeeIds.length === 1;
+  const isMultipleEmployeesSelected = selectedEmployeeIds.length > 1;
+
+  const targetEmployee = useMemo(() => {
+    if (selectedRecordsList.length === 0) return null;
+    return selectedRecordsList[0];
+  }, [selectedRecordsList]);
+
   const toggleRecordSelection = (id: string) => {
     const newSet = new Set(selectedRecordIds);
     if (newSet.has(id)) newSet.delete(id);
@@ -567,17 +613,213 @@ const allPlantExitHistory = useMemo(() => {
   };
 
   const toggleAllSelection = () => {
-    const selectableItems = currentData.items.filter((r: any) => r.isVirtual || (r.inTime && (r.outTime || r.autoCheckout)));
-    const allSelected = selectableItems.every((r: any) => selectedRecordIds.has(r.id || (r as any)._id || `${r.employeeId}:${r.date}`));
+    const selectableItems = currentData.items;
+    const allSelected = selectableItems.length > 0 && selectableItems.every((r: any) => selectedRecordIds.has(r.id || (r as any)._id || `${r.employeeId}:${r.date}`));
     
     if (allSelected && selectableItems.length > 0) {
       setSelectedRecordIds(new Set());
     } else {
-      const newSet = new Set<string>();
+      const newSet = new Set<string>(selectedRecordIds);
       selectableItems.forEach((r: any) => {
         newSet.add(r.id || (r as any)._id || `${r.employeeId}:${r.date}`);
       });
       setSelectedRecordIds(newSet);
+    }
+  };
+
+  const handleOpenBulkEditModal = () => {
+    if (selectedRecordIds.size === 0) return;
+    if (isMultipleEmployeesSelected) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please select records for one employee only."
+      });
+      return;
+    }
+
+    const defaultPlant = selectedRecordsList[0]?.inPlant || authorizedPlants[0]?.name || "Salt Plant";
+    const defaultRemark = "Timing adjustment by HR";
+
+    const rows: BulkEditRow[] = selectedRecordsList.map(r => ({
+      id: r.id || (r as any)._id || `${r.employeeId}:${r.date}`,
+      _id: (r as any)._id,
+      employeeId: r.employeeId,
+      employeeName: r.employeeName,
+      date: r.date,
+      plant: r.inPlant || defaultPlant,
+      inTime: r.inTime || "09:00",
+      outTime: r.outTime || "18:00",
+      remark: r.remark || defaultRemark,
+      isVirtual: !!r.isVirtual
+    })).sort((a, b) => a.date.localeCompare(b.date));
+
+    setBulkQuickFill({
+      plant: defaultPlant,
+      inTime: "09:00",
+      outTime: "18:00",
+      remark: defaultRemark
+    });
+
+    setBulkEditRows(rows);
+    setIsBulkEditModalOpen(true);
+  };
+
+  const updateBulkEditRow = (index: number, field: keyof BulkEditRow, value: any) => {
+    setBulkEditRows(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const applyBulkFillToAllRows = (plant: string, inTime: string, outTime: string, remark: string) => {
+    setBulkEditRows(prev => prev.map(r => ({
+      ...r,
+      ...(plant ? { plant } : {}),
+      ...(inTime ? { inTime } : {}),
+      ...(outTime ? { outTime } : {}),
+      ...(remark ? { remark } : {})
+    })));
+    toast({ title: "Applied to all rows", description: "Values updated across all selected date records in the table." });
+  };
+
+  const handleSaveBulkEditRows = async () => {
+    if (bulkEditRows.length === 0) return;
+
+    // Validate each row
+    for (let i = 0; i < bulkEditRows.length; i++) {
+      const row = bulkEditRows[i];
+      const formattedDateStr = formatDate(row.date);
+
+      if (!row.inTime || !row.outTime) {
+        toast({
+          variant: "destructive",
+          title: "Incomplete Timings",
+          description: `Date ${formattedDateStr} is missing IN or OUT time.`
+        });
+        return;
+      }
+
+      if (!row.plant) {
+        toast({
+          variant: "destructive",
+          title: "Plant Required",
+          description: `Please select a plant facility for date ${formattedDateStr}.`
+        });
+        return;
+      }
+
+      if (!row.remark || row.remark.trim().length < 3) {
+        toast({
+          variant: "destructive",
+          title: "Remark Required",
+          description: `Please enter a valid modification remark for date ${formattedDateStr} (minimum 3 characters).`
+        });
+        return;
+      }
+    }
+
+    setIsBulkUpdating(true);
+    const approverName = verifiedUser?.fullName || "HR_ADMIN";
+    const rowsToSave = [...bulkEditRows];
+
+    // Optimistic UI updates
+    const newEdits = { ...localEdits };
+    rowsToSave.forEach(row => {
+      const recId = row.id;
+      const recInDate = row.date;
+      const isNightShift = row.outTime <= row.inTime;
+      const recOutDate = isNightShift ? format(addDays(parseISO(recInDate), 1), "yyyy-MM-dd") : row.date;
+
+      const inDT = parseISO(`${recInDate}T${row.inTime}:00`);
+      const outDT = parseISO(`${recOutDate}T${row.outTime}:00`);
+      let hours = 0;
+      if (isValid(inDT) && isValid(outDT) && isBefore(inDT, outDT)) {
+        hours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+      }
+
+      newEdits[recId] = {
+        inPlant: row.plant,
+        inDate: recInDate,
+        inTime: row.inTime,
+        outDate: recOutDate,
+        outTime: row.outTime,
+        hours,
+        status: 'PRESENT',
+        displayStatus: 'Present',
+        remark: row.remark
+      };
+    });
+
+    setLocalEdits(newEdits);
+    setIsBulkEditModalOpen(false);
+    setSelectedRecordIds(new Set());
+
+    toast({
+      title: "Bulk Edit Applied",
+      description: `Updating ${rowsToSave.length} date record(s) for ${targetEmployee?.employeeName || 'employee'}...`
+    });
+
+    try {
+      const promises = rowsToSave.map(async (row) => {
+        const recInDate = row.date;
+        const isNightShift = row.outTime <= row.inTime;
+        const recOutDate = isNightShift ? format(addDays(parseISO(recInDate), 1), "yyyy-MM-dd") : row.date;
+
+        const inDT = parseISO(`${recInDate}T${row.inTime}:00`);
+        const outDT = parseISO(`${recOutDate}T${row.outTime}:00`);
+        let hours = 0;
+        if (isValid(inDT) && isValid(outDT) && isBefore(inDT, outDT)) {
+          hours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+        }
+
+        const updatePayload: any = {
+          inPlant: row.plant,
+          inDate: recInDate,
+          inTime: row.inTime,
+          outDate: recOutDate,
+          outTime: row.outTime,
+          hours,
+          status: 'PRESENT',
+          attendanceType: 'OFFICE',
+          remark: row.remark,
+          editedBy: approverName,
+          editedAt: new Date().toISOString()
+        };
+
+        if (row.isVirtual) {
+          await addRecord('attendance', {
+            ...updatePayload,
+            employeeId: row.employeeId,
+            employeeName: row.employeeName,
+            date: row.date,
+            approved: false,
+            address: 'Bulk Modified Log',
+            unapprovedOutDuration: 0
+          }, true);
+        } else {
+          const finalDbId = row.id && !row.id.startsWith('v-') ? row.id : (row._id || '');
+          await updateRecord('attendance', finalDbId, updatePayload, true);
+        }
+      });
+
+      await Promise.all(promises);
+      await refreshData();
+      toast({
+        title: "Success",
+        description: `Successfully updated ${rowsToSave.length} date record(s) for ${targetEmployee?.employeeName || 'employee'}.`
+      });
+    } catch (e) {
+      console.error("Bulk edit error", e);
+      toast({
+        variant: "destructive",
+        title: "Bulk Edit Sync Issue",
+        description: "Some entries failed to update. Refreshing queue..."
+      });
+      await refreshData();
+    } finally {
+      setIsBulkUpdating(false);
     }
   };
 
@@ -1085,12 +1327,36 @@ const allPlantExitHistory = useMemo(() => {
         </Tabs>
 
         {viewMode === 'attendance' && attendanceView === 'pending' && selectedRecordIds.size > 0 && (
-          <Button 
-            onClick={() => setIsBulkApproveConfirmOpen(true)}
-            className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase rounded-xl shadow-md px-5"
-          >
-            <CheckSquare className="w-4 h-4 mr-2" /> Bulk Approve ({selectedRecordIds.size})
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              onClick={() => {
+                if (isMultipleEmployeesSelected) {
+                  toast({
+                    variant: "destructive",
+                    title: "Multiple Employees Selected",
+                    description: "Please select records for one employee only."
+                  });
+                } else {
+                  handleOpenBulkEditModal();
+                }
+              }}
+              className={cn(
+                "h-10 text-white font-black text-xs uppercase rounded-xl shadow-md px-4 gap-1.5 transition-all",
+                isMultipleEmployeesSelected 
+                  ? "bg-slate-400 hover:bg-slate-500 cursor-not-allowed opacity-90" 
+                  : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/10"
+              )}
+              title={isMultipleEmployeesSelected ? "Please select records for one employee only." : "Bulk Edit Selected Dates"}
+            >
+              <Pencil className="w-4 h-4" /> Bulk Edit ({selectedRecordIds.size})
+            </Button>
+            <Button 
+              onClick={() => setIsBulkApproveConfirmOpen(true)}
+              className="h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase rounded-xl shadow-md px-4 gap-1.5 shadow-emerald-600/10"
+            >
+              <CheckSquare className="w-4 h-4" /> Bulk Approve ({selectedRecordIds.size})
+            </Button>
+          </div>
         )}
       </div>
 
@@ -1279,7 +1545,7 @@ const allPlantExitHistory = useMemo(() => {
                       <input 
                         type="checkbox" 
                         className="rounded border-slate-300 w-4 h-4 cursor-pointer accent-emerald-600"
-                        checked={currentData.items.length > 0 && currentData.items.filter((r: any) => r.isVirtual || (r.inTime && (r.outTime || r.autoCheckout))).every((r: any) => selectedRecordIds.has(r.id || (r as any)._id || `${r.employeeId}:${r.date}`))}
+                        checked={currentData.items.length > 0 && currentData.items.every((r: any) => selectedRecordIds.has(r.id || (r as any)._id || `${r.employeeId}:${r.date}`))}
                         onChange={toggleAllSelection}
                       />
                     </TableHead>
@@ -1325,8 +1591,7 @@ const allPlantExitHistory = useMemo(() => {
                           <TableCell className="text-center px-4">
                             <input 
                               type="checkbox" 
-                              className="rounded border-slate-300 w-4 h-4 cursor-pointer accent-emerald-600 disabled:opacity-50"
-                              disabled={!canApprove}
+                              className="rounded border-slate-300 w-4 h-4 cursor-pointer accent-emerald-600"
                               checked={selectedRecordIds.has(rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
                               onChange={() => toggleRecordSelection(rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
                             />
@@ -1815,6 +2080,175 @@ const allPlantExitHistory = useMemo(() => {
              <Button variant="ghost" onClick={() => { setIsEditModalOpen(false); setSelectedAttendance(null); }} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
              <Button onClick={handleUpdateAttendance} className="flex-1 bg-primary hover:bg-primary/90 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-primary/10">Save Changes</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* BULK EDIT MODAL - SINGLE EMPLOYEE MULTI-DATE */}
+      <Dialog open={isBulkEditModalOpen} onOpenChange={setIsBulkEditModalOpen}>
+        <DialogContent className="sm:max-w-4xl rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
+          <DialogHeader className="p-6 bg-slate-900 text-white flex flex-row items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                <Pencil className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-md font-black uppercase tracking-tight">Bulk Edit Attendance</DialogTitle>
+                <DialogDescription className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                  Update multiple attendance dates for single employee
+                </DialogDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="bg-blue-950/80 border-blue-500/40 text-blue-300 font-black text-xs uppercase px-3 py-1">
+              {bulkEditRows.length} Dates Selected
+            </Badge>
+          </DialogHeader>
+          
+          <div className="p-6 space-y-5 bg-white max-h-[70vh] overflow-y-auto">
+            {/* 4. Employee Information Card at Top */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Employee Name</span>
+                  <p className="font-black text-slate-900 uppercase text-sm">{targetEmployee?.employeeName || "--"}</p>
+                  <p className="text-[10px] font-mono font-bold text-primary">{targetEmployee?.employeeId || "--"}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Department</span>
+                  <p className="font-bold text-slate-800 uppercase text-xs">{targetEmployee?.dept || "Operations"}</p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Designation</span>
+                  <p className="font-bold text-slate-800 uppercase text-xs">{targetEmployee?.desig || "Staff"}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Fill / Uniform Fill Helper */}
+            <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" /> Quick Fill All Selected Dates (Optional)
+                </span>
+                <span className="text-[9px] text-blue-600 font-bold uppercase">Applies values to all table rows</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Select value={bulkQuickFill.plant} onValueChange={(val) => setBulkQuickFill(prev => ({ ...prev, plant: val }))}>
+                  <SelectTrigger className="h-8 bg-white border-blue-200 text-xs font-bold rounded-lg shadow-none">
+                    <SelectValue placeholder="Quick Plant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {authorizedPlants.map(p => (
+                      <SelectItem key={p.id || (p as any)._id} value={p.name} className="font-bold text-xs uppercase">{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input 
+                  type="time" 
+                  value={bulkQuickFill.inTime} 
+                  onChange={(e) => setBulkQuickFill(prev => ({ ...prev, inTime: e.target.value }))}
+                  placeholder="IN Time"
+                  className="h-8 bg-white border-blue-200 text-xs font-bold font-mono rounded-lg shadow-none"
+                />
+                <Input 
+                  type="time" 
+                  value={bulkQuickFill.outTime} 
+                  onChange={(e) => setBulkQuickFill(prev => ({ ...prev, outTime: e.target.value }))}
+                  placeholder="OUT Time"
+                  className="h-8 bg-white border-blue-200 text-xs font-bold font-mono rounded-lg shadow-none"
+                />
+                <Button 
+                  type="button" 
+                  size="sm"
+                  onClick={() => applyBulkFillToAllRows(bulkQuickFill.plant, bulkQuickFill.inTime, bulkQuickFill.outTime, bulkQuickFill.remark)}
+                  className="h-8 bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] uppercase rounded-lg shadow-sm"
+                >
+                  Apply To All
+                </Button>
+              </div>
+            </div>
+
+            {/* 5. Selected Attendance Records Table */}
+            <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              <Table>
+                <TableHeader className="bg-slate-100/80">
+                  <TableRow>
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-600 py-3 pl-4">Date</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-600">Plant</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-600">Mark IN Time</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-600">Mark Out Time</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-600 pr-4 min-w-[200px]">Remark</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bulkEditRows.map((row, idx) => (
+                    <TableRow key={row.id} className="hover:bg-slate-50/60 transition-colors">
+                      <TableCell className="pl-4 py-2.5">
+                        <span className="font-black text-xs text-slate-800 font-mono whitespace-nowrap">
+                          {format(parseISO(row.date), "dd-MMM-yyyy")}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-2.5">
+                        <Select value={row.plant} onValueChange={(val) => updateBulkEditRow(idx, 'plant', val)}>
+                          <SelectTrigger className="h-8 w-[140px] bg-white border-slate-200 text-xs font-bold rounded-lg shadow-none">
+                            <SelectValue placeholder="Select Plant" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {authorizedPlants.map(p => (
+                              <SelectItem key={p.id || (p as any)._id} value={p.name} className="font-bold text-xs uppercase">{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="py-2.5">
+                        <Input 
+                          type="time" 
+                          value={row.inTime} 
+                          onChange={(e) => updateBulkEditRow(idx, 'inTime', e.target.value)} 
+                          className="h-8 w-[110px] bg-white border-slate-200 font-mono text-xs font-bold rounded-lg shadow-none" 
+                        />
+                      </TableCell>
+                      <TableCell className="py-2.5">
+                        <Input 
+                          type="time" 
+                          value={row.outTime} 
+                          onChange={(e) => updateBulkEditRow(idx, 'outTime', e.target.value)} 
+                          className="h-8 w-[110px] bg-white border-slate-200 font-mono text-xs font-bold rounded-lg shadow-none" 
+                        />
+                      </TableCell>
+                      <TableCell className="py-2.5 pr-4">
+                        <Input 
+                          type="text" 
+                          value={row.remark} 
+                          onChange={(e) => updateBulkEditRow(idx, 'remark', e.target.value)} 
+                          placeholder="Adjustment remark..." 
+                          className="h-8 bg-white border-slate-200 text-xs font-medium rounded-lg shadow-none" 
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          
+          <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
+            <Button 
+              variant="ghost" 
+              onClick={() => setIsBulkEditModalOpen(false)} 
+              disabled={isBulkUpdating}
+              className="flex-1 rounded-xl font-bold h-11 uppercase text-xs"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveBulkEditRows} 
+              disabled={isBulkUpdating}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-blue-600/10 gap-2"
+            >
+              {isBulkUpdating ? <RotateCcw className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+              {isBulkUpdating ? "Saving Changes..." : `Save / Update (${bulkEditRows.length} Dates)`}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
