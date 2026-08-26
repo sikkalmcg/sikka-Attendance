@@ -132,7 +132,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (dataMap['notifications']) {
         setNotifications(dataMap['notifications']);
       } else if (currentUserUsername) {
-        const notifRes = await fetch(`/api/data/notifications?employeeId=${currentUserUsername}`);
+        const notifRes = await fetch(`/api/data/notifications?employeeId=${encodeURIComponent(currentUserUsername)}`);
         if (notifRes.ok) {
             const json = await notifRes.json();
             setNotifications(Array.isArray(json) ? json : (json?.data || []));
@@ -148,6 +148,48 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchData();
   }, [currentUserId, fetchData]);
+
+  // Real-time live synchronization for notifications
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const syncNotifications = async () => {
+      try {
+        let notifUrl = '/api/data/notifications';
+        if (currentUserRole === 'EMPLOYEE' && currentUserUsername) {
+          notifUrl = `/api/data/notifications?employeeId=${encodeURIComponent(currentUserUsername)}`;
+        }
+        const res = await fetch(notifUrl);
+        if (res.ok) {
+          const json = await res.json();
+          const list = Array.isArray(json) ? json : (json?.data || []);
+          setNotifications(list);
+        }
+      } catch (err) {
+        console.debug("Notification sync error:", err);
+      }
+    };
+
+    // Polling interval every 15 seconds
+    const interval = setInterval(syncNotifications, 15000);
+
+    // Sync on tab focus / visibility change
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncNotifications();
+      }
+    };
+    const onFocus = () => syncNotifications();
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [currentUserId, currentUserRole, currentUserUsername]);
 
   const verifiedUser = useMemo(() => {
     if (!currentUser) return null;
@@ -182,7 +224,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const tempId = data.id || `temp-${Date.now()}`;
     const newRecord = { ...data, id: tempId, _id: tempId, createdAt: new Date().toISOString() };
 
-    // Optimistic UI update for attendance and leave requests
+    // Optimistic UI update for attendance, leave requests, and notifications
     if (col === 'attendance') {
       setAttendanceRecords(prev => {
         const filtered = prev.filter(r => !(r.employeeId === newRecord.employeeId && r.date === newRecord.date));
@@ -190,6 +232,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
     } else if (col === 'leaveRequests') {
       setLeaveRequests(prev => [newRecord, ...prev]);
+    } else if (col === 'notifications') {
+      setNotifications(prev => [newRecord, ...prev]);
     }
 
     try {
@@ -202,6 +246,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const resData = await res.json();
         if (resData?.id && col === 'attendance') {
           setAttendanceRecords(prev => prev.map(r => (r.id === tempId ? { ...r, id: resData.id, _id: resData.id } : r)));
+        } else if (resData?.id && col === 'notifications') {
+          setNotifications(prev => prev.map(n => (n.id === tempId ? { ...n, id: resData.id, _id: resData.id } : n)));
         }
       } else {
         console.warn(`Failed to append record in ${col}. Status: ${res.status}`);
@@ -213,7 +259,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
-    // Optimistic UI update for attendance
+    // Optimistic UI update for attendance and notifications
     if (col === 'attendance') {
       setAttendanceRecords(prev => prev.map(r => {
         const rId = String(r.id || (r as any)._id || '');
@@ -222,6 +268,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           return { ...r, ...data, updatedAt: new Date().toISOString() };
         }
         return r;
+      }));
+    } else if (col === 'notifications') {
+      setNotifications(prev => prev.map(n => {
+        const nId = String(n.id || (n as any)._id || '');
+        const targetId = String(id || '');
+        if (nId === targetId) {
+          return { ...n, ...data };
+        }
+        return n;
       }));
     }
 
@@ -245,6 +300,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         description: "Only Super Admin accounts are authorized to delete records."
       });
       return;
+    }
+
+    if (col === 'notifications') {
+      setNotifications(prev => prev.filter(n => {
+        const nId = String(n.id || (n as any)._id || '');
+        return nId !== String(id);
+      }));
     }
     try {
       await fetch(`/api/data/${col}?id=${id}`, { method: 'DELETE' });

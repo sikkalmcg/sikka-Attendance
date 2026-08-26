@@ -275,11 +275,13 @@ export interface LeaveRequest {
 
 export interface AppNotification {
   id: string;
+  _id?: string;
   message: string;
   timestamp: string;
   read: boolean;
   type?: string;
   employeeId?: string;
+  dedupeKey?: string;
 }
 
 export interface SalaryPaymentRecord {
@@ -332,6 +334,6 @@ export interface PayrollRecord {
   pfHistory: StatutoryPaymentRecord[];
 
   esicPaidAmountEmployee: number;
-  esicAmountEmployer: number;
+  esicPaidAmountEmployer: number;
   esicHistory: StatutoryPaymentRecord[];
 }

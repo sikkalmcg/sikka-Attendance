@@ -76,37 +76,89 @@ function NotificationBell() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Filter notifications for current user
-  const userEmpId = String(verifiedUser?.employeeId || verifiedUser?.username || '').trim().toUpperCase();
+  const isEmployee = String(verifiedUser?.role || '').toUpperCase() === 'EMPLOYEE';
+
+  // Gather all unique identifiers for the currently logged-in user
+  const userIdentifiers = useMemo(() => {
+    if (!verifiedUser) return [];
+    return [
+      verifiedUser.employeeId,
+      verifiedUser.id,
+      (verifiedUser as any)._id,
+      verifiedUser.username,
+      verifiedUser.aadhaar,
+      (verifiedUser as any).aadhaarNumber,
+      verifiedUser.mobile,
+      (verifiedUser as any).mobileNumber
+    ]
+      .filter(Boolean)
+      .map(id => String(id).trim().toUpperCase());
+  }, [verifiedUser]);
+
+  // Strict employee filtering: an employee only sees their own notifications or global announcements
   const userNotifications = useMemo(() => {
     return (notifications || []).filter((n: any) => {
       if (!n) return false;
       const targetEmpId = String(n.employeeId || '').trim().toUpperCase();
-      if (!targetEmpId || targetEmpId === "N/A") return true; // Global notification
-      return targetEmpId === userEmpId || targetEmpId === String(verifiedUser?.id || '').toUpperCase();
+
+      if (isEmployee) {
+        // If notification has a specific employeeId, it MUST match one of this employee's identifiers
+        if (targetEmpId && targetEmpId !== "GLOBAL" && targetEmpId !== "ALL" && targetEmpId !== "N/A") {
+          return userIdentifiers.includes(targetEmpId);
+        }
+        // General/broadcast notification
+        return true;
+      } else {
+        // For Admin / HR / Super Admin: show matching or system notifications
+        if (targetEmpId && targetEmpId !== "GLOBAL" && targetEmpId !== "ALL" && targetEmpId !== "N/A") {
+          return userIdentifiers.includes(targetEmpId) || ['SUPER_ADMIN', 'ADMIN'].includes(String(verifiedUser?.role || '').toUpperCase());
+        }
+        return true;
+      }
     }).sort((a: any, b: any) => {
       return (b.timestamp || "").localeCompare(a.timestamp || "");
     });
-  }, [notifications, userEmpId, verifiedUser]);
+  }, [notifications, userIdentifiers, isEmployee, verifiedUser?.role]);
 
+  // Red badge reflects UNREAD notifications only
   const unreadCount = useMemo(() => {
     return userNotifications.filter((n: any) => !n.read).length;
   }, [userNotifications]);
 
+  // Format count: 1 to 9 as exact number, 10 or more as "9+"
+  const badgeLabel = unreadCount > 9 ? "9+" : String(unreadCount);
+
   const handleNotificationClick = async (notif: any) => {
-    if (!notif.read && (notif.id || notif._id)) {
-      await updateRecord('notifications', notif.id || notif._id, { read: true }, true);
+    const notifId = notif.id || notif._id;
+    if (!notif.read && notifId) {
+      await updateRecord('notifications', notifId, { read: true }, true);
     }
     setIsOpen(false);
-    // Redirect to Mark Attendance page
-    router.push('/dashboard/attendance');
+    
+    // Contextual routing based on notification payload
+    if (notif.type === 'SALARY_PAID' || notif.message?.toLowerCase().includes('salary')) {
+      router.push('/dashboard/payroll');
+    } else if (notif.type === 'LEAVE_APPROVAL' || notif.message?.toLowerCase().includes('leave')) {
+      router.push('/dashboard/approvals');
+    } else {
+      router.push('/dashboard/attendance');
+    }
+  };
+
+  const handleMarkSingleAsRead = async (e: React.MouseEvent, notif: any) => {
+    e.stopPropagation();
+    const notifId = notif.id || notif._id;
+    if (!notif.read && notifId) {
+      await updateRecord('notifications', notifId, { read: true }, true);
+    }
   };
 
   const handleMarkAllAsRead = async () => {
     const unread = userNotifications.filter((n: any) => !n.read);
     for (const notif of unread) {
-      if (notif.id || notif._id) {
-        await updateRecord('notifications', notif.id || notif._id, { read: true }, true);
+      const notifId = notif.id || notif._id;
+      if (notifId) {
+        await updateRecord('notifications', notifId, { read: true }, true);
       }
     }
     await refreshData();
@@ -117,33 +169,51 @@ function NotificationBell() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Notifications"
-          className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:outline-none"
+          aria-label={`Notifications ${unreadCount > 0 ? `(${unreadCount} unread)` : ''}`}
+          className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
         >
-          <Bell className="w-5 h-5" />
+          <Bell className="w-5 h-5 text-slate-700 hover:text-slate-900 transition-colors" />
+          
+          {/* Small Red Circular Badge with White Bold Unread Count */}
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-black text-white bg-rose-500 rounded-full px-1 shadow-sm animate-in zoom-in-50">
-              {unreadCount > 99 ? '99+' : unreadCount}
+            <span
+              className={cn(
+                "absolute -top-0.5 -right-0.5 flex items-center justify-center",
+                "bg-red-600 text-white font-bold leading-none select-none",
+                "rounded-full ring-2 ring-white shadow-sm pointer-events-none",
+                "transition-all duration-200 transform animate-in zoom-in-75",
+                unreadCount > 9
+                  ? "h-[18px] min-w-[20px] px-1 text-[9px]"
+                  : "h-[18px] w-[18px] text-[10px]"
+              )}
+              title={`${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`}
+            >
+              {badgeLabel}
             </span>
           )}
         </button>
       </PopoverTrigger>
+      
       <PopoverContent align="end" className="w-80 sm:w-96 p-0 rounded-2xl shadow-2xl border-slate-200 bg-white overflow-hidden z-50">
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/70">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/80 backdrop-blur-sm">
           <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-primary" />
-            <span className="font-bold text-sm text-slate-800">Notifications</span>
-            {unreadCount > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary font-bold">
-                {unreadCount} new
-              </Badge>
-            )}
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-sm text-slate-800">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-600 border border-red-100">
+                  {unreadCount} unread
+                </span>
+              )}
+            </div>
           </div>
           {unreadCount > 0 && (
             <button
               type="button"
               onClick={handleMarkAllAsRead}
-              className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+              className="text-[11px] font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-1 bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-lg"
             >
               <CheckCheck className="w-3.5 h-3.5" /> Mark all read
             </button>
@@ -153,38 +223,59 @@ function NotificationBell() {
         <ScrollArea className="max-h-[380px]">
           {userNotifications.length === 0 ? (
             <div className="py-12 text-center text-slate-400">
-              <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-xs font-semibold">No notifications</p>
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-2.5">
+                <Bell className="w-6 h-6 text-slate-300" />
+              </div>
+              <p className="text-xs font-bold text-slate-600">No notifications yet</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">We'll alert you when there are updates.</p>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {userNotifications.map((notif: any) => (
-                <div
-                  key={notif.id || notif._id || notif.dedupeKey || Math.random()}
-                  onClick={() => handleNotificationClick(notif)}
-                  className={cn(
-                    "p-3.5 transition-colors cursor-pointer text-left hover:bg-slate-50 flex items-start gap-3",
-                    !notif.read ? "bg-primary/[0.04]" : ""
-                  )}
-                >
-                  <div className={cn(
-                    "w-2 h-2 rounded-full mt-1.5 shrink-0",
-                    !notif.read ? "bg-primary" : "bg-slate-200"
-                  )} />
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <p className={cn(
-                      "text-xs leading-relaxed",
-                      !notif.read ? "font-bold text-slate-900" : "font-medium text-slate-600"
-                    )}>
-                      {notif.message}
-                    </p>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                      <Clock className="w-3 h-3" />
-                      <span>{notif.timestamp ? (notif.timestamp.includes("-") ? notif.timestamp.substring(0, 16) : notif.timestamp) : "Recent"}</span>
+              {userNotifications.map((notif: any) => {
+                const notifId = notif.id || notif._id || notif.dedupeKey;
+                const isUnread = !notif.read;
+                return (
+                  <div
+                    key={notifId || Math.random()}
+                    onClick={() => handleNotificationClick(notif)}
+                    className={cn(
+                      "p-3.5 transition-colors cursor-pointer text-left hover:bg-slate-50 flex items-start gap-3 group relative",
+                      isUnread ? "bg-red-50/20" : "bg-white"
+                    )}
+                  >
+                    {/* Unread Red Dot Indicator */}
+                    <div className={cn(
+                      "w-2 h-2 rounded-full mt-1.5 shrink-0 transition-colors",
+                      isUnread ? "bg-red-500 shadow-sm" : "bg-slate-200"
+                    )} />
+                    
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className={cn(
+                        "text-xs leading-relaxed transition-colors",
+                        isUnread ? "font-bold text-slate-900" : "font-medium text-slate-600"
+                      )}>
+                        {notif.message}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span>{notif.timestamp ? (notif.timestamp.includes("-") ? notif.timestamp.substring(0, 16) : notif.timestamp) : "Recent"}</span>
+                        </div>
+                        {isUnread && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleMarkSingleAsRead(e, notif)}
+                            title="Mark as read"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold text-slate-500 hover:text-primary flex items-center gap-0.5 hover:underline"
+                          >
+                            Mark read
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ScrollArea>
@@ -193,7 +284,7 @@ function NotificationBell() {
           <Button
             variant="ghost"
             size="sm"
-            className="w-full text-xs font-bold text-primary h-8 hover:bg-primary/5"
+            className="w-full text-xs font-bold text-primary h-8 hover:bg-primary/5 rounded-xl"
             onClick={() => {
               setIsOpen(false);
               router.push('/dashboard/attendance');
