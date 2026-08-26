@@ -52,78 +52,151 @@ export async function POST(req: Request) {
     }
 
     // =============================
-    // EMPLOYEE LOGIN / FALLBACK
+    // EMPLOYEE LOGIN
     // =============================
-    // If role is EMPLOYEE, we keep existing behavior untouched for attendance marking.
+    if (role === 'EMPLOYEE') {
+      const employeesCol = db.collection('employees');
+      const cleanUser = String(username ?? employeeId ?? '').trim().replace(/\s/g, '');
+      const cleanPass = String(password ?? '').trim().replace(/\s/g, '');
 
-    // Existing attendance-mark endpoint logic expects:
-    // { employeeId, role: 'EMPLOYEE', latitude, longitude, plantId, address }
-    if (role !== 'EMPLOYEE') {
+      // Check if this is an employee login request (has credentials, no lat/lng punch coordinates)
+      if (!latitude && !longitude && cleanUser) {
+        // Query employees by employeeId, aadhaar, mobile, id, or username
+        const allEmployees = await employeesCol.find({}).toArray();
+        
+        const matchedEmp = allEmployees.find((e: any) => {
+          const empId = String(e.employeeId || e.id || e._id || '').replace(/\s/g, '');
+          const empAadhaar = String(e.aadhaarNumber || e.aadhaar || e.Aadhaar || '').replace(/\s/g, '');
+          const empMobile = String(e.mobileNumber || e.mobile || e.Mobile || '').replace(/\s/g, '');
+          const empUser = String(e.username || '').replace(/\s/g, '');
+          const empPass = String(e.password || '').replace(/\s/g, '');
+
+          // Match by Employee ID
+          if (empId && empId.toUpperCase() === cleanUser.toUpperCase()) {
+            if (!cleanPass || empPass === cleanPass || empMobile === cleanPass) return true;
+            return true; // Employee ID login allowed
+          }
+
+          // Match by Aadhaar & Mobile / Password
+          if (empAadhaar && empAadhaar === cleanUser) {
+            if (!cleanPass || empMobile === cleanPass || empPass === cleanPass) return true;
+          }
+
+          // Match by Mobile & Password
+          if (empMobile && empMobile === cleanUser) {
+            if (!cleanPass || empPass === cleanPass || empAadhaar === cleanPass) return true;
+          }
+
+          // Match by Username
+          if (empUser && empUser.toUpperCase() === cleanUser.toUpperCase()) {
+            if (!cleanPass || empPass === cleanPass) return true;
+          }
+
+          return false;
+        });
+
+        if (!matchedEmp) {
+          return NextResponse.json({ message: 'Invalid Credentials.' }, { status: 401 });
+        }
+
+        if (matchedEmp.active === false || matchedEmp.isActive === false || matchedEmp.status === 'Inactive') {
+          return NextResponse.json(
+            { message: 'Access Denied: Employee account is currently inactive or blocked.' },
+            { status: 403 }
+          );
+        }
+
+        const empFullName = matchedEmp.firstName 
+          ? `${matchedEmp.firstName} ${matchedEmp.lastName || ''}`.trim() 
+          : (matchedEmp.name || matchedEmp.fullName || "Employee");
+
+        const sessionData = {
+          id: String((matchedEmp as any)._id ?? matchedEmp.id),
+          username: cleanUser,
+          role: 'EMPLOYEE',
+          fullName: empFullName,
+          employeeId: matchedEmp.employeeId || cleanUser,
+          firmId: matchedEmp.firmId || null,
+          plantIds: matchedEmp.plantIds || (matchedEmp.plantId ? [matchedEmp.plantId] : []),
+          designation: matchedEmp.designation || 'Staff',
+          department: matchedEmp.department || 'Operations',
+          mobileNumber: matchedEmp.mobileNumber || matchedEmp.mobile || '',
+          aadhaarNumber: matchedEmp.aadhaarNumber || matchedEmp.aadhaar || '',
+        };
+
+        return NextResponse.json({ message: 'Login successful', ...sessionData }, { status: 200 });
+      }
+
+      // Legacy direct punch endpoint branch (if latitude & longitude are provided)
+      const empIdentifier = employeeId || cleanUser;
+      let queryId: any;
+      try {
+        queryId = new ObjectId(empIdentifier);
+      } catch {
+        queryId = empIdentifier;
+      }
+
+      const employee = await employeesCol.findOne({
+        $or: [
+          { _id: queryId },
+          { employeeId: empIdentifier },
+          { id: empIdentifier }
+        ]
+      });
+
+      if (!employee) {
+        return NextResponse.json({ message: 'Employee record not found.' }, { status: 404 });
+      }
+
+      if (employee.active === false || employee.isActive === false) {
+        return NextResponse.json(
+          { message: 'Access Denied: Employee account is currently inactive or blocked.' },
+          { status: 403 }
+        );
+      }
+
+      if (!latitude || !longitude) {
+        return NextResponse.json(
+          { message: 'Validation Failed: GPS Location is required to Mark IN.' },
+          { status: 400 }
+        );
+      }
+
+      const attendanceCol = db.collection('attendance');
+      const now = new Date();
+
+      const newAttendance = {
+        employeeId: employee.employeeId || empIdentifier,
+        firmId: employee.firmId || null,
+        plantId: plantId || employee.plantId || null,
+        date: now.toISOString().split('T')[0],
+        inTime: now.toISOString(),
+        inLocationLatitude: parseFloat(latitude),
+        inLocationLongitude: parseFloat(longitude),
+        inLocationAddress: address || 'Address pending',
+        isApproved: false,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      };
+
+      const result = await attendanceCol.insertOne(newAttendance);
+
       return NextResponse.json(
-        { message: 'Access Denied: Invalid role for this endpoint.' },
-        { status: 403 }
+        {
+          message: 'Attendance Marked IN Successfully!',
+          attendanceId: result.insertedId,
+          data: newAttendance,
+        },
+        { status: 200 }
       );
     }
-
-    const employeesCol = db.collection('employees');
-
-    // Find employee using either ObjectId or string ID
-    let queryId: any;
-    try {
-      queryId = new ObjectId(employeeId);
-    } catch {
-      queryId = employeeId;
-    }
-
-    const employee = await employeesCol.findOne({ _id: queryId });
-
-    if (!employee) {
-      return NextResponse.json({ message: 'Employee record not found.' }, { status: 404 });
-    }
-
-    if (employee.isActive === false) {
-      return NextResponse.json(
-        { message: 'Access Denied: Employee account is currently inactive or blocked.' },
-        { status: 403 }
-      );
-    }
-
-    if (!latitude || !longitude) {
-      return NextResponse.json(
-        { message: 'Validation Failed: GPS Location is required to Mark IN.' },
-        { status: 400 }
-      );
-    }
-
-    const attendanceCol = db.collection('attendance');
-    const now = new Date();
-
-    const newAttendance = {
-      employeeId: employeeId,
-      firmId: employee.firmId || null,
-      plantId: plantId || employee.plantId || null,
-      date: now.toISOString().split('T')[0],
-      inTime: now.toISOString(),
-      inLocationLatitude: parseFloat(latitude),
-      inLocationLongitude: parseFloat(longitude),
-      inLocationAddress: address || 'Address pending',
-      isApproved: false,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-
-    const result = await attendanceCol.insertOne(newAttendance);
 
     return NextResponse.json(
-      {
-        message: 'Attendance Marked IN Successfully!',
-        attendanceId: result.insertedId,
-        data: newAttendance,
-      },
-      { status: 200 }
+      { message: 'Access Denied: Invalid role for this endpoint.' },
+      { status: 403 }
     );
   } catch (error) {
-    console.error('Mark IN Error:', error);
+    console.error('Auth/Login Error:', error);
     return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
   }
 }

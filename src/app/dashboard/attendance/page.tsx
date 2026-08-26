@@ -247,6 +247,10 @@ export default function AttendancePage() {
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT" | "DETAILS">("NONE");
 
+  // Location Permission & Fast Verification State
+  const [locationPermissionStatus, setLocationPermissionStatus] = useState<"checking" | "prompt" | "granted" | "denied" | "unavailable">("checking");
+  const [locationPermissionMessage, setLocationPermissionMessage] = useState<string | null>(null);
+
   // Leave history pagination
   const LEAVE_ROWS_PER_PAGE = 4;
   const [leavePage, setLeavePage] = useState(1);
@@ -254,6 +258,7 @@ export default function AttendancePage() {
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
+  const [nearestPlantInfo, setNearestPlantInfo] = useState<{ plant: Plant; distance: number } | null>(null);
   const [detectedAddress, setDetectedAddress] = useState("");
   const [detailedLocation, setDetailedLocation] = useState({ street: "", area: "", city: "", state: "", pincode: "" });
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH" | "">("");
@@ -272,6 +277,73 @@ export default function AttendancePage() {
       watchIdRef.current = null;
     }
   }, []);
+
+  const checkLocationOnMount = useCallback((isManualRetry = false) => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setLocationPermissionStatus("unavailable");
+      setLocationPermissionMessage("Please allow location access to mark attendance.");
+      return;
+    }
+
+    setLocationPermissionStatus("checking");
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        setLocationPermissionStatus("granted");
+        setLocationPermissionMessage(null);
+        setCurrentGPS({ lat, lng });
+        setGpsAccuracy(accuracy);
+
+        const sortedAllPlants = (plants || [])
+          .map((p) => ({ plant: p, distance: Math.round(getPreciseDistance(lat, lng, p.lat, p.lng)) }))
+          .sort((a, b) => a.distance - b.distance);
+
+        if (sortedAllPlants.length > 0) {
+          setNearestPlantInfo(sortedAllPlants[0]);
+          if (sortedAllPlants[0].distance <= (sortedAllPlants[0].plant.radius || 700)) {
+            setDetectedPlant(sortedAllPlants[0].plant);
+          } else {
+            setDetectedPlant(null);
+          }
+        } else {
+          setNearestPlantInfo(null);
+          setDetectedPlant(null);
+        }
+
+        // Fast background reverse geocoding
+        fetch('/api/geocode/reverse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat, lng })
+        }).then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data?.address) {
+              const addr = typeof data.address === 'object' ? (data.address.Match_addr || data.address.LongLabel || data.address.Address || "") : data.address;
+              setDetectedAddress(addr);
+            }
+            if (data?.components) {
+              setDetailedLocation({
+                street: data.components.street || '',
+                area: data.components.area || '',
+                city: data.components.city || '',
+                state: data.components.state || '',
+                pincode: data.components.pincode || ''
+              });
+            }
+          }).catch(() => {});
+      },
+      (err) => {
+        setLocationPermissionStatus("denied");
+        setLocationPermissionMessage("Please allow location access to mark attendance.");
+      },
+      { enableHighAccuracy: true, timeout: 3500, maximumAge: 15000 }
+    );
+  }, [plants]);
+
+  useEffect(() => {
+    checkLocationOnMount();
+  }, [checkLocationOnMount]);
 
   useEffect(() => {
     return () => {
@@ -316,18 +388,35 @@ export default function AttendancePage() {
   }, [verifiedUser, isHRorAdmin, selectedEmployeeId, employees]);
 
   const employeeRecords = useMemo(() => {
-    if (!effectiveEmployeeId || effectiveEmployeeId === "N/A") return [];
+    const targetEmpId = String(effectiveEmployeeId || '').trim().toUpperCase();
+    if (!targetEmpId || targetEmpId === "N/A") return [];
     
+    const verifiedEmpId = String(verifiedUser?.employeeId || '').trim().toUpperCase();
+    const verifiedUsername = String(verifiedUser?.username || '').trim().toUpperCase();
+    const verifiedId = String(verifiedUser?.id || (verifiedUser as any)?._id || '').trim().toUpperCase();
+
     const now = getISTTime();
     const todayStr = format(now, "yyyy-MM-dd");
     const ninetyDaysAgo = getISTTime();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     const ninetyDaysAgoStr = format(ninetyDaysAgo, "yyyy-MM-dd");
-    
-    const startDateStr = ninetyDaysAgoStr < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : ninetyDaysAgoStr;
 
-    const myRecords = (attendanceRecords || [])
-      .filter(r => r.employeeId === effectiveEmployeeId && r.date >= startDateStr && r.date <= todayStr);
+    const myRecords = (attendanceRecords || []).filter(r => {
+      if (!r) return false;
+      const recEmpId = String(r.employeeId || '').trim().toUpperCase();
+      const isMatch = isHRorAdmin
+        ? (recEmpId === targetEmpId)
+        : (recEmpId === targetEmpId || (verifiedEmpId && recEmpId === verifiedEmpId) || (verifiedUsername && recEmpId === verifiedUsername) || (verifiedId && recEmpId === verifiedId));
+      return isMatch && r.date && r.date <= todayStr;
+    });
+
+    let startDateStr = ninetyDaysAgoStr < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : ninetyDaysAgoStr;
+    // Ensure all available historical records are visible
+    myRecords.forEach(r => {
+      if (r.date && r.date < startDateStr) {
+        startDateStr = r.date;
+      }
+    });
       
     const recordsByDate = new Map<string, any[]>();
     myRecords.forEach(r => {
@@ -371,7 +460,7 @@ export default function AttendancePage() {
     }
 
     return fullHistory;
-  }, [attendanceRecords, effectiveEmployeeId, holidays, effectiveEmployeeName]);
+  }, [attendanceRecords, effectiveEmployeeId, verifiedUser, isHRorAdmin, holidays, effectiveEmployeeName]);
 
   // Leave requests are now filtered directly on each render without memoization.
   const currentEmpIdForLeaves = String(effectiveEmployeeId || "").trim().toUpperCase();
@@ -730,18 +819,160 @@ const allPlantExitHistory = useMemo(() => {
     return () => clearInterval(geofenceWorkerId);
   }, [activeRecord?.id, activeRecord?.status, plants, employees, effectiveEmployeeId, effectiveEmployeeName, verifiedUser]);
 
+  const punchCheckIn = async (finalInPlant: string, attendanceType: string, plantName: string, geofenceStatus: string) => {
+    if (isMutatingAttendance) return;
+    setIsMutatingAttendance(true);
+
+    const now = getISTTime();
+    const today = format(now, "yyyy-MM-dd");
+    const timeStr = format(now, "HH:mm");
+
+    const newRecordData = {
+      employeeId: effectiveEmployeeId,
+      employeeName: effectiveEmployeeName,
+      aadhaarNumber: "[Aadhaar Redacted]",
+      mobileNumber: verifiedUser?.mobileNumber || "N/A",
+      date: today,
+      inDate: today,
+      inTime: timeStr,
+      inDateTime: now.toISOString(),
+      hours: 0,
+      status: 'Open',
+      attendanceType: attendanceType,
+      lat: currentGPS?.lat || 28.6329, 
+      lng: currentGPS?.lng || 77.4357,
+      address: detectedAddress || (detectedPlant ? detectedPlant.name : "Registered Zone"),
+      street: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Industrial Bypass"),
+      area: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || "Industrial Zone"),
+      city: detailedLocation.city || "NCR",
+      state: detailedLocation.state || "Uttar Pradesh",
+      pincode: detailedLocation.pincode || "N/A",
+      inPlant: finalInPlant,
+      remark: `Checked IN for ${attendanceType}`,
+      approved: false,
+      unapprovedOutDuration: 0,
+      currentGeofenceStatus: geofenceStatus,
+      exitEvents: []
+    };
+
+    try {
+      await addRecord('attendance', newRecordData);
+      setSelectedType("");
+      setActiveDialog("NONE");
+      toast({ title: "Mark IN Successful", description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
+    } catch (e) {
+      console.error("Check-in error:", e);
+      toast({ variant: "destructive", title: "Error", description: "Failed to process database entry register log." });
+    } finally {
+      setIsMutatingAttendance(false);
+    }
+  };
+
   const handleMarkInClick = (e?: React.MouseEvent | React.FormEvent) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
-    if (isCooldownLocked || isLoadingLocation || isMutatingAttendance) return;
+    if (isCooldownLocked || isLoadingLocation || isMutatingAttendance || !!activeRecord) return;
+
     clearActiveWatch();
     requestLocation("IN");
+  };
+
+  const punchCheckOut = async () => {
+    if (!activeRecord || isMutatingAttendance) return;
+
+    if (!activeRecord.inTime) {
+      toast({
+        variant: "destructive",
+        title: "Mark IN Required",
+        description: "Cannot Mark OUT because no valid Mark IN record exists for today.",
+      });
+      return;
+    }
+
+    const now = getISTTime();
+    const inDT = activeRecord.inDateTime
+      ? parseISO(activeRecord.inDateTime)
+      : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
+    const outDT = now;
+
+    if (!inDT || !isValid(inDT)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Mark IN",
+        description: "Stored Mark IN date/time is invalid. Please Mark IN again.",
+      });
+      return;
+    }
+
+    let finalHours = 0;
+    if (isValid(inDT) && isValid(outDT)) {
+      const diffHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+      finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
+    }
+
+    // Spec: After a manual Mark OUT, next Mark IN opens exactly 1 hour after the actual
+    // Mark OUT time (Mark OUT Time + 1 Hour).
+    const nextEnableDT = addHours(outDT, 1);
+    const recordId = activeRecord.id || (activeRecord as any)._id;
+
+    if (!recordId) {
+      toast({ variant: "destructive", title: "Error", description: "Record ID not found." });
+      return;
+    }
+
+    setIsMutatingAttendance(true);
+
+    try {
+      let finalExitEvents = activeRecord.exitEvents ? [...activeRecord.exitEvents] : [];
+      let incompleteEvent = finalExitEvents.find((e: any) => !e.inPlantTime && e.trackingStatus === "Outside Plant");
+      if (incompleteEvent) {
+        const timeNowStr = format(now, "yyyy-MM-dd HH:mm");
+        const exitTimeParsed = parseISO(incompleteEvent.outPlantTime.replace(" ", "T"));
+        const duration = differenceInMinutes(now, exitTimeParsed);
+        const hh = String(Math.floor(Math.max(0, duration) / 60)).padStart(2, '0');
+        const mm = String(Math.max(0, duration) % 60).padStart(2, '0');
+        incompleteEvent.inPlantTime = timeNowStr;
+        incompleteEvent.totalOutDuration = `${hh}:${mm}`;
+        incompleteEvent.currentPlant = incompleteEvent.plant || activeRecord.inPlant || "Salt Plant";
+        incompleteEvent.trackingStatus = "Returned";
+      }
+
+      await updateRecord('attendance', recordId, { 
+        outTime: format(outDT, "HH:mm"), 
+        outDate: format(outDT, "yyyy-MM-dd"),
+        outDateTime: outDT.toISOString(),
+        hours: finalHours,
+        status: 'Closed',
+        outType: 'Manual',
+        latOut: currentGPS?.lat || activeRecord.lat || 28.6329,
+        lngOut: currentGPS?.lng || activeRecord.lng || 77.4357,
+        addressOut: detectedAddress || activeRecord.address || (detectedPlant as any)?.address || "Registered Zone",
+        streetOut: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || activeRecord.street || "Unknown Street"),
+        areaOut: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || activeRecord.area || "Unknown Area"),
+        cityOut: detailedLocation.city || activeRecord.city || "NCR",
+        stateOut: detectedPlant ? "Uttar Pradesh" : (detailedLocation.state || activeRecord.state || "NCR"),
+        pincodeOut: detailedLocation.pincode || activeRecord.pincode || "N/A",
+        outPlant: detectedPlant ? detectedPlant.name : (activeRecord.inPlant || "Outside"),
+        nextInEnableTime: nextEnableDT.toISOString(),
+        exitEvents: finalExitEvents,
+        currentGeofenceStatus: "Shift Closed"
+      });
+
+      setActiveDialog("NONE");
+      toast({ title: "Mark OUT Successful", description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
+    } catch (e) {
+      console.error("Check-out error:", e);
+      toast({ variant: "destructive", title: "Error", description: "Failed to Mark OUT" });
+    } finally {
+      setIsMutatingAttendance(false);
+    }
   };
 
   const handleMarkOutClick = (e?: React.MouseEvent | React.FormEvent) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
     if (!activeRecord || !canMarkOut || isLoadingLocation || isMutatingAttendance) return;
+    
     clearActiveWatch();
     requestLocation("OUT");
   };
@@ -838,6 +1069,8 @@ const allPlantExitHistory = useMemo(() => {
     const processGeocoding = async (lat: number, lng: number, accuracy: number) => {
       try {
         setGpsAccuracy(accuracy);
+        setLocationPermissionStatus("granted");
+        setLocationPermissionMessage(null);
 
         // Fallback accuracy threshold check: allow 50-100m, notify if > 100m without failing
         if (accuracy > 100) {
@@ -880,22 +1113,20 @@ const allPlantExitHistory = useMemo(() => {
           setDetailedLocation(components);
           setCurrentGPS({ lat, lng });
 
-          const qualifiedPlants = (plants || [])
-            .map(p => ({ plant: p, distance: getPreciseDistance(lat, lng, p.lat, p.lng) }))
-            .filter(p => p.distance <= (p.plant.radius || 700))
+          const sortedAllPlants = (plants || [])
+            .map(p => ({ plant: p, distance: Math.round(getPreciseDistance(lat, lng, p.lat, p.lng)) }))
             .sort((a, b) => a.distance - b.distance);
 
-          if (qualifiedPlants.length > 0) {
-            setDetectedPlant(qualifiedPlants[0].plant);
-          } else {
-            setDetectedPlant(null);
-            if (type !== "OUT_AUTO") {
-              toast({
-                variant: "default",
-                title: "Outside Plant Radius",
-                description: `You are outside the plant radius. Current coordinates accuracy: ${accuracy ? accuracy.toFixed(1) : "0"} meters.`,
-              });
+          if (sortedAllPlants.length > 0) {
+            setNearestPlantInfo(sortedAllPlants[0]);
+            if (sortedAllPlants[0].distance <= (sortedAllPlants[0].plant.radius || 700)) {
+              setDetectedPlant(sortedAllPlants[0].plant);
+            } else {
+              setDetectedPlant(null);
             }
+          } else {
+            setNearestPlantInfo(null);
+            setDetectedPlant(null);
           }
 
           if (type === "OUT_AUTO" && isAutoTriggering.current) {
@@ -904,11 +1135,9 @@ const allPlantExitHistory = useMemo(() => {
           }
         } else {
           console.warn('Reverse geocode failed', data);
-          toast({ variant: "destructive", title: "Location Error", description: "Could not resolve readable address coordinates." });
         }
       } catch (error) {
         console.error("Fast geocoding failed", error);
-        toast({ variant: "destructive", title: "Location Timeout", description: "Network error occurred while fetching position parameters." });
       } finally {
         if (type !== "OUT_AUTO") {
           setActiveDialog(type);
@@ -918,7 +1147,8 @@ const allPlantExitHistory = useMemo(() => {
     };
 
     if (!navigator.geolocation) {
-      toast({ variant: "destructive", title: "Geolocation Unavailable", description: "GPS is not supported on this device/browser." });
+      setLocationPermissionStatus("unavailable");
+      setLocationPermissionMessage("Please allow location access to mark attendance.");
       setIsLoadingLocation(false);
       return;
     }
@@ -942,33 +1172,8 @@ const allPlantExitHistory = useMemo(() => {
         clearTimeout(emergencyTimeout);
         setIsLoadingLocation(false);
         clearActiveWatch();
-
-        let title = "Location Error";
-        let description = "Unable to retrieve device location. Please try again.";
-
-        switch (err.code) {
-          case err.PERMISSION_DENIED:
-            title = "Location Permission Denied";
-            description = "Location access was denied. Please allow GPS permissions in your browser or device settings to mark attendance.";
-            break;
-          case err.POSITION_UNAVAILABLE:
-            title = "GPS Signal Unavailable";
-            description = "GPS position is unavailable. Please verify your device's location services and retry.";
-            break;
-          case err.TIMEOUT:
-            title = "Location Request Timed Out";
-            description = "GPS acquisition timed out. Please check your GPS signal and retry.";
-            break;
-          default:
-            description = err.message || "An unexpected error occurred while retrieving GPS coordinates.";
-            break;
-        }
-
-        toast({
-          variant: "destructive",
-          title,
-          description,
-        });
+        setLocationPermissionStatus("denied");
+        setLocationPermissionMessage("Please allow location access to mark attendance.");
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -984,10 +1189,6 @@ const allPlantExitHistory = useMemo(() => {
       return;
     }
 
-    const now = getISTTime();
-    const today = format(now, "yyyy-MM-dd");
-    const timeStr = format(now, "HH:mm");
-    
     const plantName = detectedPlant ? detectedPlant.name : "N/A";
     
     let finalInPlant = "N/A";
@@ -1001,47 +1202,7 @@ const allPlantExitHistory = useMemo(() => {
       attendanceType = selectedType === 'WFH' ? 'Work From Home' : 'Field Work';
     }
 
-    setIsMutatingAttendance(true);
-
-    try {
-      await addRecord('attendance', {
-        employeeId: effectiveEmployeeId,
-        employeeName: effectiveEmployeeName,
-        aadhaarNumber: "[Aadhaar Redacted]",
-        mobileNumber: verifiedUser?.mobileNumber || "N/A",
-        date: today,
-        inDate: today,
-        inTime: timeStr,
-        inDateTime: now.toISOString(),
-        hours: 0,
-        status: 'Open',
-        attendanceType: attendanceType,
-        lat: currentGPS?.lat || 28.6329, 
-        lng: currentGPS?.lng || 77.4357,
-        address: detectedAddress || "Salt Plant Zone, NCR",
-        street: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Industrial Bypass"),
-        area: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || "Industrial Zone"),
-        city: detailedLocation.city || "NCR",
-        state: detailedLocation.state || "Uttar Pradesh",
-        pincode: detailedLocation.pincode || "N/A",
-        inPlant: finalInPlant,
-        remark: `Checked IN for ${attendanceType}`,
-        approved: false,
-        unapprovedOutDuration: 0,
-        currentGeofenceStatus: detectedPlant ? "Inside Plant" : "Outside Plant",
-        exitEvents: []
-      });
-
-      await refreshData();
-      setSelectedType("");
-      setActiveDialog("NONE");
-      toast({ title: "Mark IN Successful", description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
-    } catch (e) {
-      console.error("Check-in error:", e);
-      toast({ variant: "destructive", title: "Error", description: "Failed to process database entry register log." });
-    } finally {
-      setIsMutatingAttendance(false);
-    }
+    await punchCheckIn(finalInPlant, attendanceType, plantName, detectedPlant ? "Inside Plant" : "Outside Plant");
   };
 
   const handleConfirmCheckOut = async (e?: React.MouseEvent | React.FormEvent) => {
@@ -1049,94 +1210,7 @@ const allPlantExitHistory = useMemo(() => {
     e?.stopPropagation?.();
     if (!activeRecord || isMutatingAttendance) return;
 
-    if (!activeRecord.inTime) {
-      toast({
-        variant: "destructive",
-        title: "Mark IN Required",
-        description: "Cannot Mark OUT because no valid Mark IN record exists for today.",
-      });
-      return;
-    }
-
-    const now = getISTTime();
-    const inDT = activeRecord.inDateTime
-      ? parseISO(activeRecord.inDateTime)
-      : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
-    const outDT = now;
-
-    if (!inDT || !isValid(inDT)) {
-      toast({
-        variant: "destructive",
-        title: "Invalid Mark IN",
-        description: "Stored Mark IN date/time is invalid. Please Mark IN again.",
-      });
-      return;
-    }
-
-    let finalHours = 0;
-    if (isValid(inDT) && isValid(outDT)) {
-      const diffHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-      finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
-    }
-
-    // Spec: After a manual Mark OUT, next Mark IN opens exactly 1 hour after the actual
-    // Mark OUT time (Mark OUT Time + 1 Hour). UI liveness (button disable + countdown)
-    // is driven by nextInEnableTime / isCooldownLocked below.
-    const nextEnableDT = addHours(outDT, 1);
-    const recordId = activeRecord.id || (activeRecord as any)._id;
-
-    if (!recordId) {
-      toast({ variant: "destructive", title: "Error", description: "Record ID not found." });
-      return;
-    }
-
-    setIsMutatingAttendance(true);
-
-    try {
-      let finalExitEvents = activeRecord.exitEvents ? [...activeRecord.exitEvents] : [];
-      let incompleteEvent = finalExitEvents.find(e => !e.inPlantTime && e.trackingStatus === "Outside Plant");
-      if (incompleteEvent) {
-        const timeNowStr = format(now, "yyyy-MM-dd HH:mm");
-        const exitTimeParsed = parseISO(incompleteEvent.outPlantTime.replace(" ", "T"));
-        const duration = differenceInMinutes(now, exitTimeParsed);
-        const hh = String(Math.floor(Math.max(0, duration) / 60)).padStart(2, '0');
-        const mm = String(Math.max(0, duration) % 60).padStart(2, '0');
-        incompleteEvent.inPlantTime = timeNowStr;
-        incompleteEvent.totalOutDuration = `${hh}:${mm}`;
-        incompleteEvent.currentPlant = incompleteEvent.plant || activeRecord.inPlant || "Salt Plant";
-        incompleteEvent.trackingStatus = "Returned";
-      }
-
-      await updateRecord('attendance', recordId, { 
-        outTime: format(outDT, "HH:mm"), 
-        outDate: format(outDT, "yyyy-MM-dd"),
-        outDateTime: outDT.toISOString(),
-        hours: finalHours,
-        status: 'Closed',
-        outType: 'Manual',
-        latOut: currentGPS?.lat || activeRecord.lat || 28.6329,
-        lngOut: currentGPS?.lng || activeRecord.lng || 77.4357,
-        addressOut: detectedAddress || activeRecord.address || (detectedPlant as any)?.address || "Registered Zone",
-        streetOut: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || activeRecord.street || "Unknown Street"),
-        areaOut: detectedPlant ? "Plant Radius Zone" : (detailedLocation.area || activeRecord.area || "Unknown Area"),
-        cityOut: detailedLocation.city || activeRecord.city || "NCR",
-        stateOut: detectedPlant ? "Uttar Pradesh" : (detailedLocation.state || activeRecord.state || "NCR"),
-        pincodeOut: detailedLocation.pincode || activeRecord.pincode || "N/A",
-        outPlant: detectedPlant ? detectedPlant.name : "Outside",
-        nextInEnableTime: nextEnableDT.toISOString(),
-        exitEvents: finalExitEvents,
-        currentGeofenceStatus: "Shift Closed"
-      });
-
-      await refreshData();
-      setActiveDialog("NONE");
-      toast({ title: "Mark OUT Successful" });
-    } catch (e) {
-      console.error("Check-out error:", e);
-      toast({ variant: "destructive", title: "Error", description: "Failed to Mark OUT" });
-    } finally {
-      setIsMutatingAttendance(false);
-    }
+    await punchCheckOut();
   };
 
   const handleViewEventDetails = (event: any) => {
@@ -1150,6 +1224,24 @@ const allPlantExitHistory = useMemo(() => {
     <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
       {isEmployeeLogin && (
       <div className="max-w-xl mx-auto w-full space-y-6">
+        {(locationPermissionStatus === "denied" || locationPermissionStatus === "unavailable" || locationPermissionMessage) && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm text-amber-900 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <MapPin className="w-5 h-5 text-amber-600 shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wide">
+                Please allow location access to mark attendance.
+              </span>
+            </div>
+            <Button 
+              size="sm" 
+              className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase px-4 h-9 rounded-xl shrink-0"
+              onClick={() => checkLocationOnMount(true)}
+            >
+              Allow Location
+            </Button>
+          </div>
+        )}
+
         <Card className="shadow-2xl border-none overflow-hidden bg-white">
           <div className="h-1.5 bg-primary" />
           <CardHeader className="text-center py-6 relative">
@@ -1614,104 +1706,129 @@ const allPlantExitHistory = useMemo(() => {
         </DialogContent>
       </Dialog>
 
-      {/* Mark IN Confirmation Pop-up */}
+      {/* Mark IN Confirmation Pop-up with Location and Distance */}
       <Dialog
         open={activeDialog === "IN"}
         onOpenChange={(o) => {
-          if (!o) setActiveDialog("NONE");
+          if (!o) {
+            clearActiveWatch();
+            setActiveDialog("NONE");
+            setIsLoadingLocation(false);
+          }
         }}
       >
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
-          <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <MapPin className="w-6 h-6 text-primary" /> Welcome, {effectiveEmployeeName}
+          <DialogHeader className="p-7 bg-slate-900 text-white shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
+              <MapPin className="w-5 h-5 text-primary" /> Mark IN Confirmation
             </DialogTitle>
           </DialogHeader>
-          <div className="p-10 space-y-6">
-            <div>
-              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee Name</Label>
-              <p className="text-md font-black text-slate-900 uppercase mt-0.5">{effectiveEmployeeName}</p>
+          <div className="p-8 space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee Name</Label>
+                <p className="text-sm font-black text-slate-900 uppercase mt-0.5">{effectiveEmployeeName}</p>
+              </div>
+
+              <div>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Date & Time</Label>
+                <p className="text-sm font-bold text-slate-700 mt-0.5">
+                  {format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm:ss a")}
+                </p>
+              </div>
             </div>
 
-            <div>
-              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
-              <p className="text-sm font-bold text-slate-700 mt-0.5">
-                {format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm:ss a")}
-              </p>
-            </div>
-
-            <div>
-              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GPS Accuracy</Label>
-              <p className="text-sm font-bold text-slate-700 mt-0.5">
-                {gpsAccuracy ? `${gpsAccuracy.toFixed(2)} meters` : "N/A"}
-              </p>
-            </div>
-
-            <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 shadow-inner">
-              <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-3">
-                <Navigation className="w-3.5 h-3.5" /> Captured GPS Address
+            {/* Current GPS Location / Address */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+              <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-2">
+                <Navigation className="w-3.5 h-3.5" /> Current Location (GPS)
               </Label>
               <div className="text-xs font-bold text-slate-700">
                 <span className="text-slate-800 whitespace-normal break-words leading-relaxed">
                   {detectedAddress || (
                     <span className="text-slate-400 flex items-center gap-1.5 font-medium italic">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Capturing secure telemetry address bounds...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Capturing real-time address bounds...
                     </span>
                   )}
                 </span>
               </div>
             </div>
 
+            {/* Plant & Distance Info */}
             {detectedPlant ? (
-              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-3">
-                <div className="bg-emerald-500 p-2 rounded-xl text-white">
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center gap-3.5">
+                <div className="bg-emerald-500 p-2.5 rounded-xl text-white shrink-0">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <div>
-                  <Label className="text-[9px] font-black uppercase text-emerald-700 tracking-wider">Verified Facility Geofence Zone</Label>
+                <div className="space-y-0.5">
+                  <Label className="text-[9px] font-black uppercase text-emerald-700 tracking-wider">Facility Geofence Zone</Label>
                   <p className="text-sm font-black text-emerald-900 uppercase">{detectedPlant.name}</p>
+                  <p className="text-[11px] font-bold text-emerald-700">
+                    Distance: <span className="font-mono font-black">{nearestPlantInfo?.distance || 0} meters</span> (Inside {detectedPlant.radius || 700}m radius)
+                  </p>
                 </div>
               </div>
             ) : (
-              detectedAddress && (
-                <div className="space-y-4 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
-                  <div className="flex items-start gap-2 text-rose-600 bg-rose-50/50 p-3 rounded-xl border border-rose-100">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <p className="text-[11px] font-bold uppercase tracking-wide">
-                      Outside Plant Radius Constraints (700m). Selection is Mandatory to authorize ledger sign-in.
-                    </p>
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-1">
+                  <div className="flex items-center gap-2 text-amber-800 font-black text-xs uppercase">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <span>Outside Plant Radius (700m)</span>
                   </div>
-                  <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-4">
+                  {nearestPlantInfo && (
+                    <p className="text-[11px] font-bold text-amber-900">
+                      Nearest Plant: <span className="uppercase">{nearestPlantInfo.plant.name}</span> — Distance: <span className="font-mono font-black">{nearestPlantInfo.distance} meters</span>
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    Select Attendance Category (Mandatory):
+                  </Label>
+                  <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-3">
                     <div 
                       className={cn(
-                        "p-5 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", 
-                        selectedType === 'WFH' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-100 bg-white hover:border-slate-200 shadow-sm"
+                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2", 
+                        selectedType === 'WFH' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
                       )} 
                       onClick={() => setSelectedType('WFH')}
                     >
                       <Home className={cn("w-6 h-6", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
-                      <span className="font-black text-[10px] uppercase tracking-wider text-slate-700">Work From Home</span>
+                      <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Work From Home</span>
                     </div>
                     <div 
                       className={cn(
-                        "p-5 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-3", 
-                        selectedType === 'FIELD' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-100 bg-white hover:border-slate-200 shadow-sm"
+                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2", 
+                        selectedType === 'FIELD' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
                       )} 
                       onClick={() => setSelectedType('FIELD')}
                     >
                       <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
-                      <span className="font-black text-[10px] uppercase tracking-wider text-slate-700">Field Work</span>
+                      <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Field Work</span>
                     </div>
                   </RadioGroup>
                 </div>
-              )
+              </div>
             )}
+
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 pt-1 border-t border-slate-100">
+              <span>GPS Accuracy: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} meters` : "N/A"}</span>
+              <span>Coordinates: {currentGPS ? `${currentGPS.lat.toFixed(4)}, ${currentGPS.lng.toFixed(4)}` : "N/A"}</span>
+            </div>
           </div>
-          <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
-            <Button type="button" variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-rose-500 hover:bg-rose-600 uppercase tracking-widest text-xs" onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}>CANCEL</Button>
+          <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs" 
+              onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}
+            >
+              CANCEL
+            </Button>
             <Button 
               type="button"
-              className="flex-1 h-14 font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-500/20 uppercase tracking-widest text-xs" 
+              className="flex-1 h-12 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20 uppercase tracking-wider text-xs" 
               onClick={handleConfirmCheckIn} 
               disabled={isMutatingAttendance || !detectedAddress || (!detectedPlant && !selectedType)}
             >
@@ -1719,13 +1836,13 @@ const allPlantExitHistory = useMemo(() => {
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" /> PROCESSING...
                 </span>
-              ) : "MARK IN"}
+              ) : "CONFIRM & MARK IN"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Mark OUT Confirmation Dialog */}
+      {/* Mark OUT Confirmation Pop-up with Location and Distance */}
       <Dialog
         open={activeDialog === "OUT"}
         onOpenChange={(o) => {
@@ -1737,83 +1854,86 @@ const allPlantExitHistory = useMemo(() => {
         }}
       >
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
-          <DialogHeader className="p-8 bg-rose-600 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <Navigation className="w-6 h-6" /> {effectiveEmployeeName}
+          <DialogHeader className="p-7 bg-rose-600 text-white shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
+              <Navigation className="w-5 h-5" /> Mark OUT Confirmation
             </DialogTitle>
           </DialogHeader>
-          <div className="p-10 space-y-8">
-             <div className="grid grid-cols-2 gap-8">
-               <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Plant Name</Label>
-                  <p className="text-sm font-black text-slate-900 uppercase mt-1">{detectedPlant?.name || "Outside Allowed Geofence"}</p>
-               </div>
-               <div>
-                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Date & Time</Label>
-                  <p className="text-sm font-bold text-slate-700 mt-1">{format(currentTime || getISTTime(), "dd-MMM-yyyy HH:mm")}</p>
-               </div>
-                <div>
-                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">GPS Accuracy</Label>
-                    <p className="text-sm font-bold text-slate-700 mt-1">{gpsAccuracy ? `${gpsAccuracy.toFixed(2)} meters` : "N/A"}</p>
-                </div>
+          <div className="p-8 space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee Name</Label>
+                <p className="text-sm font-black text-slate-900 uppercase mt-0.5">{effectiveEmployeeName}</p>
+              </div>
+
+              <div>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Date & Time</Label>
+                <p className="text-sm font-bold text-slate-700 mt-0.5">
+                  {format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm:ss a")}
+                </p>
+              </div>
             </div>
 
-            {gpsAccuracy && gpsAccuracy > 100 && (
-              <Alert className="bg-amber-50 border-amber-100 text-amber-700 rounded-2xl">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                <AlertDescription className="text-[10px] font-black uppercase tracking-widest">
-                  Poor GPS Signal ({gpsAccuracy.toFixed(0)}m accuracy). Location may be inaccurate.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {!detectedPlant && (
-              <Alert className="bg-rose-50 border-rose-100 text-rose-700 rounded-2xl">
-                <AlertTriangle className="h-4 w-4 text-rose-600" />
-                <AlertDescription className="text-[10px] font-black uppercase tracking-widest">
-                  You are outside the plant radius. Current coordinates accuracy: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} meters.` : "N/A"}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {activeRecord && canMarkOut && (
-              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center gap-2 font-black text-slate-700 uppercase tracking-wider text-xs">
-                <ShieldCheck className="w-4 h-4 text-slate-400" />
+            {activeRecord && (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center gap-2 font-black text-slate-700 uppercase tracking-wider text-xs">
+                <ShieldCheck className="w-4 h-4 text-slate-500" />
                 <span>SHIFT STARTED: {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "dd-MMM-yyyy")} {activeRecord.inTime}</span>
               </div>
             )}
 
-            <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100 shadow-inner">
-              <Label className="text-[10px] font-black uppercase text-rose-500 tracking-wider flex items-center gap-2 mb-4">
-                <MapPin className="w-3.5 h-3.5" /> Employee Current Location
+            {/* Current GPS Location / Address */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+              <Label className="text-[10px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-2 mb-2">
+                <MapPin className="w-3.5 h-3.5" /> Current Location (GPS)
               </Label>
-              <div className="space-y-2.5 text-xs font-bold text-slate-700">
-                <div className="flex flex-col gap-2">
-                  <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider">Address:</span>
-                  <span className="text-slate-800 whitespace-normal break-words">
-                    {detectedAddress || (
-                      <span className="text-slate-400 flex items-center gap-1 font-medium">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Fetching real-time address...
-                      </span>
-                    )}
-                  </span>
-                </div>
+              <div className="text-xs font-bold text-slate-700">
+                <span className="text-slate-800 whitespace-normal break-words leading-relaxed">
+                  {detectedAddress || (
+                    <span className="text-slate-400 flex items-center gap-1.5 font-medium italic">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Fetching real-time address...
+                    </span>
+                  )}
+                </span>
               </div>
             </div>
+
+            {/* Facility & Distance Information */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+              <Label className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Facility Distance Check</Label>
+              <p className="text-xs font-bold text-slate-800">
+                Nearest Plant: <span className="font-black uppercase">{nearestPlantInfo?.plant?.name || detectedPlant?.name || "Salt Plant"}</span>
+              </p>
+              <p className="text-[11px] font-bold text-slate-600">
+                Distance: <span className="font-mono font-black text-slate-900">{nearestPlantInfo?.distance || 0} meters</span>
+                {detectedPlant ? " (Within Geofence Radius)" : " (Outside Geofence Radius)"}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 pt-1 border-t border-slate-100">
+              <span>GPS Accuracy: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} meters` : "N/A"}</span>
+              <span>Coordinates: {currentGPS ? `${currentGPS.lat.toFixed(4)}, ${currentGPS.lng.toFixed(4)}` : "N/A"}</span>
+            </div>
           </div>
-          <DialogFooter className="p-8 bg-slate-50 border-t flex flex-row gap-4">
-            <Button type="button" variant="ghost" className="flex-1 h-14 font-black rounded-2xl text-white bg-blue-500 hover:bg-blue-600 text-xs uppercase" onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}>CANCEL</Button>
+          <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs" 
+              onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}
+            >
+              CANCEL
+            </Button>
             <Button 
               type="button"
-              className="flex-1 h-14 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-2xl shadow-xl shadow-rose-200 uppercase tracking-widest text-xs" 
-              onClick={handleConfirmCheckOut}
+              className="flex-1 h-12 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-lg shadow-rose-600/20 uppercase tracking-wider text-xs" 
+              onClick={handleConfirmCheckOut} 
               disabled={isMutatingAttendance || !canMarkOut}
             >
               {isMutatingAttendance ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" /> PROCESSING...
                 </span>
-              ) : "CHECK OUT"}
+              ) : "CONFIRM & MARK OUT"}
             </Button>
           </DialogFooter>
         </DialogContent>

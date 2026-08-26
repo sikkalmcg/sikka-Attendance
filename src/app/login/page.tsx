@@ -23,16 +23,35 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const session = Cookies.get('sikka_session');
+    let session = Cookies.get('sikka_session');
+    if (!session && typeof window !== 'undefined') {
+      session = localStorage.getItem('user') || undefined;
+      if (session) {
+        try {
+          Cookies.set('sikka_session', session, { expires: 365, path: '/' });
+        } catch {}
+      }
+    }
     if (session) {
-      router.push('/dashboard');
+      try {
+        const parsed = JSON.parse(session);
+        if (String(parsed?.role).toUpperCase() === 'EMPLOYEE') {
+          router.push('/dashboard/attendance');
+        } else {
+          router.push('/dashboard');
+        }
+      } catch {
+        router.push('/dashboard');
+      }
     }
   }, [router]);
 
   const persistSession = (userData: any) => {
     const sessionData = JSON.stringify(userData);
     Cookies.set('sikka_session', sessionData, { expires: 365, path: '/' });
-    localStorage.setItem("user", sessionData);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("user", sessionData);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {

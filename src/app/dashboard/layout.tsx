@@ -31,7 +31,9 @@ import {
   Camera, 
   ShieldAlert, 
   ArrowLeft, 
-  Smartphone
+  Smartphone,
+  Bell,
+  CheckCheck
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -47,6 +49,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -60,6 +69,143 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import Cookies from 'js-cookie';
+import { format } from "date-fns";
+
+function NotificationBell() {
+  const { notifications = [], updateRecord, refreshData, verifiedUser } = useData();
+  const router = useRouter();
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Filter notifications for current user
+  const userEmpId = String(verifiedUser?.employeeId || verifiedUser?.username || '').trim().toUpperCase();
+  const userNotifications = useMemo(() => {
+    return (notifications || []).filter((n: any) => {
+      if (!n) return false;
+      const targetEmpId = String(n.employeeId || '').trim().toUpperCase();
+      if (!targetEmpId || targetEmpId === "N/A") return true; // Global notification
+      return targetEmpId === userEmpId || targetEmpId === String(verifiedUser?.id || '').toUpperCase();
+    }).sort((a: any, b: any) => {
+      return (b.timestamp || "").localeCompare(a.timestamp || "");
+    });
+  }, [notifications, userEmpId, verifiedUser]);
+
+  const unreadCount = useMemo(() => {
+    return userNotifications.filter((n: any) => !n.read).length;
+  }, [userNotifications]);
+
+  const handleNotificationClick = async (notif: any) => {
+    if (!notif.read && (notif.id || notif._id)) {
+      await updateRecord('notifications', notif.id || notif._id, { read: true }, true);
+    }
+    setIsOpen(false);
+    // Redirect to Mark Attendance page
+    router.push('/dashboard/attendance');
+  };
+
+  const handleMarkAllAsRead = async () => {
+    const unread = userNotifications.filter((n: any) => !n.read);
+    for (const notif of unread) {
+      if (notif.id || notif._id) {
+        await updateRecord('notifications', notif.id || notif._id, { read: true }, true);
+      }
+    }
+    await refreshData();
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Notifications"
+          className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:outline-none"
+        >
+          <Bell className="w-5 h-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-black text-white bg-rose-500 rounded-full px-1 shadow-sm animate-in zoom-in-50">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 sm:w-96 p-0 rounded-2xl shadow-2xl border-slate-200 bg-white overflow-hidden z-50">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/70">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-primary" />
+            <span className="font-bold text-sm text-slate-800">Notifications</span>
+            {unreadCount > 0 && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-primary/10 text-primary font-bold">
+                {unreadCount} new
+              </Badge>
+            )}
+          </div>
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={handleMarkAllAsRead}
+              className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+            >
+              <CheckCheck className="w-3.5 h-3.5" /> Mark all read
+            </button>
+          )}
+        </div>
+
+        <ScrollArea className="max-h-[380px]">
+          {userNotifications.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-xs font-semibold">No notifications</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {userNotifications.map((notif: any) => (
+                <div
+                  key={notif.id || notif._id || notif.dedupeKey || Math.random()}
+                  onClick={() => handleNotificationClick(notif)}
+                  className={cn(
+                    "p-3.5 transition-colors cursor-pointer text-left hover:bg-slate-50 flex items-start gap-3",
+                    !notif.read ? "bg-primary/[0.04]" : ""
+                  )}
+                >
+                  <div className={cn(
+                    "w-2 h-2 rounded-full mt-1.5 shrink-0",
+                    !notif.read ? "bg-primary" : "bg-slate-200"
+                  )} />
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <p className={cn(
+                      "text-xs leading-relaxed",
+                      !notif.read ? "font-bold text-slate-900" : "font-medium text-slate-600"
+                    )}>
+                      {notif.message}
+                    </p>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                      <Clock className="w-3 h-3" />
+                      <span>{notif.timestamp ? (notif.timestamp.includes("-") ? notif.timestamp.substring(0, 16) : notif.timestamp) : "Recent"}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+
+        <div className="p-2.5 border-t border-slate-100 bg-slate-50 text-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs font-bold text-primary h-8 hover:bg-primary/5"
+            onClick={() => {
+              setIsOpen(false);
+              router.push('/dashboard/attendance');
+            }}
+          >
+            Go to Mark Attendance
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function HeaderActions() {
   const { verifiedUser } = useData();
@@ -81,8 +227,8 @@ function HeaderActions() {
   if (!verifiedUser) return null;
 
   return (
-    <div className="flex items-center gap-5">
-      {/* FIXED: Notification Bell Icon & Popover Window blocks are completely removed */}
+    <div className="flex items-center gap-3 sm:gap-5">
+      <NotificationBell />
       
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -316,18 +462,44 @@ function SidebarNav() {
 function AuthorizedContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { verifiedUser, isLoading, employees, users } = useData();
+  const { verifiedUser, isLoading, employees, users, refreshData } = useData();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   const [maxWaitExceeded, setMaxWaitExceeded] = useState(false);
 
   const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
 
-  // Spec: Validation Gateway runs for max 5 seconds, after which it opens
+  // Periodic automated shift reminder evaluation
+  useEffect(() => {
+    if (!verifiedUser) return;
+    
+    const checkShiftReminders = async () => {
+      try {
+        const res = await fetch('/api/notifications/shift-reminders', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.newRemindersCount > 0) {
+            await refreshData();
+          }
+        }
+      } catch (err) {
+        console.error("Shift reminder check error:", err);
+      }
+    };
+
+    // Trigger on mount
+    checkShiftReminders();
+
+    // Check periodically every 60 seconds
+    const interval = setInterval(checkShiftReminders, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [verifiedUser, refreshData]);
+
+  // Spec: Validation Gateway runs for max 2 seconds, after which it opens
   useEffect(() => {
     const timer = setTimeout(() => {
       setMaxWaitExceeded(true);
       setIsAuthorized((prev) => (prev === null ? true : prev));
-    }, 5000);
+    }, 2000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -336,18 +508,22 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
 
     const handleLogout = () => {
       Cookies.remove('sikka_session', { path: '/' });
-      localStorage.removeItem("user");
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem("user");
+      }
       router.push("/login");
     };
 
-    if (verifiedUser.role === 'EMPLOYEE') {
-      const loginIdent = verifiedUser.username?.replace(/\s/g, '');
+    const userRole = String(verifiedUser.role || '').toUpperCase();
+    if (userRole === 'EMPLOYEE') {
+      const loginIdent = String(verifiedUser.username || verifiedUser.employeeId || '').replace(/\s/g, '');
       const dbEmp = employees.find(e => {
-        const empAadhaar = e.aadhaar?.replace(/\s/g, '');
-        const empMobile = e.mobile?.replace(/\s/g, '');
-        return empAadhaar === loginIdent || empMobile === loginIdent;
+        const empAadhaar = String((e as any).aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
+        const empMobile = String((e as any).mobileNumber || e.mobile || '').replace(/\s/g, '');
+        const empId = String(e.employeeId || e.id || '').replace(/\s/g, '');
+        return empAadhaar === loginIdent || empMobile === loginIdent || empId === loginIdent;
       });
-      if (dbEmp && (dbEmp.active === false || (dbEmp.sessionId && verifiedUser.sessionId && dbEmp.sessionId !== verifiedUser.sessionId))) {
+      if (dbEmp && (dbEmp.active === false || (dbEmp as any).isActive === false || (dbEmp.sessionId && verifiedUser.sessionId && dbEmp.sessionId !== verifiedUser.sessionId))) {
         handleLogout();
       }
     } else {
@@ -366,6 +542,21 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const userRole = String(verifiedUser.role || '').toUpperCase();
+
+    // Mark Attendance is accessible by all authenticated roles (Employee, HR, Admin, Super Admin)
+    if (pathname === '/dashboard/attendance') {
+      setIsAuthorized(true);
+      return;
+    }
+
+    // Employees navigating anywhere other than /dashboard/attendance get redirected to Mark Attendance
+    if (userRole === 'EMPLOYEE') {
+      setIsAuthorized(true);
+      router.push("/dashboard/attendance");
+      return;
+    }
+
     const menuPermissions: Record<string, string> = {
       "/dashboard": "Dashboard",
       "/dashboard/attendance": "Attendance",
@@ -381,14 +572,10 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     };
 
     const requiredPermission = menuPermissions[pathname];
-    const isSuperAdmin = verifiedUser.role === 'SUPER_ADMIN';
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
     
     if (isSuperAdmin) {
       setIsAuthorized(true);
-    } else if (verifiedUser.role === 'EMPLOYEE') {
-      const canAccessAttendance = pathname === '/dashboard/attendance';
-      setIsAuthorized(canAccessAttendance);
-      if (!canAccessAttendance) router.push("/dashboard/attendance");
     } else if (requiredPermission) {
       const hasPerm = (verifiedUser.permissions || []).includes(requiredPermission) || requiredPermission === "Dashboard";
       setIsAuthorized(hasPerm);
@@ -449,11 +636,11 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
         </div>
         <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Access Denied</h1>
         <p className="text-slate-500 font-medium text-center max-w-sm mb-8">
-          You do not have the required permissions to view this module. Only Super Admin can access system-level settings and deletions.
+          You do not have the required permissions to view this administrative module.
         </p>
         <Button 
           className="bg-primary px-8 h-12 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2"
-          onClick={() => router.push(verifiedUser?.role === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard")}
+          onClick={() => router.push(String(verifiedUser?.role).toUpperCase() === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard")}
         >
           <ArrowLeft className="w-4 h-4" /> Go Back Home
         </Button>

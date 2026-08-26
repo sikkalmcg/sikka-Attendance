@@ -11,6 +11,22 @@ export async function GET(
     const { collection } = params;
     const db = await getDb();
     
+    if (collection === 'notifications') {
+      const { searchParams } = new URL(req.url);
+      const employeeId = searchParams.get('employeeId');
+      const query: any = {};
+      if (employeeId) {
+        query.$or = [
+          { employeeId },
+          { employeeId: { $exists: false } },
+          { employeeId: null },
+          { employeeId: "" }
+        ];
+      }
+      const data = await db.collection(collection).find(query).sort({ timestamp: -1, _id: -1 }).toArray();
+      return NextResponse.json(data);
+    }
+
     const data = await db.collection(collection).find({}).toArray();
     return NextResponse.json(data);
   } catch (error) {

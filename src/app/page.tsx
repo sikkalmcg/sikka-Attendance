@@ -6,8 +6,16 @@ export default async function Home() {
   const session = cookieStore.get('sikka_session');
 
   // Skip login screen if a valid session exists
-  if (session) {
-    redirect('/dashboard');
+  if (session?.value) {
+    try {
+      const parsed = JSON.parse(session.value);
+      if (String(parsed?.role).toUpperCase() === 'EMPLOYEE') {
+        redirect('/dashboard/attendance');
+      }
+      redirect('/dashboard');
+    } catch {
+      redirect('/dashboard');
+    }
   }
 
   redirect('/login');

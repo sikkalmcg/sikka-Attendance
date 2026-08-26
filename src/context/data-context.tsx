@@ -56,22 +56,35 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const session = Cookies.get('sikka_session');
-    if (session) {
+    let sessionUser = null;
+    const sessionCookie = Cookies.get('sikka_session');
+    if (sessionCookie) {
       try {
-        setCurrentUser(JSON.parse(session));
+        sessionUser = JSON.parse(sessionCookie);
       } catch (e) {
         console.error("Session parse error", e);
       }
     }
+    if (!sessionUser && typeof window !== 'undefined') {
+      const local = localStorage.getItem('user');
+      if (local) {
+        try {
+          sessionUser = JSON.parse(local);
+          Cookies.set('sikka_session', local, { expires: 365, path: '/' });
+        } catch (e) {}
+      }
+    }
+    if (sessionUser) {
+      setCurrentUser(sessionUser);
+    }
   }, []);
 
   const isAdminRole = useMemo(() => {
-    return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(currentUser.role);
+    return currentUser && ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(String(currentUser.role).toUpperCase());
   }, [currentUser?.role]);
 
-  const currentUserId = currentUser?.id;
-  const currentUserRole = currentUser?.role;
+  const currentUserId = currentUser?.id || currentUser?.employeeId || currentUser?.username;
+  const currentUserRole = currentUser?.role ? String(currentUser.role).toUpperCase() : undefined;
   const currentUserUsername = currentUser?.username;
 
   const fetchData = useCallback(async () => {
@@ -85,15 +98,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       let collectionsToFetch: string[] = [];
 
       if (currentUserRole === 'EMPLOYEE') {
-        collectionsToFetch = ['attendance', 'plants', 'holidays', 'leaveRequests'];
+        collectionsToFetch = ['employees', 'attendance', 'plants', 'holidays', 'leaveRequests', 'notifications'];
       } else {
         // Admin, SUPER_ADMIN aur HR teeno ke liye global core tables load karein
-        collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests', 'users'];
+        collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests', 'users', 'notifications'];
         
-        // HR aur Admin verification aur logs ke liye payroll / notifications inject karein
+        // HR aur Admin verification aur logs ke liye payroll inject karein
         if (isAdminRole) {
           if (!collectionsToFetch.includes('payroll')) collectionsToFetch.push('payroll');
-          if (!collectionsToFetch.includes('notifications')) collectionsToFetch.push('notifications');
         }
       }
 
@@ -140,18 +152,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const verifiedUser = useMemo(() => {
     if (!currentUser) return null;
 
-    if (currentUser.role === 'EMPLOYEE') {
-      if (employees.length === 0) {
-        return { ...currentUser, fullName: currentUser.fullName || "Employee" };
-      }
-      const loginIdent = currentUser.username?.replace(/\s/g, '');
+    const userRole = String(currentUser.role || '').toUpperCase();
+    if (userRole === 'EMPLOYEE') {
+      const loginIdent = String(currentUser.username || currentUser.employeeId || '').replace(/\s/g, '').toUpperCase();
       const dbEmp = (employees || []).find(e => {
+        const empId = String(e.employeeId || e.id || (e as any)._id || '').replace(/\s/g, '').toUpperCase();
         const empAadhaar = String((e as any).aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
         const empMobile = String((e as any).mobileNumber || e.mobile || '').replace(/\s/g, '');
-        return empAadhaar === loginIdent || empMobile === loginIdent;
+        return empId === loginIdent || empAadhaar === loginIdent || empMobile === loginIdent;
       });
-      const fullName = dbEmp ? (dbEmp.firstName ? `${dbEmp.firstName} ${dbEmp.lastName || ''}`.trim() : dbEmp.name) : (currentUser.fullName || "Employee");
-      return dbEmp ? { ...currentUser, ...dbEmp, fullName, avatar: dbEmp.avatar } : currentUser;
+      const fullName = dbEmp 
+        ? (dbEmp.firstName ? `${dbEmp.firstName} ${dbEmp.lastName || ''}`.trim() : (dbEmp.name || (dbEmp as any).fullName || "Employee")) 
+        : (currentUser.fullName || "Employee");
+      return dbEmp 
+        ? { ...currentUser, ...dbEmp, fullName, avatar: dbEmp.avatar || currentUser.avatar, employeeId: dbEmp.employeeId || currentUser.employeeId } 
+        : currentUser;
     }
 
     // HR aur Management users ke validation parameters ko filter out karein
@@ -164,13 +179,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser, employees, users]);
 
   const addRecord = async (col: string, data: any, skipRefresh = false) => {
+    const tempId = data.id || `temp-${Date.now()}`;
+    const newRecord = { ...data, id: tempId, _id: tempId, createdAt: new Date().toISOString() };
+
+    // Optimistic UI update for attendance and leave requests
+    if (col === 'attendance') {
+      setAttendanceRecords(prev => {
+        const filtered = prev.filter(r => !(r.employeeId === newRecord.employeeId && r.date === newRecord.date));
+        return [newRecord, ...filtered];
+      });
+    } else if (col === 'leaveRequests') {
+      setLeaveRequests(prev => [newRecord, ...prev]);
+    }
+
     try {
       const res = await fetch(`/api/data/${col}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, createdAt: new Date().toISOString() })
+        body: JSON.stringify(newRecord)
       });
-      if (!res.ok) console.warn(`Failed to append record in ${col}. Status: ${res.status}`);
+      if (res.ok) {
+        const resData = await res.json();
+        if (resData?.id && col === 'attendance') {
+          setAttendanceRecords(prev => prev.map(r => (r.id === tempId ? { ...r, id: resData.id, _id: resData.id } : r)));
+        }
+      } else {
+        console.warn(`Failed to append record in ${col}. Status: ${res.status}`);
+      }
       if (!skipRefresh) await fetchData();
     } catch (e) {
       console.error(e);
@@ -178,6 +213,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
+    // Optimistic UI update for attendance
+    if (col === 'attendance') {
+      setAttendanceRecords(prev => prev.map(r => {
+        const rId = String(r.id || (r as any)._id || '');
+        const targetId = String(id || '');
+        if (rId === targetId) {
+          return { ...r, ...data, updatedAt: new Date().toISOString() };
+        }
+        return r;
+      }));
+    }
+
     try {
       await fetch(`/api/data/${col}?id=${id}`, {
         method: 'PUT',
