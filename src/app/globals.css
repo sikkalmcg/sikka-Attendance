@@ -158,3 +158,86 @@
     margin: 0;
   }
 }
+
+/* Sikka Validation Gateway Animations */
+@keyframes gateway-scan {
+  0% {
+    top: -10%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    top: 110%;
+    opacity: 0;
+  }
+}
+
+@keyframes gateway-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 25px rgba(197, 157, 46, 0.35), 0 0 50px rgba(37, 99, 235, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 45px rgba(197, 157, 46, 0.7), 0 0 80px rgba(37, 99, 235, 0.4);
+    transform: scale(1.03);
+  }
+}
+
+@keyframes gateway-spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes gateway-spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes gateway-radar-ping {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.animate-gateway-scan {
+  animation: gateway-scan 2s ease-in-out infinite;
+}
+
+.animate-gateway-pulse-glow {
+  animation: gateway-pulse-glow 2.5s ease-in-out infinite;
+}
+
+.animate-gateway-spin-slow {
+  animation: gateway-spin-slow 12s linear infinite;
+}
+
+.animate-gateway-spin-reverse {
+  animation: gateway-spin-reverse 9s linear infinite;
+}
+
+.animate-gateway-radar-ping {
+  animation: gateway-radar-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+

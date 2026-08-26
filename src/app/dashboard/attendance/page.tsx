@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
+import { ValidationGateway } from "@/components/attendance/ValidationGateway";
 import { format, parseISO, addHours, isAfter, isValid, startOfMonth, endOfMonth, addDays, isSunday, isSameMonth, subMonths, differenceInMinutes, differenceInCalendarDays, isBefore, startOfToday, startOfDay } from "date-fns";
 import {
   Dialog,
@@ -239,6 +240,7 @@ function LeaveRequestForm() {
 
 export default function AttendancePage() {
   const { attendanceRecords = [], addRecord, updateRecord, refreshData, plants = [], verifiedUser, isLoading, holidays = [], employees = [], leaveRequests = [] } = useData();
+  const [isValidatingGateway, setIsValidatingGateway] = useState(true);
   const [isMutatingAttendance, setIsMutatingAttendance] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -1148,6 +1150,16 @@ const allPlantExitHistory = useMemo(() => {
 
   return (
     <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
+      {/* Sikka 5-Second Animated Validation Gateway */}
+      {isValidatingGateway && (
+        <ValidationGateway
+          onComplete={() => setIsValidatingGateway(false)}
+          employeeName={effectiveEmployeeName}
+          employeeId={effectiveEmployeeId}
+          plantName={plants?.[0]?.name || "Sikka Industrial Plant"}
+        />
+      )}
+
       {isEmployeeLogin && (
       <div className="max-w-xl mx-auto w-full space-y-6">
         <Card className="shadow-2xl border-none overflow-hidden bg-white">
@@ -1156,6 +1168,16 @@ const allPlantExitHistory = useMemo(() => {
             <CardTitle className="text-xl font-black flex items-center justify-center gap-2 text-slate-800 uppercase tracking-tight">
               <ShieldCheck className="text-primary w-6 h-6" /> Gateway Portal
             </CardTitle>
+            <div className="flex items-center justify-center gap-2 mt-1.5">
+              <Badge 
+                variant="outline" 
+                onClick={() => setIsValidatingGateway(true)}
+                className="cursor-pointer text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors py-0.5 px-2.5 gap-1 shadow-sm"
+                title="Click to re-run 5s Security Validation Gateway"
+              >
+                <CheckCircle className="w-3 h-3 text-emerald-600" /> Gateway Verified (5s)
+              </Badge>
+            </div>
             <div className="absolute top-4 right-4">
               <LeaveRequestForm />
             </div>
