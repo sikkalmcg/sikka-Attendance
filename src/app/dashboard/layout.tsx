@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Image from "next/image";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -317,6 +318,18 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { verifiedUser, isLoading, employees, users } = useData();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  const [maxWaitExceeded, setMaxWaitExceeded] = useState(false);
+
+  const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
+
+  // Spec: Validation Gateway runs for max 5 seconds, after which it opens
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMaxWaitExceeded(true);
+      setIsAuthorized((prev) => (prev === null ? true : prev));
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (isLoading || !verifiedUser) return;
@@ -384,13 +397,48 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     }
   }, [verifiedUser, isLoading, pathname, router]);
 
-  if (isLoading || isAuthorized === null) {
-    return <div className="h-screen w-full flex items-center justify-center bg-slate-50">
-      <div className="flex flex-col items-center gap-4">
-        <Clock className="w-10 h-10 text-primary animate-pulse" />
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Validating Gateway...</p>
+  if ((isLoading || isAuthorized === null) && !maxWaitExceeded) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative flex items-center justify-center w-28 h-28">
+            {/* Outer Rotating Cyber Accent Ring */}
+            <div className="absolute inset-0 rounded-full border-2 border-dashed border-[#C59D2E]/40 animate-gateway-spin-slow" />
+            
+            {/* Middle Reverse Rotating Ring */}
+            <div className="absolute inset-2 rounded-full border border-blue-500/20 animate-gateway-spin-reverse" />
+
+            {/* Radar Sonar Ping Waves */}
+            <div className="absolute inset-0 rounded-full bg-[#C59D2E]/10 animate-gateway-radar-ping" />
+
+            {/* Animated Sikka Logo Container with Pulse Glow */}
+            <div className="relative w-20 h-20 rounded-2xl bg-white shadow-xl overflow-hidden p-1 border-2 border-[#C59D2E] animate-gateway-pulse-glow flex items-center justify-center">
+              <Image
+                src={logoUrl}
+                alt="Sikka Logo"
+                width={72}
+                height={72}
+                className="w-full h-full object-cover rounded-xl"
+                priority
+              />
+            </div>
+          </div>
+
+          <div className="text-center space-y-1">
+            <p className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center justify-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </span>
+              Validating Gateway...
+            </p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Sikka Enterprises & Logistics
+            </p>
+          </div>
+        </div>
       </div>
-    </div>;
+    );
   }
 
   if (isAuthorized === false) {
