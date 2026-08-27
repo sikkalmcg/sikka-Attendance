@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
+export const dynamic = 'force-dynamic';
+
 // 1. GET HANDLER: Saari collections ka data read karne ke liye
 export async function GET(
   req: Request,

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { eachDayOfInterval, endOfYear, format, isSunday, startOfYear } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const yearParam = searchParams.get('year');

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 
+export const dynamic = 'force-dynamic';
+
 // GET: Fetch facility exit history from the MongoDB `plantExits` collection.
 // Supports optional filters: employeeCode, date, plant, trackingStatus.
 export async function GET(req: Request) {
