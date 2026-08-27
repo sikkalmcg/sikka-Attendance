@@ -7,10 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  MapPin, 
-  Clock, 
-  ShieldCheck, 
+import {
+  MapPin,
+  Clock,
+  ShieldCheck,
   History,
   Loader2,
   Navigation,
@@ -24,13 +24,13 @@ import {
   CalendarDays
 } from "lucide-react";
 import { calculateDistance, cn, formatDate, getWorkingHoursColor, formatHoursToHHMM, parseDateTime } from "@/lib/utils";
-import { 
-  Table, 
-  TableHeader, 
-  TableBody, 
-  TableRow, 
-  TableHead, 
-  TableCell 
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell
 } from "@/components/ui/table";
 import { Plant } from "@/lib/types";
 import { useData } from "@/context/data-context";
@@ -117,8 +117,8 @@ function LeaveRequestForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const today = startOfToday(); 
-    
+    const today = startOfToday();
+
     if (!purpose || !fromDate || !toDate) {
       toast({ variant: "destructive", title: "Incomplete Form", description: "Please fill all required fields." });
       return;
@@ -138,7 +138,7 @@ function LeaveRequestForm() {
     }
 
     const empId = verifiedUser?.employeeId || verifiedUser?.username || "N/A";
-    const hasDuplicate = (leaveRequests || []).some((req: any) => 
+    const hasDuplicate = (leaveRequests || []).some((req: any) =>
       req.employeeId === empId &&
       String(req.status).toUpperCase() !== 'REJECTED' &&
       (new Date(fromDate) <= new Date(req.toDate) && new Date(toDate) >= new Date(req.fromDate))
@@ -192,7 +192,7 @@ function LeaveRequestForm() {
           <div className="space-y-2">
             <Label htmlFor="purpose" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Leave Purpose / Type</Label>
             <Input id="purpose" placeholder="e.g. Sick Leave, Casual Leave" value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
-            
+
             <div className="flex flex-wrap gap-1.5 pt-0.5">
               {recommendedLeaves.map((leaveType) => (
                 <Badge
@@ -244,14 +244,14 @@ export default function AttendancePage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState<string>("");
-  
+
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT">("NONE");
 
   // Location Permission & Fast Verification State
   const [locationPermissionStatus, setLocationPermissionStatus] = useState<"checking" | "prompt" | "granted" | "denied" | "unavailable">("checking");
   const [locationPermissionMessage, setLocationPermissionMessage] = useState<string | null>(null);
-  
+
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [detectedPlant, setDetectedPlant] = useState<Plant | null>(null);
@@ -325,7 +325,7 @@ export default function AttendancePage() {
                 pincode: data.components.pincode || ''
               });
             }
-          }).catch(() => {});
+          }).catch(() => { });
       },
       (err) => {
         setLocationPermissionStatus("denied");
@@ -389,7 +389,7 @@ export default function AttendancePage() {
   const employeeRecords = useMemo(() => {
     const targetEmpId = String(effectiveEmployeeId || '').trim().toUpperCase();
     if (!targetEmpId || targetEmpId === "N/A") return [];
-    
+
     const verifiedEmpId = String(verifiedUser?.employeeId || '').trim().toUpperCase();
     const verifiedUsername = String(verifiedUser?.username || '').trim().toUpperCase();
     const verifiedId = String(verifiedUser?.id || (verifiedUser as any)?._id || '').trim().toUpperCase();
@@ -406,8 +406,8 @@ export default function AttendancePage() {
 
     const recordsByDate = new Map<string, any[]>();
     myRecords.forEach(r => {
-       if (!recordsByDate.has(r.date)) recordsByDate.set(r.date, []);
-       recordsByDate.get(r.date)!.push(r);
+      if (!recordsByDate.has(r.date)) recordsByDate.set(r.date, []);
+      recordsByDate.get(r.date)!.push(r);
     });
 
     // Approved leaves for this employee within the 45-day window
@@ -424,56 +424,56 @@ export default function AttendancePage() {
               approvedLeaveDates.set(format(cur, "yyyy-MM-dd"), l);
               cur = addDays(cur, 1);
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       }
     });
 
     const fullHistory: any[] = [];
     let currentD = now;
-    
+
     while (format(currentD, "yyyy-MM-dd") >= startDateStr) {
-       const dateStr = format(currentD, "yyyy-MM-dd");
-       
-       if (recordsByDate.has(dateStr)) {
-          const dayRecords = recordsByDate.get(dateStr)!;
-          dayRecords.sort((a, b) => (b.inTime || "").localeCompare(a.inTime || ""));
-          fullHistory.push(...dayRecords);
-       } else {
-          const isSun = isSunday(currentD);
-          const holidayObj = holidays.find((h: any) => h.date === dateStr);
-          const leaveObj = approvedLeaveDates.get(dateStr);
-          
-          let displayStatus = isSun ? 'Weekly Off' : 'Absent';
-          let attType = holidayObj ? holidayObj.name : 'N/A';
-          let inPlant = holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'N/A');
-          let remark = holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'Absent');
+      const dateStr = format(currentD, "yyyy-MM-dd");
 
-          if (holidayObj) {
-            displayStatus = 'Holiday';
-          } else if (leaveObj) {
-            displayStatus = 'Leave';
-            attType = leaveObj.purpose || 'Approved Leave';
-            inPlant = 'On Leave';
-            remark = `Approved Leave (${leaveObj.purpose || 'Leave'})`;
-          }
+      if (recordsByDate.has(dateStr)) {
+        const dayRecords = recordsByDate.get(dateStr)!;
+        dayRecords.sort((a, b) => (b.inTime || "").localeCompare(a.inTime || ""));
+        fullHistory.push(...dayRecords);
+      } else {
+        const isSun = isSunday(currentD);
+        const holidayObj = holidays.find((h: any) => h.date === dateStr);
+        const leaveObj = approvedLeaveDates.get(dateStr);
 
-          fullHistory.push({
-             id: `missing-${dateStr}`,
-             employeeName: effectiveEmployeeName,
-             date: dateStr,
-             inTime: null,
-             outTime: null,
-             hours: 0,
-             status: displayStatus,
-             attendanceType: attType,
-             address: null,
-             addressOut: null,
-             inPlant: inPlant,
-             remark: remark
-          });
-       }
-       currentD = addDays(currentD, -1);
+        let displayStatus = isSun ? 'Weekly Off' : 'Absent';
+        let attType = holidayObj ? holidayObj.name : 'N/A';
+        let inPlant = holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'N/A');
+        let remark = holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'Absent');
+
+        if (holidayObj) {
+          displayStatus = 'Holiday';
+        } else if (leaveObj) {
+          displayStatus = 'Leave';
+          attType = leaveObj.purpose || 'Approved Leave';
+          inPlant = 'On Leave';
+          remark = `Approved Leave (${leaveObj.purpose || 'Leave'})`;
+        }
+
+        fullHistory.push({
+          id: `missing-${dateStr}`,
+          employeeName: effectiveEmployeeName,
+          date: dateStr,
+          inTime: null,
+          outTime: null,
+          hours: 0,
+          status: displayStatus,
+          attendanceType: attType,
+          address: null,
+          addressOut: null,
+          inPlant: inPlant,
+          remark: remark
+        });
+      }
+      currentD = addDays(currentD, -1);
     }
 
     return fullHistory;
@@ -503,7 +503,7 @@ export default function AttendancePage() {
               approvedLeaveDates.add(format(cur, "yyyy-MM-dd"));
               cur = addDays(cur, 1);
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       }
     });
@@ -648,7 +648,7 @@ export default function AttendancePage() {
             daysInThisMonth: daysInMonth,
           });
         });
-      } catch (e) {}
+      } catch (e) { }
     });
 
     // Sort months in descending order (most recent first) and hide months with 0 leave
@@ -891,7 +891,7 @@ export default function AttendancePage() {
           console.error("Geofence verification dynamic lookup failed", error);
           const latestRecord = activeRecordRef.current;
           if (!latestRecord || latestRecord.status !== "Open") return;
-          
+
           let currentEvents = latestRecord.exitEvents ? [...latestRecord.exitEvents] : [];
           let currentActiveEvent = currentEvents.find((e: any) => !e.inPlantTime && e.trackingStatus === "Outside Plant");
           if (currentActiveEvent) {
@@ -936,7 +936,7 @@ export default function AttendancePage() {
       hours: 0,
       status: 'Open',
       attendanceType: attendanceType,
-      lat: currentGPS?.lat || 28.6329, 
+      lat: currentGPS?.lat || 28.6329,
       lng: currentGPS?.lng || 77.4357,
       address: detectedAddress || (detectedPlant ? detectedPlant.name : "Registered Zone"),
       street: detectedPlant ? (detectedPlant.name || "Plant") : (detailedLocation.street || "Industrial Bypass"),
@@ -965,7 +965,7 @@ export default function AttendancePage() {
         read: false,
         type: 'MARK_IN',
         employeeId: effectiveEmployeeId
-      }).catch(() => {});
+      }).catch(() => { });
 
       // Post notification on native Android system if running in native app
       postNativeNotification(
@@ -1066,8 +1066,8 @@ export default function AttendancePage() {
         incompleteEvent.trackingStatus = "Returned";
       }
 
-      await updateRecord('attendance', recordId, { 
-        outTime: format(outDT, "HH:mm"), 
+      await updateRecord('attendance', recordId, {
+        outTime: format(outDT, "HH:mm"),
         outDate: format(outDT, "yyyy-MM-dd"),
         outDateTime: outDT.toISOString(),
         hours: finalHours,
@@ -1097,7 +1097,7 @@ export default function AttendancePage() {
         read: false,
         type: 'MARK_OUT',
         employeeId: effectiveEmployeeId
-      }).catch(() => {});
+      }).catch(() => { });
 
       // Post notification on native Android system if running in native app
       postNativeNotification(
@@ -1133,14 +1133,14 @@ export default function AttendancePage() {
     e?.preventDefault?.();
     e?.stopPropagation?.();
     if (!activeRecord || !canMarkOut || isLoadingLocation || isMutatingAttendance) return;
-    
+
     clearActiveWatch();
     requestLocation("OUT");
   };
 
   const performAutoCheckOut = async (lat: number, lng: number, address: string, components: any, plant: Plant | null) => {
     if (!activeRecord || isMutatingAttendance) return;
-    
+
     let inDT: Date | null = null;
     if (activeRecord.inDateTime) {
       inDT = parseISO(activeRecord.inDateTime);
@@ -1149,16 +1149,16 @@ export default function AttendancePage() {
     }
     if (!inDT || !isValid(inDT)) return;
 
-    const creditOutDT = addHours(inDT, 8); 
+    const creditOutDT = addHours(inDT, 8);
     const finalOutDate = format(creditOutDT, "yyyy-MM-dd");
     const finalOutTime = format(creditOutDT, "HH:mm");
-    
+
     const recordId = activeRecord.id || (activeRecord as any)._id;
     if (!recordId) return;
 
     setIsMutatingAttendance(true);
     try {
-      await updateRecord('attendance', recordId, { 
+      await updateRecord('attendance', recordId, {
         outTime: finalOutTime,
         outDate: finalOutDate,
         outDateTime: creditOutDT.toISOString(),
@@ -1191,9 +1191,9 @@ export default function AttendancePage() {
         employeeId: effectiveEmployeeId
       });
 
-      toast({ 
-        title: "Auto OUT Triggered", 
-        description: "Session auto-closed at 16h limit (8h credited). Next Mark IN opens 1h later (IN + 17h)." 
+      toast({
+        title: "Auto OUT Triggered",
+        description: "Session auto-closed at 16h limit (8h credited). Next Mark IN opens 1h later (IN + 17h)."
       });
 
       await refreshData();
@@ -1320,10 +1320,10 @@ export default function AttendancePage() {
     const emergencyTimeout = setTimeout(() => {
       setIsLoadingLocation(false);
       clearActiveWatch();
-      toast({ 
-        variant: "destructive", 
-        title: "GPS Tracking Timeout", 
-        description: "System could not identify device coordinates in time. Please retry." 
+      toast({
+        variant: "destructive",
+        title: "GPS Tracking Timeout",
+        description: "System could not identify device coordinates in time. Please retry."
       });
     }, 12000);
 
@@ -1354,10 +1354,10 @@ export default function AttendancePage() {
     }
 
     const plantName = detectedPlant ? detectedPlant.name : "N/A";
-    
+
     let finalInPlant = "N/A";
     let attendanceType = "N/A";
-    
+
     if (detectedPlant) {
       finalInPlant = detectedPlant.name;
       attendanceType = 'Plant Attendance';
@@ -1391,8 +1391,8 @@ export default function AttendancePage() {
                 Please allow location access to mark attendance.
               </span>
             </div>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase px-4 h-9 rounded-xl shrink-0"
               onClick={() => checkLocationOnMount(true)}
             >
@@ -1435,26 +1435,26 @@ export default function AttendancePage() {
             )}
 
             <div className="flex gap-4">
-              <Button 
+              <Button
                 type="button"
-                className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest", 
+                className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest",
                   (!activeRecord && !isCooldownLocked) ? "bg-primary text-white shadow-primary/20 hover:bg-primary/90" : "bg-slate-100 text-slate-400"
-                )} 
-                disabled={isLoadingLocation || isMutatingAttendance || !!activeRecord || isCooldownLocked} 
+                )}
+                disabled={isLoadingLocation || isMutatingAttendance || !!activeRecord || isCooldownLocked}
                 onClick={handleMarkInClick}
               >
                 {isLoadingLocation && activeDialog === 'NONE' ? (
                   <span className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Fetching GPS...</span>
                 ) : "Mark IN"}
               </Button>
-              <Button 
+              <Button
                 type="button"
                 className={cn(
                   "flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest",
                   activeRecord ? "bg-rose-600 text-white shadow-rose-200 hover:bg-rose-700" : "bg-slate-100 text-slate-400",
                   activeRecord && !canMarkOut ? "opacity-70 hover:bg-rose-600/90" : ""
-                )} 
-                disabled={isLoadingLocation || isMutatingAttendance || !activeRecord || (activeRecord ? !canMarkOut : false)} 
+                )}
+                disabled={isLoadingLocation || isMutatingAttendance || !activeRecord || (activeRecord ? !canMarkOut : false)}
                 onClick={handleMarkOutClick}
               >
                 {activeRecord && !canMarkOut ? "Mark OUT (Locked)" : (isLoadingLocation && activeDialog === 'NONE' ? <>
@@ -1481,7 +1481,7 @@ export default function AttendancePage() {
                     <MapPin className="w-4 h-4 animate-bounce" />
                     <span>{activeRecord.currentGeofenceStatus || "Inside Plant"}</span>
                   </div>
-                  
+
                   <div className="flex items-center justify-center gap-2 text-slate-600 bg-[#F8F9FA] px-5 py-2.5 rounded-xl w-full border border-slate-200 shadow-sm font-black uppercase tracking-wider text-xs">
                     <ShieldCheck className="w-4 h-4 text-slate-500" />
                     <span>SHIFT STARTED: {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "dd-MMM-yyyy")} {activeRecord.inTime}</span>
@@ -1574,19 +1574,19 @@ export default function AttendancePage() {
                           {r.remark || "N/A"}
                         </TableCell>
                         <TableCell className="text-right pr-6">
-                          <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap", 
-                            r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700 hover:bg-amber-100" : 
-                            r.status === 'Open' ? "bg-blue-100 text-blue-700 hover:bg-blue-100" :
-                            r.status === 'Absent' ? "bg-rose-100 text-rose-700 hover:bg-rose-100" :
-                            r.status === 'Leave' ? "bg-purple-100 text-purple-700 hover:bg-purple-100" :
-                            (r.status === 'Weekly Off' || r.status === 'Holiday') ? "bg-slate-100 text-slate-700 hover:bg-slate-100" :
-                            "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                          <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap",
+                            r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700 hover:bg-amber-100" :
+                              r.status === 'Open' ? "bg-blue-100 text-blue-700 hover:bg-blue-100" :
+                                r.status === 'Absent' ? "bg-rose-100 text-rose-700 hover:bg-rose-100" :
+                                  r.status === 'Leave' ? "bg-purple-100 text-purple-700 hover:bg-purple-100" :
+                                    (r.status === 'Weekly Off' || r.status === 'Holiday') ? "bg-slate-100 text-slate-700 hover:bg-slate-100" :
+                                      "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
                           )}>
-                            {r.status === 'Open' ? 'Active Shift' : 
-                             r.status === 'Closed' ? 'Completed Shift' : 
-                             r.status === 'Auto OUT' ? 'Auto Closed Shift' : 
-                             r.status === 'Leave' ? 'Approved Leave' : 
-                             r.status}
+                            {r.status === 'Open' ? 'Active Shift' :
+                              r.status === 'Closed' ? 'Completed Shift' :
+                                r.status === 'Auto OUT' ? 'Auto Closed Shift' :
+                                  r.status === 'Leave' ? 'Approved Leave' :
+                                    r.status}
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -1597,7 +1597,7 @@ export default function AttendancePage() {
             </ScrollArea>
           </Card>
         </div>
-        
+
         {/* MONTHLY SUMMARY (CURRENT & PREVIOUS MONTH ONLY) */}
         <div className="lg:col-span-1 space-y-4">
           <div className="pt-2">
@@ -1610,33 +1610,6 @@ export default function AttendancePage() {
           </div>
 
           <div className="space-y-4">
-            {monthlySummaries.map((summary, idx) => (
-              <Card key={idx} className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
-                <CardHeader className="bg-slate-50/70 border-b py-3.5 px-6 flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">
-                    {summary.monthYear}
-                  </CardTitle>
-                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2 py-0.5", summary.isCurrentMonth ? "bg-primary/10 text-primary border-primary/30" : "bg-slate-100 text-slate-600 border-slate-200")}>
-                    {summary.isCurrentMonth ? "Current Month" : "Previous Month"}
-                  </Badge>
-                </CardHeader>
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex justify-between items-center bg-emerald-50/80 rounded-xl p-3.5 border border-emerald-100">
-                    <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Total Present</span>
-                    <span className="text-2xl font-black text-emerald-600">{summary.present}</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-rose-50/80 rounded-xl p-3.5 border border-rose-100">
-                    <span className="text-xs font-bold text-rose-800 uppercase tracking-wider">Total Absent</span>
-                    <span className="text-2xl font-black text-rose-600">{summary.absent}</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-slate-50 rounded-xl p-3 border border-slate-100 text-slate-600">
-                    <span className="text-[11px] font-bold uppercase tracking-wider">Worked Hours</span>
-                    <span className="text-sm font-black text-slate-900">{summary.workedHours}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
             {/* Compact Comparative Summary Table */}
             <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
               <Table>
@@ -1645,6 +1618,7 @@ export default function AttendancePage() {
                     <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
                     <TableHead className="font-black uppercase text-[10px] text-right">Total Present</TableHead>
                     <TableHead className="font-black uppercase text-[10px] text-right pr-4">Total Absent</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] text-right pr-4">Worked Hours</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1653,6 +1627,7 @@ export default function AttendancePage() {
                       <TableCell className="font-bold text-xs text-slate-800 py-3">{summary.monthYear}</TableCell>
                       <TableCell className="font-black text-xs text-emerald-600 text-right">{summary.present}</TableCell>
                       <TableCell className="font-black text-xs text-rose-600 text-right pr-4">{summary.absent}</TableCell>
+                      <TableCell className="font-black text-xs text-slate-600 text-right pr-4">{summary.workedHours}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1682,8 +1657,8 @@ export default function AttendancePage() {
         {fyMonthWiseLeaves.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {fyMonthWiseLeaves.map((group) => (
-              <div 
-                key={group.monthKey} 
+              <div
+                key={group.monthKey}
                 className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-primary/40 transition-colors"
               >
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{group.monthLabel}</span>
@@ -1842,21 +1817,21 @@ export default function AttendancePage() {
                     Select Attendance Category (Mandatory):
                   </Label>
                   <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-3">
-                    <div 
+                    <div
                       className={cn(
-                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2", 
+                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2",
                         selectedType === 'WFH' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
-                      )} 
+                      )}
                       onClick={() => setSelectedType('WFH')}
                     >
                       <Home className={cn("w-6 h-6", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
                       <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Work From Home</span>
                     </div>
-                    <div 
+                    <div
                       className={cn(
-                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2", 
+                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2",
                         selectedType === 'FIELD' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
-                      )} 
+                      )}
                       onClick={() => setSelectedType('FIELD')}
                     >
                       <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
@@ -1873,18 +1848,18 @@ export default function AttendancePage() {
             </div>
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
-            <Button 
-              type="button" 
-              variant="outline" 
-              className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs" 
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs"
               onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}
             >
               CANCEL
             </Button>
-            <Button 
+            <Button
               type="button"
-              className="flex-1 h-12 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20 uppercase tracking-wider text-xs" 
-              onClick={handleConfirmCheckIn} 
+              className="flex-1 h-12 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20 uppercase tracking-wider text-xs"
+              onClick={handleConfirmCheckIn}
               disabled={isMutatingAttendance || !detectedAddress || (!detectedPlant && !selectedType)}
             >
               {isMutatingAttendance ? (
@@ -1970,18 +1945,18 @@ export default function AttendancePage() {
             </div>
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
-            <Button 
-              type="button" 
-              variant="outline" 
-              className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs" 
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs"
               onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}
             >
               CANCEL
             </Button>
-            <Button 
+            <Button
               type="button"
-              className="flex-1 h-12 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-lg shadow-rose-600/20 uppercase tracking-wider text-xs" 
-              onClick={handleConfirmCheckOut} 
+              className="flex-1 h-12 font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-lg shadow-rose-600/20 uppercase tracking-wider text-xs"
+              onClick={handleConfirmCheckOut}
               disabled={isMutatingAttendance || !canMarkOut}
             >
               {isMutatingAttendance ? (
