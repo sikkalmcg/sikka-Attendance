@@ -246,15 +246,11 @@ export default function AttendancePage() {
   const [cooldownRemaining, setCooldownRemaining] = useState<string>("");
   
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
-  const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT" | "DETAILS">("NONE");
+  const [activeDialog, setActiveDialog] = useState<"NONE" | "IN" | "OUT">("NONE");
 
   // Location Permission & Fast Verification State
   const [locationPermissionStatus, setLocationPermissionStatus] = useState<"checking" | "prompt" | "granted" | "denied" | "unavailable">("checking");
   const [locationPermissionMessage, setLocationPermissionMessage] = useState<string | null>(null);
-
-  // Leave history pagination
-  const LEAVE_ROWS_PER_PAGE = 4;
-  const [leavePage, setLeavePage] = useState(1);
   
   const [currentGPS, setCurrentGPS] = useState<{ lat: number, lng: number } | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
@@ -263,9 +259,6 @@ export default function AttendancePage() {
   const [detectedAddress, setDetectedAddress] = useState("");
   const [detailedLocation, setDetailedLocation] = useState({ street: "", area: "", city: "", state: "", pincode: "" });
   const [selectedType, setSelectedType] = useState<"FIELD" | "WFH" | "">("");
-
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("N/A");
-  const [selectedExitEvent, setSelectedExitEvent] = useState<any>(null);
 
   const isAutoTriggering = useRef(false);
   const activeRecordRef = useRef<any>(null);
@@ -359,35 +352,40 @@ export default function AttendancePage() {
     return () => clearInterval(timer);
   }, []);
 
-  const isHRorAdmin = useMemo(() => {
-    if (!verifiedUser) return false;
-    if (typeof verifiedUser.role === "string") {
-      const role = verifiedUser.role.toUpperCase();
-      return role === "HR" || role === "ADMIN" || role === "SUPER_ADMIN";
-    }
-    return false;
-  }, [verifiedUser]);
-
-  useEffect(() => {
-    if (isHRorAdmin && employees.length > 0 && (selectedEmployeeId === "N/A" || selectedEmployeeId === "")) {
-      setSelectedEmployeeId(employees[0].employeeId);
-    }
-  }, [isHRorAdmin, employees, selectedEmployeeId]);
-
+  // Mark Attendance is strictly employee-specific for the currently logged-in user.
   const effectiveEmployeeId = useMemo(() => {
     if (!verifiedUser) return "N/A";
-    if (isHRorAdmin) return selectedEmployeeId || "N/A";
     return verifiedUser?.employeeId || verifiedUser?.username || "N/A";
-  }, [verifiedUser, isHRorAdmin, selectedEmployeeId]);
+  }, [verifiedUser]);
 
   const effectiveEmployeeName = useMemo(() => {
-    if (isHRorAdmin) {
-      const emp = employees.find((e: any) => e.employeeId === selectedEmployeeId);
-      return emp ? (emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : (emp.name || emp.employeeId)) : "N/A";
-    }
-    return verifiedUser?.fullName || "N/A";
-  }, [verifiedUser, isHRorAdmin, selectedEmployeeId, employees]);
+    if (!verifiedUser) return "N/A";
+    return verifiedUser?.fullName || verifiedUser?.name || verifiedUser?.username || "N/A";
+  }, [verifiedUser]);
 
+  // Rolling 45-day date bounds based on current date
+  const dateWindow45Days = useMemo(() => {
+    const now = currentTime || getISTTime();
+    const todayStr = format(now, "yyyy-MM-dd");
+    const fortyFiveDaysAgo = addDays(now, -45);
+    const startDateStr = format(fortyFiveDaysAgo, "yyyy-MM-dd");
+    return { now, todayStr, fortyFiveDaysAgo, startDateStr };
+  }, [currentTime]);
+
+  // Current Financial Year bounds (1-Apr to 31-Mar)
+  const currentFYInfo = useMemo(() => {
+    const now = currentTime || getISTTime();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-indexed: 0 = Jan, 3 = Apr
+    const fyStartYear = currentMonth < 3 ? currentYear - 1 : currentYear;
+    const fyEndYear = fyStartYear + 1;
+    const startDateStr = `${fyStartYear}-04-01`;
+    const endDateStr = `${fyEndYear}-03-31`;
+    const label = `FY ${fyStartYear}-${fyEndYear}`;
+    return { fyStartYear, fyEndYear, startDateStr, endDateStr, label };
+  }, [currentTime]);
+
+  // 1. SESSION HISTORY: Current date back to previous 45 days only, strictly for logged-in employee
   const employeeRecords = useMemo(() => {
     const targetEmpId = String(effectiveEmployeeId || '').trim().toUpperCase();
     if (!targetEmpId || targetEmpId === "N/A") return [];
@@ -396,33 +394,39 @@ export default function AttendancePage() {
     const verifiedUsername = String(verifiedUser?.username || '').trim().toUpperCase();
     const verifiedId = String(verifiedUser?.id || (verifiedUser as any)?._id || '').trim().toUpperCase();
 
-    const now = getISTTime();
-    const todayStr = format(now, "yyyy-MM-dd");
-    const ninetyDaysAgo = getISTTime();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    const ninetyDaysAgoStr = format(ninetyDaysAgo, "yyyy-MM-dd");
+    const { now, todayStr, startDateStr } = dateWindow45Days;
 
+    // Strictly filter attendance punches for the logged-in employee within [startDateStr, todayStr]
     const myRecords = (attendanceRecords || []).filter(r => {
       if (!r) return false;
       const recEmpId = String(r.employeeId || '').trim().toUpperCase();
-      const isMatch = isHRorAdmin
-        ? (recEmpId === targetEmpId)
-        : (recEmpId === targetEmpId || (verifiedEmpId && recEmpId === verifiedEmpId) || (verifiedUsername && recEmpId === verifiedUsername) || (verifiedId && recEmpId === verifiedId));
-      return isMatch && r.date && r.date <= todayStr;
+      const isMatch = (recEmpId === targetEmpId || (verifiedEmpId && recEmpId === verifiedEmpId) || (verifiedUsername && recEmpId === verifiedUsername) || (verifiedId && recEmpId === verifiedId));
+      return isMatch && r.date && r.date >= startDateStr && r.date <= todayStr;
     });
 
-    let startDateStr = ninetyDaysAgoStr < PROJECT_START_DATE_STR ? PROJECT_START_DATE_STR : ninetyDaysAgoStr;
-    // Ensure all available historical records are visible
-    myRecords.forEach(r => {
-      if (r.date && r.date < startDateStr) {
-        startDateStr = r.date;
-      }
-    });
-      
     const recordsByDate = new Map<string, any[]>();
     myRecords.forEach(r => {
        if (!recordsByDate.has(r.date)) recordsByDate.set(r.date, []);
        recordsByDate.get(r.date)!.push(r);
+    });
+
+    // Approved leaves for this employee within the 45-day window
+    const approvedLeaveDates = new Map<string, any>();
+    (leaveRequests || []).forEach((l: any) => {
+      const lEmpId = String(l.employeeId || (l as any).employeeID || "").trim().toUpperCase();
+      const isMatch = (lEmpId === targetEmpId || (verifiedEmpId && lEmpId === verifiedEmpId) || (verifiedUsername && lEmpId === verifiedUsername) || (verifiedId && lEmpId === verifiedId));
+      if (isMatch && String(l.status).toUpperCase() === 'APPROVED') {
+        if (l.fromDate && l.toDate) {
+          try {
+            let cur = startOfDay(parseISO(l.fromDate));
+            const end = startOfDay(parseISO(l.toDate));
+            while (!isAfter(cur, end)) {
+              approvedLeaveDates.set(format(cur, "yyyy-MM-dd"), l);
+              cur = addDays(cur, 1);
+            }
+          } catch (e) {}
+        }
+      }
     });
 
     const fullHistory: any[] = [];
@@ -438,9 +442,21 @@ export default function AttendancePage() {
        } else {
           const isSun = isSunday(currentD);
           const holidayObj = holidays.find((h: any) => h.date === dateStr);
+          const leaveObj = approvedLeaveDates.get(dateStr);
           
           let displayStatus = isSun ? 'Weekly Off' : 'Absent';
-          if (holidayObj) displayStatus = 'Holiday';
+          let attType = holidayObj ? holidayObj.name : 'N/A';
+          let inPlant = holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'N/A');
+          let remark = holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'Absent');
+
+          if (holidayObj) {
+            displayStatus = 'Holiday';
+          } else if (leaveObj) {
+            displayStatus = 'Leave';
+            attType = leaveObj.purpose || 'Approved Leave';
+            inPlant = 'On Leave';
+            remark = `Approved Leave (${leaveObj.purpose || 'Leave'})`;
+          }
 
           fullHistory.push({
              id: `missing-${dateStr}`,
@@ -450,116 +466,196 @@ export default function AttendancePage() {
              outTime: null,
              hours: 0,
              status: displayStatus,
-             attendanceType: holidayObj ? holidayObj.name : 'N/A',
+             attendanceType: attType,
              address: null,
              addressOut: null,
-             inPlant: holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'N/A'),
-             remark: holidayObj ? holidayObj.name : (isSun ? 'Weekly Off' : 'Absent')
+             inPlant: inPlant,
+             remark: remark
           });
        }
        currentD = addDays(currentD, -1);
     }
 
     return fullHistory;
-  }, [attendanceRecords, effectiveEmployeeId, verifiedUser, isHRorAdmin, holidays, effectiveEmployeeName]);
+  }, [attendanceRecords, effectiveEmployeeId, verifiedUser, holidays, leaveRequests, effectiveEmployeeName, dateWindow45Days]);
 
-  // Leave requests are now filtered directly on each render without memoization.
-  const currentEmpIdForLeaves = String(effectiveEmployeeId || "").trim().toUpperCase();
-  const userLeaveRequests = (!currentEmpIdForLeaves || currentEmpIdForLeaves === "N/A")
-    ? []
-    : (leaveRequests || [])
-        .filter((l: any) => {
-          const targetEmpId = String(l.employeeId || (l as any).employeeID || "").trim().toUpperCase();
-          return targetEmpId === currentEmpIdForLeaves;
-        })
-        .sort((a: any, b: any) => {
-          const dateA = a.createdAt ? new Date(a.createdAt) : new Date(a.fromDate);
-          const dateB = b.createdAt ? new Date(b.createdAt) : new Date(b.fromDate);
-          return dateB.getTime() - dateA.getTime();
-        });
+  // 2. MONTHLY SUMMARY: Current Month and Previous Month ONLY, strictly for logged-in employee
+  const monthlySummaries = useMemo(() => {
+    const now = currentTime || getISTTime();
+    const targetEmpId = String(effectiveEmployeeId || '').trim().toUpperCase();
+    if (!targetEmpId || targetEmpId === "N/A") return [];
 
-const allPlantExitHistory = useMemo(() => {
-    const exits: any[] = [];
-    attendanceRecords.forEach((record: any) => {
-      if (record.exitEvents && Array.isArray(record.exitEvents)) {
-        record.exitEvents.forEach((event: any) => {
-          exits.push({
-            ...event,
-            employeeId: record.employeeId,
-            employeeCode: event.employeeCode || record.employeeId,
-            employeeName: event.employeeName || record.employeeName,
-            designation: event.designation || "Staff",
-            date: event.date || record.date,
-            plant: event.plant || record.inPlant || "Salt Plant",
-            plantName: event.plant || record.inPlant || "Salt Plant",
-            inTime: record.inTime,
-            outTime: record.outTime,
-            attendanceId: record.id || record._id
-          });
-        });
+    const verifiedEmpId = String(verifiedUser?.employeeId || '').trim().toUpperCase();
+    const verifiedUsername = String(verifiedUser?.username || '').trim().toUpperCase();
+    const verifiedId = String(verifiedUser?.id || (verifiedUser as any)?._id || '').trim().toUpperCase();
+
+    // Map of approved leave dates for this employee
+    const approvedLeaveDates = new Set<string>();
+    (leaveRequests || []).forEach((l: any) => {
+      const lEmpId = String(l.employeeId || (l as any).employeeID || "").trim().toUpperCase();
+      const isMatch = (lEmpId === targetEmpId || (verifiedEmpId && lEmpId === verifiedEmpId) || (verifiedUsername && lEmpId === verifiedUsername) || (verifiedId && lEmpId === verifiedId));
+      if (isMatch && String(l.status).toUpperCase() === 'APPROVED') {
+        if (l.fromDate && l.toDate) {
+          try {
+            let cur = startOfDay(parseISO(l.fromDate));
+            const end = startOfDay(parseISO(l.toDate));
+            while (!isAfter(cur, end)) {
+              approvedLeaveDates.add(format(cur, "yyyy-MM-dd"));
+              cur = addDays(cur, 1);
+            }
+          } catch (e) {}
+        }
       }
     });
-    return exits.sort((a, b) => String(b.outPlantTime || "").localeCompare(String(a.outPlantTime || "")));
-  }, [attendanceRecords]);
 
-  const monthlySummaries = useMemo(() => {
-    const now = getISTTime();
-    const monthsMap = new Map<string, { presentDates: Set<string>; monthDate: Date; totalMinutes: number }>();
+    // Valid attendance punches for this employee
+    const myPunches = (attendanceRecords || []).filter((r: any) => {
+      if (!r) return false;
+      const recEmpId = String(r.employeeId || '').trim().toUpperCase();
+      const isMatch = (recEmpId === targetEmpId || (verifiedEmpId && recEmpId === verifiedEmpId) || (verifiedUsername && recEmpId === verifiedUsername) || (verifiedId && recEmpId === verifiedId));
+      return isMatch && r.date && r.inTime;
+    });
 
-    for (let i = 0; i < 3; i++) {
+    const presentDatesSet = new Set<string>();
+    const minutesByMonth = new Map<string, number>();
+
+    myPunches.forEach((r: any) => {
+      presentDatesSet.add(r.date);
+      if (typeof r.hours === "number" && r.hours > 0) {
+        const mKey = r.date.substring(0, 7); // "yyyy-MM"
+        minutesByMonth.set(mKey, (minutesByMonth.get(mKey) || 0) + Math.round(r.hours * 60));
+      }
+    });
+
+    // Exactly 2 months: Current Month (i = 0) and Previous Month (i = 1)
+    const result = [];
+    for (let i = 0; i < 2; i++) {
       const mDate = subMonths(now, i);
       const mKey = format(mDate, "yyyy-MM");
-      monthsMap.set(mKey, {
-        presentDates: new Set(),
-        monthDate: startOfMonth(mDate),
-        totalMinutes: 0,
+      const monthYearLabel = format(mDate, "MMM-yyyy"); // e.g. "Aug-2026", "Jul-2026"
+      const start = startOfMonth(mDate);
+      const end = isSameMonth(mDate, now) ? now : endOfMonth(mDate);
+
+      let totalPresent = 0;
+      let totalAbsent = 0;
+
+      let cur = startOfDay(start);
+      const endDay = startOfDay(end);
+
+      while (!isAfter(cur, endDay)) {
+        const dStr = format(cur, "yyyy-MM-dd");
+        const isSun = isSunday(cur);
+        const isHoliday = holidays.some((h: any) => h.date === dStr);
+        const isLeave = approvedLeaveDates.has(dStr);
+        const isPresent = presentDatesSet.has(dStr);
+
+        if (isPresent) {
+          totalPresent++;
+        } else if (!isSun && !isHoliday && !isLeave) {
+          // Regular working day without attendance or approved leave
+          totalAbsent++;
+        }
+
+        cur = addDays(cur, 1);
+      }
+
+      const totalMinutes = minutesByMonth.get(mKey) || 0;
+      const totalHoursFloat = totalMinutes / 60;
+
+      result.push({
+        monthKey: mKey,
+        monthYear: monthYearLabel,
+        present: totalPresent,
+        absent: totalAbsent,
+        workedHours: formatHoursToHHMM(totalHoursFloat),
+        isCurrentMonth: i === 0,
       });
     }
 
-    employeeRecords.forEach((r: any) => {
-      const rDate = parseISO(r.date);
-      if (!isValid(rDate)) return;
+    return result;
+  }, [attendanceRecords, effectiveEmployeeId, verifiedUser, holidays, leaveRequests, currentTime]);
 
-      const mKey = format(rDate, "yyyy-MM");
-      if (!monthsMap.has(mKey)) return;
+  // 3. LEAVE HISTORY: Current Financial Year (FY) only, Approved records only, grouped month-wise
+  const fyMonthWiseLeaves = useMemo(() => {
+    const targetEmpId = String(effectiveEmployeeId || '').trim().toUpperCase();
+    if (!targetEmpId || targetEmpId === "N/A") return [];
 
-      const isMissing = String(r.id || "").startsWith("missing-");
-      const hasWorkedHours = !isMissing && typeof r.hours === "number" && r.hours > 0;
+    const verifiedEmpId = String(verifiedUser?.employeeId || '').trim().toUpperCase();
+    const verifiedUsername = String(verifiedUser?.username || '').trim().toUpperCase();
+    const verifiedId = String(verifiedUser?.id || (verifiedUser as any)?._id || '').trim().toUpperCase();
 
-      if (r.inTime && !isMissing) {
-        monthsMap.get(mKey)!.presentDates.add(r.date);
-      }
+    const { startDateStr, endDateStr } = currentFYInfo;
+    const fyStart = startOfDay(parseISO(startDateStr));
+    const fyEnd = startOfDay(parseISO(endDateStr));
 
-      if (hasWorkedHours) {
-        const minutes = Math.round(r.hours * 60);
-        monthsMap.get(mKey)!.totalMinutes += minutes;
+    // Filter only APPROVED leaves for this employee that overlap with current FY
+    const approvedLeaves = (leaveRequests || []).filter((l: any) => {
+      const lEmpId = String(l.employeeId || (l as any).employeeID || "").trim().toUpperCase();
+      const isMatch = (lEmpId === targetEmpId || (verifiedEmpId && lEmpId === verifiedEmpId) || (verifiedUsername && lEmpId === verifiedUsername) || (verifiedId && lEmpId === verifiedId));
+      if (!isMatch) return false;
+      if (String(l.status).toUpperCase() !== 'APPROVED') return false;
+      if (!l.fromDate || !l.toDate) return false;
+
+      try {
+        const fromD = startOfDay(parseISO(l.fromDate));
+        const toD = startOfDay(parseISO(l.toDate));
+        // Overlap with FY: fromDate <= fyEnd && toDate >= fyStart
+        return !isAfter(fromD, fyEnd) && !isBefore(toD, fyStart);
+      } catch (e) {
+        return false;
       }
     });
 
-    const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+    // Group month-wise
+    const monthGroups = new Map<string, {
+      monthKey: string;
+      monthLabel: string;
+      totalLeaveDays: number;
+      records: any[];
+    }>();
 
-    return sortedMonths.map(([mKey, data]) => {
-      const monthYearStr = format(data.monthDate, "MMM-yy");
-      const presentDays = data.presentDates.size;
-      const start = data.monthDate;
-      const end = isSameMonth(data.monthDate, now) ? now : endOfMonth(data.monthDate);
+    approvedLeaves.forEach((leave: any) => {
+      try {
+        const fromD = startOfDay(parseISO(leave.fromDate));
+        const toD = startOfDay(parseISO(leave.toDate));
+        const actualStart = isBefore(fromD, fyStart) ? fyStart : fromD;
+        const actualEnd = isAfter(toD, fyEnd) ? fyEnd : toD;
 
-      let workingDays = 0;
-      for (let d = start; d <= end; d = addDays(d, 1)) {
-        workingDays++;
-      }
+        // Count days in each month
+        const monthDaysMap = new Map<string, number>();
+        let cur = actualStart;
+        while (!isAfter(cur, actualEnd)) {
+          const mKey = format(cur, "yyyy-MM");
+          const dayIncrement = leave.leaveType === 'HALF_DAY' ? 0.5 : 1;
+          monthDaysMap.set(mKey, (monthDaysMap.get(mKey) || 0) + dayIncrement);
+          cur = addDays(cur, 1);
+        }
 
-      const absentDays = Math.max(0, workingDays - presentDays);
-      const totalHoursFloat = data.totalMinutes / 60;
-
-      return {
-        monthYear: monthYearStr,
-        present: presentDays,
-        absent: absentDays,
-        workedHours: formatHoursToHHMM(totalHoursFloat),
-      };
+        monthDaysMap.forEach((daysInMonth, mKey) => {
+          if (!monthGroups.has(mKey)) {
+            const mDate = parseISO(`${mKey}-01`);
+            monthGroups.set(mKey, {
+              monthKey: mKey,
+              monthLabel: format(mDate, "MMM-yyyy"),
+              totalLeaveDays: 0,
+              records: [],
+            });
+          }
+          const group = monthGroups.get(mKey)!;
+          group.totalLeaveDays += daysInMonth;
+          group.records.push({
+            ...leave,
+            daysInThisMonth: daysInMonth,
+          });
+        });
+      } catch (e) {}
     });
-  }, [employeeRecords]);
+
+    // Sort months in descending order (most recent first) and hide months with 0 leave
+    return Array.from(monthGroups.values())
+      .filter((g) => g.totalLeaveDays > 0)
+      .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  }, [effectiveEmployeeId, verifiedUser, leaveRequests, currentFYInfo]);
 
   const { activeRecord, todayRecord, isStale, nextInAvailableAt, canMarkOut, nextOutAvailableAt } = useMemo(() => {
     const now = currentTime || getISTTime();
@@ -1281,16 +1377,11 @@ const allPlantExitHistory = useMemo(() => {
     await punchCheckOut();
   };
 
-  const handleViewEventDetails = (event: any) => {
-    setSelectedExitEvent(event);
-    setActiveDialog("DETAILS");
-  };
-
   if (!isMounted) return null;
 
   return (
     <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
-      {isEmployeeLogin && (
+      {/* 0. GATEWAY PORTAL (MARK IN / MARK OUT) */}
       <div className="max-w-xl mx-auto w-full space-y-6">
         {(locationPermissionStatus === "denied" || locationPermissionStatus === "unavailable" || locationPermissionMessage) && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm text-amber-900 animate-in fade-in">
@@ -1374,7 +1465,7 @@ const allPlantExitHistory = useMemo(() => {
             </div>
 
             <div className="pt-6 border-t border-slate-100 flex flex-col items-center justify-center w-full">
-{isCooldownLocked && nextInAvailableAt ? (
+              {isCooldownLocked && nextInAvailableAt ? (
                 <div className="flex flex-col items-center justify-center gap-1 text-amber-700 bg-amber-50 px-5 py-3 rounded-xl w-full border border-amber-200">
                   <span className="text-sm font-black uppercase tracking-wider">Rest Period Active</span>
                   <span className="text-xs font-bold text-center">Mark IN will be available at {format(nextInAvailableAt, "dd-MMM-yyyy HH:mm")}</span>
@@ -1413,366 +1504,262 @@ const allPlantExitHistory = useMemo(() => {
           </CardContent>
         </Card>
       </div>
-      )}
 
+      {/* 1. SESSION HISTORY & 2. MONTHLY SUMMARY */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-4">
-             {isHRorAdmin && (
-               <Card className="p-4 rounded-2xl border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border">
-                 <div>
-                   <h4 className="text-sm font-black uppercase text-slate-700 tracking-tight">Employee Attendance Ledger</h4>
-                   <p className="text-xs text-slate-400 font-medium mt-0.5">Select an employee to view their real-time logs.</p>
-                 </div>
-                 <div className="w-full sm:w-72">
-                   <Select
-                     value={selectedEmployeeId}
-                     onValueChange={(value) => setSelectedEmployeeId(value)}
-                   >
-                     <SelectTrigger className="w-full h-11 rounded-xl bg-white border-slate-200 font-bold text-xs text-slate-700 shadow-sm">
-                       <SelectValue placeholder="Choose an Employee..." />
-                     </SelectTrigger>
-                     <SelectContent className="rounded-xl max-h-60">
-                       {employees.length === 0 ? (
-                         <SelectItem value="NONE" disabled>No employees found</SelectItem>
-                       ) : (
-                         <span className="block max-h-56 overflow-y-auto">
-                           {employees.map((emp: any) => (
-                             <SelectItem 
-                               key={emp.employeeId} 
-                               value={emp.employeeId}
-                               className="font-bold text-xs text-slate-600"
-                             >
-                               {emp.firstName ? `${emp.firstName} ${emp.lastName || ""}`.trim() : (emp.name || emp.employeeId)} ({emp.employeeId})
-                             </SelectItem>
-                           ))}
-                         </span>
-                       )}
-                     </SelectContent>
-                   </Select>
-                 </div>
-               </Card>
-             )}
-
-             <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight pt-2">
+        {/* SESSION HISTORY (LAST 45 DAYS ONLY) */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
+            <div>
+              <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
                 <History className="w-5 h-5 text-primary" /> Session History
-             </h3>
-             <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200">
-                <ScrollArea className="h-[400px]">
-                   {isLoading && employeeRecords.length === 0 ? (
-                     <div className="flex flex-col items-center justify-center py-20 space-y-3">
-                       <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Syncing Ledger History...</p>
-                     </div>
-                   ) : (
-                     <Table>
-                        <TableHeader className="bg-slate-50">
-                            <TableRow>
-                               <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
-                               <TableHead className="font-black uppercase text-[10px] hidden xl:table-cell">Employee</TableHead>
-                               <TableHead className="font-black uppercase text-[10px]">Plant Name</TableHead>
-                               <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
-                               <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
-                               <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">In Address</TableHead>
-                               <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Out Address</TableHead>
-                               <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
-                               <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">Remarks</TableHead>
-                               <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {employeeRecords.map((r: any) => (
-                              <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
-                                 <TableCell className="py-4">
-                                    <div className="flex flex-col">
-                                      <span className="text-xs font-bold text-slate-700">{formatDate(r.date)}</span>
-                                      <span className="text-[10px] font-semibold text-slate-400 mt-0.5">{format(parseISO(r.date), "EEEE")}</span>
-                                    </div>
-                                 </TableCell>
-                                 <TableCell className="hidden xl:table-cell text-xs font-bold text-slate-600 truncate max-w-[120px]">{r.employeeName || "N/A"}</TableCell>
-                                 <TableCell className="text-xs font-bold text-slate-600">{r.inPlant && r.inPlant !== "N/A" ? r.inPlant : (r.attendanceType || "N/A")}</TableCell>
-                                 <TableCell className="text-xs font-bold text-slate-500">{r.inTime || "--:--"}</TableCell>
-                                 <TableCell className="text-xs font-bold text-slate-500">{r.outTime || "--:--"}</TableCell>
-                                 <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[150px] truncate" title={r.address}>{r.address || "N/A"}</TableCell>
-                                 <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[150px] truncate" title={r.addressOut}>{r.addressOut || "N/A"}</TableCell>
-                                 <TableCell>
-                                    <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
-                                       {formatHoursToHHMM(r.hours || 0)}
-                                    </Badge>
-                                 </TableCell>
-                                 <TableCell className="hidden lg:table-cell text-[10px] font-medium text-slate-500 max-w-[150px] truncate" title={r.remark}>{r.remark || "N/A"}</TableCell>
-                                 <TableCell className="text-right pr-6">
-                                    <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap", 
-                                       r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700" : 
-                                       r.status === 'Open' ? "bg-blue-100 text-blue-700" :
-                                       r.status === 'Absent' ? "bg-rose-100 text-rose-700" :
-                                       (r.status === 'Weekly Off' || r.status === 'Holiday') ? "bg-slate-100 text-slate-700" :
-                                       "bg-emerald-100 text-emerald-700"
-                                    )}>
-                                       {r.status === 'Open' ? 'Active Shift' : r.status === 'Closed' ? 'Completed Shift' : r.status === 'Auto OUT' ? 'Auto Closed Shift' : r.status}
-                                    </Badge>
-                                 </TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                     </Table>
-                   )}
-                </ScrollArea>
-             </Card>
+              </h3>
+              <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                Displaying previous 45 days ({formatDate(dateWindow45Days.startDateStr)} to {formatDate(dateWindow45Days.todayStr)})
+              </p>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-black uppercase px-2.5 py-1 text-slate-600 border-slate-300 w-fit bg-white">
+              Rolling 45-Day Period
+            </Badge>
           </div>
-          
-          <div className="lg:col-span-1 space-y-4">
-             <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
-                <Calendar className="w-5 h-5 text-primary" /> Monthly Summary
-             </h3>
-             <ScrollArea className="h-[400px]">
-                <div className="space-y-4 pr-3">
-                  {monthlySummaries.map((summary, idx) => (
-                    <Card key={idx} className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
-                      <CardHeader className="bg-slate-50/50 border-b py-4 px-6">
-                         <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500 text-center">
-                            {summary.monthYear}
-                         </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-5 space-y-3">
-                         <div className="flex justify-between items-center bg-emerald-50 rounded-xl p-3 border border-emerald-100">
-                            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Present Days</span>
-                            <span className="text-xl font-black text-emerald-600">{summary.present}</span>
-                         </div>
-                         <div className="flex justify-between items-center bg-rose-50 rounded-xl p-3 border border-rose-100">
-                            <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Absent Days</span>
-                            <span className="text-xl font-black text-rose-600">{summary.absent}</span>
-                         </div>
-                         <div className="flex justify-between items-center bg-slate-50 rounded-xl p-3 border border-slate-100">
-                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Worked Hours</span>
-                            <span className="text-xl font-black text-slate-900">{summary.workedHours}</span>
-                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+
+          <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
+            <ScrollArea className="h-[430px]">
+              {isLoading && employeeRecords.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 space-y-3">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Syncing 45-Day Session Ledger...</p>
                 </div>
-             </ScrollArea>
+              ) : (
+                <Table>
+                  <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                    <TableRow>
+                      <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">Plant / Type</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">In Address</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Out Address</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">Remarks</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {employeeRecords.map((r: any) => (
+                      <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
+                        <TableCell className="py-3.5">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-800">{formatDate(r.date)}</span>
+                            <span className="text-[10px] font-semibold text-slate-400 mt-0.5">{format(parseISO(r.date), "EEEE")}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs font-bold text-slate-600">
+                          {r.inPlant && r.inPlant !== "N/A" ? r.inPlant : (r.attendanceType || "N/A")}
+                        </TableCell>
+                        <TableCell className="text-xs font-bold text-slate-600">{r.inTime || "--:--"}</TableCell>
+                        <TableCell className="text-xs font-bold text-slate-600">{r.outTime || "--:--"}</TableCell>
+                        <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[140px] truncate" title={r.address}>
+                          {r.address || "N/A"}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[140px] truncate" title={r.addressOut}>
+                          {r.addressOut || "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
+                            {formatHoursToHHMM(r.hours || 0)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-[10px] font-medium text-slate-500 max-w-[130px] truncate" title={r.remark}>
+                          {r.remark || "N/A"}
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap", 
+                            r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700 hover:bg-amber-100" : 
+                            r.status === 'Open' ? "bg-blue-100 text-blue-700 hover:bg-blue-100" :
+                            r.status === 'Absent' ? "bg-rose-100 text-rose-700 hover:bg-rose-100" :
+                            r.status === 'Leave' ? "bg-purple-100 text-purple-700 hover:bg-purple-100" :
+                            (r.status === 'Weekly Off' || r.status === 'Holiday') ? "bg-slate-100 text-slate-700 hover:bg-slate-100" :
+                            "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                          )}>
+                            {r.status === 'Open' ? 'Active Shift' : 
+                             r.status === 'Closed' ? 'Completed Shift' : 
+                             r.status === 'Auto OUT' ? 'Auto Closed Shift' : 
+                             r.status === 'Leave' ? 'Approved Leave' : 
+                             r.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </ScrollArea>
+          </Card>
+        </div>
+        
+        {/* MONTHLY SUMMARY (CURRENT & PREVIOUS MONTH ONLY) */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="pt-2">
+            <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
+              <Calendar className="w-5 h-5 text-primary" /> Monthly Summary
+            </h3>
+            <p className="text-xs font-semibold text-slate-500 mt-0.5">
+              Current & Previous Month Only
+            </p>
           </div>
+
+          <div className="space-y-4">
+            {monthlySummaries.map((summary, idx) => (
+              <Card key={idx} className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
+                <CardHeader className="bg-slate-50/70 border-b py-3.5 px-6 flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800">
+                    {summary.monthYear}
+                  </CardTitle>
+                  <Badge variant="outline" className={cn("text-[9px] font-black uppercase px-2 py-0.5", summary.isCurrentMonth ? "bg-primary/10 text-primary border-primary/30" : "bg-slate-100 text-slate-600 border-slate-200")}>
+                    {summary.isCurrentMonth ? "Current Month" : "Previous Month"}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex justify-between items-center bg-emerald-50/80 rounded-xl p-3.5 border border-emerald-100">
+                    <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Total Present</span>
+                    <span className="text-2xl font-black text-emerald-600">{summary.present}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-rose-50/80 rounded-xl p-3.5 border border-rose-100">
+                    <span className="text-xs font-bold text-rose-800 uppercase tracking-wider">Total Absent</span>
+                    <span className="text-2xl font-black text-rose-600">{summary.absent}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-slate-50 rounded-xl p-3 border border-slate-100 text-slate-600">
+                    <span className="text-[11px] font-bold uppercase tracking-wider">Worked Hours</span>
+                    <span className="text-sm font-black text-slate-900">{summary.workedHours}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {/* Compact Comparative Summary Table */}
+            <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] text-right">Total Present</TableHead>
+                    <TableHead className="font-black uppercase text-[10px] text-right pr-4">Total Absent</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlySummaries.map((summary, idx) => (
+                    <TableRow key={idx} className="hover:bg-slate-50/50">
+                      <TableCell className="font-bold text-xs text-slate-800 py-3">{summary.monthYear}</TableCell>
+                      <TableCell className="font-black text-xs text-emerald-600 text-right">{summary.present}</TableCell>
+                      <TableCell className="font-black text-xs text-rose-600 text-right pr-4">{summary.absent}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+          </div>
+        </div>
       </div>
 
-      {/* --- LEAVE HISTORY SECTION --- */}
+      {/* 3. LEAVE HISTORY (CURRENT FINANCIAL YEAR & APPROVED RECORDS ONLY) */}
       <div className="space-y-4 pt-4">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
-            <CalendarDays className="w-5 h-5 text-primary" /> Leave History
-          </h3>
-        </div>
-        <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
-          <div className="flex justify-end gap-2 p-3 border-b bg-slate-50">
-            {userLeaveRequests.length > LEAVE_ROWS_PER_PAGE && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 font-bold text-xs border-slate-200"
-                  disabled={leavePage <= 1}
-                  onClick={() => setLeavePage((p) => Math.max(1, p - 1))}
-                >
-                  Prev
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 font-bold text-xs border-emerald-200 text-emerald-700"
-                  disabled={leavePage >= Math.ceil(userLeaveRequests.length / LEAVE_ROWS_PER_PAGE)}
-                  onClick={() => setLeavePage((p) => Math.min(Math.ceil(userLeaveRequests.length / LEAVE_ROWS_PER_PAGE), p + 1))}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
+              <CalendarDays className="w-5 h-5 text-primary" /> Leave History ({currentFYInfo.label})
+            </h3>
+            <p className="text-xs font-semibold text-slate-500 mt-0.5">
+              Month-wise approved leaves for current Financial Year ({formatDate(currentFYInfo.startDateStr)} to {formatDate(currentFYInfo.endDateStr)})
+            </p>
           </div>
+          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px] font-black uppercase px-2.5 py-1 border border-emerald-200 w-fit">
+            Approved Records Only
+          </Badge>
+        </div>
+
+        {/* Month-wise Leave Cards (Summary) */}
+        {fyMonthWiseLeaves.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {fyMonthWiseLeaves.map((group) => (
+              <div 
+                key={group.monthKey} 
+                className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between hover:border-primary/40 transition-colors"
+              >
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{group.monthLabel}</span>
+                <div className="mt-2 flex items-baseline justify-between">
+                  <span className="text-xl font-black text-slate-900">{group.totalLeaveDays}</span>
+                  <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 uppercase">
+                    {group.totalLeaveDays === 1 ? "1 Leave" : `${group.totalLeaveDays} Leave`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Detailed Approved Leave Table */}
+        <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
-                <TableHead className="font-black uppercase text-[10px]">Employee Name</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Leave Type</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">From Date</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">To Date</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Days</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Remark</TableHead>
-                <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Approved/Rejected By</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Total Leave</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Leave Dates</TableHead>
+                <TableHead className="font-black uppercase text-[10px]">Purpose / Type</TableHead>
+                <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Remark</TableHead>
+                <TableHead className="font-black uppercase text-[10px] text-right">Status</TableHead>
+                <TableHead className="font-black uppercase text-[10px] text-right pr-6">Approved By</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {userLeaveRequests.length === 0 ? (
+              {fyMonthWiseLeaves.length === 0 ? (
                 <TableRow>
-
-                  <TableCell colSpan={8} className="text-center py-8 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    No leave requests logged for this employee context.
+                  <TableCell colSpan={7} className="text-center py-12 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    No approved leave records found for current Financial Year ({currentFYInfo.label}).
                   </TableCell>
                 </TableRow>
               ) : (
-                userLeaveRequests
-                  .slice((leavePage - 1) * LEAVE_ROWS_PER_PAGE, leavePage * LEAVE_ROWS_PER_PAGE)
-                  .map((leave: any) => (
-                  <TableRow key={leave.id || leave._id}>
-                    <TableCell className="text-xs font-bold text-slate-700">{leave.employeeName || effectiveEmployeeName}</TableCell>
-                    <TableCell className="text-xs font-bold text-slate-600">{leave.purpose}</TableCell>
-                    <TableCell className="text-xs font-bold text-slate-500">{formatDate(leave.fromDate)}</TableCell>
-                    <TableCell className="text-xs font-bold text-slate-500">{formatDate(leave.toDate)}</TableCell>
-                    <TableCell className="text-xs font-black text-slate-700">{leave.days}</TableCell>
-                    <TableCell className="text-[11px] font-medium text-slate-500 max-w-[150px] truncate" title={leave.remark}>{leave.remark || "-"}</TableCell>
-                    <TableCell className="text-right pr-6">
-                      <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap", 
-                        String(leave.status).toUpperCase() === 'APPROVED' ? "bg-emerald-100 text-emerald-700 border-none" : 
-                        String(leave.status).toUpperCase() === 'REJECTED' ? "bg-rose-100 text-rose-700 border-none" :
-                        "bg-amber-100 text-amber-700 border-none"
-                      )}>
-                        {String(leave.status).toUpperCase() === 'APPROVED' ? 'Approved' : 
-                         String(leave.status).toUpperCase() === 'REJECTED' ? 'Rejected' : 'Under Process'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-[10px] font-bold text-slate-600 uppercase font-mono">
-                      {leave.processedByUserId || "-"}
-                    </TableCell>
-                  </TableRow>
+                fyMonthWiseLeaves.map((group) => (
+                  group.records.map((leave: any, rIdx: number) => (
+                    <TableRow key={`${group.monthKey}-${leave.id || leave._id || rIdx}`} className="hover:bg-slate-50/50">
+                      <TableCell className="font-bold text-xs text-slate-800 py-3.5">
+                        {rIdx === 0 ? (
+                          <span className="font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">
+                            {group.monthLabel}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[10px] italic pl-2">↳ {group.monthLabel}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs font-black text-emerald-700">
+                        {rIdx === 0 ? `${group.totalLeaveDays} Leave` : `${leave.daysInThisMonth || leave.days} Day(s)`}
+                      </TableCell>
+                      <TableCell className="text-xs font-bold text-slate-600">
+                        {formatDate(leave.fromDate)} – {formatDate(leave.toDate)}
+                      </TableCell>
+                      <TableCell className="text-xs font-bold text-slate-700">
+                        {leave.purpose || "Leave"}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-[11px] font-medium text-slate-500 max-w-[180px] truncate" title={leave.remark}>
+                        {leave.remark || "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap">
+                          Approved
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-[10px] font-bold text-slate-600 uppercase font-mono text-right pr-6">
+                        {leave.processedByUserId || leave.approvedBy || "Admin"}
+                      </TableCell>
+                    </TableRow>
+                  ))
                 ))
               )}
             </TableBody>
           </Table>
         </Card>
       </div>
-
-      {/* HR/ADMIN Geofence Approvals & Exit Tracking Section */}
-      {isHRorAdmin && (
-        <div className="space-y-4 pt-4">
-          <h3 className="font-black text-lg flex items-center gap-2 text-slate-700 uppercase tracking-tight">
-            <LogOut className="w-5 h-5 text-rose-500" /> Employee Plant Exit History
-          </h3>
-          <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200">
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="font-black uppercase text-[10px]">Employee</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Attendance Date</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Plant</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Mark IN</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Mark OUT</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Exit Time</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Return Time</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Outside Duration</TableHead>
-                  <TableHead className="font-black uppercase text-[10px] text-right pr-6">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allPlantExitHistory.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      No Geofence Exit violations logged.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  allPlantExitHistory.map((event: any, index: number) => (
-                    <TableRow key={index} className="hover:bg-slate-50/50">
-                      <TableCell className="text-xs font-bold text-slate-700">{event.employeeName} ({event.employeeId})</TableCell>
-                      <TableCell className="text-xs font-bold text-slate-600">{formatDate(event.date)}</TableCell>
-                      <TableCell className="text-xs font-bold text-slate-600 uppercase">{event.plantName}</TableCell>
-                      <TableCell className="text-xs font-medium text-slate-500">{event.inTime || "--:--"}</TableCell>
-                      <TableCell className="text-xs font-medium text-slate-500">{event.outTime || "--:--"}</TableCell>
-<TableCell className="text-xs font-bold text-rose-600">
-                        {event.outPlantTime
-                          ? (() => {
-                              try {
-                                // Handles both "YYYY-MM-DD HH:mm" and ISO "YYYY-MM-DDTHH:mm:ss.sssZ"
-                                const d = parseISO(String(event.outPlantTime).replace(" ", "T"));
-                                return isValid(d) ? format(d, "HH:mm") : "--:--";
-                              } catch (e) {
-                                return "--:--";
-                              }
-                            })()
-                          : "--:--"}
-                      </TableCell>
-                      <TableCell className="text-xs font-bold text-emerald-600">
-                        {event.inPlantTime ? (() => {
-                          try {
-                            // Handles both "YYYY-MM-DD HH:mm" and ISO "YYYY-MM-DDTHH:mm:ss.sssZ"
-                            const d = parseISO(String(event.inPlantTime).replace(" ", "T"));
-                            return isValid(d) ? format(d, "HH:mm") : "Invalid Time";
-                          } catch (e) {
-                            return "Invalid Time";
-                          }
-                        })() : <span className="text-amber-600">Still Outside</span>}
-                      </TableCell>
-                      <TableCell className="text-xs font-black text-slate-700">{event.totalOutDuration || "--"}</TableCell>
-                      <TableCell className="text-right pr-6">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="h-8 rounded-lg font-black text-[10px] uppercase border-primary/20 text-primary hover:bg-primary/5 flex items-center gap-1 ml-auto"
-                          onClick={() => handleViewEventDetails(event)}
-                        >
-                          <Eye className="w-3 h-3" /> View Details
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </Card>
-        </div>
-      )}
-
-      {/* View Geofence Location Trajectory Details Dialog */}
-      <Dialog
-        open={activeDialog === "DETAILS"}
-        onOpenChange={(o) => {
-          if (!o) setActiveDialog("NONE");
-        }}
-      >
-        <DialogContent className="sm:max-w-2xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
-          <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <MapPin className="w-6 h-6 text-primary" /> Exit Trajectory Logs
-            </DialogTitle>
-          </DialogHeader>
-          <div className="p-8">
-            <ScrollArea className="h-[300px] rounded-xl border border-slate-100 p-2 bg-slate-50/50">
-              <Table>
-                <TableHeader className="bg-slate-100">
-                  <TableRow>
-                    <TableHead className="font-black uppercase text-[10px]">Date & Time</TableHead>
-                    <TableHead className="font-black uppercase text-[10px]">Full Address</TableHead>
-                    <TableHead className="font-black uppercase text-[10px]">Latitude</TableHead>
-                    <TableHead className="font-black uppercase text-[10px]">Longitude</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] text-right">Distance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-{selectedExitEvent?.outLocationHistory && selectedExitEvent.outLocationHistory.length > 0 ? (
-                    selectedExitEvent.outLocationHistory.map((loc: any, idx: number) => (
-                      <TableRow key={idx} className="bg-white hover:bg-slate-50">
-                        <TableCell className="text-xs font-bold text-slate-600 whitespace-nowrap">{loc.time}</TableCell>
-                        <TableCell className="text-xs text-slate-600 max-w-[200px] break-words font-medium">{loc.address}</TableCell>
-                        <TableCell className="text-xs font-mono text-slate-500">{loc.lat.toFixed(5)}</TableCell>
-                        <TableCell className="text-xs font-mono text-slate-500">{loc.lng.toFixed(5)}</TableCell>
-                        <TableCell className="text-xs font-black text-rose-600 text-right">{loc.distance} m</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-6 text-xs text-slate-400 font-bold uppercase">
-                        No tracking coordinate blocks found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t">
-            <Button className="w-full h-12 font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl uppercase tracking-widest" onClick={() => setActiveDialog("NONE")}>
-              CLOSE
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Mark IN Confirmation Pop-up with Location and Distance */}
       <Dialog
