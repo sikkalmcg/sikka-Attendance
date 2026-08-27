@@ -9,6 +9,7 @@ import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import Cookies from 'js-cookie';
 import { getDeviceId, getDeviceName } from "@/lib/utils";
+import { registerNativeUser } from "@/lib/android-bridge";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -52,6 +53,8 @@ export default function LoginPage() {
     if (typeof window !== 'undefined') {
       localStorage.setItem("user", sessionData);
     }
+    const empId = userData?.employeeId || userData?.username || userData?.id || '';
+    registerNativeUser(empId, userData?.role || 'EMPLOYEE', userData?.fullName || '');
   };
 
   const handleLogin = async (e: React.FormEvent) => {

@@ -809,7 +809,7 @@ export default function EmployeesPage() {
                       <Label className="text-[10px] font-black uppercase text-slate-500">Designation</Label>
                       <Select value={formData.designation} onValueChange={v => setFormData(p => ({...p, designation: v}))} disabled={!formData.department}>
                         <SelectTrigger className="h-12 font-bold"><SelectValue placeholder="Choose Designation" /></SelectTrigger>
-                        <SelectContent>{(DESIGNATIONS[formData.department!] || []).map(d => <SelectItem key={d} value={d} className="font-bold">{d}</SelectItem>)}</SelectContent>
+                        <SelectContent>{(Array.isArray(DESIGNATIONS) ? DESIGNATIONS : (DESIGNATIONS as any)[formData.department!] || []).map((d: any) => <SelectItem key={d} value={d} className="font-bold">{d}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
                   </div>

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/dialog_background"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <!-- Warning / Denied Title -->
+    <TextView
+        android:id="@+id/tvDeniedTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permission Required"
+        android:textColor="@color/error_red"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <!-- Denied Description -->
+    <TextView
+        android:id="@+id/tvDeniedDescription"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:lineSpacingExtra="3dp"
+        android:text="This permission was previously denied. Please open App Settings to enable it manually for full attendance functionality."
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
+    <!-- Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/rounded_button_secondary"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/permission_cancel"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnOpenSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:background="@drawable/rounded_button_primary"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:text="@string/permission_open_settings"
+            android:textColor="@color/white"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>

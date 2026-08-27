@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.sikka.attendance.app-mergeDebugResources-49:/layout/activity_main.xml",
+        "source": "com.sikka.attendance.app-main-52:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.sikka.attendance.app-mergeDebugResources-49:/layout/dialog_permission_denied.xml",
+        "source": "com.sikka.attendance.app-main-52:/layout/dialog_permission_denied.xml"
+    },
+    {
+        "merged": "com.sikka.attendance.app-mergeDebugResources-49:/layout/dialog_permission_request.xml",
+        "source": "com.sikka.attendance.app-main-52:/layout/dialog_permission_request.xml"
+    }
+]

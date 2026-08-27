@@ -70,6 +70,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import Cookies from 'js-cookie';
 import { format } from "date-fns";
+import { registerNativeUser, updateNativeBadgeCount, logoutNativeUser } from "@/lib/android-bridge";
 
 function NotificationBell() {
   const { notifications = [], updateRecord, refreshData, verifiedUser } = useData();
@@ -83,10 +84,10 @@ function NotificationBell() {
     if (!verifiedUser) return [];
     return [
       verifiedUser.employeeId,
+      verifiedUser.username,
       verifiedUser.id,
       (verifiedUser as any)._id,
-      verifiedUser.username,
-      verifiedUser.aadhaar,
+      (verifiedUser as any).aadhaar,
       (verifiedUser as any).aadhaarNumber,
       verifiedUser.mobile,
       (verifiedUser as any).mobileNumber
@@ -95,11 +96,15 @@ function NotificationBell() {
       .map(id => String(id).trim().toUpperCase());
   }, [verifiedUser]);
 
-  // Strict employee filtering: an employee only sees their own notifications or global announcements
+  // Strict employee filtering:
+  // - Employees see their own notifications + global announcements
+  // - Admin / HR / Super Admin see system/admin notifications, but NEVER see employee Mark IN / Mark OUT notifications
   const userNotifications = useMemo(() => {
     return (notifications || []).filter((n: any) => {
       if (!n) return false;
       const targetEmpId = String(n.employeeId || '').trim().toUpperCase();
+      const notifType = String(n.type || '').toUpperCase();
+      const isEmployeeOnlyNotif = ['MARK_IN', 'MARK_OUT', 'AUTO_OUT', 'SHIFT_REMINDER'].includes(notifType);
 
       if (isEmployee) {
         // If notification has a specific employeeId, it MUST match one of this employee's identifiers
@@ -109,7 +114,16 @@ function NotificationBell() {
         // General/broadcast notification
         return true;
       } else {
-        // For Admin / HR / Super Admin: show matching or system notifications
+        // For Admin / HR / Super Admin:
+        // Strictly exclude employee Mark IN / Mark OUT / Shift Reminders
+        if (isEmployeeOnlyNotif) {
+          if (targetEmpId && targetEmpId !== "GLOBAL" && targetEmpId !== "ALL") {
+            return userIdentifiers.includes(targetEmpId);
+          }
+          return false;
+        }
+
+        // For other system notifications: show if targeted to admin or global
         if (targetEmpId && targetEmpId !== "GLOBAL" && targetEmpId !== "ALL" && targetEmpId !== "N/A") {
           return userIdentifiers.includes(targetEmpId) || ['SUPER_ADMIN', 'ADMIN'].includes(String(verifiedUser?.role || '').toUpperCase());
         }
@@ -124,6 +138,11 @@ function NotificationBell() {
   const unreadCount = useMemo(() => {
     return userNotifications.filter((n: any) => !n.read).length;
   }, [userNotifications]);
+
+  // Sync with native Android badge count
+  useEffect(() => {
+    updateNativeBadgeCount(unreadCount);
+  }, [unreadCount]);
 
   // Format count: 1 to 9 as exact number, 10 or more as "9+"
   const badgeLabel = unreadCount > 9 ? "9+" : String(unreadCount);
@@ -304,6 +323,7 @@ function HeaderActions() {
   const router = useRouter();
 
   const handleLogout = () => {
+    logoutNativeUser();
     Cookies.remove('sikka_session', { path: '/' });
     localStorage.removeItem("user");
     router.push("/login");
@@ -538,6 +558,7 @@ function SidebarNav() {
       </SidebarContent>
       <SidebarFooter className="p-4">
         <Button variant="ghost" className="w-full justify-start text-rose-600 font-bold hover:bg-rose-50 hover:text-rose-700 group-data-[collapsible=icon]:p-2" onClick={() => {
+          logoutNativeUser();
           Cookies.remove('sikka_session', { path: '/' });
           localStorage.removeItem("user");
           router.push("/login");
@@ -585,6 +606,14 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [verifiedUser, refreshData]);
 
+  // Register active user credentials with Android Native Bridge
+  useEffect(() => {
+    if (verifiedUser) {
+      const empId = verifiedUser.employeeId || verifiedUser.username || verifiedUser.id || '';
+      registerNativeUser(empId, verifiedUser.role || 'EMPLOYEE', verifiedUser.fullName || (verifiedUser as any).name || '');
+    }
+  }, [verifiedUser]);
+
   // Spec: Validation Gateway runs for max 2 seconds, after which it opens
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -598,6 +627,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     if (isLoading || !verifiedUser) return;
 
     const handleLogout = () => {
+      logoutNativeUser();
       Cookies.remove('sikka_session', { path: '/' });
       if (typeof window !== 'undefined') {
         localStorage.removeItem("user");

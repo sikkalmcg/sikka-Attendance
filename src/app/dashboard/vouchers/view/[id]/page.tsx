@@ -3,7 +3,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useData } from "@/context/data-context";
-import { VoucherDocumentContent } from "@/app/dashboard/vouchers/page";
+import { VoucherDocumentContent } from "@/components/vouchers/voucher-document-content";
 import { Button } from "@/components/ui/button";
 import { Printer, X, Info, Download, ArrowLeft } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";

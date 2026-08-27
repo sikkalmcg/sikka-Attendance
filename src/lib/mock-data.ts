@@ -45,7 +45,7 @@ export const INITIAL_USERS: User[] = [
     fullName: "Ajay Somra", 
     username: "ajaysomra", 
     role: "SUPER_ADMIN", 
-    permissions: ["Dashboard", ...APP_PERMISSIONS],
+    permissions: ["Dashboard", ...Object.values(APP_PERMISSIONS)],
     status: "Active"
   },
   { 
@@ -61,6 +61,8 @@ export const INITIAL_USERS: User[] = [
 export const DEFAULT_EMPLOYEE: Employee = { 
   id: "emp-mock-1", 
   employeeId: "EMP-S0001", 
+  firstName: "Ravi",
+  lastName: "Kumar",
   name: "Ravi Kumar", 
   fatherName: "Mr. Ramesh Kumar",
   aadhaar: "1234 5678 9012",
@@ -72,6 +74,7 @@ export const DEFAULT_EMPLOYEE: Employee = {
   joinDate: "2023-01-15",
   firmId: "f1",
   unitId: "u1",
+  unitIds: ["u1"],
   bankName: "HDFC Bank",
   accountNo: "50100123456789",
   ifscCode: "HDFC0000123",
@@ -93,6 +96,8 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   {
     id: "emp-mock-2",
     employeeId: "EMP-S0002",
+    firstName: "Sunita",
+    lastName: "Devi",
     name: "Sunita Devi",
     fatherName: "Mr. Gopal Das",
     aadhaar: "9876 5432 1098",
@@ -104,6 +109,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
     joinDate: "2023-06-10",
     firmId: "f1",
     unitId: "u2",
+    unitIds: ["u2"],
     bankName: "SBI",
     accountNo: "3344556677",
     ifscCode: "SBIN0001234",

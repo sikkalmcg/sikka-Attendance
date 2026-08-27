@@ -3,7 +3,7 @@ import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { calculateDistance } from '@/lib/utils';
 
-export const PLANT_RADIUS_METERS = 700;
+const PLANT_RADIUS_METERS = 700;
 
 // Haversine distance is imported from utils (returns meters).
 

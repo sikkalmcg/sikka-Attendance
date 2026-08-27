@@ -271,6 +271,9 @@ export interface LeaveRequest {
   createdAt: string;
   leaveType: 'DAYS' | 'HALF_DAY';
   reachTime?: string;
+  remark?: string;
+  processedAt?: string;
+  processedByUserId?: string;
 }
 
 export interface AppNotification {

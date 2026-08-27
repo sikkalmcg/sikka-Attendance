@@ -1,11 +1,13 @@
 // === नीचे ये मिसिंग कॉन्स्टेंट्स जोड़ें ===
 
-// 1. Statutory Rates (इसमें PF_EMPLOYEE_RATE होना अनिवार्य है)
+// 1. Statutory Rates
 export const STATUTORY_RATES = {
-  PF_EMPLOYEE_RATE: 0.12, // उदाहरण के लिए 12% (अपने हिसाब से बदल लें)
+  PF_EMPLOYEE_RATE: 0.12,
   PF_EMPLOYER_RATE: 0.12,
   ESI_EMPLOYEE_RATE: 0.0075,
   ESI_EMPLOYER_RATE: 0.0325,
+  ESIC_EMPLOYEE_RATE: 0.0075,
+  ESIC_EMPLOYER_RATE: 0.0325,
 };
 
 // 2. Departments
@@ -36,6 +38,8 @@ export const APP_PERMISSIONS = {
 
 // 5. Super Admin User
 export const SUPER_ADMIN_USER = {
-  email: "admin@sikka.com", // अपनी सही ईमेल डालें
+  username: "admin",
+  password: "admin@password123",
+  email: "admin@sikka.com",
   role: "SUPER_ADMIN",
 };

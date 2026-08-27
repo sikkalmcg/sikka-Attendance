@@ -56,6 +56,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { postNativeNotification } from "@/lib/android-bridge";
 
 const PROJECT_START_DATE_STR = "2026-04-01";
 
@@ -860,6 +861,38 @@ const allPlantExitHistory = useMemo(() => {
       setSelectedType("");
       setActiveDialog("NONE");
       toast({ title: "Mark IN Successful", description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
+
+      const notifMsg = `${effectiveEmployeeName} – Mark IN Recorded | Time: ${timeStr} | ${detectedPlant ? plantName : attendanceType}`;
+      await addRecord('notifications', {
+        message: notifMsg,
+        timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+        read: false,
+        type: 'MARK_IN',
+        employeeId: effectiveEmployeeId
+      }).catch(() => {});
+
+      // Post notification on native Android system if running in native app
+      postNativeNotification(
+        "Mark IN Successful",
+        notifMsg,
+        "MARK_IN",
+        effectiveEmployeeId,
+        "EMPLOYEE"
+      );
+
+      // Trigger push notification to registered employee devices
+      fetch('/api/notifications/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: "Mark IN Successful",
+          message: notifMsg,
+          type: 'MARK_IN',
+          employeeId: effectiveEmployeeId,
+          targetRole: 'EMPLOYEE'
+        })
+      }).catch((err) => console.warn("Push notification deferred:", err));
+
     } catch (e) {
       console.error("Check-in error:", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to process database entry register log." });
@@ -960,6 +993,38 @@ const allPlantExitHistory = useMemo(() => {
 
       setActiveDialog("NONE");
       toast({ title: "Mark OUT Successful", description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
+
+      const notifMsg = `${effectiveEmployeeName} – Mark OUT Recorded | Time: ${format(outDT, "HH:mm")} | Worked: ${formatHoursToHHMM(finalHours)}`;
+      await addRecord('notifications', {
+        message: notifMsg,
+        timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+        read: false,
+        type: 'MARK_OUT',
+        employeeId: effectiveEmployeeId
+      }).catch(() => {});
+
+      // Post notification on native Android system if running in native app
+      postNativeNotification(
+        "Mark OUT Successful",
+        notifMsg,
+        "MARK_OUT",
+        effectiveEmployeeId,
+        "EMPLOYEE"
+      );
+
+      // Trigger push notification to registered employee devices
+      fetch('/api/notifications/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: "Mark OUT Successful",
+          message: notifMsg,
+          type: 'MARK_OUT',
+          employeeId: effectiveEmployeeId,
+          targetRole: 'EMPLOYEE'
+        })
+      }).catch((err) => console.warn("Push notification deferred:", err));
+
     } catch (e) {
       console.error("Check-out error:", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to Mark OUT" });
@@ -1131,7 +1196,10 @@ const allPlantExitHistory = useMemo(() => {
 
           if (type === "OUT_AUTO" && isAutoTriggering.current) {
             isAutoTriggering.current = false;
-            performAutoCheckOut(lat, lng, geocodedAddress, components, qualifiedPlants.length > 0 ? qualifiedPlants[0].plant : null);
+            const autoPlant = sortedAllPlants.length > 0 && sortedAllPlants[0].distance <= (sortedAllPlants[0].plant.radius || 700)
+              ? sortedAllPlants[0].plant
+              : null;
+            performAutoCheckOut(lat, lng, geocodedAddress, components, autoPlant);
           }
         } else {
           console.warn('Reverse geocode failed', data);
