@@ -3,6 +3,8 @@ import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 // 1. GET HANDLER: Saari collections ka data read karne ke liye
 export async function GET(
@@ -31,7 +33,10 @@ export async function GET(
 
     const data = await db.collection(collection).find({}).toArray();
     return NextResponse.json(data);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.digest === 'DYNAMIC_SERVER_USAGE' || error?.message?.includes('Dynamic server usage')) {
+      throw error;
+    }
     console.error(`GET Error in ${params.collection}:`, error);
     return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });
   }

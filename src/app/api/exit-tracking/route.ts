@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { calculateDistance } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 const PLANT_RADIUS_METERS = 700;
 
@@ -189,9 +193,9 @@ export async function POST(req: Request) {
 // ============================================================
 // GET: Fetch facility exit history (optionally filtered).
 // ============================================================
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
+    const { searchParams } = req.nextUrl;
     const employeeCode = searchParams.get('employeeCode');
     const date = searchParams.get('date');
     const plant = searchParams.get('plant');
@@ -206,7 +210,10 @@ export async function GET(req: Request) {
 
     const history = await plantExits.find(filter).sort({ outPlantTime: -1 }).toArray();
     return NextResponse.json(history);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.digest === 'DYNAMIC_SERVER_USAGE' || error?.message?.includes('Dynamic server usage')) {
+      throw error;
+    }
     console.error('Exit tracking GET error:', error);
     return NextResponse.json({ error: 'Failed to fetch history' }, { status: 500 });
   }
