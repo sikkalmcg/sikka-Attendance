@@ -895,12 +895,12 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
 
   if (isEmployee) {
     return (
-      <div className="min-h-screen w-full bg-slate-100 flex justify-center">
-        {/* Strictly Mobile View Container: Locked to mobile view even on Desktop Site mode or Wide Screens */}
-        <div className="w-full max-w-lg min-h-screen bg-white shadow-2xl flex flex-col border-x border-slate-200/80">
+      <div className="min-h-screen w-full bg-slate-50 sm:bg-slate-100 flex justify-center">
+        {/* Mobile View Container: Full width on mobile, nicely framed on tablets/desktop */}
+        <div className="w-full sm:max-w-md md:max-w-lg min-h-screen bg-white sm:shadow-2xl flex flex-col sm:border-x border-slate-200/80">
           {/* Mobile App Header */}
-          <header className="h-16 border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-5 bg-white shrink-0 sticky top-0 z-30 shadow-sm">
-            <div className="flex items-center gap-3">
+          <header className="h-16 border-b border-slate-200/80 flex items-center justify-between px-3 sm:px-5 bg-white shrink-0 sticky top-0 z-30 shadow-sm">
+            <div className="flex items-center gap-2.5 sm:gap-3">
               <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
                 <span className="text-white font-black text-lg">S</span>
               </div>
@@ -920,7 +920,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
           <NotificationBanner user={verifiedUser} />
 
           <main 
-            className="flex-1 p-3 sm:p-4 overflow-y-auto bg-slate-50/50 outline-none"
+            className="flex-1 p-2 sm:p-4 overflow-y-auto bg-slate-50/50 outline-none"
             tabIndex={0}
             role="main"
           >

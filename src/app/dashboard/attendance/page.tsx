@@ -1967,7 +1967,7 @@ export default function AttendancePage() {
 
         <Card className="shadow-2xl border-none overflow-hidden bg-white">
           <div className="h-1.5 bg-primary" />
-          <CardHeader className="text-center py-6 relative bg-slate-50/50 border-b border-slate-100">
+          <CardHeader className="text-center py-5 sm:py-6 relative bg-slate-50/50 border-b border-slate-100 px-4">
             <div className="space-y-1">
               <span className="text-[10px] font-black uppercase tracking-[0.25em] text-primary bg-primary/10 px-3 py-1 rounded-full">
                 Gateway Portal
@@ -1980,7 +1980,7 @@ export default function AttendancePage() {
               <LeaveRequestForm />
             </div>
           </CardHeader>
-          <CardContent className="space-y-6 px-8 pb-10 pt-6">
+          <CardContent className="space-y-6 px-4 sm:px-8 pb-8 pt-6">
             {/* Employee Identification Card */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
               <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
@@ -2008,10 +2008,10 @@ export default function AttendancePage() {
             </div>
 
             {/* Live Clock Display */}
-            <div className="py-6 px-10 rounded-[2.5rem] bg-slate-50 text-slate-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-slate-100 max-w-[300px] mx-auto group hover:bg-primary/5 transition-colors" suppressHydrationWarning>
+            <div className="py-6 px-8 sm:px-10 rounded-[2.5rem] bg-slate-50 text-slate-900 flex flex-col items-center justify-center space-y-1 shadow-inner border border-slate-100 max-w-[300px] mx-auto group hover:bg-primary/5 transition-colors" suppressHydrationWarning>
               {currentTime ? (
                 <div className="text-center" suppressHydrationWarning>
-                  <h2 className="text-[55px] font-black tracking-tighter font-mono leading-none text-slate-900" suppressHydrationWarning>{format(currentTime, "HH:mm")}</h2>
+                  <h2 className="text-[50px] sm:text-[55px] font-black tracking-tighter font-mono leading-none text-slate-900" suppressHydrationWarning>{format(currentTime, "HH:mm")}</h2>
                   <p className="text-[11px] font-black text-primary mt-3 flex items-center justify-center gap-1.5 uppercase tracking-[0.2em]" suppressHydrationWarning>{format(currentTime, "dd MMM yyyy")}</p>
                 </div>
               ) : (
@@ -2031,7 +2031,7 @@ export default function AttendancePage() {
             )}
 
             {/* Mark IN & Mark OUT Action Buttons */}
-            <div className="flex gap-4">
+            <div className="flex gap-3 sm:gap-4">
               <Button
                 type="button"
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest",
@@ -2104,7 +2104,7 @@ export default function AttendancePage() {
       </div>
 
       {/* 1. SESSION HISTORY & 2. MONTHLY SUMMARY - STRICTLY FOR LOGGED-IN EMPLOYEE */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* SESSION HISTORY (LAST 45 DAYS ONLY) */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
@@ -2122,75 +2122,77 @@ export default function AttendancePage() {
           </div>
 
           <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
-            <ScrollArea className="h-[430px]">
+            <ScrollArea className="h-[430px] w-full">
               {isLoading && employeeRecords.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 space-y-3">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Syncing Attendance History...</p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader className="bg-slate-50 sticky top-0 z-10">
-                    <TableRow>
-                      <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
-                      <TableHead className="font-black uppercase text-[10px]">Plant / Type</TableHead>
-                      <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
-                      <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">In Address</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Out Address</TableHead>
-                      <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">Remarks</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] text-right pr-6">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employeeRecords.map((r: any) => (
-                      <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
-                        <TableCell className="py-3.5">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-slate-800">{formatDate(r.date)}</span>
-                            <span className="text-[10px] font-semibold text-slate-400 mt-0.5">{format(parseISO(r.date), "EEEE")}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-slate-600">
-                          {r.inPlant && r.inPlant !== "N/A" ? r.inPlant : (r.attendanceType || "N/A")}
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-slate-600">{r.inTime || "--:--"}</TableCell>
-                        <TableCell className="text-xs font-bold text-slate-600">{r.outTime || "--:--"}</TableCell>
-                        <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[140px] truncate" title={r.address}>
-                          {r.address || "N/A"}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[140px] truncate" title={r.addressOut}>
-                          {r.addressOut || "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
-                            {formatHoursToHHMM(r.hours || 0)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-[10px] font-medium text-slate-500 max-w-[130px] truncate" title={r.remark}>
-                          {r.remark || "N/A"}
-                        </TableCell>
-                        <TableCell className="text-right pr-6">
-                          <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap",
-                            r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700 hover:bg-amber-100" :
-                              r.status === 'Open' ? "bg-blue-100 text-blue-700 hover:bg-blue-100" :
-                                r.status === 'Absent' ? "bg-rose-100 text-rose-700 hover:bg-rose-100" :
-                                  r.status === 'Leave' ? "bg-purple-100 text-purple-700 hover:bg-purple-100" :
-                                    (r.status === 'Weekly Off' || r.status === 'Holiday') ? "bg-slate-100 text-slate-700 hover:bg-slate-100" :
-                                      "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
-                          )}>
-                            {r.status === 'Open' ? 'Active Shift' :
-                              r.status === 'Closed' ? 'Completed Shift' :
-                                r.status === 'Auto OUT' ? 'Auto Closed Shift' :
-                                  r.status === 'Leave' ? 'Approved Leave' :
-                                    r.status}
-                          </Badge>
-                        </TableCell>
+                <div className="overflow-x-auto w-full">
+                  <Table className="min-w-[550px] w-full">
+                    <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                      <TableRow>
+                        <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">Plant / Type</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">In Address</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Out Address</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">Remarks</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] text-right pr-4">Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {employeeRecords.map((r: any) => (
+                        <TableRow key={r.id || r._id} className="hover:bg-slate-50/50">
+                          <TableCell className="py-3.5">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-800">{formatDate(r.date)}</span>
+                              <span className="text-[10px] font-semibold text-slate-400 mt-0.5">{format(parseISO(r.date), "EEEE")}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-slate-600">
+                            {r.inPlant && r.inPlant !== "N/A" ? r.inPlant : (r.attendanceType || "N/A")}
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-slate-600">{r.inTime || "--:--"}</TableCell>
+                          <TableCell className="text-xs font-bold text-slate-600">{r.outTime || "--:--"}</TableCell>
+                          <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[140px] truncate" title={r.address}>
+                            {r.address || "N/A"}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-[10px] font-medium text-slate-500 max-w-[140px] truncate" title={r.addressOut}>
+                            {r.addressOut || "N/A"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("font-black text-[10px]", getWorkingHoursColor(r.hours || 0))}>
+                              {formatHoursToHHMM(r.hours || 0)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-[10px] font-medium text-slate-500 max-w-[130px] truncate" title={r.remark}>
+                            {r.remark || "N/A"}
+                          </TableCell>
+                          <TableCell className="text-right pr-4">
+                            <Badge className={cn("text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap",
+                              r.status === 'Auto OUT' ? "bg-amber-100 text-amber-700 hover:bg-amber-100" :
+                                r.status === 'Open' ? "bg-blue-100 text-blue-700 hover:bg-blue-100" :
+                                  r.status === 'Absent' ? "bg-rose-100 text-rose-700 hover:bg-rose-100" :
+                                    r.status === 'Leave' ? "bg-purple-100 text-purple-700 hover:bg-purple-100" :
+                                      (r.status === 'Weekly Off' || r.status === 'Holiday') ? "bg-slate-100 text-slate-700 hover:bg-slate-100" :
+                                        "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
+                            )}>
+                              {r.status === 'Open' ? 'Active Shift' :
+                                r.status === 'Closed' ? 'Completed Shift' :
+                                  r.status === 'Auto OUT' ? 'Auto Closed Shift' :
+                                    r.status === 'Leave' ? 'Approved Leave' :
+                                      r.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
             </ScrollArea>
           </Card>
@@ -2209,26 +2211,28 @@ export default function AttendancePage() {
 
           <div className="space-y-4">
             <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] text-right">Present</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] text-right pr-4">Absent</TableHead>
-                    <TableHead className="font-black uppercase text-[10px] text-right pr-4">Worked</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {monthlySummaries.map((summary, idx) => (
-                    <TableRow key={idx} className="hover:bg-slate-50/50">
-                      <TableCell className="font-bold text-xs text-slate-800 py-3">{summary.monthYear}</TableCell>
-                      <TableCell className="font-black text-xs text-emerald-600 text-right">{summary.present}</TableCell>
-                      <TableCell className="font-black text-xs text-rose-600 text-right pr-4">{summary.absent}</TableCell>
-                      <TableCell className="font-black text-xs text-slate-600 text-right pr-4">{summary.workedHours}</TableCell>
+              <div className="overflow-x-auto w-full">
+                <Table className="w-full">
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-right">Present</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-right pr-4">Absent</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-right pr-4">Worked</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {monthlySummaries.map((summary, idx) => (
+                      <TableRow key={idx} className="hover:bg-slate-50/50">
+                        <TableCell className="font-bold text-xs text-slate-800 py-3">{summary.monthYear}</TableCell>
+                        <TableCell className="font-black text-xs text-emerald-600 text-right">{summary.present}</TableCell>
+                        <TableCell className="font-black text-xs text-rose-600 text-right pr-4">{summary.absent}</TableCell>
+                        <TableCell className="font-black text-xs text-slate-600 text-right pr-4">{summary.workedHours}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </Card>
           </div>
         </div>
@@ -2270,64 +2274,66 @@ export default function AttendancePage() {
         )}
 
         <Card className="rounded-[1.5rem] overflow-hidden shadow-sm border-slate-200 bg-white">
-          <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow>
-                <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Total Leave</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Leave Dates</TableHead>
-                <TableHead className="font-black uppercase text-[10px]">Purpose / Type</TableHead>
-                <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Remark</TableHead>
-                <TableHead className="font-black uppercase text-[10px] text-right">Status</TableHead>
-                <TableHead className="font-black uppercase text-[10px] text-right pr-6">Approved By</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {fyMonthWiseLeaves.length === 0 ? (
+          <div className="overflow-x-auto w-full">
+            <Table className="min-w-[550px] w-full">
+              <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    No approved leave records found for current Financial Year ({currentFYInfo.label}).
-                  </TableCell>
+                  <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">Total Leave</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">Leave Dates</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">Purpose / Type</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Remark</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] text-right">Status</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] text-right pr-4">Approved By</TableHead>
                 </TableRow>
-              ) : (
-                fyMonthWiseLeaves.map((group) => (
-                  group.records.map((leave: any, rIdx: number) => (
-                    <TableRow key={`${group.monthKey}-${leave.id || leave._id || rIdx}`} className="hover:bg-slate-50/50">
-                      <TableCell className="font-bold text-xs text-slate-800 py-3.5">
-                        {rIdx === 0 ? (
-                          <span className="font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">
-                            {group.monthLabel}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-[10px] italic pl-2">↳ {group.monthLabel}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs font-black text-emerald-700">
-                        {rIdx === 0 ? `${group.totalLeaveDays} Leave` : `${leave.daysInThisMonth || leave.days} Day(s)`}
-                      </TableCell>
-                      <TableCell className="text-xs font-bold text-slate-600">
-                        {formatDate(leave.fromDate)} – {formatDate(leave.toDate)}
-                      </TableCell>
-                      <TableCell className="text-xs font-bold text-slate-700">
-                        {leave.purpose || "Leave"}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell text-[11px] font-medium text-slate-500 max-w-[180px] truncate" title={leave.remark}>
-                        {leave.remark || "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap">
-                          Approved
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-[10px] font-bold text-slate-600 uppercase font-mono text-right pr-6">
-                        {leave.processedByUserId || leave.approvedBy || "Admin"}
-                      </TableCell>
-                    </TableRow>
+              </TableHeader>
+              <TableBody>
+                {fyMonthWiseLeaves.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      No approved leave records found for current Financial Year ({currentFYInfo.label}).
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  fyMonthWiseLeaves.map((group) => (
+                    group.records.map((leave: any, rIdx: number) => (
+                      <TableRow key={`${group.monthKey}-${leave.id || leave._id || rIdx}`} className="hover:bg-slate-50/50">
+                        <TableCell className="font-bold text-xs text-slate-800 py-3.5">
+                          {rIdx === 0 ? (
+                            <span className="font-black text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">
+                              {group.monthLabel}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px] italic pl-2">↳ {group.monthLabel}</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs font-black text-emerald-700">
+                          {rIdx === 0 ? `${group.totalLeaveDays} Leave` : `${leave.daysInThisMonth || leave.days} Day(s)`}
+                        </TableCell>
+                        <TableCell className="text-xs font-bold text-slate-600">
+                          {formatDate(leave.fromDate)} – {formatDate(leave.toDate)}
+                        </TableCell>
+                        <TableCell className="text-xs font-bold text-slate-700">
+                          {leave.purpose || "Leave"}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-[11px] font-medium text-slate-500 max-w-[180px] truncate" title={leave.remark}>
+                          {leave.remark || "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap">
+                            Approved
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-[10px] font-bold text-slate-600 uppercase font-mono text-right pr-4">
+                          {leave.processedByUserId || leave.approvedBy || "Admin"}
+                        </TableCell>
+                      </TableRow>
+                    ))
                   ))
-                ))
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       </div>
 

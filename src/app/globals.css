@@ -45,8 +45,19 @@
   * {
     @apply border-border;
   }
+  html {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+  }
   body {
     @apply bg-background text-foreground font-body;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    touch-action: manipulation;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
