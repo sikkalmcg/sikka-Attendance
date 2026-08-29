@@ -24,7 +24,7 @@ import {
   User,
   Filter,
 } from "lucide-react";
-import { cn, formatDate, getWorkingHoursColor, formatHoursToHHMM, parseDateTime } from "@/lib/utils";
+import { cn, formatDate, getWorkingHoursColor, formatHoursToHHMM, parseDateTime, isEmployeeActiveOnDate } from "@/lib/utils";
 import {
   Table,
   TableHeader,
@@ -51,7 +51,8 @@ import {
   differenceInCalendarDays,
   isBefore,
   startOfToday,
-  startOfDay
+  startOfDay,
+  differenceInCalendarMonths
 } from "date-fns";
 import {
   Dialog,
@@ -439,13 +440,13 @@ export default function AttendancePage() {
     return verifiedUser?.fullName || verifiedUser?.name || verifiedUser?.username || "N/A";
   }, [verifiedUser]);
 
-  // Rolling 45-day date bounds based on current date
-  const dateWindow45Days = useMemo(() => {
+  // Rolling 62-day date bounds based on current date
+  const dateWindow62Days = useMemo(() => {
     const now = currentTime || getISTTime();
     const todayStr = format(now, "yyyy-MM-dd");
-    const fortyFiveDaysAgo = addDays(now, -45);
-    const startDateStr = format(fortyFiveDaysAgo, "yyyy-MM-dd");
-    return { now, todayStr, fortyFiveDaysAgo, startDateStr };
+    const sixtyTwoDaysAgo = addDays(now, -62);
+    const startDateStr = format(sixtyTwoDaysAgo, "yyyy-MM-dd");
+    return { now, todayStr, sixtyTwoDaysAgo, startDateStr };
   }, [currentTime]);
 
   // Current Financial Year bounds (1-Apr to 31-Mar)
@@ -518,11 +519,11 @@ export default function AttendancePage() {
     return set;
   }, [effectiveEmployeeId, effectiveEmployeeName, verifiedUser, employees]);
 
-  // 1. SESSION HISTORY: Current date back to previous 45 days only, strictly for logged-in employee
+  // 1. SESSION HISTORY: Current date back to previous 62 days, strictly for logged-in employee
   const employeeRecords = useMemo(() => {
     if (myIdentitySet.size === 0) return [];
 
-    const { now, todayStr, startDateStr } = dateWindow45Days;
+    const { now, todayStr, startDateStr } = dateWindow62Days;
 
     const myRecords = (attendanceRecords || []).filter(r => {
       if (!r) return false;
@@ -605,14 +606,23 @@ export default function AttendancePage() {
     }
 
     return fullHistory;
-  }, [attendanceRecords, myIdentitySet, holidays, leaveRequests, effectiveEmployeeName, dateWindow45Days]);
+  }, [attendanceRecords, myIdentitySet, holidays, leaveRequests, effectiveEmployeeName, dateWindow62Days]);
 
-  // 2. MONTHLY SUMMARY: Current Month and Previous Month ONLY, strictly for logged-in employee
+  // 2. MONTHLY SUMMARY: Derived directly from Page Approvals → Active Tab → Attendance data source
+  // Filtered strictly for the currently authenticated logged-in employee.
   const monthlySummaries = useMemo(() => {
     const now = currentTime || getISTTime();
     if (myIdentitySet.size === 0) return [];
 
-    const approvedLeaveDates = new Set<string>();
+    // Find the logged-in employee record for joining/inactive date checking (same as Approvals)
+    const currentEmp = (employees || []).find((e: any) => {
+      const eId = String(e.employeeId || e.id || (e as any)._id || "").trim().toUpperCase();
+      const eName = String(e.name || (e as any).fullName || "").trim().toUpperCase();
+      return myIdentitySet.has(eId) || (eName && myIdentitySet.has(eName));
+    });
+
+    // Approved leaves from leaveRequests matching logged-in employee
+    const approvedLeavesMap = new Map<string, any>();
     (leaveRequests || []).forEach((l: any) => {
       const lEmpId = String(l.employeeId || (l as any).employeeID || "").trim().toUpperCase();
       const lEmpName = String(l.employeeName || "").trim().toUpperCase();
@@ -620,38 +630,54 @@ export default function AttendancePage() {
       if (isMatch && String(l.status).toUpperCase() === 'APPROVED') {
         if (l.fromDate && l.toDate) {
           try {
-            let cur = startOfDay(parseISO(l.fromDate));
+            const start = startOfDay(parseISO(l.fromDate));
             const end = startOfDay(parseISO(l.toDate));
-            while (!isAfter(cur, end)) {
-              approvedLeaveDates.add(format(cur, "yyyy-MM-dd"));
-              cur = addDays(cur, 1);
+            if (isValid(start) && isValid(end)) {
+              let cur = start;
+              while (!isAfter(cur, end)) {
+                approvedLeavesMap.set(format(cur, "yyyy-MM-dd"), l);
+                cur = addDays(cur, 1);
+              }
             }
           } catch (e) { }
         }
       }
     });
 
+    // Active attendance punches for logged-in employee from attendance collection (Approvals Active source)
     const myPunches = (attendanceRecords || []).filter((r: any) => {
       if (!r) return false;
       const recEmpId = String(r.employeeId || '').trim().toUpperCase();
       const recEmpName = String(r.employeeName || '').trim().toUpperCase();
-      const isMatch = myIdentitySet.has(recEmpId) || (recEmpName && myIdentitySet.has(recEmpName));
-      return isMatch && r.date && r.inTime;
+      return myIdentitySet.has(recEmpId) || (recEmpName && myIdentitySet.has(recEmpName));
     });
 
-    const presentDatesSet = new Set<string>();
-    const minutesByMonth = new Map<string, number>();
-
+    const punchesByDate = new Map<string, any>();
     myPunches.forEach((r: any) => {
-      presentDatesSet.add(r.date);
-      if (typeof r.hours === "number" && r.hours > 0) {
-        const mKey = r.date.substring(0, 7);
-        minutesByMonth.set(mKey, (minutesByMonth.get(mKey) || 0) + Math.round(r.hours * 60));
-      }
+      if (r.date) punchesByDate.set(r.date, r);
     });
+
+    // Status calculation identical to Page Approvals Active Tab
+    const getApprovalsCalculatedStatus = (dateStr: string, record: any) => {
+      const isSun = isSunday(parseISO(dateStr));
+      const customHoliday = (holidays || []).find((h: any) => h.date === dateStr && !h.auto);
+      const approvedLeave = approvedLeavesMap.get(dateStr);
+
+      if (record && record.inTime) {
+        if (isSun) return "Present on Weekly Off";
+        if (customHoliday) return "Present on Holiday";
+        return "Present";
+      }
+
+      if (approvedLeave) return "Absent on Leave";
+      if (isSun) return "Weekly Off";
+      if (customHoliday) return "Holiday";
+
+      return "Absent";
+    };
 
     const result = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 3; i++) {
       const mDate = subMonths(now, i);
       const mKey = format(mDate, "yyyy-MM");
       const monthYearLabel = format(mDate, "MMM-yyyy");
@@ -660,27 +686,44 @@ export default function AttendancePage() {
 
       let totalPresent = 0;
       let totalAbsent = 0;
+      let totalMinutes = 0;
 
       let cur = startOfDay(start);
       const endDay = startOfDay(end);
 
       while (!isAfter(cur, endDay)) {
         const dStr = format(cur, "yyyy-MM-dd");
-        const isSun = isSunday(cur);
-        const isHoliday = holidays.some((h: any) => h.date === dStr);
-        const isLeave = approvedLeaveDates.has(dStr);
-        const isPresent = presentDatesSet.has(dStr);
 
-        if (isPresent) {
+        // Respect employee join date and inactive date if defined
+        if (currentEmp && !isEmployeeActiveOnDate(currentEmp, dStr)) {
+          cur = addDays(cur, 1);
+          continue;
+        }
+
+        const punchRec = punchesByDate.get(dStr);
+        const status = getApprovalsCalculatedStatus(dStr, punchRec);
+
+        if (status === "Present" || status === "Present on Weekly Off" || status === "Present on Holiday") {
           totalPresent++;
-        } else if (!isSun && !isHoliday && !isLeave) {
+          if (punchRec) {
+            let hours = typeof punchRec.hours === "number" ? punchRec.hours : 0;
+            // Auto checkout rule if unclosed shift and >16h
+            if (!punchRec.outTime && punchRec.inTime) {
+              const inDT = punchRec.inDateTime ? parseISO(punchRec.inDateTime) : (punchRec.inDate && punchRec.inTime ? parseDateTime(punchRec.inDate, punchRec.inTime) : null);
+              if (inDT && isValid(inDT)) {
+                const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+                if (diffHours >= 16) hours = 16.0;
+              }
+            }
+            totalMinutes += Math.round(hours * 60);
+          }
+        } else if (status === "Absent") {
           totalAbsent++;
         }
 
         cur = addDays(cur, 1);
       }
 
-      const totalMinutes = minutesByMonth.get(mKey) || 0;
       const totalHoursFloat = totalMinutes / 60;
 
       result.push({
@@ -694,7 +737,7 @@ export default function AttendancePage() {
     }
 
     return result;
-  }, [attendanceRecords, myIdentitySet, holidays, leaveRequests, currentTime]);
+  }, [attendanceRecords, myIdentitySet, employees, holidays, leaveRequests, currentTime]);
 
   // 3. LEAVE HISTORY: Current Financial Year (FY) only, Approved records only, grouped month-wise
   const fyMonthWiseLeaves = useMemo(() => {
@@ -2284,7 +2327,7 @@ export default function AttendancePage() {
 
       {/* 1. SESSION HISTORY & 2. MONTHLY SUMMARY - STRICTLY FOR LOGGED-IN EMPLOYEE */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* SESSION HISTORY (LAST 45 DAYS ONLY) */}
+        {/* SESSION HISTORY (LAST 62 DAYS) */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
             <div>
@@ -2292,11 +2335,11 @@ export default function AttendancePage() {
                 <History className="w-5 h-5 text-primary" /> My Attendance History
               </h3>
               <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                Displaying your previous 45 days ({formatDate(dateWindow45Days.startDateStr)} to {formatDate(dateWindow45Days.todayStr)})
+                Displaying your previous 62 days ({formatDate(dateWindow62Days.startDateStr)} to {formatDate(dateWindow62Days.todayStr)})
               </p>
             </div>
             <Badge variant="outline" className="text-[10px] font-black uppercase px-2.5 py-1 text-slate-600 border-slate-300 w-fit bg-white">
-              Rolling 45-Day Period
+              Rolling 62-Day Period
             </Badge>
           </div>
 
@@ -2377,14 +2420,14 @@ export default function AttendancePage() {
           </Card>
         </div>
 
-        {/* MONTHLY SUMMARY (CURRENT & PREVIOUS MONTH ONLY) */}
+        {/* MONTHLY SUMMARY (CURRENT & PREVIOUS 2 MONTHS) */}
         <div className="lg:col-span-1 space-y-4">
           <div className="pt-2">
             <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
               <Calendar className="w-5 h-5 text-primary" /> Monthly Summary
             </h3>
             <p className="text-xs font-semibold text-slate-500 mt-0.5">
-              Current & Previous Month Only
+              Current & Previous 2 Months
             </p>
           </div>
 

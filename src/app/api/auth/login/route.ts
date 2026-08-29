@@ -195,9 +195,9 @@ export async function POST(req: Request) {
       { message: 'Access Denied: Invalid role for this endpoint.' },
       { status: 403 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Auth/Login Error:', error);
-    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ message: 'Internal Server Error', error: error?.message || String(error) }, { status: 500 });
   }
 }
 

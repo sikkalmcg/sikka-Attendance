@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { format } from "date-fns";
 import { getDb } from "@/lib/mongodb";
 import { evaluateShiftAttendanceReminders, getISTDate } from "@/lib/shift-notification-service";
 import { sendFCMPushNotification } from "@/lib/fcm-service";
@@ -25,17 +26,23 @@ async function handleShiftReminders() {
       return NextResponse.json({ success: true, evaluatedEmployees: 0, newRemindersCount: 0, newReminders: [] });
     }
 
-    // 1. Fetch relevant collections with catch fallback
+    const currentIST = getISTDate();
+    const nowIso = currentIST.toISOString();
+    const fourteenDaysAgoStr = format(new Date(currentIST.getTime() - 14 * 24 * 60 * 60 * 1000), "yyyy-MM-dd");
+    const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // 1. Fetch relevant collections with fast indexed range queries
     const [employeesRaw, attendanceRaw, holidaysRaw, leaveRequestsRaw, existingNotificationsRaw] = await Promise.all([
       db.collection("employees").find({ active: { $ne: false } }).toArray().catch(() => []),
-      db.collection("attendance").find({}).toArray().catch(() => []),
+      db.collection("attendance").find({ date: { $gte: fourteenDaysAgoStr } }).toArray().catch(() => []),
       db.collection("holidays").find({}).toArray().catch(() => []),
       db.collection("leaveRequests").find({ status: "APPROVED" }).toArray().catch(() => []),
       db.collection("notifications").find({
         $or: [
           { type: { $in: ["DAY_MARK_IN_REMINDER", "DAY_MARK_OUT_REMINDER", "NIGHT_MARK_IN_REMINDER", "NIGHT_MARK_OUT_REMINDER", "SHIFT_REMINDER", "DAY_IN_REMINDER", "DAY_OUT_REMINDER", "NIGHT_IN_REMINDER", "NIGHT_OUT_REMINDER"] } },
           { notification_type: { $in: ["DAY_MARK_IN_REMINDER", "DAY_MARK_OUT_REMINDER", "NIGHT_MARK_IN_REMINDER", "NIGHT_MARK_OUT_REMINDER", "SHIFT_REMINDER", "DAY_IN_REMINDER", "DAY_OUT_REMINDER", "NIGHT_IN_REMINDER", "NIGHT_OUT_REMINDER"] } },
-        ]
+        ],
+        createdAt: { $gte: sevenDaysAgoDate }
       }).toArray().catch(() => []),
     ]);
 
@@ -64,9 +71,6 @@ async function handleShiftReminders() {
       id: n.id || n._id?.toString(),
       dedupeKey: n.dedupeKey,
     }));
-
-    const currentIST = getISTDate();
-    const nowIso = currentIST.toISOString();
 
     // 2. Evaluate shift reminders based on exact business logic & time thresholds
     const remindersToCreate = evaluateShiftAttendanceReminders({

@@ -31,30 +31,18 @@ export async function GET(req: Request) {
     const isAdmin = ADMIN_ROLES.includes(sessionRole);
     const sessionEmpId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || '';
 
-    // Cache key — include empId so different users get their own cached slice
-    const cacheKey = isAdmin ? 'admin' : sessionEmpId;
-
-    // Return from in-memory cache if available & fresh
-    if (!forceRefresh) {
-      const cached = getCachedBootstrapData(cacheKey);
-      if (cached) {
-        return NextResponse.json(cached, {
-          headers: {
-            'Cache-Control': 'no-cache, must-revalidate',
-            'X-Cache-Status': 'HIT',
-          },
-        });
-      }
-    }
-
     const db = await getDb();
     if (!db) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
-    // Build notification query based on role
+    // Build employee-specific queries if authenticated as standard employee
     let notificationQuery: any = {};
+    let attendanceQuery: any = {};
+    const targetIds = new Set<string>();
+
     if (!isAdmin && sessionEmpId) {
+      targetIds.add(sessionEmpId);
       // Resolve all aliases for this employee
       const matchedEmp = await db.collection('employees').findOne({
         $or: [
@@ -68,8 +56,6 @@ export async function GET(req: Request) {
         ],
       }).catch(() => null);
 
-      const targetIds = new Set<string>();
-      targetIds.add(sessionEmpId);
       if (matchedEmp) {
         if (matchedEmp.employeeId) targetIds.add(matchedEmp.employeeId);
         if (matchedEmp.id) targetIds.add(String(matchedEmp.id));
@@ -78,11 +64,23 @@ export async function GET(req: Request) {
         if (matchedEmp.aadhaar) targetIds.add(matchedEmp.aadhaar);
         if (matchedEmp.aadhaarNumber) targetIds.add(matchedEmp.aadhaarNumber);
         if (matchedEmp.username) targetIds.add(matchedEmp.username);
+        if (matchedEmp.name) targetIds.add(matchedEmp.name);
+        if ((matchedEmp as any).fullName) targetIds.add((matchedEmp as any).fullName);
       }
-      // STRICT: only this employee's notifications (Section 5)
-      notificationQuery = { employeeId: { $in: Array.from(targetIds).filter(Boolean) } };
+
+      const empIds = Array.from(targetIds).filter(Boolean);
+
+      // STRICT: only this employee's notifications
+      notificationQuery = { employeeId: { $in: empIds } };
+
+      // Build attendance query: employee gets complete personal history
+      attendanceQuery = {
+        $or: [
+          { employeeId: { $in: empIds } },
+          { employeeName: { $in: empIds } },
+        ]
+      };
     }
-    // For admin: notificationQuery = {} → returns all notifications
 
     // Fetch all collections in parallel
     const [
@@ -98,15 +96,15 @@ export async function GET(req: Request) {
       payroll,
     ] = await Promise.all([
       db.collection('employees').find({}).toArray().catch(() => []),
-      db.collection('attendance').find({}).sort({ date: -1 }).limit(1200).toArray().catch(() => []),
+      db.collection('attendance').find(attendanceQuery).sort({ date: -1 }).limit(isAdmin ? 3000 : 1000).toArray().catch(() => []),
       db.collection('plants').find({}).toArray().catch(() => []),
       db.collection('holidays').find({}).toArray().catch(() => []),
-      db.collection('leaveRequests').find({}).sort({ createdAt: -1, fromDate: -1 }).limit(300).toArray().catch(() => []),
+      db.collection('leaveRequests').find({}).sort({ createdAt: -1, fromDate: -1 }).limit(isAdmin ? 500 : 200).toArray().catch(() => []),
       db.collection('notifications').find(notificationQuery).sort({ createdAt: -1, timestamp: -1, _id: -1 }).limit(isAdmin ? 200 : 100).toArray().catch(() => []),
-      db.collection('vouchers').find({}).sort({ date: -1 }).limit(300).toArray().catch(() => []),
+      db.collection('vouchers').find({}).sort({ date: -1 }).limit(isAdmin ? 500 : 100).toArray().catch(() => []),
       db.collection('firms').find({}).toArray().catch(() => []),
       db.collection('users').find({}).toArray().catch(() => []),
-      db.collection('payroll').find({}).sort({ createdAt: -1 }).limit(300).toArray().catch(() => []),
+      db.collection('payroll').find({}).sort({ createdAt: -1 }).limit(isAdmin ? 500 : 100).toArray().catch(() => []),
     ]);
 
     const payload = {
@@ -121,8 +119,6 @@ export async function GET(req: Request) {
       users,
       payroll,
     };
-
-    setCachedBootstrapData(payload, cacheKey);
 
     return NextResponse.json(payload, {
       headers: {

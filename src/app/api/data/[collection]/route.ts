@@ -23,7 +23,7 @@ export async function GET(
     }
 
     if (collection === 'attendance') {
-      const data = await db.collection(collection).find({}).sort({ date: -1, inDateTime: -1, _id: -1 }).limit(2000).toArray();
+      const data = await db.collection(collection).find({}).sort({ date: -1, inDateTime: -1, _id: -1 }).toArray();
       return NextResponse.json(data);
     }
 
@@ -34,7 +34,7 @@ export async function GET(
       throw error;
     }
     console.error(`GET Error in ${params.collection}:`, error);
-    return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch data", details: error?.message || String(error) }, { status: 500 });
   }
 }
 

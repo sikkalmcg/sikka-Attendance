@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   Users, 
@@ -44,16 +45,40 @@ const getISTTime = () => {
 };
 
 export default function DashboardHome() {
-  const { employees = [], attendanceRecords = [], holidays = [], plants = [], verifiedUser, isLoading } = useData();
+  const { employees = [], attendanceRecords = [], holidays = [], plants = [], verifiedUser, currentUser, isLoading } = useData();
+  const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [viewMode, setViewMode] = useState<null | 'present' | 'absent' | 'employees'>(null);
   const [todayStr, setTodayStr] = useState("");
   const [selectedPlantId, setSelectedPlantId] = useState("all");
 
+  const isEmployee = useMemo(() => {
+    const roleStr = String(verifiedUser?.role || currentUser?.role || '').toUpperCase();
+    if (roleStr === 'EMPLOYEE') return true;
+    if (Array.isArray(verifiedUser?.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) return true;
+    if (verifiedUser?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(roleStr)) return true;
+    return false;
+  }, [verifiedUser, currentUser]);
+
+  useEffect(() => {
+    if (isEmployee) {
+      router.replace("/dashboard/attendance");
+    }
+  }, [isEmployee, router]);
+
   useEffect(() => {
     setIsMounted(true);
     setTodayStr(format(getISTTime(), 'yyyy-MM-dd'));
   }, []);
+
+  if (isEmployee) {
+    return (
+      <div className="h-[60vh] w-full flex flex-col items-center justify-center space-y-3">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-xs font-black uppercase tracking-wider text-slate-500">Redirecting to Mark Attendance...</p>
+      </div>
+    );
+  }
 
   const userAssignedPlantIds = useMemo(() => {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;

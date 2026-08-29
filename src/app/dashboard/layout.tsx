@@ -80,7 +80,10 @@ function NotificationBell() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
-  const isEmployee = String(verifiedUser?.role || '').toUpperCase() === 'EMPLOYEE';
+  const userRoleUpper = String(verifiedUser?.role || '').toUpperCase();
+  const isEmployee = userRoleUpper === 'EMPLOYEE' ||
+    (Array.isArray(verifiedUser?.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
+    (!!verifiedUser?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(userRoleUpper));
 
   // Gather all unique identifiers for the currently logged-in user
   const userIdentifiers = useMemo(() => {
@@ -793,6 +796,9 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     if (!verifiedUser) return;
 
     const userRole = String(verifiedUser.role || '').toUpperCase();
+    const isEmployeeRole = userRole === 'EMPLOYEE' ||
+      (Array.isArray(verifiedUser.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
+      (!!verifiedUser.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(userRole));
 
     // Mark Attendance is accessible by all authenticated roles (Employee, HR, Admin, Super Admin)
     if (pathname === '/dashboard/attendance') {
@@ -801,9 +807,9 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     }
 
     // Employees navigating anywhere other than /dashboard/attendance get redirected to Mark Attendance
-    if (userRole === 'EMPLOYEE') {
-      setIsAuthorized(true);
-      router.push("/dashboard/attendance");
+    if (isEmployeeRole) {
+      setIsAuthorized(false);
+      router.replace("/dashboard/attendance");
       return;
     }
 
@@ -827,7 +833,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     if (isSuperAdmin) {
       setIsAuthorized(true);
     } else if (requiredPermission) {
-      const hasPerm = (verifiedUser.permissions || []).includes(requiredPermission) || requiredPermission === "Dashboard";
+      const hasPerm = (verifiedUser.permissions || []).includes(requiredPermission) || (requiredPermission === "Dashboard" && !isEmployeeRole);
       setIsAuthorized(hasPerm);
     } else {
       setIsAuthorized(true); 
@@ -891,7 +897,10 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const isEmployee = String(verifiedUser?.role || '').toUpperCase() === 'EMPLOYEE';
+  const userRoleUpper = String(verifiedUser?.role || '').toUpperCase();
+  const isEmployee = userRoleUpper === 'EMPLOYEE' ||
+    (Array.isArray(verifiedUser?.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
+    (!!verifiedUser?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(userRoleUpper));
 
   if (isEmployee) {
     return (
