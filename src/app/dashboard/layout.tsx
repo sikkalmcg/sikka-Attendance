@@ -74,7 +74,7 @@ import { format } from "date-fns";
 import { registerNativeUser, updateNativeBadgeCount, logoutNativeUser, setAppBadge, clearAppBadge, requestAppNotificationPermission } from "@/lib/android-bridge";
 
 function NotificationBell() {
-  const { notifications = [], updateRecord, deleteRecord, refreshData, verifiedUser } = useData();
+  const { notifications = [], employees = [], updateRecord, deleteRecord, refreshData, verifiedUser } = useData();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -83,7 +83,7 @@ function NotificationBell() {
   // Gather all unique identifiers for the currently logged-in user
   const userIdentifiers = useMemo(() => {
     if (!verifiedUser) return [];
-    return [
+    const ids: string[] = [
       verifiedUser.employeeId,
       verifiedUser.username,
       verifiedUser.id,
@@ -92,10 +92,31 @@ function NotificationBell() {
       (verifiedUser as any).aadhaarNumber,
       verifiedUser.mobile,
       (verifiedUser as any).mobileNumber
-    ]
-      .filter(Boolean)
-      .map(id => String(id).trim().toUpperCase());
-  }, [verifiedUser]);
+    ].filter(Boolean).map(id => String(id).trim().toUpperCase());
+
+    const loginIdent = String(verifiedUser.username || verifiedUser.employeeId || '').replace(/\s/g, '').toUpperCase();
+    const matchedEmp = (employees || []).find(e => {
+      const empAadhaar = String((e as any).aadhaarNumber || e.aadhaar || '').replace(/\s/g, '').toUpperCase();
+      const empMobile = String((e as any).mobileNumber || e.mobile || '').replace(/\s/g, '').toUpperCase();
+      const empId = String(e.employeeId || e.id || '').replace(/\s/g, '').toUpperCase();
+      return (
+        (empAadhaar && empAadhaar === loginIdent) ||
+        (empMobile && empMobile === loginIdent) ||
+        (empId && empId === loginIdent) ||
+        (empId && ids.includes(empId))
+      );
+    });
+
+    if (matchedEmp) {
+      if (matchedEmp.employeeId) ids.push(String(matchedEmp.employeeId).trim().toUpperCase());
+      if (matchedEmp.id) ids.push(String(matchedEmp.id).trim().toUpperCase());
+      if ((matchedEmp as any)._id) ids.push(String((matchedEmp as any)._id).trim().toUpperCase());
+      if (matchedEmp.aadhaar) ids.push(String(matchedEmp.aadhaar).trim().toUpperCase());
+      if (matchedEmp.mobile) ids.push(String(matchedEmp.mobile).trim().toUpperCase());
+    }
+
+    return Array.from(new Set(ids));
+  }, [verifiedUser, employees]);
 
   // Strict employee filtering:
   // - Employees see their own notifications + global announcements
@@ -104,13 +125,26 @@ function NotificationBell() {
     return (notifications || []).filter((n: any) => {
       if (!n) return false;
       const targetEmpId = String(n.employeeId || '').trim().toUpperCase();
+      const targetEmpName = String(n.employeeName || '').trim().toUpperCase();
+      const userFullName = String(verifiedUser?.fullName || (verifiedUser as any)?.name || '').trim().toUpperCase();
       const notifType = String(n.type || '').toUpperCase();
-      const isEmployeeOnlyNotif = ['MARK_IN', 'MARK_OUT', 'AUTO_OUT', 'SHIFT_REMINDER'].includes(notifType);
+      const isEmployeeOnlyNotif = [
+        'MARK_IN',
+        'MARK_OUT',
+        'AUTO_OUT',
+        'SHIFT_REMINDER',
+        'DAY_IN_REMINDER',
+        'DAY_OUT_REMINDER',
+        'NIGHT_IN_REMINDER',
+        'NIGHT_OUT_REMINDER'
+      ].includes(notifType);
 
       if (isEmployee) {
-        // If notification has a specific employeeId, it MUST match one of this employee's identifiers
+        // If notification has a specific employeeId, it MUST match one of this employee's identifiers or name
         if (targetEmpId && targetEmpId !== "GLOBAL" && targetEmpId !== "ALL" && targetEmpId !== "N/A") {
-          return userIdentifiers.includes(targetEmpId);
+          const isIdMatch = userIdentifiers.includes(targetEmpId);
+          const isNameMatch = Boolean(targetEmpName && userFullName && (targetEmpName === userFullName || userFullName.includes(targetEmpName)));
+          return isIdMatch || isNameMatch;
         }
         // General/broadcast notification
         return true;
@@ -131,9 +165,12 @@ function NotificationBell() {
         return true;
       }
     }).sort((a: any, b: any) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (timeA && timeB && timeA !== timeB) return timeB - timeA;
       return (b.timestamp || "").localeCompare(a.timestamp || "");
     });
-  }, [notifications, userIdentifiers, isEmployee, verifiedUser?.role]);
+  }, [notifications, userIdentifiers, isEmployee, verifiedUser?.role, verifiedUser?.fullName]);
 
   // Red badge reflects UNREAD notifications only
   const unreadCount = useMemo(() => {

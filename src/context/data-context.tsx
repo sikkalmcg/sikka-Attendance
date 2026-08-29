@@ -155,11 +155,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const syncNotifications = async () => {
       try {
-        let notifUrl = '/api/data/notifications';
-        if (currentUserRole === 'EMPLOYEE' && currentUserUsername) {
-          notifUrl = `/api/data/notifications?employeeId=${encodeURIComponent(currentUserUsername)}`;
-        }
-        const res = await fetch(notifUrl);
+        const res = await fetch('/api/data/notifications');
         if (res.ok) {
           const json = await res.json();
           const list = Array.isArray(json) ? json : (json?.data || []);

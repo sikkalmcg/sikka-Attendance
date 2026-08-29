@@ -18,16 +18,41 @@ export async function GET(
     if (collection === 'notifications') {
       const { searchParams } = new URL(req.url);
       const employeeId = searchParams.get('employeeId');
-      const query: any = {};
-      if (employeeId) {
-        query.$or = [
-          { employeeId },
-          { employeeId: { $exists: false } },
-          { employeeId: null },
-          { employeeId: "" }
-        ];
+      let query: any = {};
+
+      if (employeeId && employeeId !== 'ALL' && employeeId !== 'undefined' && employeeId !== 'null') {
+        const matchedEmp = await db.collection('employees').findOne({
+          $or: [
+            { employeeId },
+            { username: employeeId },
+            { mobile: employeeId },
+            { mobileNumber: employeeId },
+            { aadhaar: employeeId },
+            { aadhaarNumber: employeeId },
+            { id: employeeId },
+          ]
+        }).catch(() => null);
+
+        const targetIds: string[] = [employeeId, 'GLOBAL', 'ALL', 'N/A', ''];
+        if (matchedEmp) {
+          if (matchedEmp.employeeId) targetIds.push(matchedEmp.employeeId);
+          if (matchedEmp.id) targetIds.push(matchedEmp.id);
+          if (matchedEmp.mobile) targetIds.push(matchedEmp.mobile);
+          if (matchedEmp.aadhaar) targetIds.push(matchedEmp.aadhaar);
+        }
+
+        query = {
+          $or: [
+            { employeeId: { $in: targetIds } },
+            { employeeId: { $exists: false } },
+            { employeeId: null },
+            { employeeId: "" },
+            { targetRole: { $in: ["EMPLOYEE", "ALL", "GLOBAL"] } }
+          ]
+        };
       }
-      const data = await db.collection(collection).find(query).sort({ timestamp: -1, _id: -1 }).toArray();
+
+      const data = await db.collection(collection).find(query).sort({ createdAt: -1, timestamp: -1, _id: -1 }).toArray();
       return NextResponse.json(data);
     }
 
