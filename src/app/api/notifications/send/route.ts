@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
-import { sendFCMPushNotification } from '@/lib/fcm-service';
+import { sendFCMPushNotificationToMany } from '@/lib/fcm-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,27 +47,40 @@ export async function POST(req: Request) {
     const now = new Date();
     const nowIso = now.toISOString();
 
-    const createdNotifications: any[] = [];
+    // 3. Deduplicate selected IDs
     const uniqueEmpIds = Array.from(new Set(employeeIds.map((id: string) => String(id).trim()).filter(Boolean)));
 
+    // 4. Resolve all employee details from DB in one query
+    const employeeRecords = await db.collection('employees').find({
+      $or: [
+        { employeeId: { $in: uniqueEmpIds } },
+        { id: { $in: uniqueEmpIds } },
+        { mobile: { $in: uniqueEmpIds } },
+        { mobileNumber: { $in: uniqueEmpIds } },
+        { username: { $in: uniqueEmpIds } },
+      ],
+    }).toArray().catch(() => []);
+
+    // Build a map for quick lookup: rawId → employee record
+    const empByIdMap = new Map<string, any>();
+    for (const emp of employeeRecords) {
+      const aliases = [emp.employeeId, emp.id, emp.mobile, emp.mobileNumber, emp.username].filter(Boolean);
+      for (const alias of aliases) {
+        empByIdMap.set(String(alias).trim(), emp);
+      }
+    }
+
+    // 5. Insert one notification record per selected employee (for the in-app bell)
+    const createdNotifications: any[] = [];
+    const insertedIds: string[] = [];
+
     for (const rawEmpId of uniqueEmpIds) {
-      // Find matching employee details from DB
-      const emp = await db.collection('employees').findOne({
-        $or: [
-          { employeeId: rawEmpId },
-          { id: rawEmpId },
-          { mobile: rawEmpId },
-          { mobileNumber: rawEmpId },
-          { aadhaar: rawEmpId },
-          { aadhaarNumber: rawEmpId },
-          { username: rawEmpId },
-        ],
-      }).catch(() => null);
-
+      const emp = empByIdMap.get(rawEmpId);
       const targetEmpId = emp?.employeeId || rawEmpId;
-      const targetEmpName = emp ? (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()) : rawEmpId;
+      const targetEmpName = emp
+        ? (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim())
+        : rawEmpId;
 
-      // 3. Step 1: Create notification record in MongoDB (Section 10)
       const notifDoc = {
         employeeId: targetEmpId,
         employeeName: targetEmpName,
@@ -91,66 +104,7 @@ export async function POST(req: Request) {
 
       const insertResult = await db.collection('notifications').insertOne(notifDoc);
       const insertedId = insertResult.insertedId.toString();
-
-      // 4. Step 2 & 3: Find employee device tokens & Send FCM push notification (Section 2, 9, 10, 11)
-      try {
-        const pushRes = await sendFCMPushNotification({
-          notificationId: insertedId,
-          title: title || 'New Notification',
-          message: cleanMessage,
-          type: 'CUSTOM_NOTIFICATION',
-          employeeId: targetEmpId,
-          targetRole: 'EMPLOYEE',
-          deepLink: '/dashboard/attendance',
-          data: {
-            notificationId: insertedId,
-            senderUserId: finalSenderId,
-            senderUserName: finalSenderName,
-            dateTime: nowIso,
-          },
-        });
-
-        // 5. Step 4: Update push status in MongoDB
-        if (pushRes.success && pushRes.successCount > 0) {
-          await db.collection('notifications').updateOne(
-            { _id: insertResult.insertedId },
-            {
-              $set: {
-                pushSent: true,
-                pushSentAt: new Date().toISOString(),
-                status: 'sent',
-                pushError: null,
-                updatedAt: new Date().toISOString(),
-              },
-            }
-          );
-        } else {
-          await db.collection('notifications').updateOne(
-            { _id: insertResult.insertedId },
-            {
-              $set: {
-                pushSent: false,
-                status: 'failed',
-                pushError: pushRes.error || (pushRes.totalTokens === 0 ? 'No active device tokens found' : 'FCM delivery failed'),
-                updatedAt: new Date().toISOString(),
-              },
-            }
-          );
-        }
-      } catch (pushErr: any) {
-        console.warn(`Push dispatch exception for employee ${targetEmpId}:`, pushErr);
-        await db.collection('notifications').updateOne(
-          { _id: insertResult.insertedId },
-          {
-            $set: {
-              pushSent: false,
-              status: 'failed',
-              pushError: pushErr?.message || 'Push dispatch exception',
-              updatedAt: new Date().toISOString(),
-            },
-          }
-        );
-      }
+      insertedIds.push(insertedId);
 
       createdNotifications.push({
         id: insertedId,
@@ -159,10 +113,60 @@ export async function POST(req: Request) {
       });
     }
 
+    // 6. Dispatch push to ALL selected employees in ONE batch call
+    //    This fetches all device tokens in a single MongoDB query and sends to all devices.
+    const pushBatchResult = await sendFCMPushNotificationToMany(uniqueEmpIds, {
+      title: title || 'New Notification',
+      message: cleanMessage,
+      type: 'CUSTOM_NOTIFICATION',
+      deepLink: '/dashboard/notifications',
+      data: {
+        senderUserId: finalSenderId,
+        senderUserName: finalSenderName,
+        dateTime: nowIso,
+      },
+    });
+
+    // 7. Update push delivery status for each notification record
+    const pushSuccessEmpIds = new Set(
+      Object.entries(pushBatchResult.perEmployee)
+        .filter(([, status]) => status === 'sent')
+        .map(([id]) => id)
+    );
+
+    for (const notif of createdNotifications) {
+      const pushDelivered = pushSuccessEmpIds.has(notif.employeeId);
+      await db.collection('notifications').updateOne(
+        { _id: { $exists: true }, employeeId: notif.employeeId, createdAt: nowIso },
+        {
+          $set: {
+            pushSent: pushDelivered,
+            pushSentAt: pushDelivered ? new Date().toISOString() : null,
+            status: pushDelivered ? 'sent' : 'saved',
+            updatedAt: new Date().toISOString(),
+          },
+        }
+      ).catch(() => {});
+    }
+
+    const withPushCount = pushSuccessEmpIds.size;
+    const withoutPushCount = uniqueEmpIds.length - withPushCount;
+
+    let responseMessage = `Notification sent to ${createdNotifications.length} employee${createdNotifications.length > 1 ? 's' : ''}.`;
+    if (withPushCount > 0 && withoutPushCount > 0) {
+      responseMessage += ` Push delivered to ${withPushCount} device(s). ${withoutPushCount} employee(s) will see it when they open the app.`;
+    } else if (withPushCount === uniqueEmpIds.length) {
+      responseMessage += ` Push notification delivered to all devices.`;
+    } else if (withPushCount === 0) {
+      responseMessage += ` Notification saved — employees will see it when they open the app.`;
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Notification sent successfully to ${createdNotifications.length} employee${createdNotifications.length > 1 ? 's' : ''}.`,
+      message: responseMessage,
       count: createdNotifications.length,
+      pushDelivered: withPushCount,
+      pushPending: withoutPushCount,
       records: createdNotifications,
     });
   } catch (error: any) {

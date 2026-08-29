@@ -4,8 +4,9 @@ import { getDb } from '@/lib/mongodb';
 export interface FCMNotificationPayload {
   title: string;
   message: string;
-  type: string; // 'CUSTOM_NOTIFICATION' | 'SHIFT_REMINDER' | 'MARK_IN' | 'MARK_OUT' | string
+  type: string;
   employeeId?: string;
+  employeeIds?: string[];   // ← NEW: batch send to multiple employees at once
   targetRole?: string;
   notificationId?: string;
   eventId?: string;
@@ -318,5 +319,215 @@ async function logNotificationAudit(db: any, logData: any) {
     });
   } catch (e) {
     console.warn('Failed to insert into notification_logs:', e);
+  }
+}
+
+/**
+ * Batch Push: Send the SAME notification to MULTIPLE employees at once.
+ *
+ * Fetches ALL device tokens for the provided employee IDs in a SINGLE
+ * MongoDB query, then dispatches Web-Push to every registered device.
+ *
+ * This is the correct function to call from /api/notifications/send
+ * so that all selected employees receive the push notification.
+ */
+export async function sendFCMPushNotificationToMany(
+  employeeIds: string[],
+  payload: Omit<FCMNotificationPayload, 'employeeId' | 'employeeIds'>
+): Promise<FCMSendResult & { perEmployee: Record<string, 'sent' | 'no_token'> }> {
+  const result: FCMSendResult & { perEmployee: Record<string, 'sent' | 'no_token'> } = {
+    success: true,
+    totalTokens: 0,
+    successCount: 0,
+    failureCount: 0,
+    invalidTokensCleaned: [],
+    perEmployee: {},
+  };
+
+  if (!employeeIds || employeeIds.length === 0) {
+    result.error = 'No employee IDs provided';
+    return result;
+  }
+
+  const {
+    title,
+    message,
+    type = 'CUSTOM_NOTIFICATION',
+    notificationId = '',
+    eventId = '',
+    shift = 'DAY',
+    shiftDate = new Date().toISOString().split('T')[0],
+    data = {},
+    deepLink = '/dashboard/attendance',
+  } = payload;
+
+  const resolvedNotifId = notificationId || eventId || `notif_batch_${Date.now()}`;
+  const notifTitle = title || 'Sikka ERP - New Notification';
+  const notifBody = message || 'You have a new notification from Sikka ERP.';
+
+  try {
+    const db = await getDb();
+    if (!db) {
+      result.error = 'Database unavailable';
+      result.success = false;
+      return result;
+    }
+
+    // 1. Resolve all alias IDs for all selected employees in ONE query
+    const cleanIds = employeeIds.map(id => String(id).trim()).filter(Boolean);
+    const employeeRecords = await db.collection('employees').find({
+      $or: [
+        { employeeId: { $in: cleanIds } },
+        { id: { $in: cleanIds } },
+        { mobile: { $in: cleanIds } },
+        { mobileNumber: { $in: cleanIds } },
+        { username: { $in: cleanIds } },
+        { aadhaar: { $in: cleanIds } },
+        { aadhaarNumber: { $in: cleanIds } },
+      ],
+    }).toArray().catch(() => []);
+
+    // Build a comprehensive set of all alias IDs across all selected employees
+    const allTargetIds = new Set<string>(cleanIds);
+    // Map empId → canonical employeeId for per-employee tracking
+    const empIdMap: Record<string, string> = {};
+    for (const emp of employeeRecords) {
+      const aliases = [
+        emp.employeeId, emp.id, emp.mobile,
+        emp.mobileNumber, emp.aadhaar, emp.aadhaarNumber, emp.username,
+      ].filter(Boolean) as string[];
+      for (const alias of aliases) {
+        allTargetIds.add(String(alias).trim());
+        if (emp.employeeId) empIdMap[String(alias).trim()] = emp.employeeId;
+      }
+    }
+    const allTargetIdsArr = Array.from(allTargetIds);
+
+    // 2. Fetch ALL device tokens for ALL selected employees in ONE query
+    const [empDevices, deviceTokens] = await Promise.all([
+      db.collection('employee_devices').find({
+        employeeId: { $in: allTargetIdsArr },
+        isActive: { $ne: false },
+      }).toArray().catch(() => []),
+      db.collection('device_tokens').find({
+        employeeId: { $in: allTargetIdsArr },
+        active: { $ne: false },
+      }).toArray().catch(() => []),
+    ]);
+
+    const allDevices = [...empDevices, ...deviceTokens];
+    console.log(`[FCM Batch] Sending to ${cleanIds.length} employees — found ${allDevices.length} device(s).`);
+
+    // Track which employees have tokens
+    const employeesWithTokens = new Set<string>();
+    for (const device of allDevices) {
+      const devEmpId = String(device.employeeId || '').trim();
+      if (devEmpId) employeesWithTokens.add(devEmpId);
+    }
+
+    const seenEndpoints = new Set<string>();
+    const seenTokens = new Set<string>();
+
+    const webPushPayload = JSON.stringify({
+      title: notifTitle,
+      body: notifBody,
+      icon: SIKKA_LOCAL_LOGO,
+      badge: SIKKA_LOCAL_LOGO,
+      image: SIKKA_LOCAL_LOGO,
+      badgeCount: data?.badgeCount || 1,
+      notificationId: resolvedNotifId,
+      url: deepLink || '/dashboard/attendance',
+      vibrate: [200, 100, 200, 100, 200],
+      channel_id: CHANNEL_ID,
+      sound: 'default',
+      data: {
+        notificationId: resolvedNotifId,
+        url: deepLink || '/dashboard/attendance',
+        deepLink: deepLink || '/dashboard/attendance',
+        type,
+        timestamp: new Date().toISOString(),
+        ...data,
+      },
+    });
+
+    const webPushOptions: webpush.RequestOptions = {
+      TTL: 86400,
+      urgency: 'high',
+      headers: { Urgency: 'high' },
+    };
+
+    // 3. Send to all discovered devices
+    for (const device of allDevices) {
+      const sub = device.subscription;
+      if (sub && sub.endpoint && !seenEndpoints.has(sub.endpoint)) {
+        seenEndpoints.add(sub.endpoint);
+        result.totalTokens++;
+
+        const devEmpId = String(device.employeeId || '').trim();
+
+        try {
+          await webpush.sendNotification(sub, webPushPayload, webPushOptions);
+          result.successCount++;
+          if (devEmpId) result.perEmployee[devEmpId] = 'sent';
+          console.log(`[FCM Batch] ✓ Push sent to employee: ${devEmpId}`);
+        } catch (pushErr: any) {
+          result.failureCount++;
+          if (pushErr?.statusCode === 404 || pushErr?.statusCode === 410) {
+            result.invalidTokensCleaned.push(sub.endpoint);
+            await db.collection('employee_devices').updateOne(
+              { 'subscription.endpoint': sub.endpoint },
+              { $set: { isActive: false, active: false, deactivatedAt: new Date() } }
+            ).catch(() => {});
+            await db.collection('device_tokens').updateOne(
+              { 'subscription.endpoint': sub.endpoint },
+              { $set: { isActive: false, active: false, deactivatedAt: new Date() } }
+            ).catch(() => {});
+            console.warn(`[FCM Batch] ✗ Invalid token for employee ${devEmpId} — deactivated.`);
+          }
+        }
+      } else {
+        const t = String(device.token || device.deviceToken || '').trim();
+        if (t.length > 5) seenTokens.add(t);
+      }
+    }
+
+    // Mark employees with no token
+    for (const id of cleanIds) {
+      const canonical = empIdMap[id] || id;
+      if (!result.perEmployee[canonical] && !result.perEmployee[id]) {
+        result.perEmployee[id] = 'no_token';
+        console.warn(`[FCM Batch] ⚠ No active device token for employee: ${id} — notification saved to DB only.`);
+      }
+    }
+
+    // 4. Optional FCM legacy tokens
+    const fcmServerKey = process.env.FCM_SERVER_KEY || process.env.FIREBASE_SERVER_KEY || process.env.FIREBASE_MESSAGING_KEY;
+    const fcmTokensList = Array.from(seenTokens);
+    if (fcmServerKey && fcmTokensList.length > 0) {
+      try {
+        await fetch('https://fcm.googleapis.com/fcm/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `key=${fcmServerKey}` },
+          body: JSON.stringify({
+            registration_ids: fcmTokensList,
+            priority: 'high',
+            notification: { title: notifTitle, body: notifBody, sound: 'default', channel_id: CHANNEL_ID },
+            data: { notificationId: resolvedNotifId, type, url: deepLink, ...data },
+          }),
+        }).catch((e) => console.warn('FCM batch legacy dispatch deferred:', e));
+      } catch (fcmErr) {
+        console.warn('FCM batch legacy send skipped:', fcmErr);
+      }
+    }
+
+    if (result.totalTokens === 0) {
+      console.warn(`[FCM Batch] No device tokens found for any of the ${cleanIds.length} selected employees. Notifications are saved to DB — employees will see them when they open the app.`);
+    }
+
+    return result;
+  } catch (error: any) {
+    console.error('[FCM Batch] Dispatch error:', error);
+    result.error = error?.message || 'Batch notification exception';
+    return result;
   }
 }
