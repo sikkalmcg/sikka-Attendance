@@ -1638,6 +1638,132 @@ export default function AttendancePage() {
     });
   }, [employees, adminSearchTerm]);
 
+  // Compute location info for the selected employee (Admin View)
+  const selectedEmployeeLocationInfo = useMemo(() => {
+    if (!selectedAdminEmployee || selectedAdminEmployeeIdentitySet.size === 0) {
+      return {
+        isLive: false,
+        status: "NO_RECORDS" as const,
+        readableAddress: "Location unavailable",
+        lastUpdated: null,
+        lat: null,
+        lng: null,
+        accuracy: null,
+      };
+    }
+
+    const employeePunches = (attendanceRecords || [])
+      .filter((r: any) => {
+        if (!r) return false;
+        const recEmpId = String(r.employeeId || '').trim().toUpperCase();
+        const recEmpName = String(r.employeeName || '').trim().toUpperCase();
+        return selectedAdminEmployeeIdentitySet.has(recEmpId) || (recEmpName && selectedAdminEmployeeIdentitySet.has(recEmpName));
+      })
+      .sort((a: any, b: any) => {
+        const dateDiff = String(b.date || '').localeCompare(String(a.date || ''));
+        if (dateDiff !== 0) return dateDiff;
+        const timeA = a.outDateTime || a.inDateTime || a.outTime || a.inTime || '';
+        const timeB = b.outDateTime || b.inDateTime || b.outTime || b.inTime || '';
+        return String(timeB).localeCompare(String(timeA));
+      });
+
+    const activeRec = employeePunches.find((r: any) => r.status === 'Open' || (r.inTime && !r.outTime && r.status !== 'Closed' && r.status !== 'Auto OUT'));
+    const latestRec = employeePunches[0];
+
+    if (activeRec) {
+      const activeExit = (activeRec.exitEvents || []).find((e: any) => !e.inPlantTime && e.trackingStatus === 'Outside Plant');
+      const latestExitPoint = activeExit?.outLocationHistory && activeExit.outLocationHistory.length > 0
+        ? activeExit.outLocationHistory[activeExit.outLocationHistory.length - 1]
+        : null;
+
+      const rawAddress = latestExitPoint?.address || activeExit?.completeAddress || activeRec.address || (activeRec.inPlant ? `${activeRec.inPlant} Industrial Area` : "Salt Plant Zone");
+      const rawTime = latestExitPoint?.time || activeRec.inDateTime || `${activeRec.date} ${activeRec.inTime}`;
+
+      let formattedTime = "N/A";
+      try {
+        if (rawTime.includes("T") || rawTime.includes("-")) {
+          formattedTime = format(parseISO(rawTime.replace(" ", "T")), "hh:mm a");
+        } else if (rawTime.includes(":")) {
+          formattedTime = rawTime;
+        }
+      } catch (e) {
+        formattedTime = activeRec.inTime ? `${activeRec.inTime}` : "Recent";
+      }
+
+      return {
+        isLive: true,
+        status: "ACTIVE" as const,
+        readableAddress: rawAddress,
+        lastUpdated: formattedTime,
+        lat: latestExitPoint?.lat || activeRec.lat || null,
+        lng: latestExitPoint?.lng || activeRec.lng || null,
+        accuracy: null,
+      };
+    }
+
+    if (latestRec) {
+      const rawAddress = latestRec.addressOut || latestRec.address || (latestRec.inPlant ? `${latestRec.inPlant} Area` : "Salt Plant");
+      const rawTime = latestRec.outDateTime || latestRec.inDateTime || (latestRec.outTime ? `${latestRec.date} ${latestRec.outTime}` : (latestRec.inTime ? `${latestRec.date} ${latestRec.inTime}` : null));
+
+      let formattedTime = "N/A";
+      try {
+        if (rawTime && (rawTime.includes("T") || rawTime.includes("-"))) {
+          const parsed = parseISO(rawTime.replace(" ", "T"));
+          formattedTime = format(parsed, "hh:mm a");
+        } else if (latestRec.outTime || latestRec.inTime) {
+          formattedTime = `${latestRec.outTime || latestRec.inTime}`;
+        }
+      } catch (e) {
+        formattedTime = latestRec.outTime || latestRec.inTime || formatDate(latestRec.date);
+      }
+
+      return {
+        isLive: false,
+        status: "LAST_KNOWN" as const,
+        readableAddress: rawAddress,
+        lastUpdated: formattedTime,
+        lat: latestRec.latOut || latestRec.lat || null,
+        lng: latestRec.lngOut || latestRec.lng || null,
+        accuracy: null,
+      };
+    }
+
+    return {
+      isLive: false,
+      status: "NO_RECORDS" as const,
+      readableAddress: "Location unavailable",
+      lastUpdated: null,
+      lat: null,
+      lng: null,
+      accuracy: null,
+    };
+  }, [selectedAdminEmployee, selectedAdminEmployeeIdentitySet, attendanceRecords]);
+
+  const [adminResolvedAddress, setAdminResolvedAddress] = useState<string>("");
+
+  useEffect(() => {
+    if (!selectedAdminEmployee) {
+      setAdminResolvedAddress("");
+      return;
+    }
+    const loc = selectedEmployeeLocationInfo;
+    if (loc.lat && loc.lng && (!loc.readableAddress || loc.readableAddress === "Location unavailable" || loc.readableAddress.includes("Lat:") || loc.readableAddress === "Registered Zone")) {
+      fetch('/api/geocode/reverse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: loc.lat, lng: loc.lng })
+      }).then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.address) {
+            const addr = typeof data.address === 'object' ? (data.address.Match_addr || data.address.LongLabel || data.address.Address || "") : data.address;
+            if (addr) setAdminResolvedAddress(addr);
+          }
+        }).catch(() => { });
+    } else {
+      setAdminResolvedAddress(loc.readableAddress);
+    }
+  }, [selectedAdminEmployee, selectedEmployeeLocationInfo]);
+
   if (!isMounted) return null;
 
   // =========================================================================
@@ -1793,50 +1919,118 @@ export default function AttendancePage() {
           </CardContent>
         </Card>
 
-        {/* Selected Employee Summary Banner & Stats */}
+        {/* Selected Employee Summary Banner & Location Box */}
         {selectedAdminEmployee ? (
           <div className="space-y-6">
-            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-3xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            {/* 1. Employee Information Header */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white font-black text-2xl shadow-inner">
+                <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-md shrink-0">
                   {(selectedAdminEmployee.name || selectedAdminEmployee.firstName || "E")[0]}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-black uppercase tracking-tight text-white">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">
                       {selectedAdminEmployee.name || (selectedAdminEmployee as any).fullName || `${selectedAdminEmployee.firstName || ''} ${selectedAdminEmployee.lastName || ''}`.trim()}
                     </h2>
-                    <Badge className="bg-amber-400 text-slate-900 font-black text-[10px] uppercase">
+                    <Badge className="bg-slate-900 text-white font-black text-[10px] uppercase">
                       {selectedAdminEmployee.employeeId}
                     </Badge>
                   </div>
-                  <p className="text-xs text-slate-300 mt-1 flex flex-wrap items-center gap-3">
-                    <span><strong>Designation:</strong> {selectedAdminEmployee.designation || 'Staff'}</span>
-                    <span>•</span>
-                    <span><strong>Department:</strong> {selectedAdminEmployee.department || 'Operations'}</span>
-                    <span>•</span>
-                    <span><strong>Mobile:</strong> {selectedAdminEmployee.mobile || (selectedAdminEmployee as any).mobileNumber || 'N/A'}</span>
-                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-1 sm:gap-x-6 text-xs text-slate-600 font-semibold pt-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Employee Name:</span>
+                      <span className="font-bold text-slate-900 uppercase">{selectedAdminEmployee.name || (selectedAdminEmployee as any).fullName || `${selectedAdminEmployee.firstName || ''} ${selectedAdminEmployee.lastName || ''}`.trim()}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Department:</span>
+                      <span className="font-bold text-slate-900 uppercase">{selectedAdminEmployee.department || 'Logistics'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Mobile:</span>
+                      <span className="font-bold text-slate-900">{selectedAdminEmployee.mobile || (selectedAdminEmployee as any).mobileNumber || 'N/A'}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto">
-                <div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10 min-w-[90px]">
-                  <p className="text-[10px] font-black uppercase text-slate-300 tracking-wider">Present</p>
-                  <p className="text-xl font-black text-emerald-400 mt-0.5">{adminEmployeeStats.totalPresent}</p>
+              {/* Stats Counters */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto shrink-0">
+                <div className="bg-slate-50 rounded-2xl p-3 text-center border border-slate-200 min-w-[85px]">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Present</p>
+                  <p className="text-xl font-black text-emerald-600 mt-0.5">{adminEmployeeStats.totalPresent}</p>
                 </div>
-                <div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10 min-w-[90px]">
-                  <p className="text-[10px] font-black uppercase text-slate-300 tracking-wider">Absent</p>
-                  <p className="text-xl font-black text-rose-400 mt-0.5">{adminEmployeeStats.totalAbsent}</p>
+                <div className="bg-slate-50 rounded-2xl p-3 text-center border border-slate-200 min-w-[85px]">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Absent</p>
+                  <p className="text-xl font-black text-rose-600 mt-0.5">{adminEmployeeStats.totalAbsent}</p>
                 </div>
-                <div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10 min-w-[90px]">
-                  <p className="text-[10px] font-black uppercase text-slate-300 tracking-wider">Leaves</p>
-                  <p className="text-xl font-black text-purple-400 mt-0.5">{adminEmployeeStats.totalLeaves}</p>
+                <div className="bg-slate-50 rounded-2xl p-3 text-center border border-slate-200 min-w-[85px]">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Leaves</p>
+                  <p className="text-xl font-black text-purple-600 mt-0.5">{adminEmployeeStats.totalLeaves}</p>
                 </div>
-                <div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10 min-w-[90px]">
-                  <p className="text-[10px] font-black uppercase text-slate-300 tracking-wider">Hours</p>
-                  <p className="text-xl font-black text-amber-300 mt-0.5">{adminEmployeeStats.totalHours}</p>
+                <div className="bg-slate-50 rounded-2xl p-3 text-center border border-slate-200 min-w-[85px]">
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Hours</p>
+                  <p className="text-xl font-black text-amber-600 mt-0.5">{adminEmployeeStats.totalHours}</p>
                 </div>
+              </div>
+            </div>
+
+            {/* 2. Black Location Box: CURRENT / LAST KNOWN LOCATION */}
+            <div className="bg-slate-950 text-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-800 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-primary">
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                      {selectedEmployeeLocationInfo.isLive ? "Live Location Tracking" : "Location Status"}
+                    </span>
+                    <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                      {selectedEmployeeLocationInfo.isLive ? "CURRENT LOCATION" : (selectedEmployeeLocationInfo.status === "LAST_KNOWN" ? "CURRENT LOCATION" : "LOCATION UNAVAILABLE")}
+                    </h3>
+                  </div>
+                </div>
+
+                <Badge className={cn("text-[10px] font-black uppercase px-3 py-1 rounded-xl",
+                  selectedEmployeeLocationInfo.isLive ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse" :
+                    selectedEmployeeLocationInfo.status === "LAST_KNOWN" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" :
+                      "bg-slate-800 text-slate-400"
+                )}>
+                  {selectedEmployeeLocationInfo.isLive ? "● Active Shift" : (selectedEmployeeLocationInfo.status === "LAST_KNOWN" ? "Last Known Location" : "Unavailable")}
+                </Badge>
+              </div>
+
+              <div className="space-y-3 pt-1">
+                {selectedEmployeeLocationInfo.status === "NO_RECORDS" ? (
+                  <div className="space-y-1 py-2">
+                    <p className="text-sm font-bold text-slate-400">Location unavailable</p>
+                    <p className="text-xs text-slate-500 font-medium">No recorded punch or location data found for this employee.</p>
+                  </div>
+                ) : (
+                  <>
+                    {!selectedEmployeeLocationInfo.isLive && (
+                      <div className="text-[11px] font-black uppercase text-amber-400/90 tracking-wider">
+                        Location unavailable
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      {!selectedEmployeeLocationInfo.isLive && (
+                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Last known location:</p>
+                      )}
+                      <p className="text-base sm:text-lg font-bold text-white leading-relaxed whitespace-pre-line">
+                        {adminResolvedAddress || selectedEmployeeLocationInfo.readableAddress || "Address resolving..."}
+                      </p>
+                    </div>
+
+                    {selectedEmployeeLocationInfo.lastUpdated && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 text-xs font-semibold text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Last Updated: <strong className="text-slate-200 font-black">{selectedEmployeeLocationInfo.lastUpdated}</strong></span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -1976,9 +2170,6 @@ export default function AttendancePage() {
                 <ShieldCheck className="text-primary w-5 h-5" /> Mark Attendance
               </CardTitle>
             </div>
-            <div className="absolute top-4 right-4">
-              <LeaveRequestForm />
-            </div>
           </CardHeader>
           <CardContent className="space-y-6 px-4 sm:px-8 pb-8 pt-6">
             {/* Employee Identification Card */}
@@ -1987,22 +2178,10 @@ export default function AttendancePage() {
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Employee Name</span>
                 <span className="text-xs font-black text-slate-900 uppercase">{effectiveEmployeeName} ({effectiveEmployeeId})</span>
               </div>
-              <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+              <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Current Location</span>
                 <span className="text-xs font-bold text-slate-700 text-right max-w-[260px] truncate" title={detectedAddress}>
                   {detectedAddress || "Capturing address..."}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Plant / Geofence</span>
-                <span className="text-xs font-black text-slate-800">
-                  {detectedPlant ? (
-                    <span className="text-emerald-700 flex items-center gap-1">
-                      <CheckCircle className="w-3.5 h-3.5 inline" /> {detectedPlant.name} ({nearestPlantInfo?.distance || 0}m)
-                    </span>
-                  ) : (
-                    <span className="text-amber-700">Outside Plant Radius ({nearestPlantInfo ? `${nearestPlantInfo.distance}m` : '700m'})</span>
-                  )}
                 </span>
               </div>
             </div>
@@ -2238,12 +2417,25 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* 3. LEAVE HISTORY (CURRENT FINANCIAL YEAR & APPROVED RECORDS ONLY) */}
+      {/* 3. LEAVE REQUEST & LEAVE HISTORY (CURRENT FINANCIAL YEAR & APPROVED RECORDS ONLY) */}
       <div className="space-y-4 pt-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        {/* Leave Request Action Button Bar Above Leave History */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 bg-white border border-slate-200 rounded-3xl shadow-sm">
+          <div className="space-y-0.5">
+            <h4 className="text-sm font-black uppercase text-slate-900 tracking-tight flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-primary" /> Apply for Leave
+            </h4>
+            <p className="text-xs font-medium text-slate-500">
+              Submit a new leave application for managerial review.
+            </p>
+          </div>
+          <LeaveRequestForm />
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
           <div>
             <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
-              <CalendarDays className="w-5 h-5 text-primary" /> Leave History ({currentFYInfo.label})
+              <History className="w-5 h-5 text-primary" /> Leave History ({currentFYInfo.label})
             </h3>
             <p className="text-xs font-semibold text-slate-500 mt-0.5">
               Month-wise approved leaves for current Financial Year ({formatDate(currentFYInfo.startDateStr)} to {formatDate(currentFYInfo.endDateStr)})
