@@ -1,10 +1,14 @@
 /**
- * Comprehensive Client Notification Manager for Mobile & Web (FCM / ServiceWorker / PWA).
+ * Comprehensive Client Notification Manager for Mobile & Web (Web-Push / FCM / ServiceWorker / PWA).
  */
 
 import { playNotificationSoundAndVibrate, SIKKA_VIBRATION_PATTERN } from '@/lib/notification-sound';
 
 const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
+
+export const VAPID_PUBLIC_KEY =
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+  'BIZhkoYnicqfnaDuT-C5egEnM_OnnYauDQnT7_jZbAOnYp9MrxsNfU3BK0fTVw9mPYsF28ZqjSjDPH8BHyGZnmk';
 
 export interface DeviceRegistrationPayload {
   token: string;
@@ -12,6 +16,21 @@ export interface DeviceRegistrationPayload {
   role: string;
   deviceName?: string;
   platform?: string;
+  subscription?: PushSubscriptionJSON | null;
+}
+
+/**
+ * Utility to convert VAPID base64 public key to Uint8Array for pushManager subscription
+ */
+export function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
 }
 
 /**
@@ -55,7 +74,7 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 }
 
 /**
- * Sync device token with backend MongoDB database.
+ * Subscribes the client device to Web-Push with VAPID Public Key and registers subscription in MongoDB.
  */
 export async function syncDeviceWithBackend(user: any): Promise<boolean> {
   try {
@@ -65,12 +84,42 @@ export async function syncDeviceWithBackend(user: any): Promise<boolean> {
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Web Browser';
     const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
 
+    let pushSubscriptionJson: PushSubscriptionJSON | null = null;
+
+    // 1. If Service Worker & PushManager are supported and permission is granted, obtain Web-Push subscription
+    if (
+      typeof window !== 'undefined' &&
+      'serviceWorker' in navigator &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      try {
+        const reg = await registerServiceWorker();
+        if (reg && 'pushManager' in reg) {
+          let sub = await reg.pushManager.getSubscription();
+          if (!sub && VAPID_PUBLIC_KEY) {
+            const convertedVapidKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: convertedVapidKey,
+            });
+          }
+          if (sub) {
+            pushSubscriptionJson = sub.toJSON();
+          }
+        }
+      } catch (subErr) {
+        console.warn('Web-Push subscription negotiation skipped/deferred:', subErr);
+      }
+    }
+
     const payload: DeviceRegistrationPayload = {
       token: deviceId,
       employeeId,
       role,
       deviceName: isMobile ? 'Mobile Browser / APK Web' : 'Desktop Browser',
       platform: isMobile ? 'android-web' : 'web',
+      subscription: pushSubscriptionJson,
     };
 
     const res = await fetch('/api/notifications/register-device', {
@@ -87,8 +136,8 @@ export async function syncDeviceWithBackend(user: any): Promise<boolean> {
 }
 
 /**
- * Request notification permission from user, register service worker, sync to DB,
- * and display a test confirmation notification with sound and vibration.
+ * Request notification permission from user, register service worker, subscribe with VAPID keys,
+ * sync to DB, and display a test confirmation notification with sound and vibration.
  */
 export async function requestAndEnableNotifications(user: any): Promise<{
   granted: boolean;
@@ -111,13 +160,11 @@ export async function requestAndEnableNotifications(user: any): Promise<{
       // 2. Play sound & vibrate
       playNotificationSoundAndVibrate();
 
-      // 3. Register Service Worker
+      // 3. Register Service Worker & Subscribe to Web-Push with VAPID
       const reg = await registerServiceWorker();
-
-      // 4. Sync Device ID with backend
       await syncDeviceWithBackend(user);
 
-      // 5. Trigger Welcome / Success notification on device
+      // 4. Trigger Welcome / Success notification on device
       if (reg) {
         reg.showNotification('🔔 Notifications Enabled!', {
           body: 'Sikka ERP attendance alerts and notifications are now active on your device with sound & vibration.',

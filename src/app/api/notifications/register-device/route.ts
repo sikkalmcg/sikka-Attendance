@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing device token' }, { status: 400 });
     }
 
-    const { token, employeeId, role, deviceName, platform, appVersion = '1.0.0' } = body;
+    const { token, employeeId, role, deviceName, platform, appVersion = '1.0.0', subscription } = body;
     const cleanToken = String(token).trim();
     const cleanRole = String(role || 'EMPLOYEE').toUpperCase();
     let cleanEmpId = String(employeeId || '').trim();
@@ -42,7 +42,26 @@ export async function POST(req: Request) {
     const now = new Date();
     const nowIso = now.toISOString();
 
-    // 1. Update `employee_devices` collection (Section 3)
+    const deviceUpdateDoc: any = {
+      employeeId: cleanEmpId,
+      deviceToken: cleanToken,
+      token: cleanToken,
+      deviceType: platform || 'android',
+      platform: platform || 'android',
+      deviceName: deviceName || 'Android Device',
+      appVersion,
+      isActive: true,
+      active: true,
+      lastTokenUpdatedAt: nowIso,
+      lastActiveAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    if (subscription && typeof subscription === 'object') {
+      deviceUpdateDoc.subscription = subscription;
+    }
+
+    // 1. Update `employee_devices` collection
     await db.collection('employee_devices').updateOne(
       {
         $or: [
@@ -51,20 +70,7 @@ export async function POST(req: Request) {
         ],
       },
       {
-        $set: {
-          employeeId: cleanEmpId,
-          deviceToken: cleanToken,
-          token: cleanToken,
-          deviceType: platform || 'android',
-          platform: platform || 'android',
-          deviceName: deviceName || 'Android Device',
-          appVersion,
-          isActive: true,
-          active: true,
-          lastTokenUpdatedAt: nowIso,
-          lastActiveAt: nowIso,
-          updatedAt: nowIso,
-        },
+        $set: deviceUpdateDoc,
         $setOnInsert: {
           createdAt: nowIso,
         },
@@ -77,16 +83,8 @@ export async function POST(req: Request) {
       { token: cleanToken },
       {
         $set: {
-          token: cleanToken,
-          deviceToken: cleanToken,
-          employeeId: cleanEmpId,
+          ...deviceUpdateDoc,
           role: cleanRole,
-          deviceName: deviceName || 'Android Device',
-          platform: platform || 'android',
-          active: true,
-          isActive: true,
-          lastTokenUpdatedAt: nowIso,
-          lastActiveAt: nowIso,
           updatedAt: now,
         },
         $setOnInsert: {
@@ -104,9 +102,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Employee device token registered successfully in MongoDB',
+      message: 'Employee device token and Web-Push subscription registered successfully in MongoDB',
       employeeId: cleanEmpId,
       deviceToken: cleanToken,
+      hasSubscription: Boolean(subscription),
       registeredAt: nowIso,
     });
   } catch (error: any) {
