@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, BellRing, CheckCircle2, X, Smartphone, Send, AlertTriangle, Volume2, Vibrate, ShieldCheck, Check } from "lucide-react";
+import { Bell, BellRing, CheckCircle2, X, Smartphone, Send, AlertTriangle, Volume2, ShieldCheck, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,20 +22,14 @@ interface NotificationBannerProps {
  */
 export function NotificationBanner({ user }: NotificationBannerProps) {
   const [permission, setPermission] = useState<NotificationPermission | "unsupported" | "loading">("loading");
-  const [isDismissed, setIsDismissed] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const status = getNotificationPermissionStatus();
     setPermission(status);
 
-    const dismissed = sessionStorage.getItem("sikka_notif_banner_dismissed") === "true";
-    setIsDismissed(dismissed);
-
-    // If permission is already granted, ensure device is registered silently with VAPID
     if (status === "granted" && user) {
       syncDeviceWithBackend(user);
     }
@@ -48,7 +42,6 @@ export function NotificationBanner({ user }: NotificationBannerProps) {
       setPermission(res.status);
 
       if (res.granted) {
-        setIsDismissed(true);
         toast({
           title: "🔔 Notifications Enabled!",
           description: "Mobile notifications with sound & vibration are now active.",
@@ -57,7 +50,7 @@ export function NotificationBanner({ user }: NotificationBannerProps) {
         toast({
           variant: "destructive",
           title: "Permission Denied",
-          description: "Please allow notifications in your browser / app site settings.",
+          description: "Please allow notifications in your browser or app settings.",
         });
       }
     } catch (err: any) {
@@ -71,18 +64,8 @@ export function NotificationBanner({ user }: NotificationBannerProps) {
     }
   };
 
-  const handleDismiss = () => {
-    setIsDismissed(true);
-    sessionStorage.setItem("sikka_notif_banner_dismissed", "true");
-  };
-
-  // If already granted, unsupported, or dismissed in current session, hide top banner
-  if (permission === "granted" || permission === "unsupported" || isDismissed || permission === "loading") {
-    return null;
-  }
-
   return (
-    <div className="w-full bg-gradient-to-r from-amber-500/15 via-primary/10 to-blue-500/15 border-b border-primary/20 px-4 py-3 sm:py-3.5 transition-all animate-in fade-in duration-300">
+    <div className="w-full bg-gradient-to-r from-amber-500/15 via-primary/10 to-blue-500/15 border-b border-primary/20 px-4 py-3 sm:py-3.5 transition-all">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-3">
           <div className="relative p-2 rounded-xl bg-primary text-white shadow-md shadow-primary/20 shrink-0">
@@ -114,15 +97,6 @@ export function NotificationBanner({ user }: NotificationBannerProps) {
             <Bell className="w-4 h-4" />
             {isProcessing ? "Enabling..." : "Allow Notifications"}
           </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDismiss}
-            className="text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 font-bold text-xs h-9 px-3 rounded-xl"
-          >
-            <X className="w-4 h-4" />
-          </Button>
         </div>
       </div>
     </div>
@@ -130,8 +104,8 @@ export function NotificationBanner({ user }: NotificationBannerProps) {
 }
 
 /**
- * Prominent Attendance Page Notification Card
- * Shown directly on the Attendance Portal for all employees
+ * Attendance Page Dedicated "Enable Mobile Notifications" Card
+ * Always presents the Enable Mobile Notifications options & actions to employees
  */
 export function AttendanceNotificationCard({ user }: { user: any }) {
   const [permission, setPermission] = useState<NotificationPermission | "unsupported" | "loading">("loading");
@@ -158,13 +132,13 @@ export function AttendanceNotificationCard({ user }: { user: any }) {
       if (res.granted) {
         toast({
           title: "🔔 Notifications Enabled!",
-          description: "Mobile push notifications with sound & vibration are now active.",
+          description: "Mobile notifications with sound & vibration are now active on your device.",
         });
       } else if (res.status === "denied") {
         toast({
           variant: "destructive",
           title: "Permission Denied",
-          description: "Please allow notifications in your browser or phone app settings.",
+          description: "Please allow notifications in your browser or app settings.",
         });
       }
     } catch (err: any) {
@@ -185,13 +159,13 @@ export function AttendanceNotificationCard({ user }: { user: any }) {
       if (ok) {
         toast({
           title: "🔔 Test Notification Dispatched",
-          description: "Check your phone status bar for the sound and vibration alert!",
+          description: "Check your phone status bar for sound and vibration alert!",
         });
       } else {
         toast({
           variant: "destructive",
           title: "Test Failed",
-          description: "Please ensure notifications are enabled on this device.",
+          description: "Please tap 'Allow Notifications' to activate.",
         });
       }
     } finally {
@@ -199,92 +173,66 @@ export function AttendanceNotificationCard({ user }: { user: any }) {
     }
   };
 
-  if (permission === "unsupported" || permission === "loading") {
-    return null;
-  }
-
-  const isGranted = permission === "granted";
-  const isDenied = permission === "denied";
-
   return (
-    <Card className={`border rounded-2xl overflow-hidden shadow-sm transition-all animate-in fade-in ${
-      isGranted
-        ? "bg-gradient-to-r from-emerald-50/80 via-white to-teal-50/80 border-emerald-200/80"
-        : isDenied
-        ? "bg-gradient-to-r from-rose-50/80 via-white to-amber-50/80 border-rose-200/80"
-        : "bg-gradient-to-r from-amber-50/90 via-white to-orange-50/90 border-amber-300"
-    }`}>
-      <CardContent className="p-4 sm:p-5">
+    <Card className="border border-amber-300/80 rounded-3xl overflow-hidden shadow-md bg-gradient-to-r from-amber-500/10 via-primary/5 to-blue-500/10 transition-all animate-in fade-in">
+      <div className="h-1.5 bg-gradient-to-r from-amber-500 via-primary to-blue-600" />
+      <CardContent className="p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className={`p-2.5 rounded-2xl shrink-0 shadow-sm ${
-              isGranted
-                ? "bg-emerald-600 text-white shadow-emerald-200"
-                : isDenied
-                ? "bg-rose-600 text-white shadow-rose-200"
-                : "bg-primary text-white shadow-primary/20"
-            }`}>
-              {isGranted ? (
-                <BellRing className="w-5 h-5" />
-              ) : isDenied ? (
-                <AlertTriangle className="w-5 h-5" />
-              ) : (
-                <BellRing className="w-5 h-5 animate-pulse" />
-              )}
+          <div className="flex items-start gap-4">
+            <div className="relative p-3 rounded-2xl bg-primary text-white shadow-lg shadow-primary/25 shrink-0">
+              <BellRing className="w-6 h-6 animate-pulse" />
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
             </div>
 
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-sm font-black text-slate-900 tracking-tight">
-                  {isGranted ? "Mobile Notifications Active" : "Enable Mobile Notifications"}
-                </h4>
+                <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  Enable Mobile Notifications
+                </h3>
                 <Badge
                   variant="outline"
-                  className={`text-[10px] font-black uppercase px-2 py-0.5 border ${
-                    isGranted
-                      ? "bg-emerald-100/70 text-emerald-800 border-emerald-300"
-                      : isDenied
-                      ? "bg-rose-100 text-rose-800 border-rose-300"
-                      : "bg-amber-100 text-amber-900 border-amber-300"
-                  }`}
+                  className="bg-primary/10 text-primary border-primary/25 text-[10px] font-black uppercase px-2.5 py-0.5"
                 >
-                  {isGranted ? "🔔 Sound & Vibration ON" : isDenied ? "Blocked in Settings" : "Recommended"}
+                  Recommended
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-black uppercase px-2.5 py-0.5"
+                >
+                  🔔 Sound & Vibration
                 </Badge>
               </div>
 
               <p className="text-xs font-semibold text-slate-600 leading-relaxed max-w-xl">
-                {isGranted
-                  ? "Real-time Mark IN / Mark OUT shift reminders and company alerts are active with sound & vibration on this phone."
-                  : isDenied
-                  ? "Notification permission is blocked. Please tap site settings in your browser/app to allow notifications."
-                  : "Allow mobile notifications to receive shift reminders and attendance alerts directly in your phone status bar."}
+                Get real-time Mark IN / Mark OUT shift reminders and company notifications with sound and vibration directly on your mobile device.
+              </p>
+              <p className="text-[11px] font-bold text-slate-500">
+                मोबाइल नोटिफिकेशन्स चालू करें ताकि शिफ्ट और अटेंडेंस अलर्ट तुरंत स्टेटस बार में प्राप्त हों।
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end pt-1 sm:pt-0">
-            {!isGranted ? (
-              <Button
-                type="button"
-                onClick={handleEnable}
-                disabled={isProcessing}
-                className="w-full sm:w-auto h-9 px-5 rounded-xl font-black text-xs uppercase tracking-wider bg-primary hover:bg-primary/90 text-white shadow-md shadow-primary/25 flex items-center justify-center gap-2"
-              >
-                <Bell className="w-4 h-4" />
-                {isProcessing ? "Enabling..." : "Allow Notifications"}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTest}
-                disabled={isTesting}
-                className="w-full sm:w-auto h-9 px-4 rounded-xl font-bold text-xs bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-300 shadow-sm flex items-center justify-center gap-2"
-              >
-                <Send className="w-3.5 h-3.5 text-emerald-600" />
-                {isTesting ? "Testing..." : "Test Sound & Vibration"}
-              </Button>
-            )}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto shrink-0 justify-end pt-2 sm:pt-0">
+            <Button
+              type="button"
+              onClick={handleEnable}
+              disabled={isProcessing}
+              className="h-11 px-6 rounded-2xl font-black text-xs uppercase tracking-wider bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            >
+              <Bell className="w-4 h-4" />
+              {isProcessing ? "Enabling..." : "Allow Notifications"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleTest}
+              disabled={isTesting}
+              className="h-11 px-4 rounded-2xl font-bold text-xs bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-sm flex items-center justify-center gap-2"
+            >
+              <Send className="w-3.5 h-3.5 text-primary" />
+              {isTesting ? "Testing..." : "Test Sound & Vibration"}
+            </Button>
           </div>
         </div>
       </CardContent>
@@ -357,15 +305,14 @@ export function NotificationStatusControl({ user }: { user: any }) {
       </div>
 
       <div className="flex items-center gap-2 pt-1">
-        {!isGranted ? (
-          <Button
-            size="sm"
-            onClick={handleEnable}
-            className="w-full h-8 text-xs font-bold bg-primary text-white rounded-lg shadow-sm"
-          >
-            <Bell className="w-3.5 h-3.5 mr-1.5" /> Enable Mobile Alerts
-          </Button>
-        ) : (
+        <Button
+          size="sm"
+          onClick={handleEnable}
+          className="w-full h-8 text-xs font-bold bg-primary text-white rounded-lg shadow-sm"
+        >
+          <Bell className="w-3.5 h-3.5 mr-1.5" /> Enable Mobile Alerts
+        </Button>
+        {isGranted && (
           <Button
             size="sm"
             variant="outline"
@@ -373,7 +320,7 @@ export function NotificationStatusControl({ user }: { user: any }) {
             disabled={isSendingTest}
             className="w-full h-8 text-xs font-bold text-slate-700 hover:text-primary hover:bg-primary/5 rounded-lg border-slate-200 flex items-center justify-center gap-1.5"
           >
-            <Send className="w-3 h-3 text-primary" /> {isSendingTest ? "Sending..." : "Test Notification Alert"}
+            <Send className="w-3 h-3 text-primary" /> {isSendingTest ? "Sending..." : "Test"}
           </Button>
         )}
       </div>
