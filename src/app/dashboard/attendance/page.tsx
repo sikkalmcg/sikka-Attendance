@@ -57,7 +57,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { postNativeNotification } from "@/lib/android-bridge";
-import { AttendanceNotificationCard } from "@/components/notification-banner";
 
 const PROJECT_START_DATE_STR = "2026-04-01";
 
@@ -1384,9 +1383,6 @@ export default function AttendancePage() {
     <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
       {/* 0. GATEWAY PORTAL (MARK IN / MARK OUT) */}
       <div className="max-w-xl mx-auto w-full space-y-6">
-        {/* Mobile Push Notification Enable / Status Card */}
-        <AttendanceNotificationCard user={verifiedUser} />
-
         {(locationPermissionStatus === "denied" || locationPermissionStatus === "unavailable" || locationPermissionMessage) && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm text-amber-900 animate-in fade-in">
             <div className="flex items-center gap-3">
