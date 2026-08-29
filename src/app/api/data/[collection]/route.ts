@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
+import { getSessionUser } from '@/lib/auth/session';
+import { invalidateBootstrapCache } from '@/lib/data-cache';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -16,43 +18,12 @@ export async function GET(
     const db = await getDb();
     
     if (collection === 'notifications') {
-      const { searchParams } = new URL(req.url);
-      const employeeId = searchParams.get('employeeId');
-      let query: any = {};
+      const data = await db.collection(collection).find({}).sort({ createdAt: -1, timestamp: -1, _id: -1 }).limit(100).toArray();
+      return NextResponse.json(data);
+    }
 
-      if (employeeId && employeeId !== 'ALL' && employeeId !== 'undefined' && employeeId !== 'null') {
-        const matchedEmp = await db.collection('employees').findOne({
-          $or: [
-            { employeeId },
-            { username: employeeId },
-            { mobile: employeeId },
-            { mobileNumber: employeeId },
-            { aadhaar: employeeId },
-            { aadhaarNumber: employeeId },
-            { id: employeeId },
-          ]
-        }).catch(() => null);
-
-        const targetIds: string[] = [employeeId, 'GLOBAL', 'ALL', 'N/A', ''];
-        if (matchedEmp) {
-          if (matchedEmp.employeeId) targetIds.push(matchedEmp.employeeId);
-          if (matchedEmp.id) targetIds.push(matchedEmp.id);
-          if (matchedEmp.mobile) targetIds.push(matchedEmp.mobile);
-          if (matchedEmp.aadhaar) targetIds.push(matchedEmp.aadhaar);
-        }
-
-        query = {
-          $or: [
-            { employeeId: { $in: targetIds } },
-            { employeeId: { $exists: false } },
-            { employeeId: null },
-            { employeeId: "" },
-            { targetRole: { $in: ["EMPLOYEE", "ALL", "GLOBAL"] } }
-          ]
-        };
-      }
-
-      const data = await db.collection(collection).find(query).sort({ createdAt: -1, timestamp: -1, _id: -1 }).toArray();
+    if (collection === 'attendance') {
+      const data = await db.collection(collection).find({}).sort({ date: -1, inDateTime: -1, _id: -1 }).limit(2000).toArray();
       return NextResponse.json(data);
     }
 
@@ -68,7 +39,7 @@ export async function GET(
 }
 
 // 2. POST HANDLER: Naya data insert karne ke liye
-// For `attendance` we MUST prevent duplicates for same employee+date.
+// For `attendance` we MUST prevent duplicates for same employee+date and enforce role-based access.
 export async function POST(
   req: Request,
   { params }: { params: { collection: string } }
@@ -79,6 +50,20 @@ export async function POST(
     const db = await getDb();
 
     if (collection === 'attendance') {
+      const sessionUser = getSessionUser(req);
+      const userRole = String(sessionUser?.role || body?.userRole || body?.role || '').trim().toUpperCase();
+
+      // Enforce: Non-employees cannot create punch-in attendance records
+      if (userRole && userRole !== 'EMPLOYEE' && !body.isApprovalAction) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Only employees are allowed to Mark IN and Mark OUT."
+          },
+          { status: 403 }
+        );
+      }
+
       const employeeId = body?.employeeId;
       const date = body?.date;
 
@@ -92,126 +77,92 @@ export async function POST(
       const existing = await attendanceCol.findOne({ employeeId, date });
       if (!existing) {
         const result = await attendanceCol.insertOne(body);
+        invalidateBootstrapCache();
         return NextResponse.json({ success: true, id: result.insertedId });
       }
 
       // Merge: always keep one record per employee+date.
-      // - If Mark IN payload has inTime/inDate..., merge those.
-      // - If Mark OUT payload has outTime/outDate..., merge those.
-      // - Update status/hours if provided.
-      const mergeUpdate: any = {};
-
-      const candidateKeys = [
-        'inTime',
-        'inDate',
-        'inDateTime',
-        'inPlant',
-        'address',
-        'street',
-        'area',
-        'city',
-        'state',
-        'pincode',
-        'attendanceType',
-        'remark',
-        'status',
-        'approved',
-        'unapprovedOutDuration',
-        'hours',
-        'outTime',
-        'outDate',
-        'outDateTime',
-        'outPlant',
-        'addressOut',
-        'streetOut',
-        'areaOut',
-        'cityOut',
-        'stateOut',
-        'pincodeOut',
-        'outType',
-        'latOut',
-        'lngOut',
-        'nextInEnableTime',
-        'autoCheckout',
-        'autoOut',
-        'autoTriggerTime',
-      ];
-
-      for (const k of candidateKeys) {
-        if (Object.prototype.hasOwnProperty.call(body, k) && body[k] !== undefined) {
-          mergeUpdate[k] = body[k];
-        }
-      }
-
-      // Do not allow accidental overwriting of employeeId/date.
-      mergeUpdate.employeeId = employeeId;
-      mergeUpdate.date = date;
+      const updateFields: any = { ...body };
+      delete updateFields._id;
+      delete updateFields.id;
 
       await attendanceCol.updateOne(
-        { _id: existing._id },
-        { $set: mergeUpdate }
+        { employeeId, date },
+        { $set: updateFields }
       );
-
+      invalidateBootstrapCache();
       return NextResponse.json({ success: true, id: existing._id });
     }
 
     const result = await db.collection(collection).insertOne(body);
+    invalidateBootstrapCache();
     return NextResponse.json({ success: true, id: result.insertedId });
-  } catch (error) {
+  } catch (error: any) {
     console.error(`POST Error in ${params.collection}:`, error);
-    return NextResponse.json({ error: 'Failed to insert data' }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create record" }, { status: 500 });
   }
 }
 
-// 3. PUT HANDLER: YAHI MISSING THA JISSE 405 AA RAHA THA!
+// 3. PUT HANDLER: Data update karne ke liye
 export async function PUT(
   req: Request,
   { params }: { params: { collection: string } }
 ) {
   try {
     const { collection } = params;
-    
-    // URL se ?id=JZvVOQ8R3... nikalne ke liye
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: "Missing document ID" }, { status: 400 });
+      return NextResponse.json({ error: "Missing ID" }, { status: 400 });
     }
 
     const body = await req.json();
     const db = await getDb();
 
-    // MongoDB ke IDs ke formats (_id as string vs ObjectId) ko match karne ke liye safe query
-    let query: any = { _id: id };
-    if (ObjectId.isValid(id)) {
-      query = {
-        $or: [
-          { _id: id },
-          { _id: new ObjectId(id) },
-          { id: id }
-        ]
-      };
+    if (collection === 'attendance') {
+      const sessionUser = getSessionUser(req);
+      const userRole = String(sessionUser?.role || body?.userRole || body?.role || '').trim().toUpperCase();
+
+      // If user is trying to manually punch OUT but has non-employee role (and not an admin approval update)
+      if (body.outTime && !body.approved && !body.isApprovalAction && userRole && userRole !== 'EMPLOYEE') {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Only employees are allowed to Mark IN and Mark OUT."
+          },
+          { status: 403 }
+        );
+      }
     }
 
-    // Body se internal _id ya id remove karenge taaki Mongo schema structural crash na ho
     const updateData = { ...body };
     delete updateData._id;
     delete updateData.id;
+
+    let query: any = { id: id };
+    if (ObjectId.isValid(id)) {
+      query = { $or: [{ _id: new ObjectId(id) }, { id: id }, { _id: id }] };
+    }
 
     const result = await db.collection(collection).updateOne(
       query,
       { $set: updateData }
     );
 
-    return NextResponse.json({ success: true, modifiedCount: result.modifiedCount });
-  } catch (error) {
-    console.error(`PUT Error in collection ${params.collection}:`, error);
-    return NextResponse.json({ error: "Failed to update data" }, { status: 500 });
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: "Record not found" }, { status: 404 });
+    }
+
+    invalidateBootstrapCache();
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error(`PUT Error in ${params.collection}:`, error);
+    return NextResponse.json({ error: "Failed to update record" }, { status: 500 });
   }
 }
 
-// 4. DELETE HANDLER: Record delete karne ke liye
+// 4. DELETE HANDLER: Data delete karne ke liye
 export async function DELETE(
   req: Request,
   { params }: { params: { collection: string } }
@@ -222,19 +173,26 @@ export async function DELETE(
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: "Missing document ID" }, { status: 400 });
+      return NextResponse.json({ error: "Missing ID" }, { status: 400 });
     }
 
     const db = await getDb();
-    let query: any = { _id: id };
+
+    let query: any = { id: id };
     if (ObjectId.isValid(id)) {
-      query = { $or: [{ _id: id }, { _id: new ObjectId(id) }] };
+      query = { $or: [{ _id: new ObjectId(id) }, { id: id }, { _id: id }] };
     }
 
-    await db.collection(collection).deleteOne(query);
+    const result = await db.collection(collection).deleteOne(query);
+
+    if (result.deletedCount === 0) {
+      return NextResponse.json({ error: "Record not found" }, { status: 404 });
+    }
+
+    invalidateBootstrapCache();
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error(`DELETE Error in ${params.collection}:`, error);
-    return NextResponse.json({ error: "Failed to delete data" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete record" }, { status: 500 });
   }
 }

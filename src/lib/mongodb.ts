@@ -7,37 +7,71 @@ if (!uri) {
   throw new Error('Missing environment variable: MONGODB_URI');
 }
 
-let cachedClient: MongoClient | null = (global as any)._mongoClient || null;
-let cachedDb: Db | null = (global as any)._mongoDb || null;
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
+  var _mongoDb: Db | undefined;
+  var _indexesCreated: boolean | undefined;
+}
+
+let clientPromise: Promise<MongoClient>;
+
+if (process.env.NODE_ENV === 'development') {
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(uri, {
+      maxPoolSize: 50,
+      minPoolSize: 5,
+      maxIdleTimeMS: 300000,
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      tls: true,
+      retryWrites: true,
+    });
+    global._mongoClientPromise = client.connect();
+  }
+  clientPromise = global._mongoClientPromise;
+} else {
+  const client = new MongoClient(uri, {
+    maxPoolSize: 50,
+    minPoolSize: 5,
+    maxIdleTimeMS: 300000,
+    serverSelectionTimeoutMS: 8000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    tls: true,
+    retryWrites: true,
+  });
+  clientPromise = client.connect();
+}
+
+async function ensureIndexes(db: Db) {
+  if (global._indexesCreated) return;
+  global._indexesCreated = true;
+  try {
+    // Background index creation to make lookups and sorts instant (< 10ms)
+    db.collection('attendance').createIndex({ date: -1 }, { background: true }).catch(() => {});
+    db.collection('attendance').createIndex({ employeeId: 1, date: -1 }, { background: true }).catch(() => {});
+    db.collection('employees').createIndex({ employeeId: 1 }, { background: true }).catch(() => {});
+    db.collection('employees').createIndex({ aadhaar: 1 }, { background: true }).catch(() => {});
+    db.collection('employees').createIndex({ mobile: 1 }, { background: true }).catch(() => {});
+    db.collection('leaveRequests').createIndex({ employeeId: 1, status: 1 }, { background: true }).catch(() => {});
+    db.collection('notifications').createIndex({ createdAt: -1 }, { background: true }).catch(() => {});
+  } catch {}
+}
 
 export async function getClient(): Promise<MongoClient> {
-  if (cachedClient) {
-    return cachedClient;
-  }
-
-  const client = new MongoClient(uri, {
-    maxPoolSize: 25,
-    minPoolSize: 5,
-    maxIdleTimeMS: 60000,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 30000,
-    connectTimeoutMS: 10000,
-  });
-
-  await client.connect();
-  cachedClient = client;
-  (global as any)._mongoClient = client;
-  return client;
+  return clientPromise;
 }
 
 export async function getDb(): Promise<Db> {
-  if (cachedDb) {
-    return cachedDb;
+  if (global._mongoDb) {
+    return global._mongoDb;
   }
-  const client = await getClient();
-  cachedDb = client.db(dbName);
-  (global as any)._mongoDb = cachedDb;
-  return cachedDb;
+  const client = await clientPromise;
+  const db = client.db(dbName);
+  global._mongoDb = db;
+  ensureIndexes(db);
+  return db;
 }
 
 export async function getCollection<TSchema extends Record<string, any> = Record<string, any>>(

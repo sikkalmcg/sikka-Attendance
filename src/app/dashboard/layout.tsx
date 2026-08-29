@@ -683,7 +683,11 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { verifiedUser, isLoading, employees, users, refreshData } = useData();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-  const [maxWaitExceeded, setMaxWaitExceeded] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
 
@@ -831,9 +835,9 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
   }, [verifiedUser, pathname, router]);
 
   // Only show minimal loader if user session has not loaded yet
-  if (!verifiedUser && isLoading) {
+  if (!isMounted || (!verifiedUser && isLoading)) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-slate-50">
+      <div className="h-screen w-full flex items-center justify-center bg-slate-50" suppressHydrationWarning>
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center w-28 h-28">
             <div className="absolute inset-0 rounded-full border-2 border-dashed border-[#C59D2E]/40 animate-gateway-spin-slow" />

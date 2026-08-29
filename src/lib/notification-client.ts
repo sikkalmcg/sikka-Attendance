@@ -109,7 +109,7 @@ export async function syncDeviceWithBackend(user: any): Promise<boolean> {
             const convertedVapidKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
             sub = await reg.pushManager.subscribe({
               userVisibleOnly: true,
-              applicationServerKey: convertedVapidKey,
+              applicationServerKey: convertedVapidKey as unknown as BufferSource,
             });
           }
           if (sub) {
@@ -247,7 +247,8 @@ export async function sendTestNotification(user: any): Promise<boolean> {
     }
 
     // 3. Show Notification via Service Worker (Standard for Android Chrome / Web)
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    const isPermissionGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
+    if (isPermissionGranted && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       try {
         let reg = await navigator.serviceWorker.getRegistration();
         if (!reg) {
@@ -262,7 +263,9 @@ export async function sendTestNotification(user: any): Promise<boolean> {
             silent: false,
             tag: 'sikka-test-' + Date.now(),
             data: { url: '/dashboard/attendance' },
-          } as any);
+          } as any).catch((err) => {
+            console.warn('SW test notification notice:', err);
+          });
         }
       } catch (swErr) {
         console.warn('SW test notification notice:', swErr);

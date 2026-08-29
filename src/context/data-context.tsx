@@ -39,23 +39,6 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-// Fast local session storage cache helper for instant 0ms load
-const getInitialCache = (key: string) => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = sessionStorage.getItem(`sikka_cache_${key}`);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [];
-};
-
-const setCache = (key: string, data: any[]) => {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.setItem(`sikka_cache_${key}`, JSON.stringify(data));
-  } catch {}
-};
-
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
 
@@ -71,24 +54,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return null;
   });
 
-  // 2. Pre-populate state from local cache so UI renders immediately without blank delays
-  const [employees, setEmployees] = useState<Employee[]>(() => getInitialCache('employees'));
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => getInitialCache('attendance'));
-  const [vouchers, setVouchers] = useState<Voucher[]>(() => getInitialCache('vouchers'));
-  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(() => getInitialCache('payroll'));
-  const [plants, setPlants] = useState<Plant[]>(() => getInitialCache('plants'));
-  const [firms, setFirms] = useState<Firm[]>(() => getInitialCache('firms'));
-  const [users, setUsers] = useState<User[]>(() => getInitialCache('users'));
-  const [holidays, setHolidays] = useState<Holiday[]>(() => getInitialCache('holidays'));
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => getInitialCache('notifications'));
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => getInitialCache('leaveRequests'));
-  
-  // If cache is already present, don't block the screen with full loading state
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const hasCachedData = sessionStorage.getItem('sikka_cache_attendance') || sessionStorage.getItem('sikka_cache_employees');
-    return !hasCachedData;
-  });
+  // Helper to read local bundle cache for instant 0ms startup
+  const getInitialCache = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('sikka_data_bundle');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  };
+
+  const initialCache = useMemo(() => getInitialCache(), []);
+
+  const [employees, setEmployees] = useState<Employee[]>(() => initialCache?.employees || []);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => initialCache?.attendance || []);
+  const [vouchers, setVouchers] = useState<Voucher[]>(() => initialCache?.vouchers || []);
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(() => initialCache?.payroll || []);
+  const [plants, setPlants] = useState<Plant[]>(() => initialCache?.plants || []);
+  const [firms, setFirms] = useState<Firm[]>(() => initialCache?.firms || []);
+  const [users, setUsers] = useState<User[]>(() => initialCache?.users || []);
+  const [holidays, setHolidays] = useState<Holiday[]>(() => initialCache?.holidays || []);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => initialCache?.notifications || []);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => initialCache?.leaveRequests || []);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !initialCache);
 
   useEffect(() => {
     let sessionUser = null;
@@ -121,84 +109,57 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const currentUserId = currentUser?.id || currentUser?.employeeId || currentUser?.username;
   const currentUserRole = currentUser?.role ? String(currentUser.role).toUpperCase() : undefined;
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isManualRefresh = false) => {
     if (!currentUserId) {
       setIsLoading(false);
       return;
     }
     
     try {
-      // 1. Single-roundtrip bootstrap API call (10x faster than 9 separate HTTP requests)
-      const bootstrapUrl = `/api/data/bootstrap?role=${encodeURIComponent(currentUserRole || 'EMPLOYEE')}&employeeId=${encodeURIComponent(currentUserId || '')}`;
-      const res = await fetch(bootstrapUrl, { cache: 'no-store' });
+      // 1. Single-roundtrip bootstrap API call (fetches all MongoDB tables in parallel)
+      const url = isManualRefresh ? '/api/data/bootstrap?refresh=true' : '/api/data/bootstrap';
+      const res = await fetch(url, { cache: 'no-store' });
 
       if (res.ok) {
         const bundle = await res.json();
         if (bundle && typeof bundle === 'object') {
-          if (Array.isArray(bundle.employees)) {
-            setEmployees(bundle.employees);
-            setCache('employees', bundle.employees);
-          }
-          if (Array.isArray(bundle.attendance)) {
-            setAttendanceRecords(bundle.attendance);
-            setCache('attendance', bundle.attendance);
-          }
-          if (Array.isArray(bundle.plants)) {
-            setPlants(bundle.plants);
-            setCache('plants', bundle.plants);
-          }
-          if (Array.isArray(bundle.holidays)) {
-            setHolidays(bundle.holidays);
-            setCache('holidays', bundle.holidays);
-          }
-          if (Array.isArray(bundle.leaveRequests)) {
-            setLeaveRequests(bundle.leaveRequests);
-            setCache('leaveRequests', bundle.leaveRequests);
-          }
-          if (Array.isArray(bundle.notifications)) {
-            setNotifications(bundle.notifications);
-            setCache('notifications', bundle.notifications);
-          }
-          if (Array.isArray(bundle.vouchers)) {
-            setVouchers(bundle.vouchers);
-            setCache('vouchers', bundle.vouchers);
-          }
-          if (Array.isArray(bundle.firms)) {
-            setFirms(bundle.firms);
-            setCache('firms', bundle.firms);
-          }
-          if (Array.isArray(bundle.users)) {
-            setUsers(bundle.users);
-            setCache('users', bundle.users);
-          }
-          if (Array.isArray(bundle.payroll)) {
-            setPayrollRecords(bundle.payroll);
-            setCache('payroll', bundle.payroll);
-          }
+          if (Array.isArray(bundle.employees)) setEmployees(bundle.employees);
+          if (Array.isArray(bundle.attendance)) setAttendanceRecords(bundle.attendance);
+          if (Array.isArray(bundle.plants)) setPlants(bundle.plants);
+          if (Array.isArray(bundle.holidays)) setHolidays(bundle.holidays);
+          if (Array.isArray(bundle.leaveRequests)) setLeaveRequests(bundle.leaveRequests);
+          if (Array.isArray(bundle.notifications)) setNotifications(bundle.notifications);
+          if (Array.isArray(bundle.vouchers)) setVouchers(bundle.vouchers);
+          if (Array.isArray(bundle.firms)) setFirms(bundle.firms);
+          if (Array.isArray(bundle.users)) setUsers(bundle.users);
+          if (Array.isArray(bundle.payroll)) setPayrollRecords(bundle.payroll);
           setIsLoading(false);
+
+          // Save to local cache for instant future loads
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('sikka_data_bundle', JSON.stringify(bundle));
+            } catch (storageErr) {
+              console.warn('Local bundle cache storage warning:', storageErr);
+            }
+          }
           return;
         }
       }
 
-      // 2. Fallback in case of unexpected bootstrap network error
-      let collectionsToFetch: string[] = ['employees', 'attendance', 'plants', 'holidays', 'leaveRequests', 'notifications'];
-      if (currentUserRole !== 'EMPLOYEE') {
-        collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests', 'users', 'notifications', 'payroll'];
-      }
-
+      // 2. Direct fallback in case of network variance
+      const collectionsToFetch = ['employees', 'attendance', 'plants', 'holidays', 'leaveRequests', 'notifications', 'vouchers', 'firms', 'users', 'payroll'];
       const results = await Promise.all(
         collectionsToFetch.map(col =>
           fetch(`/api/data/${col}`, { cache: 'no-store' })
-            .then(res => res.ok ? res.json() : [])
+            .then(r => r.ok ? r.json() : [])
             .catch(() => [])
         )
       );
 
       const dataMap: Record<string, any[]> = {};
       collectionsToFetch.forEach((col, index) => {
-        const parsed = Array.isArray(results[index]) ? results[index] : (results[index]?.data || []);
-        dataMap[col] = parsed;
-        setCache(col, parsed);
+        dataMap[col] = Array.isArray(results[index]) ? results[index] : (results[index]?.data || []);
       });
 
       if (dataMap['employees']) setEmployees(dataMap['employees']);
@@ -211,12 +172,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (dataMap['holidays']) setHolidays(dataMap['holidays']);
       if (dataMap['leaveRequests']) setLeaveRequests(dataMap['leaveRequests']);
       if (dataMap['notifications']) setNotifications(dataMap['notifications']);
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('sikka_data_bundle', JSON.stringify(dataMap));
+        } catch (e) {}
+      }
     } catch (error) {
       console.error("Failed to fetch data efficiently:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserId, currentUserRole]);
+  }, [currentUserId]);
 
   useEffect(() => {
     fetchData();
@@ -233,17 +200,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           const json = await res.json();
           const list = Array.isArray(json) ? json : (json?.data || []);
           setNotifications(list);
-          setCache('notifications', list);
         }
       } catch (err) {
         console.debug("Notification sync error:", err);
       }
     };
 
-    // Polling interval every 15 seconds
     const interval = setInterval(syncNotifications, 15000);
 
-    // Sync on tab focus / visibility change
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         syncNotifications();
@@ -259,29 +223,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onFocus);
     };
-  }, [currentUserId, currentUserRole]);
+  }, [currentUserId]);
 
   const verifiedUser = useMemo(() => {
     if (!currentUser) return null;
 
     const userRole = String(currentUser.role || '').toUpperCase();
     if (userRole === 'EMPLOYEE') {
-      const loginIdent = String(currentUser.username || currentUser.employeeId || '').replace(/\s/g, '').toUpperCase();
+      const loginIdent = String(currentUser.username || currentUser.employeeId || currentUser.id || '').replace(/\s/g, '').toUpperCase();
       const dbEmp = (employees || []).find(e => {
-        const empId = String(e.employeeId || e.id || (e as any)._id || '').replace(/\s/g, '').toUpperCase();
+        const empId = String(e.employeeId || '').replace(/\s/g, '').toUpperCase();
+        const id = String(e.id || (e as any)._id || '').replace(/\s/g, '').toUpperCase();
         const empAadhaar = String((e as any).aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
         const empMobile = String((e as any).mobileNumber || e.mobile || '').replace(/\s/g, '');
-        return empId === loginIdent || empAadhaar === loginIdent || empMobile === loginIdent;
+        const empName = String(e.name || (e as any).fullName || '').replace(/\s/g, '').toUpperCase();
+        return empId === loginIdent || id === loginIdent || empAadhaar === loginIdent || empMobile === loginIdent || empName === loginIdent;
       });
       const fullName = dbEmp 
-        ? (dbEmp.firstName ? `${dbEmp.firstName} ${dbEmp.lastName || ''}`.trim() : (dbEmp.name || (dbEmp as any).fullName || "Employee")) 
-        : (currentUser.fullName || "Employee");
+        ? (dbEmp.name || (dbEmp as any).fullName || (dbEmp.firstName ? `${dbEmp.firstName} ${dbEmp.lastName || ''}`.trim() : "Employee")) 
+        : (currentUser.fullName || currentUser.name || "Employee");
       return dbEmp 
         ? { ...currentUser, ...dbEmp, fullName, avatar: dbEmp.avatar || currentUser.avatar, employeeId: dbEmp.employeeId || currentUser.employeeId } 
         : currentUser;
     }
 
-    // HR aur Management users ke validation parameters ko filter out karein
     if (currentUser.role !== 'SUPER_ADMIN') {
       const dbUser = (users || []).find(u => u.id === currentUser.id || u.username === currentUser.username);
       return dbUser ? { ...currentUser, ...dbUser } : currentUser;
@@ -294,26 +259,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const tempId = data.id || `temp-${Date.now()}`;
     const newRecord = { ...data, id: tempId, _id: tempId, createdAt: new Date().toISOString() };
 
-    // Optimistic UI update for attendance, leave requests, and notifications
+    // Optimistic UI update
     if (col === 'attendance') {
       setAttendanceRecords(prev => {
         const filtered = prev.filter(r => !(r.employeeId === newRecord.employeeId && r.date === newRecord.date));
-        const updated = [newRecord, ...filtered];
-        setCache('attendance', updated);
-        return updated;
+        return [newRecord, ...filtered];
       });
     } else if (col === 'leaveRequests') {
-      setLeaveRequests(prev => {
-        const updated = [newRecord, ...prev];
-        setCache('leaveRequests', updated);
-        return updated;
-      });
+      setLeaveRequests(prev => [newRecord, ...prev]);
     } else if (col === 'notifications') {
-      setNotifications(prev => {
-        const updated = [newRecord, ...prev];
-        setCache('notifications', updated);
-        return updated;
-      });
+      setNotifications(prev => [newRecord, ...prev]);
     }
 
     try {
@@ -329,8 +284,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } else if (resData?.id && col === 'notifications') {
           setNotifications(prev => prev.map(n => (n.id === tempId ? { ...n, id: resData.id, _id: resData.id } : n)));
         }
-      } else {
-        console.warn(`Failed to append record in ${col}. Status: ${res.status}`);
       }
       if (!skipRefresh) await fetchData();
     } catch (e) {
@@ -339,33 +292,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
-    // Optimistic UI update for attendance and notifications
     if (col === 'attendance') {
-      setAttendanceRecords(prev => {
-        const updated = prev.map(r => {
-          const rId = String(r.id || (r as any)._id || '');
-          const targetId = String(id || '');
-          if (rId === targetId) {
-            return { ...r, ...data, updatedAt: new Date().toISOString() };
-          }
-          return r;
-        });
-        setCache('attendance', updated);
-        return updated;
-      });
+      setAttendanceRecords(prev => prev.map(r => {
+        const rId = String(r.id || (r as any)._id || '');
+        const targetId = String(id || '');
+        if (rId === targetId) {
+          return { ...r, ...data, updatedAt: new Date().toISOString() };
+        }
+        return r;
+      }));
     } else if (col === 'notifications') {
-      setNotifications(prev => {
-        const updated = prev.map(n => {
-          const nId = String(n.id || (n as any)._id || '');
-          const targetId = String(id || '');
-          if (nId === targetId) {
-            return { ...n, ...data };
-          }
-          return n;
-        });
-        setCache('notifications', updated);
-        return updated;
-      });
+      setNotifications(prev => prev.map(n => {
+        const nId = String(n.id || (n as any)._id || '');
+        const targetId = String(id || '');
+        if (nId === targetId) {
+          return { ...n, ...data };
+        }
+        return n;
+      }));
     }
 
     try {
@@ -391,14 +335,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (col === 'notifications') {
-      setNotifications(prev => {
-        const updated = prev.filter(n => {
-          const nId = String(n.id || (n as any)._id || '');
-          return nId !== String(id);
-        });
-        setCache('notifications', updated);
-        return updated;
-      });
+      setNotifications(prev => prev.filter(n => {
+        const nId = String(n.id || (n as any)._id || '');
+        return nId !== String(id);
+      }));
     }
     try {
       await fetch(`/api/data/${col}?id=${id}`, { method: 'DELETE' });

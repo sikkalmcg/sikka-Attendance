@@ -115,11 +115,17 @@ export const postNativeNotification = async (
     // 2. Android Bridge native notification if inside Android Studio WebView container
     const bridge = window.AndroidBridge || window.Android;
     if (bridge && typeof bridge.postNotification === 'function') {
-      bridge.postNotification(notifTitle, notifBody, type, employeeId, role);
+      try {
+        bridge.postNotification(notifTitle, notifBody, type, employeeId, role);
+      } catch (err) {
+        console.warn('Native bridge notification error:', err);
+      }
     }
 
-    // 3. Service Worker Notification (Works on Android Mobile Notification Bar, PWA, Background)
-    if ('serviceWorker' in navigator) {
+    // 3. Service Worker Notification (Only if permission is granted)
+    const isPermissionGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
+
+    if (isPermissionGranted && 'serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistration().then((reg) => {
         if (reg) {
           reg.showNotification(notifTitle, {
@@ -132,13 +138,17 @@ export const postNativeNotification = async (
             requireInteraction: true,
             silent: false,
             data: { url: '/dashboard/attendance' },
-          } as any);
+          } as any).catch((err) => {
+            console.warn('Service worker showNotification notice:', err);
+          });
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.warn('getRegistration error:', err);
+      });
     }
 
-    // 4. Direct Web Notification fallback (desktop only)
-    if ('Notification' in window && Notification.permission === 'granted') {
+    // 4. Direct Web Notification fallback (desktop only, when permission is granted)
+    if (isPermissionGranted && 'Notification' in window) {
       try {
         new Notification(notifTitle, {
           body: notifBody,
