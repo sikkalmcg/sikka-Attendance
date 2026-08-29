@@ -1945,20 +1945,7 @@ export default function AttendancePage() {
   // =========================================================================
   return (
     <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4 pt-2">
-        <div>
-          <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900 flex items-center gap-2">
-            <ShieldCheck className="text-primary w-6 h-6" /> Mark Attendance
-          </h1>
-          <p className="text-xs font-semibold text-slate-500 mt-0.5">
-            Gateway Portal for employee attendance check-in, check-out and history.
-          </p>
-        </div>
-        <Badge className="bg-emerald-600 text-white text-xs font-black uppercase px-3 py-1.5 rounded-xl w-fit">
-          Role: Employee
-        </Badge>
-      </div>
+
 
       {/* 0. GATEWAY PORTAL (MARK IN / MARK OUT) - STRICTLY FOR EMPLOYEE */}
       <div className="max-w-xl mx-auto w-full space-y-6">
