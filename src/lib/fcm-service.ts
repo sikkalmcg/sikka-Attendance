@@ -136,14 +136,18 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
     const seenEndpoints = new Set<string>();
     const seenTokens = new Set<string>();
 
+    const resolvedUnreadCount = data?.badgeCount || data?.unreadCount || 1;
+
     const webPushPayload = JSON.stringify({
       title: notifTitle,
       body: notifBody,
       icon: SIKKA_LOCAL_LOGO,
       badge: SIKKA_LOCAL_LOGO,
       image: SIKKA_LOCAL_LOGO,
-      badgeCount: 1,
-      vibrate: [0, 300, 200, 300],
+      badgeCount: resolvedUnreadCount,
+      notificationId: resolvedNotifId,
+      url: deepLink || '/dashboard/attendance',
+      vibrate: [200, 100, 200, 100, 200],
       channel_id: CHANNEL_ID,
       sound: 'default',
       data: {
@@ -157,6 +161,14 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
       },
     });
 
+    const webPushOptions: webpush.RequestOptions = {
+      TTL: 86400, // Retain for 24h if phone is offline/killed
+      urgency: 'high',
+      headers: {
+        Urgency: 'high',
+      },
+    };
+
     // 3. Dispatch via Web-Push (VAPID) to all registered device subscriptions
     for (const device of allDevices) {
       const sub = device.subscription;
@@ -165,7 +177,7 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
         result.totalTokens++;
 
         try {
-          await webpush.sendNotification(sub, webPushPayload);
+          await webpush.sendNotification(sub, webPushPayload, webPushOptions);
           result.successCount++;
         } catch (pushErr: any) {
           result.failureCount++;
