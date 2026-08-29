@@ -138,7 +138,16 @@ object AttendanceNotificationManager {
      */
     fun isEmployeeNotificationAllowed(context: Context, notifType: String?): Boolean {
         val typeUpper = (notifType ?: "").uppercase().trim()
-        val isEmployeeOnlyType = typeUpper in listOf("MARK_IN", "MARK_OUT", "AUTO_OUT", "SHIFT_REMINDER")
+        val isEmployeeOnlyType = typeUpper in listOf(
+            "MARK_IN",
+            "MARK_OUT",
+            "AUTO_OUT",
+            "SHIFT_REMINDER",
+            "DAY_IN_REMINDER",
+            "DAY_OUT_REMINDER",
+            "NIGHT_IN_REMINDER",
+            "NIGHT_OUT_REMINDER"
+        )
 
         if (!isEmployeeOnlyType) {
             return true

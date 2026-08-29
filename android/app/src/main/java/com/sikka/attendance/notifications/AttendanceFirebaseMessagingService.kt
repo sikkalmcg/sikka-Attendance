@@ -38,7 +38,7 @@ class AttendanceFirebaseMessagingService : FirebaseMessagingService() {
             title = when (notifType.uppercase()) {
                 "MARK_IN" -> "Mark IN Successful"
                 "MARK_OUT" -> "Mark OUT Successful"
-                "SHIFT_REMINDER" -> "Shift Attendance Reminder"
+                "DAY_IN_REMINDER", "DAY_OUT_REMINDER", "NIGHT_IN_REMINDER", "NIGHT_OUT_REMINDER", "SHIFT_REMINDER" -> "Attendance Reminder"
                 "AUTO_OUT" -> "Auto OUT Notification"
                 else -> "Attendance Alert"
             }

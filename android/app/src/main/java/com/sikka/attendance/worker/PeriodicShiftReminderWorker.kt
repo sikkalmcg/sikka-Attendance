@@ -57,11 +57,13 @@ class PeriodicShiftReminderWorker(
                             val employeeId = item.optString("employeeId", "")
 
                             if (message.isNotBlank()) {
+                                val notifTitle = item.optString("title", if (reminderType == "MARK_IN") "Attendance Reminder" else "Attendance Reminder")
+                                val notifType = item.optString("type", "SHIFT_REMINDER")
                                 AttendanceNotificationManager.showNotification(
                                     context = applicationContext,
-                                    title = if (reminderType == "MARK_IN") "Mark IN Reminder" else "Mark OUT Reminder",
+                                    title = notifTitle,
                                     message = message,
-                                    notifType = "SHIFT_REMINDER",
+                                    notifType = notifType,
                                     employeeId = employeeId
                                 )
                             }
