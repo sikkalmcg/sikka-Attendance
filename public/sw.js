@@ -22,7 +22,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(fetch(event.request));
 });
 
-// 🔔 Master Fix: Web-Push / FCM Push Notification Handler (Foreground, Background, Killed/Closed App, Reconnect)
+// ══════════════════════════════════════════════════════════════════════════════
+// 🔔 PUSH NOTIFICATION HANDLER
+// Works when app is: Foreground | Background | Minimized | COMPLETELY CLOSED
+// This is the only handler needed for reliable delivery — it runs in the
+// Service Worker process which the OS keeps alive independently of the app.
+// ══════════════════════════════════════════════════════════════════════════════
 self.addEventListener('push', function (event) {
   if (!event.data) return;
 
@@ -33,11 +38,14 @@ self.addEventListener('push', function (event) {
     rawData = { body: event.data.text() || 'New Notification received' };
   }
 
-  const title = rawData.title || rawData.notification?.title || 'Sikka ERP';
-  const body = rawData.body || rawData.message || rawData.notification?.body || 'New Notification received';
-  const notifId = rawData.notificationId || rawData.data?.notificationId || 'sikka-notification-' + Date.now();
+  const title = rawData.title || rawData.notification?.title || 'Sikka Attendance';
+  const body = rawData.body || rawData.message || rawData.notification?.body || 'New notification from Sikka ERP.';
+  const notifId = rawData.notificationId || rawData.data?.notificationId || ('sikka-' + Date.now());
   const targetUrl = rawData.url || rawData.data?.url || rawData.data?.deepLink || '/dashboard/attendance';
-  const badgeCount = rawData.badgeCount || rawData.data?.badgeCount || 1;
+  
+  // Parse badge count safely
+  const rawBadge = rawData.badgeCount || rawData.data?.badgeCount;
+  const badgeCount = (typeof rawBadge === 'number' && rawBadge > 0) ? rawBadge : 1;
 
   const iconUrl = getFullLogoUrl(rawData.icon || rawData.notification?.icon || SIKKA_LOCAL_LOGO);
   const badgeUrl = getFullLogoUrl(rawData.badge || rawData.notification?.badge || SIKKA_BADGE_LOGO);
@@ -49,6 +57,8 @@ self.addEventListener('push', function (event) {
     badge: badgeUrl,
     image: imageUrl,
     vibrate: VIBRATION_PATTERN,
+    // Use notifId as tag to prevent duplicate OS notifications
+    // (one per dedupeKey, same as MongoDB deduplication)
     tag: notifId,
     renotify: true,
     requireInteraction: true,
@@ -59,48 +69,61 @@ self.addEventListener('push', function (event) {
       ...(rawData.data || {})
     },
     actions: [
-      { action: 'open', title: 'Open ERP' }
+      { action: 'open', title: '✅ Mark Attendance' },
+      { action: 'dismiss', title: 'Later' }
     ]
   };
 
   const notificationPromise = self.registration.showNotification(title, options);
-  
-  const badgePromise = ('setAppBadge' in navigator && badgeCount)
-    ? navigator.setAppBadge(badgeCount).catch(() => {})
+
+  // Update the PWA launcher badge count
+  const badgePromise = ('setAppBadge' in self.navigator && badgeCount > 0)
+    ? self.navigator.setAppBadge(badgeCount).catch(() => {})
     : Promise.resolve();
 
-  // Notify any active foreground tabs to trigger sound & update red dot badge
-  const clientNotifyPromise = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-    for (const client of clientList) {
-      client.postMessage({
-        type: 'PUSH_NOTIFICATION_RECEIVED',
-        payload: {
-          title,
-          body,
-          data: options.data,
-          badgeCount
-        }
-      });
-    }
-  });
+  // Notify any open foreground tabs so they can:
+  // 1. Play notification sound
+  // 2. Update the in-app red notification badge
+  const clientNotifyPromise = self.clients
+    .matchAll({ type: 'window', includeUncontrolled: true })
+    .then((clientList) => {
+      for (const client of clientList) {
+        client.postMessage({
+          type: 'PUSH_NOTIFICATION_RECEIVED',
+          payload: {
+            title,
+            body,
+            data: options.data,
+            badgeCount
+          }
+        });
+      }
+    });
 
   event.waitUntil(Promise.all([notificationPromise, badgePromise, clientNotifyPromise]));
 });
 
-// 👆 Notification Click Navigation & Badge Clear
+// ══════════════════════════════════════════════════════════════════════════════
+// 👆 NOTIFICATION CLICK HANDLER
+// Handles tapping the notification — opens the correct page in the app.
+// ══════════════════════════════════════════════════════════════════════════════
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  if ('clearAppBadge' in navigator) {
-    navigator.clearAppBadge().catch(() => {});
+  // Clear the launcher badge when user taps a notification
+  if ('clearAppBadge' in self.navigator) {
+    self.navigator.clearAppBadge().catch(() => {});
   }
+
+  // Handle dismiss action — do nothing except close the notification
+  if (event.action === 'dismiss') return;
 
   const notifData = event.notification.data || {};
   const notifId = notifData.notificationId || notifData.id;
   const targetUrl = notifData.url || notifData.deepLink || '/dashboard/attendance';
 
-  // Mark notification as read in database when clicked
-  if (notifId && !String(notifId).startsWith('sikka-notification-')) {
+  // Mark notification as read in the database
+  if (notifId && !String(notifId).startsWith('sikka-')) {
     fetch('/api/notifications/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -110,12 +133,18 @@ self.addEventListener('notificationclick', function (event) {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+      // If the app is already open, navigate to the target URL and focus
       for (let i = 0; i < clientList.length; i++) {
-        let client = clientList[i];
-        if (client.url.includes(targetUrl) && 'focus' in client) {
+        const client = clientList[i];
+        if ('focus' in client) {
+          // Navigate the existing tab to the target URL
+          client.navigate(targetUrl).catch(() => {
+            client.focus();
+          });
           return client.focus();
         }
       }
+      // App is closed — open a new window at the target URL
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }
@@ -123,7 +152,9 @@ self.addEventListener('notificationclick', function (event) {
   );
 });
 
-// 🔔 Handle in-app local notification trigger messages
+// ══════════════════════════════════════════════════════════════════════════════
+// 📩 LOCAL NOTIFICATION TRIGGER (from in-app message to SW)
+// ══════════════════════════════════════════════════════════════════════════════
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_LOCAL_NOTIFICATION') {
     const { title, message, url, data, icon, image } = event.data;
@@ -138,7 +169,7 @@ self.addEventListener('message', (event) => {
       image: finalImage,
       vibrate: VIBRATION_PATTERN,
       silent: false,
-      tag: 'sikka-local-notification-' + Date.now(),
+      tag: 'sikka-local-' + Date.now(),
       data: { url: url || '/dashboard/attendance', ...(data || {}) },
     });
   }

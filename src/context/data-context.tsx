@@ -15,6 +15,7 @@ import {
 } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Cookies from 'js-cookie';
+import { autoSubscribeIfPermitted } from '@/lib/notification-client';
 
 interface DataContextType {
   employees: Employee[];
@@ -188,6 +189,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchData();
   }, [currentUserId, fetchData]);
+
+  // Silently refresh VAPID push subscription after each successful session load
+  useEffect(() => {
+    if (!currentUser) return;
+    const t = setTimeout(() => {
+      autoSubscribeIfPermitted(currentUser).catch(() => {});
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [currentUser]);
 
   // Real-time live synchronization for notifications
   useEffect(() => {

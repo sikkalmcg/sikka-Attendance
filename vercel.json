@@ -1,0 +1,20 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/shift-reminders",
+      "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/shift-reminders",
+      "schedule": "30 4 * * *"
+    },
+    {
+      "path": "/api/cron/shift-reminders",
+      "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/cron/shift-reminders",
+      "schedule": "30 14 * * *"
+    }
+  ]
+}

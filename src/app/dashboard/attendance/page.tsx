@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -402,6 +403,22 @@ export default function AttendancePage() {
     const timer = setInterval(() => setCurrentTime(getISTTime()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Deep-link handler: open Mark IN or Mark OUT dialog from notification tap
+  // The notification payload sets deepLink = '/dashboard/attendance?action=mark_in'
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (!isMounted || !isEmployeeLogin) return;
+    const action = searchParams?.get("action");
+    if (action === "mark_in") {
+      // Small delay to allow location check to start first
+      const t = setTimeout(() => setActiveDialog("IN"), 800);
+      return () => clearTimeout(t);
+    } else if (action === "mark_out") {
+      const t = setTimeout(() => setActiveDialog("OUT"), 800);
+      return () => clearTimeout(t);
+    }
+  }, [isMounted, isEmployeeLogin, searchParams]);
 
   // Initialize selected admin employee when employees load
   useEffect(() => {

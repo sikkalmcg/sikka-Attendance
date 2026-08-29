@@ -144,6 +144,35 @@ export async function syncDeviceWithBackend(user: any): Promise<boolean> {
 }
 
 /**
+ * Auto-subscribe without prompting the user.
+ * Call this after login to ensure the VAPID push subscription is established
+ * and stored in MongoDB — without showing any permission dialog.
+ *
+ * Only acts if:
+ * - Notification permission is already 'granted'
+ * - A service worker and PushManager are available
+ *
+ * Safe to call on every login — idempotent.
+ */
+export async function autoSubscribeIfPermitted(user: any): Promise<boolean> {
+  try {
+    if (typeof window === 'undefined') return false;
+    if (!('Notification' in window)) return false;
+    if (Notification.permission !== 'granted') return false;
+
+    // Silently sync device + push subscription to backend
+    const ok = await syncDeviceWithBackend(user);
+    if (ok) {
+      console.log('[PushNotif] Auto-subscribe: VAPID subscription synced for', user?.employeeId || user?.username);
+    }
+    return ok;
+  } catch (e) {
+    console.warn('[PushNotif] Auto-subscribe failed:', e);
+    return false;
+  }
+}
+
+/**
  * Request notification permission from user, register service worker, subscribe with VAPID keys,
  * sync to DB, and display a test confirmation notification with sound and vibration.
  */

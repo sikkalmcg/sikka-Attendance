@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
+import { PushSubscriptionBootstrap } from '@/components/push-subscription-sync';
 
 
 export const metadata: Metadata = {
@@ -28,6 +29,9 @@ export default function RootLayout({
       <body className="font-body antialiased bg-background text-foreground">
         {children}
         <Toaster />
+
+        {/* Silent VAPID push subscription sync — runs on every page load if permission already granted */}
+        <PushSubscriptionBootstrap />
 
         <script
           dangerouslySetInnerHTML={{
