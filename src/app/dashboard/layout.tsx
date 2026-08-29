@@ -33,7 +33,8 @@ import {
   ArrowLeft, 
   Smartphone,
   Bell,
-  CheckCheck
+  CheckCheck,
+  Trash2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -70,10 +71,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import Cookies from 'js-cookie';
 import { format } from "date-fns";
-import { registerNativeUser, updateNativeBadgeCount, logoutNativeUser } from "@/lib/android-bridge";
+import { registerNativeUser, updateNativeBadgeCount, logoutNativeUser, setAppBadge, clearAppBadge, requestAppNotificationPermission } from "@/lib/android-bridge";
 
 function NotificationBell() {
-  const { notifications = [], updateRecord, refreshData, verifiedUser } = useData();
+  const { notifications = [], updateRecord, deleteRecord, refreshData, verifiedUser } = useData();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -139,9 +140,9 @@ function NotificationBell() {
     return userNotifications.filter((n: any) => !n.read).length;
   }, [userNotifications]);
 
-  // Sync with native Android badge count
+  // Sync with native Android badge count and Web PWA badge
   useEffect(() => {
-    updateNativeBadgeCount(unreadCount);
+    setAppBadge(unreadCount);
   }, [unreadCount]);
 
   // Format count: 1 to 9 as exact number, 10 or more as "9+"
@@ -178,6 +179,24 @@ function NotificationBell() {
       const notifId = notif.id || notif._id;
       if (notifId) {
         await updateRecord('notifications', notifId, { read: true }, true);
+      }
+    }
+    await refreshData();
+  };
+
+  const handleDeleteSingle = async (e: React.MouseEvent, notif: any) => {
+    e.stopPropagation();
+    const notifId = notif.id || notif._id;
+    if (notifId) {
+      await deleteRecord('notifications', notifId, true);
+    }
+  };
+
+  const handleClearAll = async () => {
+    for (const notif of userNotifications) {
+      const notifId = notif.id || notif._id;
+      if (notifId) {
+        await deleteRecord('notifications', notifId, true);
       }
     }
     await refreshData();
@@ -228,15 +247,28 @@ function NotificationBell() {
               )}
             </div>
           </div>
-          {unreadCount > 0 && (
-            <button
-              type="button"
-              onClick={handleMarkAllAsRead}
-              className="text-[11px] font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-1 bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-lg"
-            >
-              <CheckCheck className="w-3.5 h-3.5" /> Mark all read
-            </button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllAsRead}
+                title="Mark all as read"
+                className="text-[11px] font-bold text-primary hover:text-primary/80 transition-colors flex items-center gap-1 bg-primary/5 hover:bg-primary/10 px-2 py-1 rounded-lg"
+              >
+                <CheckCheck className="w-3.5 h-3.5" /> Read all
+              </button>
+            )}
+            {userNotifications.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAll}
+                title="Clear all notifications"
+                className="text-[11px] font-bold text-slate-500 hover:text-rose-600 transition-colors flex items-center gap-1 bg-slate-100 hover:bg-rose-50 px-2 py-1 rounded-lg"
+              >
+                <Trash2 className="w-3 h-3 text-rose-500" /> Clear all
+              </button>
+            )}
+          </div>
         </div>
 
         <ScrollArea className="max-h-[380px]">
@@ -280,16 +312,26 @@ function NotificationBell() {
                           <Clock className="w-3 h-3 text-slate-400" />
                           <span>{notif.timestamp ? (notif.timestamp.includes("-") ? notif.timestamp.substring(0, 16) : notif.timestamp) : "Recent"}</span>
                         </div>
-                        {isUnread && (
+                        <div className="flex items-center gap-2">
+                          {isUnread && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleMarkSingleAsRead(e, notif)}
+                              title="Mark as read"
+                              className="text-[10px] font-bold text-slate-500 hover:text-primary flex items-center gap-0.5 hover:underline"
+                            >
+                              Mark read
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={(e) => handleMarkSingleAsRead(e, notif)}
-                            title="Mark as read"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold text-slate-500 hover:text-primary flex items-center gap-0.5 hover:underline"
+                            onClick={(e) => handleDeleteSingle(e, notif)}
+                            title="Delete notification"
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
                           >
-                            Mark read
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -559,6 +601,7 @@ function SidebarNav() {
       <SidebarFooter className="p-4">
         <Button variant="ghost" className="w-full justify-start text-rose-600 font-bold hover:bg-rose-50 hover:text-rose-700 group-data-[collapsible=icon]:p-2" onClick={() => {
           logoutNativeUser();
+          clearAppBadge();
           Cookies.remove('sikka_session', { path: '/' });
           localStorage.removeItem("user");
           router.push("/login");
@@ -606,11 +649,12 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [verifiedUser, refreshData]);
 
-  // Register active user credentials with Android Native Bridge
+  // Register active user credentials with Android Native Bridge & request notification permission
   useEffect(() => {
     if (verifiedUser) {
       const empId = verifiedUser.employeeId || verifiedUser.username || verifiedUser.id || '';
       registerNativeUser(empId, verifiedUser.role || 'EMPLOYEE', verifiedUser.fullName || (verifiedUser as any).name || '');
+      requestAppNotificationPermission();
     }
   }, [verifiedUser]);
 

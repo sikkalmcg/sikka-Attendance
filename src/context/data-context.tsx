@@ -293,7 +293,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteRecord = async (col: string, id: string, skipRefresh = false) => {
-    if (currentUser?.role !== 'SUPER_ADMIN') {
+    if (col !== 'notifications' && currentUser?.role !== 'SUPER_ADMIN') {
       toast({
         variant: "destructive",
         title: "Permission Denied",

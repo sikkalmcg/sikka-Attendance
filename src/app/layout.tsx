@@ -41,6 +41,11 @@ export default function RootLayout({
                   });
                 });
               }
+              if ('clearAppBadge' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.clearAppBadge().catch(function() {});
+                });
+              }
             `,
           }}
         />

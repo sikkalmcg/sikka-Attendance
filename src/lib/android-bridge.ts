@@ -107,3 +107,72 @@ export const requestNativePermission = (permissionType: 'LOCATION' | 'PHOTO' | '
     console.warn('AndroidBridge requestNativePermission error:', e);
   }
 };
+
+/**
+ * Request notification permission across both Web Browsers / PWA and Android 13+ Native.
+ */
+export const requestAppNotificationPermission = async (): Promise<boolean> => {
+  try {
+    if (typeof window === 'undefined') return false;
+
+    // Trigger native Android permission dialog if in WebView
+    if (isNativeAndroid()) {
+      requestNativePermission('NOTIFICATION');
+    }
+
+    // Web Notification API (Android 13+ Chrome / PWA / Web)
+    if ('Notification' in window) {
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+      }
+      return Notification.permission === 'granted';
+    }
+  } catch (e) {
+    console.warn('Notification permission request error:', e);
+  }
+  return false;
+};
+
+/**
+ * Set App Badge count on both Web PWA (navigator.setAppBadge) and Android WebView.
+ */
+export const setAppBadge = async (count: number = 1): Promise<void> => {
+  try {
+    if (typeof window === 'undefined') return;
+    
+    // 1. Android Native Launcher Badge
+    updateNativeBadgeCount(count);
+
+    // 2. Web / PWA Badging API
+    if (typeof navigator !== 'undefined' && 'setAppBadge' in navigator) {
+      if (count > 0) {
+        await (navigator as any).setAppBadge(count);
+      } else {
+        await (navigator as any).clearAppBadge();
+      }
+    }
+  } catch (e) {
+    console.warn('setAppBadge error:', e);
+  }
+};
+
+/**
+ * Clear App Badge on both Web PWA (navigator.clearAppBadge) and Android WebView.
+ */
+export const clearAppBadge = async (): Promise<void> => {
+  try {
+    if (typeof window === 'undefined') return;
+
+    // 1. Android Native Launcher Badge
+    updateNativeBadgeCount(0);
+
+    // 2. Web / PWA Badging API
+    if (typeof navigator !== 'undefined' && 'clearAppBadge' in navigator) {
+      await (navigator as any).clearAppBadge();
+    }
+  } catch (e) {
+    console.warn('clearAppBadge error:', e);
+  }
+};
+
