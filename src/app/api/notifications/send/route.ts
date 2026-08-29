@@ -1,0 +1,146 @@
+import { NextResponse } from 'next/server';
+import { getDb } from '@/lib/mongodb';
+import { sendFCMPushNotification } from '@/lib/fcm-service';
+
+export const dynamic = 'force-dynamic';
+
+function getWordCount(text: string): number {
+  if (!text || !text.trim()) return 0;
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+
+    const { employeeIds, message, title = 'New Notification', senderUserId, senderUserName } = body;
+
+    // 1. Validate employee IDs
+    if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return NextResponse.json({ error: 'Please select at least one employee.' }, { status: 400 });
+    }
+
+    // 2. Validate message length (max 100 words)
+    const cleanMessage = String(message || '').trim();
+    if (!cleanMessage) {
+      return NextResponse.json({ error: 'Notification message cannot be empty.' }, { status: 400 });
+    }
+
+    const wordCount = getWordCount(cleanMessage);
+    if (wordCount > 100) {
+      return NextResponse.json(
+        { error: `Message exceeds 100 words limit (Current: ${wordCount} words).` },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDb();
+    if (!db) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
+    }
+
+    // Resolve sender details
+    const finalSenderId = String(senderUserId || 'ADMIN').trim();
+    const finalSenderName = String(senderUserName || 'Admin').trim();
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    const createdNotifications: any[] = [];
+    const uniqueEmpIds = Array.from(new Set(employeeIds.map((id: string) => String(id).trim()).filter(Boolean)));
+
+    for (const rawEmpId of uniqueEmpIds) {
+      // Find matching employee details from DB
+      const emp = await db.collection('employees').findOne({
+        $or: [
+          { employeeId: rawEmpId },
+          { id: rawEmpId },
+          { mobile: rawEmpId },
+          { mobileNumber: rawEmpId },
+          { aadhaar: rawEmpId },
+          { aadhaarNumber: rawEmpId },
+          { username: rawEmpId },
+        ],
+      }).catch(() => null);
+
+      const targetEmpId = emp?.employeeId || rawEmpId;
+      const targetEmpName = emp ? (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()) : rawEmpId;
+
+      // 3. Create MongoDB Notification Document
+      const notifDoc = {
+        employeeId: targetEmpId,
+        employeeName: targetEmpName,
+        title: title || 'New Notification',
+        message: cleanMessage,
+        senderUserId: finalSenderId,
+        senderUserName: finalSenderName,
+        senderUser: finalSenderName, // for compatibility
+        notificationDateTime: nowIso,
+        timestamp: nowIso,
+        isRead: false,
+        read: false, // for backwards compatibility
+        readAt: null,
+        pushSent: false,
+        pushSentAt: null,
+        status: 'sent',
+        type: 'CUSTOM_NOTIFICATION',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      const insertResult = await db.collection('notifications').insertOne(notifDoc);
+      const insertedId = insertResult.insertedId.toString();
+
+      // 4. Send Mobile Push Notification via FCM Service
+      try {
+        const pushRes = await sendFCMPushNotification({
+          title: title || 'Sikka ERP - New Notification',
+          message: cleanMessage,
+          type: 'CUSTOM_NOTIFICATION',
+          employeeId: targetEmpId,
+          targetRole: 'EMPLOYEE',
+          data: {
+            notificationId: insertedId,
+            senderUserId: finalSenderId,
+            senderUserName: finalSenderName,
+            dateTime: nowIso,
+          },
+        });
+
+        if (pushRes.success && pushRes.successCount > 0) {
+          await db.collection('notifications').updateOne(
+            { _id: insertResult.insertedId },
+            {
+              $set: {
+                pushSent: true,
+                pushSentAt: new Date().toISOString(),
+                status: 'delivered',
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          );
+        }
+      } catch (pushErr) {
+        console.warn(`Push dispatch failed for employee ${targetEmpId}:`, pushErr);
+      }
+
+      createdNotifications.push({
+        id: insertedId,
+        employeeId: targetEmpId,
+        employeeName: targetEmpName,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Notification sent successfully to ${createdNotifications.length} employee${createdNotifications.length > 1 ? 's' : ''}.`,
+      count: createdNotifications.length,
+      records: createdNotifications,
+    });
+  } catch (error: any) {
+    console.error('Error in /api/notifications/send:', error);
+    return NextResponse.json({ error: error?.message || 'Failed to send notification' }, { status: 500 });
+  }
+}

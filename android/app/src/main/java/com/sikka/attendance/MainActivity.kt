@@ -174,6 +174,18 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 CookieManager.getInstance().flush()
+                url?.let {
+                    try {
+                        val parsed = Uri.parse(it)
+                        if (parsed.scheme != null && parsed.host != null) {
+                            val baseUrl = "${parsed.scheme}://${parsed.authority}"
+                            val prefs = getSharedPreferences("sikka_app_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putString("server_url", baseUrl).apply()
+                        }
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "Failed to cache base server URL: ${e.message}")
+                    }
+                }
             }
 
             override fun onReceivedError(

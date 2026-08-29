@@ -233,59 +233,33 @@ export default function ActivityPage() {
     setIsSending(true);
 
     try {
-      const now = new Date();
-      const formattedTimestamp = format(now, "dd-MMM-yyyy HH:mm");
       const senderName = verifiedUser?.fullName || (verifiedUser as any)?.name || verifiedUser?.username || "Admin";
-      const senderId = verifiedUser?.id || "";
+      const senderId = verifiedUser?.id || "ADMIN";
 
       // Deduplicate selected IDs
       const uniqueSelectedIds = Array.from(new Set(selectedEmpIds));
 
-      // 2. Create individual notification record for each selected employee
-      for (const rawEmpId of uniqueSelectedIds) {
-        const emp = activeEmployees.find(e => e.employeeId === rawEmpId || e.id === rawEmpId);
-        const empCode = emp?.employeeId || rawEmpId;
-        const empName = emp ? (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()) : rawEmpId;
-
-        const notifRecord: AppNotification = {
-          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-          title: "Management Notification",
+      const res = await fetch("/api/notifications/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeIds: uniqueSelectedIds,
           message: messageText.trim(),
-          timestamp: formattedTimestamp,
-          read: false,
-          type: "CUSTOM_NOTIFICATION",
-          employeeId: empCode,
-          employeeName: empName,
-          senderUser: senderName,
-          senderId: senderId,
-          createdAt: now.toISOString(),
-        };
+          title: "New Notification",
+          senderUserId: senderId,
+          senderUserName: senderName,
+        }),
+      });
 
-        // Save to MongoDB via data context
-        await addRecord("notifications", notifRecord);
-
-        // Dispatch FCM Push Notification to employee's device
-        fetch("/api/notifications/send-push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: "Management Notification",
-            message: messageText.trim(),
-            type: "CUSTOM_NOTIFICATION",
-            employeeId: empCode,
-            targetRole: "EMPLOYEE",
-            data: {
-              senderUser: senderName,
-              timestamp: formattedTimestamp,
-            },
-          }),
-        }).catch((err) => console.warn("Push notification deferred:", err));
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to send notification");
       }
 
-      // 3. Success feedback & cleanup
+      // Success feedback & cleanup
       toast({
         title: "Notification Sent",
-        description: `Notification sent successfully to ${uniqueSelectedIds.length} employee${uniqueSelectedIds.length > 1 ? 's' : ''}.`
+        description: data.message || `Notification sent successfully to ${uniqueSelectedIds.length} employee(s).`
       });
 
       handleCloseModal();
@@ -387,27 +361,30 @@ export default function ActivityPage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1000px]">
+                <Table className="min-w-[1100px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-4 px-6 w-[240px]">
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-4 px-6 w-[220px]">
                         Employee
                       </TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[200px]">
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[190px]">
                         Notification Date & Time
                       </TableHead>
                       <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">
                         Message
                       </TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 text-right pr-6 w-[180px]">
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[150px]">
                         Sender User
+                      </TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 text-right pr-6 w-[120px]">
+                        Status
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredNotificationHistory.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-20 text-slate-400">
+                        <TableCell colSpan={5} className="text-center py-20 text-slate-400">
                           <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
                             <Bell className="w-6 h-6 text-slate-300" />
                           </div>
@@ -423,7 +400,9 @@ export default function ActivityPage() {
                         );
                         const displayName = notif.employeeName || empObj?.name || `${empObj?.firstName || ''} ${empObj?.lastName || ''}`.trim() || notif.employeeId || "All Employees";
                         const displayEmpId = notif.employeeId || empObj?.employeeId || "GLOBAL";
-                        const senderDisplay = notif.senderUser || "Admin";
+                        const senderDisplay = notif.senderUserName || notif.senderUser || "Admin";
+                        const isRead = Boolean(notif.isRead || notif.read);
+                        const pushDelivered = Boolean(notif.pushSent || notif.status === 'delivered');
 
                         return (
                           <TableRow key={notifId} className="hover:bg-slate-50/60 transition-colors">
@@ -441,7 +420,7 @@ export default function ActivityPage() {
                             <TableCell className="py-4 font-mono text-xs font-semibold text-slate-700">
                               <div className="flex items-center gap-1.5">
                                 <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span>{formatNotificationDateTime(notif.timestamp || notif.createdAt)}</span>
+                                <span>{formatNotificationDateTime(notif.notificationDateTime || notif.timestamp || notif.createdAt)}</span>
                               </div>
                             </TableCell>
 
@@ -453,11 +432,28 @@ export default function ActivityPage() {
                             </TableCell>
 
                             {/* 4. Sender User Column */}
-                            <TableCell className="text-right pr-6 py-4">
+                            <TableCell className="py-4">
                               <Badge variant="outline" className="font-bold text-xs bg-slate-50 border-slate-200 text-slate-800 px-2.5 py-1">
                                 <UserIcon className="w-3 h-3 mr-1 text-slate-400" />
                                 {senderDisplay}
                               </Badge>
+                            </TableCell>
+
+                            {/* 5. Status Column */}
+                            <TableCell className="text-right pr-6 py-4">
+                              {isRead ? (
+                                <Badge className="bg-emerald-100 text-emerald-800 border-none font-bold text-[10px] px-2 py-0.5">
+                                  Read
+                                </Badge>
+                              ) : pushDelivered ? (
+                                <Badge className="bg-blue-100 text-blue-800 border-none font-bold text-[10px] px-2 py-0.5">
+                                  Delivered
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-slate-100 text-slate-700 border-none font-bold text-[10px] px-2 py-0.5">
+                                  Sent
+                                </Badge>
+                              )}
                             </TableCell>
                           </TableRow>
                         );

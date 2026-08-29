@@ -59,35 +59,63 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
       return result;
     }
 
-    // 1. Build Query for Device Tokens
-    const isEmployeeOnlyType = [
-      'MARK_IN',
-      'MARK_OUT',
-      'AUTO_OUT',
-      'SHIFT_REMINDER',
-      'DAY_IN_REMINDER',
-      'DAY_OUT_REMINDER',
-      'NIGHT_IN_REMINDER',
-      'NIGHT_OUT_REMINDER',
-    ].includes(type);
+    // 1. Resolve target employee aliases if employeeId is specified
+    let targetIds: string[] = [employeeId];
+    if (employeeId && employeeId !== 'ALL' && employeeId !== 'GLOBAL') {
+      const emp = await db.collection('employees').findOne({
+        $or: [
+          { employeeId },
+          { id: employeeId },
+          { mobile: employeeId },
+          { mobileNumber: employeeId },
+          { aadhaar: employeeId },
+          { aadhaarNumber: employeeId },
+          { username: employeeId },
+        ],
+      }).catch(() => null);
 
-    const query: any = { active: { $ne: false } };
-
-    if (isEmployeeOnlyType) {
-      query.role = { $in: ['EMPLOYEE', 'Employee'] };
-      if (employeeId) {
-        query.employeeId = employeeId;
-      }
-    } else if (targetRole) {
-      query.role = targetRole.toUpperCase();
-      if (employeeId) {
-        query.employeeId = employeeId;
+      if (emp) {
+        targetIds = [
+          emp.employeeId,
+          emp.id,
+          emp.mobile,
+          emp.aadhaar,
+          emp.username,
+          employeeId,
+        ].filter(Boolean);
       }
     }
 
-    const deviceTokens = await db.collection('device_tokens').find(query).toArray();
+    // 2. Query both device_tokens and employee_devices collections
+    const tokensSet = new Set<string>();
 
-    if (!deviceTokens || deviceTokens.length === 0) {
+    const queryDT: any = { active: { $ne: false } };
+    if (employeeId && employeeId !== 'ALL' && employeeId !== 'GLOBAL') {
+      queryDT.employeeId = { $in: targetIds };
+    } else if (targetRole) {
+      queryDT.role = targetRole.toUpperCase();
+    }
+
+    const deviceTokens = await db.collection('device_tokens').find(queryDT).toArray();
+    deviceTokens.forEach((d: any) => {
+      const t = String(d.token || '').trim();
+      if (t.length > 10) tokensSet.add(t);
+    });
+
+    const queryED: any = { isActive: { $ne: false } };
+    if (employeeId && employeeId !== 'ALL' && employeeId !== 'GLOBAL') {
+      queryED.employeeId = { $in: targetIds };
+    }
+
+    const empDevices = await db.collection('employee_devices').find(queryED).toArray();
+    empDevices.forEach((d: any) => {
+      const t = String(d.deviceToken || '').trim();
+      if (t.length > 10) tokensSet.add(t);
+    });
+
+    const tokensList: string[] = Array.from(tokensSet);
+
+    if (tokensList.length === 0) {
       result.success = true;
       result.totalTokens = 0;
       // Log as skipped (no devices registered)
@@ -108,10 +136,6 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
       });
       return result;
     }
-
-    const tokensList: string[] = deviceTokens
-      .map((d: any) => String(d.token || '').trim())
-      .filter((t: string) => t.length > 10);
 
     result.totalTokens = tokensList.length;
 
@@ -141,11 +165,12 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
       return result;
     }
 
-    // 2. Dispatch FCM Push Request
+    // 3. Dispatch FCM Push Request with High Priority
     const fcmPayload = {
       registration_ids: tokensList,
+      priority: 'high',
       notification: {
-        title: title || 'Attendance Reminder',
+        title: title || 'Sikka ERP - Attendance Notification',
         body: message || '',
         sound: 'default',
         badge: '1',
@@ -153,6 +178,9 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
         click_action: 'OPEN_ATTENDANCE_PAGE',
       },
       data: {
+        title: title || 'Sikka ERP',
+        message: message || '',
+        body: message || '',
         notificationId: eventId || `notif_${Date.now()}`,
         eventId: eventId || '',
         employeeId: employeeId || '',
@@ -160,15 +188,12 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
         notificationType: type,
         shift,
         shiftDate,
-        title: title || 'Attendance Reminder',
-        message: message || '',
         action: type.includes('IN') ? 'MARK_IN' : type.includes('OUT') ? 'MARK_OUT' : 'OPEN_APP',
         deepLink: deepLink || '/dashboard/attendance',
         url: deepLink || '/dashboard/attendance',
         timestamp: new Date().toISOString(),
         ...data,
       },
-      priority: 'high',
       android: {
         priority: 'high',
         notification: {

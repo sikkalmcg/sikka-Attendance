@@ -10,18 +10,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing device token' }, { status: 400 });
     }
 
-    const { token, employeeId, role, deviceName, platform } = body;
+    const { token, employeeId, role, deviceName, platform, appVersion = '1.0.0' } = body;
     const cleanToken = String(token).trim();
     const cleanRole = String(role || 'EMPLOYEE').toUpperCase();
-    const cleanEmpId = String(employeeId || '').trim();
+    let cleanEmpId = String(employeeId || '').trim();
 
     const db = await getDb();
     if (!db) {
       return NextResponse.json({ success: false, error: 'Database unavailable' }, { status: 503 });
     }
 
-    const collection = db.collection('device_tokens');
-    await collection.updateOne(
+    // Resolve employee canonical ID if mobile/aadhaar was provided
+    if (cleanEmpId) {
+      const emp = await db.collection('employees').findOne({
+        $or: [
+          { employeeId: cleanEmpId },
+          { id: cleanEmpId },
+          { mobile: cleanEmpId },
+          { mobileNumber: cleanEmpId },
+          { aadhaar: cleanEmpId },
+          { aadhaarNumber: cleanEmpId },
+          { username: cleanEmpId },
+        ],
+      }).catch(() => null);
+
+      if (emp?.employeeId) {
+        cleanEmpId = emp.employeeId;
+      }
+    }
+
+    const now = new Date();
+
+    // 1. Update `device_tokens` collection
+    await db.collection('device_tokens').updateOne(
       { token: cleanToken },
       {
         $set: {
@@ -30,16 +51,49 @@ export async function POST(req: Request) {
           role: cleanRole,
           deviceName: deviceName || 'Android Device',
           platform: platform || 'android',
-          updatedAt: new Date(),
+          active: true,
+          isActive: true,
+          lastActiveAt: now.toISOString(),
+          updatedAt: now,
         },
         $setOnInsert: {
-          createdAt: new Date(),
+          createdAt: now,
         },
       },
       { upsert: true }
     );
 
-    return NextResponse.json({ success: true, message: 'Device token registered successfully' });
+    // 2. Update `employee_devices` collection (as required in schema)
+    await db.collection('employee_devices').updateOne(
+      { deviceToken: cleanToken },
+      {
+        $set: {
+          employeeId: cleanEmpId,
+          deviceToken: cleanToken,
+          deviceType: platform || 'android',
+          appVersion,
+          isActive: true,
+          lastActiveAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        },
+        $setOnInsert: {
+          createdAt: now.toISOString(),
+        },
+      },
+      { upsert: true }
+    );
+
+    // 3. Create MongoDB Performance Indexes in background
+    db.collection('notifications').createIndex({ employeeId: 1, isRead: 1, notificationDateTime: -1 }).catch(() => {});
+    db.collection('notifications').createIndex({ employeeId: 1, read: 1 }).catch(() => {});
+    db.collection('device_tokens').createIndex({ employeeId: 1, active: 1 }).catch(() => {});
+    db.collection('employee_devices').createIndex({ employeeId: 1, isActive: 1 }).catch(() => {});
+
+    return NextResponse.json({
+      success: true,
+      message: 'Device token registered successfully',
+      employeeId: cleanEmpId,
+    });
   } catch (error: any) {
     console.error('Error registering device token:', error);
     return NextResponse.json({ error: error?.message || 'Failed to register device' }, { status: 500 });

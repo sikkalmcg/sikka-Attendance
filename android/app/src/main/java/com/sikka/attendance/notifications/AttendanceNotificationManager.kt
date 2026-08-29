@@ -111,13 +111,15 @@ object AttendanceNotificationManager {
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setColor(Color.parseColor("#C59D2E"))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(Notification.DEFAULT_ALL)
             .setSound(soundUri)
             .setVibrate(longArrayOf(0, 250, 100, 250))
-            .setAutoCancel(true) // Tapping dismisses it; opening app without tapping does NOT clear tray
+            .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setGroup(GROUP_KEY_ATTENDANCE)
             .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         try {
