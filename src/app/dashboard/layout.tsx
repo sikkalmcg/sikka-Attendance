@@ -345,13 +345,13 @@ function NotificationBell() {
           <Button
             variant="ghost"
             size="sm"
-            className="w-full text-xs font-bold text-primary h-8 hover:bg-primary/5 rounded-xl"
-            onClick={() => {
-              setIsOpen(false);
-              router.push('/dashboard/attendance');
+            disabled={unreadCount === 0}
+            className="w-full text-xs font-bold text-primary h-8 hover:bg-primary/5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+            onClick={async () => {
+              await handleMarkAllAsRead();
             }}
           >
-            Go to Mark Attendance
+            <CheckCheck className="w-3.5 h-3.5" /> Mark as read
           </Button>
         </div>
       </PopoverContent>

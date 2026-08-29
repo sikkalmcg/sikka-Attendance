@@ -279,12 +279,17 @@ export interface LeaveRequest {
 export interface AppNotification {
   id: string;
   _id?: string;
+  title?: string;
   message: string;
   timestamp: string;
   read: boolean;
   type?: string;
   employeeId?: string;
+  employeeName?: string;
+  senderUser?: string;
+  senderId?: string;
   dedupeKey?: string;
+  createdAt?: string | Date;
 }
 
 export interface SalaryPaymentRecord {
