@@ -72,6 +72,7 @@ import { useToast } from "@/hooks/use-toast";
 import Cookies from 'js-cookie';
 import { format } from "date-fns";
 import { registerNativeUser, updateNativeBadgeCount, logoutNativeUser, setAppBadge, clearAppBadge, requestAppNotificationPermission } from "@/lib/android-bridge";
+import { NotificationBanner, NotificationStatusControl } from "@/components/notification-banner";
 
 function NotificationBell() {
   const { notifications = [], employees = [], updateRecord, deleteRecord, refreshData, verifiedUser } = useData();
@@ -378,7 +379,9 @@ function NotificationBell() {
           )}
         </ScrollArea>
 
-        <div className="p-2.5 border-t border-slate-100 bg-slate-50 text-center">
+        <div className="p-3 border-t border-slate-100 bg-slate-50 space-y-2">
+          <NotificationStatusControl user={verifiedUser} />
+          
           <Button
             variant="ghost"
             size="sm"
@@ -869,6 +872,8 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
             
             <HeaderActions />
           </header>
+
+          <NotificationBanner user={verifiedUser} />
 
           <main 
             className="flex-1 p-6 overflow-y-auto bg-slate-50/50 outline-none focus-visible:ring-1 focus-visible:ring-primary/10"

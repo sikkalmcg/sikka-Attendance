@@ -1,6 +1,8 @@
 /**
- * Helper to safely communicate with native Android WebView interface (AndroidBridge).
+ * Client Notification & Device Registration Bridge for Web, PWA, and Mobile APK/WebView.
  */
+
+const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
 
 declare global {
   interface Window {
@@ -30,15 +32,44 @@ export const isNativeAndroid = (): boolean => {
   return Boolean(window.AndroidBridge || window.Android);
 };
 
-export const registerNativeUser = (employeeId: string, role: string, fullName: string = '') => {
+export const getOrCreateDeviceId = (): string => {
+  if (typeof window === 'undefined') return '';
+  let id = localStorage.getItem('sikka_device_id');
+  if (!id) {
+    id = 'device_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now().toString(36);
+    localStorage.setItem('sikka_device_id', id);
+  }
+  return id;
+};
+
+export const registerNativeUser = async (employeeId: string, role: string, fullName: string = '') => {
   try {
     if (typeof window === 'undefined') return;
+
+    // 1. Android Bridge fallback if inside legacy container
     const bridge = window.AndroidBridge || window.Android;
     if (bridge && typeof bridge.registerUser === 'function') {
       bridge.registerUser(employeeId || '', role || '', fullName || '');
     }
+
+    // 2. Sync device token with backend database
+    const deviceId = getOrCreateDeviceId();
+    const userAgent = navigator.userAgent || '';
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+
+    fetch('/api/notifications/register-device', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: deviceId,
+        employeeId: employeeId || '',
+        role: role || 'EMPLOYEE',
+        deviceName: isMobile ? 'Mobile APK / Browser' : 'Desktop Browser',
+        platform: isMobile ? 'android-web' : 'web',
+      }),
+    }).catch((err) => console.warn('Device register error:', err));
   } catch (e) {
-    console.warn('AndroidBridge registerUser error:', e);
+    console.warn('registerNativeUser error:', e);
   }
 };
 
@@ -50,11 +81,14 @@ export const logoutNativeUser = () => {
       bridge.logoutUser();
     }
   } catch (e) {
-    console.warn('AndroidBridge logoutUser error:', e);
+    console.warn('logoutNativeUser error:', e);
   }
 };
 
-export const postNativeNotification = (
+/**
+ * Show system notification on phone/browser across Service Worker, Web Notification API, and Native Bridge.
+ */
+export const postNativeNotification = async (
   title: string,
   message: string,
   type: string,
@@ -63,12 +97,34 @@ export const postNativeNotification = (
 ) => {
   try {
     if (typeof window === 'undefined') return;
+
+    // 1. Android Bridge fallback
     const bridge = window.AndroidBridge || window.Android;
     if (bridge && typeof bridge.postNotification === 'function') {
       bridge.postNotification(title, message, type, employeeId, role);
     }
+
+    // 2. Service Worker Notification (Works on Android Mobile, PWA, Background)
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.showNotification(title || 'Sikka Attendance', {
+          body: message || '',
+          icon: SIKKA_LOGO,
+          badge: SIKKA_LOGO,
+          vibrate: [200, 100, 200, 100, 200],
+          tag: 'sikka-' + (type || 'notif') + '-' + Date.now(),
+          data: { url: '/dashboard/attendance' },
+        } as any);
+      }).catch(() => {});
+    } else if ('Notification' in window && Notification.permission === 'granted') {
+      // 3. Direct Web Notification fallback
+      new Notification(title || 'Sikka Attendance', {
+        body: message || '',
+        icon: SIKKA_LOGO,
+      });
+    }
   } catch (e) {
-    console.warn('AndroidBridge postNotification error:', e);
+    console.warn('postNativeNotification error:', e);
   }
 };
 
@@ -80,7 +136,7 @@ export const updateNativeBadgeCount = (count: number) => {
       bridge.updateBadgeCount(Math.max(0, count));
     }
   } catch (e) {
-    console.warn('AndroidBridge updateBadgeCount error:', e);
+    console.warn('updateNativeBadgeCount error:', e);
   }
 };
 
@@ -92,7 +148,7 @@ export const openNativeAppSettings = () => {
       bridge.openAppSettings();
     }
   } catch (e) {
-    console.warn('AndroidBridge openAppSettings error:', e);
+    console.warn('openNativeAppSettings error:', e);
   }
 };
 
@@ -104,12 +160,12 @@ export const requestNativePermission = (permissionType: 'LOCATION' | 'PHOTO' | '
       bridge.requestNativePermission(permissionType);
     }
   } catch (e) {
-    console.warn('AndroidBridge requestNativePermission error:', e);
+    console.warn('requestNativePermission error:', e);
   }
 };
 
 /**
- * Request notification permission across both Web Browsers / PWA and Android 13+ Native.
+ * Request notification permission across both Web Browsers / PWA and Android.
  */
 export const requestAppNotificationPermission = async (): Promise<boolean> => {
   try {
@@ -122,11 +178,11 @@ export const requestAppNotificationPermission = async (): Promise<boolean> => {
 
     // Web Notification API (Android 13+ Chrome / PWA / Web)
     if ('Notification' in window) {
-      if (Notification.permission === 'default') {
-        const permission = await Notification.requestPermission();
-        return permission === 'granted';
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        permission = await Notification.requestPermission();
       }
-      return Notification.permission === 'granted';
+      return permission === 'granted';
     }
   } catch (e) {
     console.warn('Notification permission request error:', e);
@@ -175,4 +231,3 @@ export const clearAppBadge = async (): Promise<void> => {
     console.warn('clearAppBadge error:', e);
   }
 };
-
