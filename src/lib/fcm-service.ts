@@ -24,7 +24,7 @@ export interface FCMSendResult {
   error?: string;
 }
 
-const SIKKA_ICON = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
+const SIKKA_ICON = '/sikka-logo.png';
 const CHANNEL_ID = 'general_notifications';
 
 // 🔑 Initialize Web-Push with VAPID Keys
@@ -140,6 +140,7 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
       body: notifBody,
       icon: SIKKA_ICON,
       badge: SIKKA_ICON,
+      image: SIKKA_ICON,
       badgeCount: 1,
       vibrate: [0, 300, 200, 300],
       channel_id: CHANNEL_ID,

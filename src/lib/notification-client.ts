@@ -5,7 +5,7 @@
 import { playNotificationSoundAndVibrate, SIKKA_VIBRATION_PATTERN } from '@/lib/notification-sound';
 import { isNativeAndroid, postNativeNotification } from '@/lib/android-bridge';
 
-const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
+const SIKKA_LOGO = '/sikka-logo.png';
 
 export const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
@@ -179,6 +179,7 @@ export async function requestAndEnableNotifications(user: any): Promise<{
             body: 'Sikka ERP attendance alerts and notifications are now active on your device with sound & vibration.',
             icon: SIKKA_LOGO,
             badge: SIKKA_LOGO,
+            image: SIKKA_LOGO,
             vibrate: SIKKA_VIBRATION_PATTERN,
             silent: false,
             tag: 'sikka-welcome-notification',
@@ -259,6 +260,7 @@ export async function sendTestNotification(user: any): Promise<boolean> {
             body: message,
             icon: SIKKA_LOGO,
             badge: SIKKA_LOGO,
+            image: SIKKA_LOGO,
             vibrate: SIKKA_VIBRATION_PATTERN,
             silent: false,
             tag: 'sikka-test-' + Date.now(),

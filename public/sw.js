@@ -1,4 +1,5 @@
-const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
+const SIKKA_LOGO = '/sikka-logo.png';
+const SIKKA_REMOTE_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
 const CHANNEL_ID = 'general_notifications';
 // Vibration pattern: 0ms delay -> 300ms vibrate -> 200ms pause -> 300ms vibrate
 const VIBRATION_PATTERN = [0, 300, 200, 300];
@@ -34,6 +35,7 @@ self.addEventListener('push', function (event) {
       data.badgeCount = payload.badgeCount || 1;
       data.icon = payload.icon || payload.notification?.icon || SIKKA_LOGO;
       data.badge = payload.badge || SIKKA_LOGO;
+      data.image = payload.image || payload.notification?.image || SIKKA_LOGO;
       if (payload.data) {
         data.data = payload.data;
         if (payload.data.url) data.data.url = payload.data.url;

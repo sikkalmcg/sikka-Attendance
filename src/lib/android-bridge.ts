@@ -9,7 +9,7 @@
 
 import { playNotificationSoundAndVibrate, SIKKA_VIBRATION_PATTERN } from '@/lib/notification-sound';
 
-const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
+const SIKKA_LOGO = '/sikka-logo.png';
 
 declare global {
   interface Window {
@@ -132,6 +132,7 @@ export const postNativeNotification = async (
             body: notifBody,
             icon: SIKKA_LOGO,
             badge: SIKKA_LOGO,
+            image: SIKKA_LOGO,
             vibrate: SIKKA_VIBRATION_PATTERN,
             tag: 'sikka-' + (type || 'notif') + '-' + Date.now(),
             renotify: true,
