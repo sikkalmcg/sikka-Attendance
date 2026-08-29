@@ -126,13 +126,14 @@ export const postNativeNotification = async (
     const isPermissionGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
 
     if (isPermissionGranted && 'serviceWorker' in navigator) {
+      const fullLogoUrl = typeof window !== 'undefined' ? `${window.location.origin}/sikka-logo.png` : SIKKA_LOGO;
       navigator.serviceWorker.getRegistration().then((reg) => {
         if (reg) {
           reg.showNotification(notifTitle, {
             body: notifBody,
-            icon: SIKKA_LOGO,
-            badge: SIKKA_LOGO,
-            image: SIKKA_LOGO,
+            icon: fullLogoUrl,
+            badge: fullLogoUrl,
+            image: fullLogoUrl,
             vibrate: SIKKA_VIBRATION_PATTERN,
             tag: 'sikka-' + (type || 'notif') + '-' + Date.now(),
             renotify: true,
@@ -151,9 +152,10 @@ export const postNativeNotification = async (
     // 4. Direct Web Notification fallback (desktop only, when permission is granted)
     if (isPermissionGranted && 'Notification' in window) {
       try {
+        const fullLogoUrl = typeof window !== 'undefined' ? `${window.location.origin}/sikka-logo.png` : SIKKA_LOGO;
         new Notification(notifTitle, {
           body: notifBody,
-          icon: SIKKA_LOGO,
+          icon: fullLogoUrl,
           silent: false,
         });
       } catch (e) {

@@ -173,13 +173,14 @@ export async function requestAndEnableNotifications(user: any): Promise<{
       await syncDeviceWithBackend(user);
 
       // 4. Trigger Welcome / Success notification on device via Service Worker
+      const fullLogoUrl = typeof window !== 'undefined' ? `${window.location.origin}/sikka-logo.png` : SIKKA_LOGO;
       if (reg) {
         try {
           await reg.showNotification('🔔 Notifications Enabled!', {
             body: 'Sikka ERP attendance alerts and notifications are now active on your device with sound & vibration.',
-            icon: SIKKA_LOGO,
-            badge: SIKKA_LOGO,
-            image: SIKKA_LOGO,
+            icon: fullLogoUrl,
+            badge: fullLogoUrl,
+            image: fullLogoUrl,
             vibrate: SIKKA_VIBRATION_PATTERN,
             silent: false,
             tag: 'sikka-welcome-notification',
@@ -192,7 +193,7 @@ export async function requestAndEnableNotifications(user: any): Promise<{
         try {
           new Notification('🔔 Notifications Enabled!', {
             body: 'Sikka ERP attendance alerts and notifications are now active on your device.',
-            icon: SIKKA_LOGO,
+            icon: fullLogoUrl,
             silent: false,
           });
         } catch {}
@@ -249,6 +250,8 @@ export async function sendTestNotification(user: any): Promise<boolean> {
 
     // 3. Show Notification via Service Worker (Standard for Android Chrome / Web)
     const isPermissionGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
+    const fullLogoUrl = typeof window !== 'undefined' ? `${window.location.origin}/sikka-logo.png` : SIKKA_LOGO;
+
     if (isPermissionGranted && typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       try {
         let reg = await navigator.serviceWorker.getRegistration();
@@ -258,9 +261,9 @@ export async function sendTestNotification(user: any): Promise<boolean> {
         if (reg) {
           await reg.showNotification(title, {
             body: message,
-            icon: SIKKA_LOGO,
-            badge: SIKKA_LOGO,
-            image: SIKKA_LOGO,
+            icon: fullLogoUrl,
+            badge: fullLogoUrl,
+            image: fullLogoUrl,
             vibrate: SIKKA_VIBRATION_PATTERN,
             silent: false,
             tag: 'sikka-test-' + Date.now(),
@@ -277,7 +280,7 @@ export async function sendTestNotification(user: any): Promise<boolean> {
     // 4. Direct Notification API fallback (for desktop browsers that support constructor)
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification(title, { body: message, icon: SIKKA_LOGO, silent: false });
+        new Notification(title, { body: message, icon: fullLogoUrl, silent: false });
       } catch (e) {
         // Android Chrome throws Illegal constructor for new Notification(), which is expected & handled by SW above
       }

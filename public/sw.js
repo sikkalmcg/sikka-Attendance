@@ -1,8 +1,14 @@
-const SIKKA_LOGO = '/sikka-logo.png';
-const SIKKA_REMOTE_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
+const SIKKA_LOCAL_LOGO = '/icon-192x192.png';
+const SIKKA_BADGE_LOGO = '/badge-72x72.png';
 const CHANNEL_ID = 'general_notifications';
-// Vibration pattern: 0ms delay -> 300ms vibrate -> 200ms pause -> 300ms vibrate
-const VIBRATION_PATTERN = [0, 300, 200, 300];
+// High-priority vibration pattern: [200ms vibrate, 100ms pause, 200ms vibrate, 100ms pause, 200ms vibrate]
+const VIBRATION_PATTERN = [200, 100, 200, 100, 200];
+
+function getFullLogoUrl(path) {
+  if (!path) return self.location.origin + SIKKA_LOCAL_LOGO;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return self.location.origin + (path.startsWith('/') ? path : '/' + path);
+}
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -16,111 +22,85 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(fetch(event.request));
 });
 
-// 🔔 Handle Incoming FCM Web Push Notifications (Foreground, Background, Closed App)
+// 🔔 Master Fix: Web-Push / FCM Push Notification Handler (Foreground, Background, Killed/Closed App, Reconnect)
 self.addEventListener('push', function (event) {
-  let data = {
-    title: 'Sikka ERP - New Notification',
-    body: 'You have a new notification from Sikka ERP.',
-    icon: SIKKA_LOGO,
-    badge: SIKKA_LOGO,
-    data: { url: '/dashboard/attendance' },
-    badgeCount: 1,
-  };
+  if (!event.data) return;
 
-  if (event.data) {
-    try {
-      const payload = event.data.json();
-      data.title = payload.title || payload.notification?.title || data.title;
-      data.body = payload.body || payload.message || payload.notification?.body || data.body;
-      data.badgeCount = payload.badgeCount || 1;
-      data.icon = payload.icon || payload.notification?.icon || SIKKA_LOGO;
-      data.badge = payload.badge || SIKKA_LOGO;
-      data.image = payload.image || payload.notification?.image || SIKKA_LOGO;
-      if (payload.data) {
-        data.data = payload.data;
-        if (payload.data.url) data.data.url = payload.data.url;
-        if (payload.data.deepLink) data.data.url = payload.data.deepLink;
-      }
-    } catch (e) {
-      data.body = event.data.text() || data.body;
-    }
+  let rawData = {};
+  try {
+    rawData = event.data.json();
+  } catch (err) {
+    rawData = { body: event.data.text() || 'New Notification received' };
   }
 
-  const notificationOptions = {
-    body: data.body,
-    icon: data.icon || SIKKA_LOGO,
-    badge: data.badge || SIKKA_LOGO,
+  const title = rawData.title || rawData.notification?.title || 'Sikka ERP';
+  const body = rawData.body || rawData.message || rawData.notification?.body || 'New Notification received';
+  const notifId = rawData.notificationId || rawData.data?.notificationId || 'sikka-notification-' + Date.now();
+  const targetUrl = rawData.url || rawData.data?.url || rawData.data?.deepLink || '/dashboard/attendance';
+  const badgeCount = rawData.badgeCount || rawData.data?.badgeCount || 1;
+
+  const iconUrl = getFullLogoUrl(rawData.icon || rawData.notification?.icon || SIKKA_LOCAL_LOGO);
+  const badgeUrl = getFullLogoUrl(rawData.badge || rawData.notification?.badge || SIKKA_BADGE_LOGO);
+  const imageUrl = getFullLogoUrl(rawData.image || rawData.notification?.image || iconUrl);
+
+  const options = {
+    body: body,
+    icon: iconUrl,
+    badge: badgeUrl,
+    image: imageUrl,
     vibrate: VIBRATION_PATTERN,
-    tag: 'sikka-hrms-notification-' + (data.data?.notificationId || Date.now()),
+    tag: notifId,
     renotify: true,
     requireInteraction: true,
     silent: false,
-    data: data.data || { url: '/dashboard/attendance' },
+    data: {
+      url: targetUrl,
+      notificationId: notifId,
+      ...(rawData.data || {})
+    },
     actions: [
-      { action: 'open', title: 'Open ERP' },
-    ],
+      { action: 'open', title: 'Open ERP' }
+    ]
   };
 
-  const promiseChain = self.registration
-    .showNotification(data.title, notificationOptions)
-    .then(async () => {
-      // 1. Set App Badge count on supported devices (PWA / Chrome / Android)
-      if ('setAppBadge' in navigator) {
-        try {
-          await navigator.setAppBadge(data.badgeCount || 1);
-        } catch (badgeErr) {
-          console.warn('Service worker badge error:', badgeErr);
+  const notificationPromise = self.registration.showNotification(title, options);
+  
+  const badgePromise = ('setAppBadge' in navigator && badgeCount)
+    ? navigator.setAppBadge(badgeCount).catch(() => {})
+    : Promise.resolve();
+
+  // Notify any active foreground tabs to trigger sound & update red dot badge
+  const clientNotifyPromise = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+    for (const client of clientList) {
+      client.postMessage({
+        type: 'PUSH_NOTIFICATION_RECEIVED',
+        payload: {
+          title,
+          body,
+          data: options.data,
+          badgeCount
         }
-      }
+      });
+    }
+  });
 
-      // 2. Notify any active foreground browser tabs to play sound, vibrate, and refresh red dot
-      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      for (const client of clientList) {
-        client.postMessage({
-          type: 'PUSH_NOTIFICATION_RECEIVED',
-          payload: {
-            title: data.title,
-            body: data.body,
-            data: data.data,
-          },
-        });
-      }
-    });
-
-  event.waitUntil(promiseChain);
+  event.waitUntil(Promise.all([notificationPromise, badgePromise, clientNotifyPromise]));
 });
 
-// 🔔 Handle direct postMessage from webpage (Local in-app notification trigger)
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SHOW_LOCAL_NOTIFICATION') {
-    const { title, message, url, data } = event.data;
-    self.registration.showNotification(title || 'Sikka ERP', {
-      body: message || 'Mobile notification received successfully!',
-      icon: SIKKA_LOGO,
-      badge: SIKKA_LOGO,
-      vibrate: VIBRATION_PATTERN,
-      silent: false,
-      tag: 'sikka-local-notification-' + Date.now(),
-      data: { url: url || '/dashboard/attendance', ...(data || {}) },
-    });
-  }
-});
-
-// 👆 Handle Notification Click
+// 👆 Notification Click Navigation & Badge Clear
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  // Clear badge count
   if ('clearAppBadge' in navigator) {
-    navigator.clearAppBadge().catch((err) => console.warn('Clear badge error:', err));
+    navigator.clearAppBadge().catch(() => {});
   }
 
   const notifData = event.notification.data || {};
-  const notifId = notifData.notificationId || notifData.id || notifData.eventId;
+  const notifId = notifData.notificationId || notifData.id;
   const targetUrl = notifData.url || notifData.deepLink || '/dashboard/attendance';
 
-  // Mark notification as isRead in MongoDB when clicked
-  if (notifId) {
+  // Mark notification as read in database when clicked
+  if (notifId && !String(notifId).startsWith('sikka-notification-')) {
     fetch('/api/notifications/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -129,8 +109,9 @@ self.addEventListener('notificationclick', function (event) {
   }
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+      for (let i = 0; i < clientList.length; i++) {
+        let client = clientList[i];
         if (client.url.includes(targetUrl) && 'focus' in client) {
           return client.focus();
         }
@@ -140,4 +121,25 @@ self.addEventListener('notificationclick', function (event) {
       }
     })
   );
+});
+
+// 🔔 Handle in-app local notification trigger messages
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_LOCAL_NOTIFICATION') {
+    const { title, message, url, data, icon, image } = event.data;
+    const finalIcon = getFullLogoUrl(icon || SIKKA_LOCAL_LOGO);
+    const finalBadge = getFullLogoUrl(SIKKA_BADGE_LOGO);
+    const finalImage = getFullLogoUrl(image || finalIcon);
+
+    self.registration.showNotification(title || 'Sikka ERP', {
+      body: message || 'Mobile notification received successfully!',
+      icon: finalIcon,
+      badge: finalBadge,
+      image: finalImage,
+      vibrate: VIBRATION_PATTERN,
+      silent: false,
+      tag: 'sikka-local-notification-' + Date.now(),
+      data: { url: url || '/dashboard/attendance', ...(data || {}) },
+    });
+  }
 });

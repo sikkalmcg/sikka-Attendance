@@ -24,7 +24,8 @@ export interface FCMSendResult {
   error?: string;
 }
 
-const SIKKA_ICON = '/sikka-logo.png';
+const SIKKA_LOCAL_LOGO = '/sikka-logo.png';
+const SIKKA_FALLBACK_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
 const CHANNEL_ID = 'general_notifications';
 
 // 🔑 Initialize Web-Push with VAPID Keys
@@ -138,9 +139,9 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
     const webPushPayload = JSON.stringify({
       title: notifTitle,
       body: notifBody,
-      icon: SIKKA_ICON,
-      badge: SIKKA_ICON,
-      image: SIKKA_ICON,
+      icon: SIKKA_LOCAL_LOGO,
+      badge: SIKKA_LOCAL_LOGO,
+      image: SIKKA_LOCAL_LOGO,
       badgeCount: 1,
       vibrate: [0, 300, 200, 300],
       channel_id: CHANNEL_ID,
@@ -204,7 +205,8 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
             body: notifBody,
             sound: 'default',
             badge: '1',
-            icon: SIKKA_ICON,
+            icon: SIKKA_LOCAL_LOGO,
+            image: SIKKA_LOCAL_LOGO,
             channel_id: CHANNEL_ID,
             click_action: 'OPEN_ATTENDANCE_PAGE',
             default_sound: true,
@@ -222,7 +224,8 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
               vibrate_timings: ['0s', '0.3s', '0.2s', '0.3s'],
               notification_priority: 'PRIORITY_HIGH',
               visibility: 'PUBLIC',
-              icon: SIKKA_ICON,
+              icon: SIKKA_LOCAL_LOGO,
+              image: SIKKA_LOCAL_LOGO,
             },
           },
           data: {
