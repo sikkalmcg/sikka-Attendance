@@ -119,27 +119,35 @@ export const postNativeNotification = async (
     }
 
     // 3. Service Worker Notification (Works on Android Mobile Notification Bar, PWA, Background)
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.showNotification(notifTitle, {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (reg) {
+          reg.showNotification(notifTitle, {
+            body: notifBody,
+            icon: SIKKA_LOGO,
+            badge: SIKKA_LOGO,
+            vibrate: SIKKA_VIBRATION_PATTERN,
+            tag: 'sikka-' + (type || 'notif') + '-' + Date.now(),
+            renotify: true,
+            requireInteraction: true,
+            silent: false,
+            data: { url: '/dashboard/attendance' },
+          } as any);
+        }
+      }).catch(() => {});
+    }
+
+    // 4. Direct Web Notification fallback (desktop only)
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(notifTitle, {
           body: notifBody,
           icon: SIKKA_LOGO,
-          badge: SIKKA_LOGO,
-          vibrate: SIKKA_VIBRATION_PATTERN,
-          tag: 'sikka-' + (type || 'notif') + '-' + Date.now(),
-          renotify: true,
-          requireInteraction: true,
           silent: false,
-          data: { url: '/dashboard/attendance' },
-        } as any);
-      }).catch(() => {});
-    } else if ('Notification' in window && Notification.permission === 'granted') {
-      // 4. Direct Web Notification fallback
-      new Notification(notifTitle, {
-        body: notifBody,
-        icon: SIKKA_LOGO,
-        silent: false,
-      });
+        });
+      } catch (e) {
+        // Handled via ServiceWorker on Android
+      }
     }
   } catch (e) {
     console.warn('postNativeNotification error:', e);
