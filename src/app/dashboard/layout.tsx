@@ -784,54 +784,9 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     }
   }, [verifiedUser]);
 
-  // Spec: Validation Gateway runs for max 2 seconds, after which it opens
+  // Quick authorization check without blocking users
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMaxWaitExceeded(true);
-      setIsAuthorized((prev) => (prev === null ? true : prev));
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (isLoading || !verifiedUser) return;
-
-    const handleLogout = () => {
-      logoutNativeUser();
-      Cookies.remove('sikka_session', { path: '/' });
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem("user");
-      }
-      router.push("/login");
-    };
-
-    const userRole = String(verifiedUser.role || '').toUpperCase();
-    if (userRole === 'EMPLOYEE') {
-      const loginIdent = String(verifiedUser.username || verifiedUser.employeeId || '').replace(/\s/g, '');
-      const dbEmp = employees.find(e => {
-        const empAadhaar = String((e as any).aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
-        const empMobile = String((e as any).mobileNumber || e.mobile || '').replace(/\s/g, '');
-        const empId = String(e.employeeId || e.id || '').replace(/\s/g, '');
-        return empAadhaar === loginIdent || empMobile === loginIdent || empId === loginIdent;
-      });
-      if (dbEmp && (dbEmp.active === false || (dbEmp as any).isActive === false || (dbEmp.sessionId && verifiedUser.sessionId && dbEmp.sessionId !== verifiedUser.sessionId))) {
-        handleLogout();
-      }
-    } else {
-      const dbUser = users.find(u => u.id === verifiedUser.id);
-      if (dbUser && (dbUser.status === 'Inactive' || (dbUser.sessionId && verifiedUser.sessionId && dbUser.sessionId !== verifiedUser.sessionId))) {
-        handleLogout();
-      }
-    }
-  }, [verifiedUser, isLoading, employees, users, router]);
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    if (!verifiedUser) {
-      router.push("/login");
-      return;
-    }
+    if (!verifiedUser) return;
 
     const userRole = String(verifiedUser.role || '').toUpperCase();
 
@@ -873,23 +828,16 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     } else {
       setIsAuthorized(true); 
     }
-  }, [verifiedUser, isLoading, pathname, router]);
+  }, [verifiedUser, pathname, router]);
 
-  if ((isLoading || isAuthorized === null) && !maxWaitExceeded) {
+  // Only show minimal loader if user session has not loaded yet
+  if (!verifiedUser && isLoading) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-5">
           <div className="relative flex items-center justify-center w-28 h-28">
-            {/* Outer Rotating Cyber Accent Ring */}
             <div className="absolute inset-0 rounded-full border-2 border-dashed border-[#C59D2E]/40 animate-gateway-spin-slow" />
-            
-            {/* Middle Reverse Rotating Ring */}
             <div className="absolute inset-2 rounded-full border border-blue-500/20 animate-gateway-spin-reverse" />
-
-            {/* Radar Sonar Ping Waves */}
-            <div className="absolute inset-0 rounded-full bg-[#C59D2E]/10 animate-gateway-radar-ping" />
-
-            {/* Animated Sikka Logo Container with Pulse Glow */}
             <div className="relative w-20 h-20 rounded-2xl bg-white shadow-xl overflow-hidden p-1 border-2 border-[#C59D2E] animate-gateway-pulse-glow flex items-center justify-center">
               <Image
                 src={logoUrl}
@@ -908,7 +856,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
               </span>
-              Validating Gateway...
+              Loading Portal...
             </p>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Sikka Enterprises & Logistics

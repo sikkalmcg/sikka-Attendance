@@ -39,21 +39,56 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+// Fast local session storage cache helper for instant 0ms load
+const getInitialCache = (key: string) => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = sessionStorage.getItem(`sikka_cache_${key}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+};
+
+const setCache = (key: string, data: any[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(`sikka_cache_${key}`, JSON.stringify(data));
+  } catch {}
+};
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [vouchers, setVouchers] = useState<Voucher[]>([]);
-  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
-  const [plants, setPlants] = useState<Plant[]>([]);
-  const [firms, setFirms] = useState<Firm[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [holidays, setHolidays] = useState<Holiday[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // 1. Synchronously resolve current session from Cookies / localStorage on mount
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const sessionCookie = Cookies.get('sikka_session');
+      if (sessionCookie) return JSON.parse(sessionCookie);
+      const local = localStorage.getItem('user');
+      if (local) return JSON.parse(local);
+    } catch {}
+    return null;
+  });
+
+  // 2. Pre-populate state from local cache so UI renders immediately without blank delays
+  const [employees, setEmployees] = useState<Employee[]>(() => getInitialCache('employees'));
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => getInitialCache('attendance'));
+  const [vouchers, setVouchers] = useState<Voucher[]>(() => getInitialCache('vouchers'));
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(() => getInitialCache('payroll'));
+  const [plants, setPlants] = useState<Plant[]>(() => getInitialCache('plants'));
+  const [firms, setFirms] = useState<Firm[]>(() => getInitialCache('firms'));
+  const [users, setUsers] = useState<User[]>(() => getInitialCache('users'));
+  const [holidays, setHolidays] = useState<Holiday[]>(() => getInitialCache('holidays'));
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => getInitialCache('notifications'));
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => getInitialCache('leaveRequests'));
+  
+  // If cache is already present, don't block the screen with full loading state
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const hasCachedData = sessionStorage.getItem('sikka_cache_attendance') || sessionStorage.getItem('sikka_cache_employees');
+    return !hasCachedData;
+  });
 
   useEffect(() => {
     let sessionUser = null;
@@ -93,7 +128,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
-    setIsLoading(true);
     try {
       let collectionsToFetch: string[] = [];
 
@@ -103,19 +137,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         // Admin, SUPER_ADMIN aur HR teeno ke liye global core tables load karein
         collectionsToFetch = ['employees', 'attendance', 'vouchers', 'plants', 'firms', 'holidays', 'leaveRequests', 'users', 'notifications'];
         
-        // HR aur Admin verification aur logs ke liye payroll inject karein
         if (isAdminRole) {
           if (!collectionsToFetch.includes('payroll')) collectionsToFetch.push('payroll');
         }
       }
 
+      // Parallel high-speed fetch
       const results = await Promise.all(
-        collectionsToFetch.map(col => fetch(`/api/data/${col}`).then(res => res.ok ? res.json() : []))
+        collectionsToFetch.map(col =>
+          fetch(`/api/data/${col}`, { cache: 'no-store' })
+            .then(res => res.ok ? res.json() : [])
+            .catch(() => [])
+        )
       );
 
       const dataMap: Record<string, any[]> = {};
       collectionsToFetch.forEach((col, index) => {
-        dataMap[col] = Array.isArray(results[index]) ? results[index] : (results[index]?.data || []);
+        const parsed = Array.isArray(results[index]) ? results[index] : (results[index]?.data || []);
+        dataMap[col] = parsed;
+        setCache(col, parsed);
       });
 
       // State Context allocation
@@ -132,10 +172,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (dataMap['notifications']) {
         setNotifications(dataMap['notifications']);
       } else if (currentUserUsername) {
-        const notifRes = await fetch(`/api/data/notifications?employeeId=${encodeURIComponent(currentUserUsername)}`);
-        if (notifRes.ok) {
-            const json = await notifRes.json();
-            setNotifications(Array.isArray(json) ? json : (json?.data || []));
+        const notifRes = await fetch(`/api/data/notifications?employeeId=${encodeURIComponent(currentUserUsername)}`).catch(() => null);
+        if (notifRes && notifRes.ok) {
+          const json = await notifRes.json().catch(() => []);
+          const list = Array.isArray(json) ? json : (json?.data || []);
+          setNotifications(list);
+          setCache('notifications', list);
         }
       }
     } catch (error) {
@@ -155,11 +197,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const syncNotifications = async () => {
       try {
-        const res = await fetch('/api/data/notifications');
+        const res = await fetch('/api/data/notifications', { cache: 'no-store' });
         if (res.ok) {
           const json = await res.json();
           const list = Array.isArray(json) ? json : (json?.data || []);
           setNotifications(list);
+          setCache('notifications', list);
         }
       } catch (err) {
         console.debug("Notification sync error:", err);
@@ -224,12 +267,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (col === 'attendance') {
       setAttendanceRecords(prev => {
         const filtered = prev.filter(r => !(r.employeeId === newRecord.employeeId && r.date === newRecord.date));
-        return [newRecord, ...filtered];
+        const updated = [newRecord, ...filtered];
+        setCache('attendance', updated);
+        return updated;
       });
     } else if (col === 'leaveRequests') {
-      setLeaveRequests(prev => [newRecord, ...prev]);
+      setLeaveRequests(prev => {
+        const updated = [newRecord, ...prev];
+        setCache('leaveRequests', updated);
+        return updated;
+      });
     } else if (col === 'notifications') {
-      setNotifications(prev => [newRecord, ...prev]);
+      setNotifications(prev => {
+        const updated = [newRecord, ...prev];
+        setCache('notifications', updated);
+        return updated;
+      });
     }
 
     try {
@@ -257,23 +310,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
     // Optimistic UI update for attendance and notifications
     if (col === 'attendance') {
-      setAttendanceRecords(prev => prev.map(r => {
-        const rId = String(r.id || (r as any)._id || '');
-        const targetId = String(id || '');
-        if (rId === targetId) {
-          return { ...r, ...data, updatedAt: new Date().toISOString() };
-        }
-        return r;
-      }));
+      setAttendanceRecords(prev => {
+        const updated = prev.map(r => {
+          const rId = String(r.id || (r as any)._id || '');
+          const targetId = String(id || '');
+          if (rId === targetId) {
+            return { ...r, ...data, updatedAt: new Date().toISOString() };
+          }
+          return r;
+        });
+        setCache('attendance', updated);
+        return updated;
+      });
     } else if (col === 'notifications') {
-      setNotifications(prev => prev.map(n => {
-        const nId = String(n.id || (n as any)._id || '');
-        const targetId = String(id || '');
-        if (nId === targetId) {
-          return { ...n, ...data };
-        }
-        return n;
-      }));
+      setNotifications(prev => {
+        const updated = prev.map(n => {
+          const nId = String(n.id || (n as any)._id || '');
+          const targetId = String(id || '');
+          if (nId === targetId) {
+            return { ...n, ...data };
+          }
+          return n;
+        });
+        setCache('notifications', updated);
+        return updated;
+      });
     }
 
     try {
@@ -299,10 +360,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (col === 'notifications') {
-      setNotifications(prev => prev.filter(n => {
-        const nId = String(n.id || (n as any)._id || '');
-        return nId !== String(id);
-      }));
+      setNotifications(prev => {
+        const updated = prev.filter(n => {
+          const nId = String(n.id || (n as any)._id || '');
+          return nId !== String(id);
+        });
+        setCache('notifications', updated);
+        return updated;
+      });
     }
     try {
       await fetch(`/api/data/${col}?id=${id}`, { method: 'DELETE' });
