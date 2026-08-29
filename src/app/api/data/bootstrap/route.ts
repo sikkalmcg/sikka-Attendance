@@ -1,24 +1,42 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { getCachedBootstrapData, setCachedBootstrapData } from '@/lib/data-cache';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
+const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR'];
+
 /**
  * High-Performance Single-Roundtrip Data Bootstrap API
  * Returns all necessary MongoDB collections in a single unified payload.
- * Uses in-memory server caching for ultra-fast responses (< 50ms).
+ * Notifications are filtered by the logged-in user's employee ID for security.
+ * Admin roles receive all notifications.
  */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
 
-    // 1. Return from in-memory cache if available & fresh
+    // Resolve session user for notification filtering
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('sikka_session')?.value;
+    let sessionUser: any = null;
+    if (sessionCookie) {
+      try { sessionUser = JSON.parse(sessionCookie); } catch {}
+    }
+    const sessionRole = String(sessionUser?.role || '').toUpperCase();
+    const isAdmin = ADMIN_ROLES.includes(sessionRole);
+    const sessionEmpId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || '';
+
+    // Cache key — include empId so different users get their own cached slice
+    const cacheKey = isAdmin ? 'admin' : sessionEmpId;
+
+    // Return from in-memory cache if available & fresh
     if (!forceRefresh) {
-      const cached = getCachedBootstrapData();
+      const cached = getCachedBootstrapData(cacheKey);
       if (cached) {
         return NextResponse.json(cached, {
           headers: {
@@ -34,7 +52,39 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
     }
 
-    // 2. Fetch all collections in parallel with index-backed optimizations
+    // Build notification query based on role
+    let notificationQuery: any = {};
+    if (!isAdmin && sessionEmpId) {
+      // Resolve all aliases for this employee
+      const matchedEmp = await db.collection('employees').findOne({
+        $or: [
+          { employeeId: sessionEmpId },
+          { id: sessionEmpId },
+          { mobile: sessionEmpId },
+          { mobileNumber: sessionEmpId },
+          { username: sessionEmpId },
+          { aadhaar: sessionEmpId },
+          { aadhaarNumber: sessionEmpId },
+        ],
+      }).catch(() => null);
+
+      const targetIds = new Set<string>();
+      targetIds.add(sessionEmpId);
+      if (matchedEmp) {
+        if (matchedEmp.employeeId) targetIds.add(matchedEmp.employeeId);
+        if (matchedEmp.id) targetIds.add(String(matchedEmp.id));
+        if (matchedEmp.mobile) targetIds.add(matchedEmp.mobile);
+        if (matchedEmp.mobileNumber) targetIds.add(matchedEmp.mobileNumber);
+        if (matchedEmp.aadhaar) targetIds.add(matchedEmp.aadhaar);
+        if (matchedEmp.aadhaarNumber) targetIds.add(matchedEmp.aadhaarNumber);
+        if (matchedEmp.username) targetIds.add(matchedEmp.username);
+      }
+      // STRICT: only this employee's notifications (Section 5)
+      notificationQuery = { employeeId: { $in: Array.from(targetIds).filter(Boolean) } };
+    }
+    // For admin: notificationQuery = {} → returns all notifications
+
+    // Fetch all collections in parallel
     const [
       employees,
       attendance,
@@ -52,7 +102,7 @@ export async function GET(req: Request) {
       db.collection('plants').find({}).toArray().catch(() => []),
       db.collection('holidays').find({}).toArray().catch(() => []),
       db.collection('leaveRequests').find({}).sort({ createdAt: -1, fromDate: -1 }).limit(300).toArray().catch(() => []),
-      db.collection('notifications').find({}).sort({ createdAt: -1, timestamp: -1, _id: -1 }).limit(60).toArray().catch(() => []),
+      db.collection('notifications').find(notificationQuery).sort({ createdAt: -1, timestamp: -1, _id: -1 }).limit(isAdmin ? 200 : 100).toArray().catch(() => []),
       db.collection('vouchers').find({}).sort({ date: -1 }).limit(300).toArray().catch(() => []),
       db.collection('firms').find({}).toArray().catch(() => []),
       db.collection('users').find({}).toArray().catch(() => []),
@@ -72,8 +122,7 @@ export async function GET(req: Request) {
       payroll,
     };
 
-    // Store in in-memory server cache
-    setCachedBootstrapData(payload);
+    setCachedBootstrapData(payload, cacheKey);
 
     return NextResponse.json(payload, {
       headers: {

@@ -7,25 +7,27 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
-let bootstrapCache: CacheEntry<any> | null = null;
+const bootstrapCacheMap = new Map<string, CacheEntry<any>>();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache TTL (invalidated immediately on DB mutation)
 
-export function getCachedBootstrapData(): any | null {
-  if (!bootstrapCache) return null;
+export function getCachedBootstrapData(cacheKey: string = 'default'): any | null {
+  const entry = bootstrapCacheMap.get(cacheKey);
+  if (!entry) return null;
   const now = Date.now();
-  if (now - bootstrapCache.timestamp > CACHE_TTL_MS) {
+  if (now - entry.timestamp > CACHE_TTL_MS) {
+    bootstrapCacheMap.delete(cacheKey);
     return null;
   }
-  return bootstrapCache.data;
+  return entry.data;
 }
 
-export function setCachedBootstrapData(data: any) {
-  bootstrapCache = {
+export function setCachedBootstrapData(data: any, cacheKey: string = 'default') {
+  bootstrapCacheMap.set(cacheKey, {
     data,
     timestamp: Date.now(),
-  };
+  });
 }
 
 export function invalidateBootstrapCache() {
-  bootstrapCache = null;
+  bootstrapCacheMap.clear();
 }

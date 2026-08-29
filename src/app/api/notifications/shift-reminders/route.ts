@@ -32,7 +32,10 @@ async function handleShiftReminders() {
       db.collection("holidays").find({}).toArray().catch(() => []),
       db.collection("leaveRequests").find({ status: "APPROVED" }).toArray().catch(() => []),
       db.collection("notifications").find({
-        type: { $in: ["SHIFT_REMINDER", "DAY_IN_REMINDER", "DAY_OUT_REMINDER", "NIGHT_IN_REMINDER", "NIGHT_OUT_REMINDER"] }
+        $or: [
+          { type: { $in: ["DAY_MARK_IN_REMINDER", "DAY_MARK_OUT_REMINDER", "NIGHT_MARK_IN_REMINDER", "NIGHT_MARK_OUT_REMINDER", "SHIFT_REMINDER", "DAY_IN_REMINDER", "DAY_OUT_REMINDER", "NIGHT_IN_REMINDER", "NIGHT_OUT_REMINDER"] } },
+          { notification_type: { $in: ["DAY_MARK_IN_REMINDER", "DAY_MARK_OUT_REMINDER", "NIGHT_MARK_IN_REMINDER", "NIGHT_MARK_OUT_REMINDER", "SHIFT_REMINDER", "DAY_IN_REMINDER", "DAY_OUT_REMINDER", "NIGHT_IN_REMINDER", "NIGHT_OUT_REMINDER"] } },
+        ]
       }).toArray().catch(() => []),
     ]);
 
@@ -63,6 +66,7 @@ async function handleShiftReminders() {
     }));
 
     const currentIST = getISTDate();
+    const nowIso = currentIST.toISOString();
 
     // 2. Evaluate shift reminders based on exact business logic & time thresholds
     const remindersToCreate = evaluateShiftAttendanceReminders({
@@ -80,21 +84,49 @@ async function handleShiftReminders() {
     // 3. Insert into MongoDB & dispatch FCM Push with strict deduplication
     for (const reminder of remindersToCreate) {
       try {
+        const notifId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const notifDoc = {
+          id: notifId,
+          notificationId: notifId,
+          notification_id: notifId,
+          employeeId: reminder.employeeId,
+          employee_id: reminder.employeeId,
+          loginId: reminder.loginId || reminder.employeeId,
+          login_id: reminder.loginId || reminder.employeeId,
           title: reminder.title,
           message: reminder.message,
           timestamp: reminder.timestamp,
+          notificationDateTime: reminder.timestamp,
           read: false,
+          isRead: false,
+          readStatus: 'UNREAD',
+          read_status: 'UNREAD',
+          readAt: null,
+          opened_at: null,
           type: reminder.type,
+          notificationType: reminder.type,
+          notification_type: reminder.type,
           shift: reminder.shift,
           reminderType: reminder.reminderType,
-          employeeId: reminder.employeeId,
           employeeName: reminder.employeeName,
           dedupeKey: reminder.dedupeKey,
           shiftDate: reminder.shiftDate,
           action: reminder.action,
           deepLink: reminder.deepLink,
+          source: 'SYSTEM_SCHEDULER',
+          createdBy: 'SYSTEM_SCHEDULER',
+          created_by: 'SYSTEM_SCHEDULER',
+          senderUser: 'SYSTEM_SCHEDULER',
+          senderUserName: 'System Scheduler',
+          scheduledAt: nowIso,
+          scheduled_at: nowIso,
+          sentAt: nowIso,
+          sent_at: nowIso,
+          deliveryStatus: 'PENDING',
+          delivery_status: 'PENDING',
+          pushSent: false,
           createdAt: new Date(),
+          updatedAt: new Date(),
         };
 
         const result = await db.collection("notifications").updateOne(
@@ -115,16 +147,34 @@ async function handleShiftReminders() {
             type: reminder.type,
             employeeId: reminder.employeeId,
             targetRole: "EMPLOYEE",
+            notificationId: notifId,
             eventId: reminder.dedupeKey,
             shift: reminder.shift,
             shiftDate: reminder.shiftDate,
             deepLink: reminder.deepLink,
             data: {
+              notificationType: reminder.type,
               reminderType: reminder.reminderType,
               action: reminder.action,
               employeeName: reminder.employeeName,
+              loginId: reminder.loginId || reminder.employeeId,
+              source: 'SYSTEM_SCHEDULER',
             },
           });
+
+          // Update delivery status
+          const isDelivered = pushRes.success && pushRes.successCount > 0;
+          await db.collection("notifications").updateOne(
+            { dedupeKey: reminder.dedupeKey },
+            {
+              $set: {
+                pushSent: isDelivered,
+                deliveryStatus: isDelivered ? 'DELIVERED' : 'SENT',
+                delivery_status: isDelivered ? 'DELIVERED' : 'SENT',
+                updatedAt: new Date(),
+              },
+            }
+          ).catch(() => {});
 
           pushResults.push({
             employeeId: reminder.employeeId,

@@ -51,7 +51,11 @@ export async function POST(req: Request) {
           $set: {
             isRead: true,
             read: true,
+            readStatus: 'READ',
+            read_status: 'READ',
             readAt: nowIso,
+            openedAt: nowIso,
+            opened_at: nowIso,
             updatedAt: nowIso,
           },
         }
@@ -66,7 +70,11 @@ export async function POST(req: Request) {
 
     // Mark single notification as read
     const filter: any = {
-      $or: [{ id: notificationId }],
+      $or: [
+        { id: notificationId },
+        { notificationId: notificationId },
+        { notification_id: notificationId },
+      ],
     };
 
     if (ObjectId.isValid(notificationId)) {
@@ -77,7 +85,11 @@ export async function POST(req: Request) {
       $set: {
         isRead: true,
         read: true,
+        readStatus: 'READ',
+        read_status: 'READ',
         readAt: nowIso,
+        openedAt: nowIso,
+        opened_at: nowIso,
         updatedAt: nowIso,
       },
     });

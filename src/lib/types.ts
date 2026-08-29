@@ -279,17 +279,49 @@ export interface LeaveRequest {
 export interface AppNotification {
   id: string;
   _id?: string;
+  notificationId?: string;
+  notification_id?: string;
+  employeeId?: string;
+  employee_id?: string;
+  loginId?: string;
+  login_id?: string;
+  deviceId?: string;
+  device_id?: string;
+  pushToken?: string;
+  push_token?: string;
+  notificationType?: string;
+  notification_type?: string;
+  type?: string;
   title?: string;
   message: string;
+  scheduledAt?: string | Date;
+  scheduled_at?: string | Date;
+  sentAt?: string | Date;
+  sent_at?: string | Date;
+  deliveryStatus?: 'SENT' | 'DELIVERED' | 'SAVED' | 'FAILED' | string;
+  delivery_status?: 'SENT' | 'DELIVERED' | 'SAVED' | 'FAILED' | string;
+  readStatus?: 'UNREAD' | 'READ' | 'OPENED' | string;
+  read_status?: 'UNREAD' | 'READ' | 'OPENED' | string;
+  openedAt?: string | Date;
+  opened_at?: string | Date;
+  source?: 'ACTIVITY_PAGE' | 'SYSTEM_SCHEDULER' | string;
+  createdBy?: string;
+  created_by?: string;
+  senderUser?: string;
+  senderUserName?: string;
+  senderUserId?: string;
+  senderId?: string;
+  employeeName?: string;
   timestamp: string;
   read: boolean;
-  type?: string;
-  employeeId?: string;
-  employeeName?: string;
-  senderUser?: string;
-  senderId?: string;
+  isRead?: boolean;
   dedupeKey?: string;
+  shift?: 'DAY' | 'NIGHT';
+  shiftDate?: string;
+  action?: 'MARK_IN' | 'MARK_OUT';
+  deepLink?: string;
   createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 export interface SalaryPaymentRecord {

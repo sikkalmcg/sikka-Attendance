@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
-    // Always resolve authenticated user from session cookie (authoritative)
+    // 1. Resolve session user
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('sikka_session')?.value;
     let sessionUser: any = null;
@@ -22,22 +22,30 @@ export async function GET(req: Request) {
     const isAdmin = ADMIN_ROLES.includes(sessionRole);
 
     const db = await getDb();
-    if (!db) return NextResponse.json({ count: 0 });
-
-    // Admin: count all unread
-    if (isAdmin) {
-      const unreadCount = await db.collection('notifications').countDocuments({
-        $or: [{ isRead: false }, { read: false }, { isRead: { $exists: false } }],
-      });
-      return NextResponse.json({ count: unreadCount, unreadCount });
+    if (!db) {
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // Employee: strictly only their own unread notifications
+    // 2. Admin receives all notifications
+    if (isAdmin) {
+      const allNotifs = await db
+        .collection('notifications')
+        .find({})
+        .sort({ createdAt: -1, timestamp: -1, _id: -1 })
+        .limit(200)
+        .toArray();
+      return NextResponse.json(allNotifs);
+    }
+
+    // 3. Employee: strict filtering by Employee ID / aliases
     let employeeId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || '';
     if (!employeeId) {
       employeeId = searchParams.get('employeeId') || '';
     }
-    if (!employeeId) return NextResponse.json({ count: 0, unreadCount: 0 });
+
+    if (!employeeId) {
+      return NextResponse.json([]);
+    }
 
     const matchedEmp = await db.collection('employees').findOne({
       $or: [
@@ -45,9 +53,9 @@ export async function GET(req: Request) {
         { id: employeeId },
         { mobile: employeeId },
         { mobileNumber: employeeId },
+        { username: employeeId },
         { aadhaar: employeeId },
         { aadhaarNumber: employeeId },
-        { username: employeeId },
       ],
     }).catch(() => null);
 
@@ -62,26 +70,17 @@ export async function GET(req: Request) {
       if (matchedEmp.aadhaarNumber) targetIds.add(matchedEmp.aadhaarNumber);
       if (matchedEmp.username) targetIds.add(matchedEmp.username);
     }
-    const targetIdsArr = Array.from(targetIds).filter(Boolean);
 
-    // STRICT: no null/empty/ALL/GLOBAL (Section 5 security)
-    const unreadCount = await db.collection('notifications').countDocuments({
-      $and: [
-        {
-          $or: [
-            { employeeId: { $in: targetIdsArr } },
-            { employee_id: { $in: targetIdsArr } },
-            { loginId: { $in: targetIdsArr } },
-            { login_id: { $in: targetIdsArr } },
-          ],
-        },
-        { $or: [{ isRead: false }, { read: false }, { isRead: { $exists: false } }] },
-      ],
-    });
+    const notifs = await db
+      .collection('notifications')
+      .find({ employeeId: { $in: Array.from(targetIds).filter(Boolean) } })
+      .sort({ createdAt: -1, timestamp: -1, _id: -1 })
+      .limit(100)
+      .toArray();
 
-    return NextResponse.json({ count: unreadCount, unreadCount });
+    return NextResponse.json(notifs);
   } catch (error: any) {
-    console.error('Error in /api/notifications/unread-count:', error);
-    return NextResponse.json({ count: 0, unreadCount: 0 });
+    console.error('Error in /api/data/notifications:', error);
+    return NextResponse.json({ error: error?.message || 'Failed to fetch notifications' }, { status: 500 });
   }
 }

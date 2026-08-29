@@ -150,24 +150,26 @@ export interface ShiftReminderNotificationItem {
   message: string;
   timestamp: string;
   read: boolean;
-  type: 'DAY_IN_REMINDER' | 'DAY_OUT_REMINDER' | 'NIGHT_IN_REMINDER' | 'NIGHT_OUT_REMINDER' | 'SHIFT_REMINDER';
+  type: 'DAY_MARK_IN_REMINDER' | 'DAY_MARK_OUT_REMINDER' | 'NIGHT_MARK_IN_REMINDER' | 'NIGHT_MARK_OUT_REMINDER' | 'DAY_IN_REMINDER' | 'DAY_OUT_REMINDER' | 'NIGHT_IN_REMINDER' | 'NIGHT_OUT_REMINDER' | 'SHIFT_REMINDER';
   shift: EmployeeShift;
   reminderType: 'MARK_IN' | 'MARK_OUT';
   employeeId: string;
+  loginId?: string;
   employeeName: string;
   dedupeKey: string;
   shiftDate: string;
   action: 'MARK_IN' | 'MARK_OUT';
   deepLink: string;
+  source: 'SYSTEM_SCHEDULER';
 }
 
 /**
  * Evaluates shift reminder notifications for all active employees based on current IST time.
  * Covers:
- * 1. 10:00 AM IST - Day Shift IN Reminder
- * 2. 06:00 PM IST - Day Shift OUT Reminder
- * 3. 08:00 PM IST - Night Shift IN Reminder
- * 4. 06:00 AM IST - Night Shift (Next Morning) OUT Reminder for previous night
+ * 1. 10:00 AM IST - Day Shift Mark IN Reminder (Section 7)
+ * 2. 06:00 PM IST - Day Shift Mark OUT Reminder (Section 8)
+ * 3. 08:00 PM IST - Night Shift Mark IN Reminder (Section 9)
+ * 4. 06:00 AM IST - Night Shift Mark OUT Reminder (Section 10)
  */
 export const evaluateShiftAttendanceReminders = (params: {
   employees: Employee[];
@@ -194,15 +196,15 @@ export const evaluateShiftAttendanceReminders = (params: {
   // Total minutes from midnight for easy comparison
   const currentTotalMinutes = currentHour * 60 + currentMinute;
 
-  // Schedule thresholds (in minutes from midnight):
-  // 10:00 AM = 600
-  // 06:00 PM (18:00) = 1080
-  // 08:00 PM (20:00) = 1200
-  // 06:00 AM = 360
-  const isAfter10AM = currentTotalMinutes >= 10 * 60;
-  const isAfter06PM = currentTotalMinutes >= 18 * 60;
-  const isAfter08PM = currentTotalMinutes >= 20 * 60;
-  const isAfter06AM = currentTotalMinutes >= 6 * 60;
+  // Schedule window thresholds (in minutes from midnight IST):
+  // 1. 06:00 AM to 10:00 AM (360 to 599 min) -> Night Shift Mark OUT Reminder (previous night)
+  // 2. 10:00 AM to 06:00 PM (600 to 1079 min) -> Day Shift Mark IN Reminder (today)
+  // 3. 06:00 PM to 08:00 PM (1080 to 1199 min) -> Day Shift Mark OUT Reminder (today)
+  // 4. 08:00 PM to 06:00 AM (>= 1200 or < 360 min) -> Night Shift Mark IN Reminder (tonight)
+  const isDayInWindow = currentTotalMinutes >= 10 * 60 && currentTotalMinutes < 18 * 60;
+  const isDayOutWindow = currentTotalMinutes >= 18 * 60 && currentTotalMinutes < 20 * 60;
+  const isNightInWindow = currentTotalMinutes >= 20 * 60 || currentTotalMinutes < 6 * 60;
+  const isNightOutWindow = currentTotalMinutes >= 6 * 60 && currentTotalMinutes < 10 * 60;
 
   const isTodayWorkingDay = isWorkingDay(todayStr, holidays);
   const isYesterdayWorkingDay = isWorkingDay(yesterdayStr, holidays);
@@ -224,6 +226,8 @@ export const evaluateShiftAttendanceReminders = (params: {
     const empId = String(emp.employeeId || emp.id || (emp as any)._id || '').trim();
     if (!empId) return;
 
+    const loginId = String((emp as any).username || (emp as any).email || (emp as any).loginId || emp.employeeId || '').trim();
+
     const empFullName = emp.firstName
       ? `${emp.firstName} ${emp.lastName || ''}`.trim()
       : (emp.name || (emp as any).fullName || "Employee");
@@ -237,7 +241,7 @@ export const evaluateShiftAttendanceReminders = (params: {
       return recEmpId === targetEmpId || (userIdent && recEmpId === userIdent);
     });
 
-    // 2. Determine applicable shift (from previous attendance history)
+    // 2. Determine applicable shift (from previous attendance history - Section 6)
     const shift = determineEmployeeShift(empHistory);
 
     // 3. Find today's and yesterday's attendance records
@@ -256,51 +260,59 @@ export const evaluateShiftAttendanceReminders = (params: {
     const nowFormatted = format(currentISTTime, "yyyy-MM-dd HH:mm:ss");
 
     // ==========================================
-    // DAY SHIFT NOTIFICATIONS
+    // DAY SHIFT NOTIFICATIONS (Section 7 & 8)
     // ==========================================
     if (shift === 'DAY') {
-      // PART 3: Day Shift - 10:00 AM Mark IN Reminder
-      if (isTodayWorkingDay && !isTodayOnLeave && isAfter10AM) {
-        const dedupeKey = `${empId}_${todayStr}_DAY_IN_REMINDER`;
-        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey)) {
+      // PART 3: Day Shift - 10:00 AM Mark IN Reminder (Section 7)
+      // Condition: Current Date AND Day Shift AND Mark IN does NOT exist for today
+      if (isTodayWorkingDay && !isTodayOnLeave && isDayInWindow) {
+        const dedupeKey = `${empId}_${todayStr}_DAY_MARK_IN_REMINDER_10:00`;
+        const legacyDedupeKey = `${empId}_${todayStr}_DAY_IN_REMINDER`;
+        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey)) {
           remindersToCreate.push({
             title: "Attendance Reminder",
-            message: "Hope you are now at work. Please Mark IN your attendance.",
+            message: "You have not marked IN today. Please Mark IN.",
             timestamp: nowFormatted,
             read: false,
-            type: 'DAY_IN_REMINDER',
+            type: 'DAY_MARK_IN_REMINDER',
             shift: 'DAY',
             reminderType: 'MARK_IN',
             employeeId: empId,
+            loginId,
             employeeName: empFullName,
             dedupeKey,
             shiftDate: todayStr,
             action: 'MARK_IN',
             deepLink: '/dashboard/attendance?action=mark_in',
+            source: 'SYSTEM_SCHEDULER',
           });
           existingDedupeKeys.add(dedupeKey);
         }
       }
 
-      // PART 4: Day Shift - 06:00 PM Mark OUT Reminder
-      if (isTodayWorkingDay && isAfter06PM) {
-        const dedupeKey = `${empId}_${todayStr}_DAY_OUT_REMINDER`;
+      // PART 4: Day Shift - 06:00 PM Mark OUT Reminder (Section 8)
+      // Condition: Day Shift AND Today's Mark IN exists AND Today's Mark OUT does NOT exist
+      if (isTodayWorkingDay && isDayOutWindow) {
+        const dedupeKey = `${empId}_${todayStr}_DAY_MARK_OUT_REMINDER_18:00`;
+        const legacyDedupeKey = `${empId}_${todayStr}_DAY_OUT_REMINDER`;
         // Send only if marked IN but has not marked OUT
-        if (hasMarkedInToday && !hasMarkedOutToday && !existingDedupeKeys.has(dedupeKey)) {
+        if (hasMarkedInToday && !hasMarkedOutToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey)) {
           remindersToCreate.push({
-            title: "Attendance Reminder",
-            message: "Please Mark OUT before leaving the workplace.",
+            title: "Mark OUT Reminder",
+            message: "You have marked IN today but have not marked OUT. Please Mark OUT.",
             timestamp: nowFormatted,
             read: false,
-            type: 'DAY_OUT_REMINDER',
+            type: 'DAY_MARK_OUT_REMINDER',
             shift: 'DAY',
             reminderType: 'MARK_OUT',
             employeeId: empId,
+            loginId,
             employeeName: empFullName,
             dedupeKey,
             shiftDate: todayStr,
             action: 'MARK_OUT',
             deepLink: '/dashboard/attendance?action=mark_out',
+            source: 'SYSTEM_SCHEDULER',
           });
           existingDedupeKeys.add(dedupeKey);
         }
@@ -308,36 +320,42 @@ export const evaluateShiftAttendanceReminders = (params: {
     }
 
     // ==========================================
-    // NIGHT SHIFT NOTIFICATIONS
+    // NIGHT SHIFT NOTIFICATIONS (Section 9 & 10)
     // ==========================================
     if (shift === 'NIGHT') {
-      // PART 5: Night Shift - 08:00 PM Mark IN Reminder
-      if (isTodayWorkingDay && !isTodayOnLeave && isAfter08PM) {
-        const dedupeKey = `${empId}_${todayStr}_NIGHT_IN_REMINDER`;
-        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey)) {
+      // PART 5: Night Shift - 08:00 PM Mark IN Reminder (Section 9)
+      // Condition: Night Shift AND applicable Mark IN does NOT exist
+      if (isTodayWorkingDay && !isTodayOnLeave && isNightInWindow) {
+        const dedupeKey = `${empId}_${todayStr}_NIGHT_MARK_IN_REMINDER_20:00`;
+        const legacyDedupeKey = `${empId}_${todayStr}_NIGHT_IN_REMINDER`;
+        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey)) {
           remindersToCreate.push({
             title: "Attendance Reminder",
-            message: "Hope you are now at work. Please Mark IN your attendance.",
+            message: "Your Night Shift is starting. Please Mark IN.",
             timestamp: nowFormatted,
             read: false,
-            type: 'NIGHT_IN_REMINDER',
+            type: 'NIGHT_MARK_IN_REMINDER',
             shift: 'NIGHT',
             reminderType: 'MARK_IN',
             employeeId: empId,
+            loginId,
             employeeName: empFullName,
             dedupeKey,
             shiftDate: todayStr,
             action: 'MARK_IN',
             deepLink: '/dashboard/attendance?action=mark_in',
+            source: 'SYSTEM_SCHEDULER',
           });
           existingDedupeKeys.add(dedupeKey);
         }
       }
 
-      // PART 6: Night Shift - 06:00 AM (Next Day) Mark OUT Reminder
-      // Specifically checks the open Night Shift started on the previous evening (yesterday)
-      if (isAfter06AM) {
-        const dedupeKey = `${empId}_${yesterdayStr}_NIGHT_OUT_REMINDER`;
+      // PART 6: Night Shift - 06:00 AM (Next Day) Mark OUT Reminder (Section 10)
+      // Condition: Night Shift AND Applicable Night Shift Mark IN exists (started yesterday) AND Mark OUT does NOT exist.
+      // An employee who did not Mark IN must NOT receive the Night Shift Mark OUT notification.
+      if (isNightOutWindow) {
+        const dedupeKey = `${empId}_${yesterdayStr}_NIGHT_MARK_OUT_REMINDER_06:00`;
+        const legacyDedupeKey = `${empId}_${yesterdayStr}_NIGHT_OUT_REMINDER`;
         const hasYesterdayNightIn = Boolean(yesterdayRecord && yesterdayRecord.inTime);
         const hasYesterdayNightOut = Boolean(
           yesterdayRecord &&
@@ -348,23 +366,26 @@ export const evaluateShiftAttendanceReminders = (params: {
           hasYesterdayNightIn &&
           !hasYesterdayNightOut &&
           !existingDedupeKeys.has(dedupeKey) &&
+          !existingDedupeKeys.has(legacyDedupeKey) &&
           isYesterdayWorkingDay &&
           !isYesterdayOnLeave
         ) {
           remindersToCreate.push({
-            title: "Attendance Reminder",
-            message: "Please Mark OUT before leaving the workplace.",
+            title: "Mark OUT Reminder",
+            message: "Your Night Shift attendance is active. Please Mark OUT.",
             timestamp: nowFormatted,
             read: false,
-            type: 'NIGHT_OUT_REMINDER',
+            type: 'NIGHT_MARK_OUT_REMINDER',
             shift: 'NIGHT',
             reminderType: 'MARK_OUT',
             employeeId: empId,
+            loginId,
             employeeName: empFullName,
             dedupeKey,
             shiftDate: yesterdayStr,
             action: 'MARK_OUT',
             deepLink: '/dashboard/attendance?action=mark_out',
+            source: 'SYSTEM_SCHEDULER',
           });
           existingDedupeKeys.add(dedupeKey);
         }

@@ -72,6 +72,7 @@ export default function ActivityPage() {
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
   const [empModalSearch, setEmpModalSearch] = useState("");
+  const [titleText, setTitleText] = useState("Message from Admin");
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
 
@@ -134,14 +135,20 @@ export default function ActivityPage() {
     if (!q) return notificationHistory;
     return notificationHistory.filter((n: any) => {
       const empName = String(n.employeeName || "").toLowerCase();
-      const empId = String(n.employeeId || "").toLowerCase();
+      const empId = String(n.employeeId || n.employee_id || "").toLowerCase();
       const msg = String(n.message || "").toLowerCase();
-      const sender = String(n.senderUser || "").toLowerCase();
-      const time = String(n.timestamp || "").toLowerCase();
+      const title = String(n.title || "").toLowerCase();
+      const type = String(n.type || n.notificationType || n.notification_type || "").toLowerCase();
+      const source = String(n.source || "").toLowerCase();
+      const sender = String(n.senderUser || n.senderUserName || "").toLowerCase();
+      const time = String(n.timestamp || n.notificationDateTime || "").toLowerCase();
       return (
         empName.includes(q) ||
         empId.includes(q) ||
         msg.includes(q) ||
+        title.includes(q) ||
+        type.includes(q) ||
+        source.includes(q) ||
         sender.includes(q) ||
         time.includes(q)
       );
@@ -152,8 +159,8 @@ export default function ActivityPage() {
   const formatNotificationDateTime = (timeStr: string | undefined): string => {
     if (!timeStr) return "N/A";
     const clean = String(timeStr).trim();
-    // If already in "dd-MMM-yyyy HH:mm" format, return as is
-    if (/^\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}$/.test(clean)) {
+    // If already in "dd-MMM-yyyy HH:mm" or "dd-MMM-yyyy hh:mm a" format, return as is
+    if (/^\d{2}-[A-Za-z]{3}-\d{4}/.test(clean)) {
       return clean;
     }
     try {
@@ -167,6 +174,64 @@ export default function ActivityPage() {
       }
     } catch {}
     return clean;
+  };
+
+  const getNotificationTypeBadge = (notif: any) => {
+    const rawType = String(notif.notification_type || notif.notificationType || notif.type || '').toUpperCase();
+    switch (rawType) {
+      case 'DAY_MARK_IN_REMINDER':
+      case 'DAY_IN_REMINDER':
+        return (
+          <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] uppercase px-2 py-0.5 shadow-none">
+            Day Mark IN
+          </Badge>
+        );
+      case 'DAY_MARK_OUT_REMINDER':
+      case 'DAY_OUT_REMINDER':
+        return (
+          <Badge className="bg-orange-100 text-orange-900 border-orange-300 font-bold text-[10px] uppercase px-2 py-0.5 shadow-none">
+            Day Mark OUT
+          </Badge>
+        );
+      case 'NIGHT_MARK_IN_REMINDER':
+      case 'NIGHT_IN_REMINDER':
+        return (
+          <Badge className="bg-indigo-100 text-indigo-900 border-indigo-300 font-bold text-[10px] uppercase px-2 py-0.5 shadow-none">
+            Night Mark IN
+          </Badge>
+        );
+      case 'NIGHT_MARK_OUT_REMINDER':
+      case 'NIGHT_OUT_REMINDER':
+        return (
+          <Badge className="bg-purple-100 text-purple-900 border-purple-300 font-bold text-[10px] uppercase px-2 py-0.5 shadow-none">
+            Night Mark OUT
+          </Badge>
+        );
+      case 'ACTIVITY_MESSAGE':
+      case 'CUSTOM_NOTIFICATION':
+      default:
+        return (
+          <Badge className="bg-blue-100 text-blue-900 border-blue-300 font-bold text-[10px] uppercase px-2 py-0.5 shadow-none">
+            Activity Message
+          </Badge>
+        );
+    }
+  };
+
+  const getSourceBadge = (notif: any) => {
+    const rawSource = String(notif.source || (notif.type?.includes('REMINDER') ? 'SYSTEM_SCHEDULER' : 'ACTIVITY_PAGE')).toUpperCase();
+    if (rawSource === 'SYSTEM_SCHEDULER') {
+      return (
+        <Badge variant="outline" className="font-bold text-[10px] uppercase bg-slate-50 border-slate-300 text-slate-700 px-2 py-0.5">
+          Scheduler
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="font-bold text-[10px] uppercase bg-purple-50 border-purple-300 text-purple-800 px-2 py-0.5">
+        Activity Page
+      </Badge>
+    );
   };
 
   // Toggle individual employee selection
@@ -195,6 +260,7 @@ export default function ActivityPage() {
   const handleCloseModal = () => {
     setIsSendModalOpen(false);
     setSelectedEmpIds([]);
+    setTitleText("Message from Admin");
     setMessageText("");
     setEmpModalSearch("");
     setIsSending(false);
@@ -244,8 +310,8 @@ export default function ActivityPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employeeIds: uniqueSelectedIds,
+          title: titleText.trim() || "Message from Admin",
           message: messageText.trim(),
-          title: "New Notification",
           senderUserId: senderId,
           senderUserName: senderName,
         }),
@@ -324,7 +390,7 @@ export default function ActivityPage() {
             <div className="relative flex-1 max-w-md w-full">
               <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
               <Input 
-                placeholder="Search history by employee, message, sender or date..." 
+                placeholder="Search by employee, message, title, type, or date..." 
                 className="pl-10 h-10 bg-slate-50 border-slate-200 rounded-xl text-sm focus-visible:ring-primary/20" 
                 value={notifSearchTerm}
                 onChange={(e) => setNotifSearchTerm(e.target.value)}
@@ -341,7 +407,7 @@ export default function ActivityPage() {
             </Button>
           </div>
 
-          {/* Notification History Table */}
+          {/* Notification History Table (Section 24) */}
           <Card className="border-slate-200 shadow-xl overflow-hidden rounded-2xl bg-white">
             <CardHeader className="bg-slate-50/80 border-b p-4 sm:p-5">
               <div className="flex items-center justify-between">
@@ -351,7 +417,7 @@ export default function ActivityPage() {
                   </div>
                   <div>
                     <CardTitle className="text-base font-bold text-slate-900">Notification History</CardTitle>
-                    <p className="text-xs text-slate-500 mt-0.5">Individual log of all sent notifications (Newest first)</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Individual log of all employee notifications & attendance reminders (Newest first)</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="font-mono text-xs font-bold bg-white border-slate-200 text-slate-700 px-3 py-1">
@@ -361,30 +427,36 @@ export default function ActivityPage() {
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1100px]">
+                <Table className="min-w-[1250px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-4 px-6 w-[220px]">
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-4 px-6 w-[200px]">
                         Employee
                       </TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[190px]">
-                        Notification Date & Time
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[140px]">
+                        Notification Type
                       </TableHead>
                       <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">
                         Message
                       </TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[150px]">
-                        Sender User
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[170px]">
+                        Date & Time
                       </TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 text-right pr-6 w-[120px]">
-                        Status
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[120px]">
+                        Source
+                      </TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[110px]">
+                        Delivery
+                      </TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 text-right pr-6 w-[100px]">
+                        Read Status
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredNotificationHistory.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-20 text-slate-400">
+                        <TableCell colSpan={7} className="text-center py-20 text-slate-400">
                           <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
                             <Bell className="w-6 h-6 text-slate-300" />
                           </div>
@@ -395,14 +467,21 @@ export default function ActivityPage() {
                     ) : (
                       filteredNotificationHistory.map((notif: any, index: number) => {
                         const notifId = notif.id || notif._id || `notif_${index}`;
+                        const rawEmpId = notif.employeeId || notif.employee_id || '';
                         const empObj = employees.find(
-                          e => e.employeeId === notif.employeeId || e.id === notif.employeeId
+                          e => e.employeeId === rawEmpId || e.id === rawEmpId
                         );
-                        const displayName = notif.employeeName || empObj?.name || `${empObj?.firstName || ''} ${empObj?.lastName || ''}`.trim() || notif.employeeId || "All Employees";
-                        const displayEmpId = notif.employeeId || empObj?.employeeId || "GLOBAL";
-                        const senderDisplay = notif.senderUserName || notif.senderUser || "Admin";
-                        const isRead = Boolean(notif.isRead || notif.read);
-                        const pushDelivered = Boolean(notif.pushSent || notif.status === 'delivered');
+                        const displayName = notif.employeeName || empObj?.name || `${empObj?.firstName || ''} ${empObj?.lastName || ''}`.trim() || rawEmpId || "Selected Employee";
+                        const displayEmpId = rawEmpId || empObj?.employeeId || "EMP";
+                        const isRead = Boolean(notif.isRead || notif.read || notif.readStatus === 'READ' || notif.read_status === 'READ');
+                        const isOpened = Boolean(notif.openedAt || notif.opened_at || notif.readStatus === 'OPENED' || notif.read_status === 'OPENED');
+                        const pushDelivered = Boolean(
+                          notif.pushSent || 
+                          notif.deliveryStatus === 'DELIVERED' || 
+                          notif.delivery_status === 'DELIVERED' || 
+                          notif.delivery_status === 'sent' || 
+                          notif.status === 'sent'
+                        );
 
                         return (
                           <TableRow key={notifId} className="hover:bg-slate-50/60 transition-colors">
@@ -416,42 +495,60 @@ export default function ActivityPage() {
                               </div>
                             </TableCell>
 
-                            {/* 2. Notification Date & Time Column (24-hour format) */}
-                            <TableCell className="py-4 font-mono text-xs font-semibold text-slate-700">
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span>{formatNotificationDateTime(notif.notificationDateTime || notif.timestamp || notif.createdAt)}</span>
-                              </div>
+                            {/* 2. Notification Type Column (Section 24) */}
+                            <TableCell className="py-4">
+                              {getNotificationTypeBadge(notif)}
                             </TableCell>
 
                             {/* 3. Message Column */}
                             <TableCell className="py-4">
-                              <p className="text-xs text-slate-700 leading-relaxed max-w-2xl font-medium">
-                                {notif.message}
-                              </p>
+                              <div className="space-y-0.5 max-w-xl">
+                                {notif.title && (
+                                  <p className="text-xs font-bold text-slate-900 leading-tight">
+                                    {notif.title}
+                                  </p>
+                                )}
+                                <p className="text-xs text-slate-700 leading-relaxed font-medium whitespace-pre-line">
+                                  {notif.message}
+                                </p>
+                              </div>
                             </TableCell>
 
-                            {/* 4. Sender User Column */}
+                            {/* 4. Date & Time Column (24-hour format) */}
+                            <TableCell className="py-4 font-mono text-xs font-semibold text-slate-700">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span>{formatNotificationDateTime(notif.notificationDateTime || notif.timestamp || notif.createdAt || notif.sentAt)}</span>
+                              </div>
+                            </TableCell>
+
+                            {/* 5. Source Column (Section 24) */}
                             <TableCell className="py-4">
-                              <Badge variant="outline" className="font-bold text-xs bg-slate-50 border-slate-200 text-slate-800 px-2.5 py-1">
-                                <UserIcon className="w-3 h-3 mr-1 text-slate-400" />
-                                {senderDisplay}
-                              </Badge>
+                              {getSourceBadge(notif)}
                             </TableCell>
 
-                            {/* 5. Status Column */}
-                            <TableCell className="text-right pr-6 py-4">
-                              {isRead ? (
+                            {/* 6. Delivery Status Column (Section 24) */}
+                            <TableCell className="py-4">
+                              {pushDelivered ? (
                                 <Badge className="bg-emerald-100 text-emerald-800 border-none font-bold text-[10px] px-2 py-0.5">
-                                  Read
-                                </Badge>
-                              ) : pushDelivered ? (
-                                <Badge className="bg-blue-100 text-blue-800 border-none font-bold text-[10px] px-2 py-0.5">
                                   Delivered
                                 </Badge>
                               ) : (
                                 <Badge className="bg-slate-100 text-slate-700 border-none font-bold text-[10px] px-2 py-0.5">
-                                  Sent
+                                  Saved
+                                </Badge>
+                              )}
+                            </TableCell>
+
+                            {/* 7. Read Status Column (Section 24) */}
+                            <TableCell className="text-right pr-6 py-4">
+                              {isOpened || isRead ? (
+                                <Badge className="bg-blue-100 text-blue-800 border-none font-bold text-[10px] px-2 py-0.5">
+                                  {isOpened ? 'Opened' : 'Read'}
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[10px] px-2 py-0.5">
+                                  Unread
                                 </Badge>
                               )}
                             </TableCell>
@@ -670,7 +767,20 @@ export default function ActivityPage() {
               </p>
             </div>
 
-            {/* 2. NOTIFICATION MESSAGE */}
+            {/* 2. NOTIFICATION TITLE (Section 3) */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-primary" /> Notification Title <span className="text-slate-400 font-normal">(Optional)</span>
+              </Label>
+              <Input
+                placeholder="Enter notification title (e.g. Message from Admin / Team Notice)"
+                value={titleText}
+                onChange={(e) => setTitleText(e.target.value)}
+                className="bg-white rounded-xl text-sm border-slate-200 focus-visible:ring-primary/20"
+              />
+            </div>
+
+            {/* 3. NOTIFICATION MESSAGE */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
