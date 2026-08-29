@@ -42,7 +42,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // Resolve sender details
     const finalSenderId = String(senderUserId || 'ADMIN').trim();
     const finalSenderName = String(senderUserName || 'Admin').trim();
     const now = new Date();
@@ -68,7 +67,7 @@ export async function POST(req: Request) {
       const targetEmpId = emp?.employeeId || rawEmpId;
       const targetEmpName = emp ? (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim()) : rawEmpId;
 
-      // 3. Create MongoDB Notification Document
+      // 3. Step 1: Create notification record in MongoDB (Section 10)
       const notifDoc = {
         employeeId: targetEmpId,
         employeeName: targetEmpName,
@@ -76,15 +75,15 @@ export async function POST(req: Request) {
         message: cleanMessage,
         senderUserId: finalSenderId,
         senderUserName: finalSenderName,
-        senderUser: finalSenderName, // for compatibility
+        senderUser: finalSenderName,
         notificationDateTime: nowIso,
         timestamp: nowIso,
         isRead: false,
-        read: false, // for backwards compatibility
+        read: false,
         readAt: null,
         pushSent: false,
         pushSentAt: null,
-        status: 'sent',
+        status: 'pending',
         type: 'CUSTOM_NOTIFICATION',
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -93,14 +92,16 @@ export async function POST(req: Request) {
       const insertResult = await db.collection('notifications').insertOne(notifDoc);
       const insertedId = insertResult.insertedId.toString();
 
-      // 4. Send Mobile Push Notification via FCM Service
+      // 4. Step 2 & 3: Find employee device tokens & Send FCM push notification (Section 2, 9, 10, 11)
       try {
         const pushRes = await sendFCMPushNotification({
-          title: title || 'Sikka ERP - New Notification',
+          notificationId: insertedId,
+          title: title || 'New Notification',
           message: cleanMessage,
           type: 'CUSTOM_NOTIFICATION',
           employeeId: targetEmpId,
           targetRole: 'EMPLOYEE',
+          deepLink: '/dashboard/attendance',
           data: {
             notificationId: insertedId,
             senderUserId: finalSenderId,
@@ -109,6 +110,7 @@ export async function POST(req: Request) {
           },
         });
 
+        // 5. Step 4: Update push status in MongoDB
         if (pushRes.success && pushRes.successCount > 0) {
           await db.collection('notifications').updateOne(
             { _id: insertResult.insertedId },
@@ -116,14 +118,38 @@ export async function POST(req: Request) {
               $set: {
                 pushSent: true,
                 pushSentAt: new Date().toISOString(),
-                status: 'delivered',
+                status: 'sent',
+                pushError: null,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          );
+        } else {
+          await db.collection('notifications').updateOne(
+            { _id: insertResult.insertedId },
+            {
+              $set: {
+                pushSent: false,
+                status: 'failed',
+                pushError: pushRes.error || (pushRes.totalTokens === 0 ? 'No active device tokens found' : 'FCM delivery failed'),
                 updatedAt: new Date().toISOString(),
               },
             }
           );
         }
-      } catch (pushErr) {
-        console.warn(`Push dispatch failed for employee ${targetEmpId}:`, pushErr);
+      } catch (pushErr: any) {
+        console.warn(`Push dispatch exception for employee ${targetEmpId}:`, pushErr);
+        await db.collection('notifications').updateOne(
+          { _id: insertResult.insertedId },
+          {
+            $set: {
+              pushSent: false,
+              status: 'failed',
+              pushError: pushErr?.message || 'Push dispatch exception',
+              updatedAt: new Date().toISOString(),
+            },
+          }
+        );
       }
 
       createdNotifications.push({

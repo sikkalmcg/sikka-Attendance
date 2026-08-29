@@ -40,44 +40,57 @@ export async function POST(req: Request) {
     }
 
     const now = new Date();
+    const nowIso = now.toISOString();
 
-    // 1. Update `device_tokens` collection
+    // 1. Update `employee_devices` collection (Section 3)
+    await db.collection('employee_devices').updateOne(
+      {
+        $or: [
+          { deviceToken: cleanToken },
+          { token: cleanToken },
+        ],
+      },
+      {
+        $set: {
+          employeeId: cleanEmpId,
+          deviceToken: cleanToken,
+          token: cleanToken,
+          deviceType: platform || 'android',
+          platform: platform || 'android',
+          deviceName: deviceName || 'Android Device',
+          appVersion,
+          isActive: true,
+          active: true,
+          lastTokenUpdatedAt: nowIso,
+          lastActiveAt: nowIso,
+          updatedAt: nowIso,
+        },
+        $setOnInsert: {
+          createdAt: nowIso,
+        },
+      },
+      { upsert: true }
+    );
+
+    // 2. Update `device_tokens` collection (for multi-collection compatibility)
     await db.collection('device_tokens').updateOne(
       { token: cleanToken },
       {
         $set: {
           token: cleanToken,
+          deviceToken: cleanToken,
           employeeId: cleanEmpId,
           role: cleanRole,
           deviceName: deviceName || 'Android Device',
           platform: platform || 'android',
           active: true,
           isActive: true,
-          lastActiveAt: now.toISOString(),
+          lastTokenUpdatedAt: nowIso,
+          lastActiveAt: nowIso,
           updatedAt: now,
         },
         $setOnInsert: {
           createdAt: now,
-        },
-      },
-      { upsert: true }
-    );
-
-    // 2. Update `employee_devices` collection (as required in schema)
-    await db.collection('employee_devices').updateOne(
-      { deviceToken: cleanToken },
-      {
-        $set: {
-          employeeId: cleanEmpId,
-          deviceToken: cleanToken,
-          deviceType: platform || 'android',
-          appVersion,
-          isActive: true,
-          lastActiveAt: now.toISOString(),
-          updatedAt: now.toISOString(),
-        },
-        $setOnInsert: {
-          createdAt: now.toISOString(),
         },
       },
       { upsert: true }
@@ -91,8 +104,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Device token registered successfully',
+      message: 'Employee device token registered successfully in MongoDB',
       employeeId: cleanEmpId,
+      deviceToken: cleanToken,
+      registeredAt: nowIso,
     });
   } catch (error: any) {
     console.error('Error registering device token:', error);

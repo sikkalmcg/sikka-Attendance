@@ -1,6 +1,13 @@
 /**
  * Client Notification & Device Registration Bridge for Web, PWA, and Mobile APK/WebView.
+ * Supports:
+ * - Real-time Push Notification with Sound & Vibration
+ * - Android Notification Channel: general_notifications (High Importance, Sound & Vibration enabled)
+ * - Android Native Bridge & Service Worker integration
+ * - Red Dot & Unread Badge synchronization
  */
+
+import { playNotificationSoundAndVibrate, SIKKA_VIBRATION_PATTERN } from '@/lib/notification-sound';
 
 const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
 
@@ -46,7 +53,7 @@ export const registerNativeUser = async (employeeId: string, role: string, fullN
   try {
     if (typeof window === 'undefined') return;
 
-    // 1. Android Bridge fallback if inside legacy container
+    // 1. Android Bridge fallback if inside APK WebView container
     const bridge = window.AndroidBridge || window.Android;
     if (bridge && typeof bridge.registerUser === 'function') {
       bridge.registerUser(employeeId || '', role || '', fullName || '');
@@ -86,7 +93,8 @@ export const logoutNativeUser = () => {
 };
 
 /**
- * Show system notification on phone/browser across Service Worker, Web Notification API, and Native Bridge.
+ * Show system notification on phone/browser across Service Worker, Web Notification API, and Native Bridge
+ * with both NOTIFICATION SOUND and VIBRATION.
  */
 export const postNativeNotification = async (
   title: string,
@@ -98,29 +106,39 @@ export const postNativeNotification = async (
   try {
     if (typeof window === 'undefined') return;
 
-    // 1. Android Bridge fallback
+    const notifTitle = title || 'Sikka ERP - New Notification';
+    const notifBody = message || 'Please check your attendance and notifications.';
+
+    // 1. Immediate Sound & Vibration trigger (works in foreground)
+    playNotificationSoundAndVibrate();
+
+    // 2. Android Bridge native notification if inside Android Studio WebView container
     const bridge = window.AndroidBridge || window.Android;
     if (bridge && typeof bridge.postNotification === 'function') {
-      bridge.postNotification(title, message, type, employeeId, role);
+      bridge.postNotification(notifTitle, notifBody, type, employeeId, role);
     }
 
-    // 2. Service Worker Notification (Works on Android Mobile, PWA, Background)
+    // 3. Service Worker Notification (Works on Android Mobile Notification Bar, PWA, Background)
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.ready.then((registration) => {
-        registration.showNotification(title || 'Sikka Attendance', {
-          body: message || '',
+        registration.showNotification(notifTitle, {
+          body: notifBody,
           icon: SIKKA_LOGO,
           badge: SIKKA_LOGO,
-          vibrate: [200, 100, 200, 100, 200],
+          vibrate: SIKKA_VIBRATION_PATTERN,
           tag: 'sikka-' + (type || 'notif') + '-' + Date.now(),
+          renotify: true,
+          requireInteraction: true,
+          silent: false,
           data: { url: '/dashboard/attendance' },
         } as any);
       }).catch(() => {});
     } else if ('Notification' in window && Notification.permission === 'granted') {
-      // 3. Direct Web Notification fallback
-      new Notification(title || 'Sikka Attendance', {
-        body: message || '',
+      // 4. Direct Web Notification fallback
+      new Notification(notifTitle, {
+        body: notifBody,
         icon: SIKKA_LOGO,
+        silent: false,
       });
     }
   } catch (e) {

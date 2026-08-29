@@ -1,4 +1,7 @@
 const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
+const CHANNEL_ID = 'general_notifications';
+// Vibration pattern: 0ms delay -> 300ms vibrate -> 200ms pause -> 300ms vibrate
+const VIBRATION_PATTERN = [0, 300, 200, 300];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -9,15 +12,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Satisfies standard PWA installation criteria
   event.respondWith(fetch(event.request));
 });
 
-// 🔔 Handle incoming Web Push Notifications
+// 🔔 Handle Incoming FCM Web Push Notifications (Foreground, Background, Closed App)
 self.addEventListener('push', function (event) {
   let data = {
-    title: 'Sikka HRMS Notification',
-    body: 'You have a new attendance update.',
+    title: 'Sikka ERP - New Notification',
+    body: 'You have a new notification from Sikka ERP.',
     icon: SIKKA_LOGO,
     badge: SIKKA_LOGO,
     data: { url: '/dashboard/attendance' },
@@ -46,17 +48,21 @@ self.addEventListener('push', function (event) {
     body: data.body,
     icon: data.icon || SIKKA_LOGO,
     badge: data.badge || SIKKA_LOGO,
-    vibrate: [200, 100, 200, 100, 200],
-    tag: 'sikka-hrms-notification',
+    vibrate: VIBRATION_PATTERN,
+    tag: 'sikka-hrms-notification-' + (data.data?.notificationId || Date.now()),
     renotify: true,
     requireInteraction: true,
+    silent: false,
     data: data.data || { url: '/dashboard/attendance' },
+    actions: [
+      { action: 'open', title: 'Open ERP' },
+    ],
   };
 
   const promiseChain = self.registration
     .showNotification(data.title, notificationOptions)
     .then(async () => {
-      // Set App Badge count on supported devices (PWA / Chrome / Android)
+      // 1. Set App Badge count on supported devices (PWA / Chrome / Android)
       if ('setAppBadge' in navigator) {
         try {
           await navigator.setAppBadge(data.badgeCount || 1);
@@ -64,21 +70,35 @@ self.addEventListener('push', function (event) {
           console.warn('Service worker badge error:', badgeErr);
         }
       }
+
+      // 2. Notify any active foreground browser tabs to play sound, vibrate, and refresh red dot
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of clientList) {
+        client.postMessage({
+          type: 'PUSH_NOTIFICATION_RECEIVED',
+          payload: {
+            title: data.title,
+            body: data.body,
+            data: data.data,
+          },
+        });
+      }
     });
 
   event.waitUntil(promiseChain);
 });
 
-// 🔔 Handle direct postMessage from webpage (Local in-app test notifications)
+// 🔔 Handle direct postMessage from webpage (Local in-app notification trigger)
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_LOCAL_NOTIFICATION') {
     const { title, message, url, data } = event.data;
-    self.registration.showNotification(title || 'Sikka Attendance', {
-      body: message || 'Mobile notification is working successfully!',
+    self.registration.showNotification(title || 'Sikka ERP', {
+      body: message || 'Mobile notification received successfully!',
       icon: SIKKA_LOGO,
       badge: SIKKA_LOGO,
-      vibrate: [200, 100, 200],
-      tag: 'sikka-test-notification',
+      vibrate: VIBRATION_PATTERN,
+      silent: false,
+      tag: 'sikka-local-notification-' + Date.now(),
       data: { url: url || '/dashboard/attendance', ...(data || {}) },
     });
   }
@@ -93,7 +113,18 @@ self.addEventListener('notificationclick', function (event) {
     navigator.clearAppBadge().catch((err) => console.warn('Clear badge error:', err));
   }
 
-  const targetUrl = event.notification.data?.url || '/dashboard/attendance';
+  const notifData = event.notification.data || {};
+  const notifId = notifData.notificationId || notifData.id || notifData.eventId;
+  const targetUrl = notifData.url || notifData.deepLink || '/dashboard/attendance';
+
+  // Mark notification as isRead in MongoDB when clicked
+  if (notifId) {
+    fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationId: notifId }),
+    }).catch(() => {});
+  }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

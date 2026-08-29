@@ -71,7 +71,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import Cookies from 'js-cookie';
 import { format } from "date-fns";
-import { registerNativeUser, updateNativeBadgeCount, logoutNativeUser, setAppBadge, clearAppBadge, requestAppNotificationPermission } from "@/lib/android-bridge";
+import { registerNativeUser, updateNativeBadgeCount, logoutNativeUser, setAppBadge, clearAppBadge, requestAppNotificationPermission, postNativeNotification } from "@/lib/android-bridge";
+import { playNotificationSoundAndVibrate } from "@/lib/notification-sound";
 import { NotificationBanner, NotificationStatusControl } from "@/components/notification-banner";
 
 function NotificationBell() {
@@ -175,7 +176,7 @@ function NotificationBell() {
 
   // Red badge reflects UNREAD notifications only
   const unreadCount = useMemo(() => {
-    return userNotifications.filter((n: any) => !n.read).length;
+    return userNotifications.filter((n: any) => n.read !== true && n.isRead !== true).length;
   }, [userNotifications]);
 
   // Sync with native Android badge count and Web PWA badge
@@ -188,8 +189,15 @@ function NotificationBell() {
 
   const handleNotificationClick = async (notif: any) => {
     const notifId = notif.id || notif._id;
-    if (!notif.read && notifId) {
-      await updateRecord('notifications', notifId, { read: true }, true);
+    const isUnread = notif.read !== true && notif.isRead !== true;
+    if (isUnread && notifId) {
+      const nowIso = new Date().toISOString();
+      await updateRecord('notifications', notifId, { read: true, isRead: true, readAt: nowIso }, true);
+      fetch('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId: notifId }),
+      }).catch(() => {});
     }
     setIsOpen(false);
     
@@ -206,18 +214,34 @@ function NotificationBell() {
   const handleMarkSingleAsRead = async (e: React.MouseEvent, notif: any) => {
     e.stopPropagation();
     const notifId = notif.id || notif._id;
-    if (!notif.read && notifId) {
-      await updateRecord('notifications', notifId, { read: true }, true);
+    const isUnread = notif.read !== true && notif.isRead !== true;
+    if (isUnread && notifId) {
+      const nowIso = new Date().toISOString();
+      await updateRecord('notifications', notifId, { read: true, isRead: true, readAt: nowIso }, true);
+      fetch('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId: notifId }),
+      }).catch(() => {});
     }
   };
 
   const handleMarkAllAsRead = async () => {
-    const unread = userNotifications.filter((n: any) => !n.read);
+    const unread = userNotifications.filter((n: any) => n.read !== true && n.isRead !== true);
+    const nowIso = new Date().toISOString();
     for (const notif of unread) {
       const notifId = notif.id || notif._id;
       if (notifId) {
-        await updateRecord('notifications', notifId, { read: true }, true);
+        await updateRecord('notifications', notifId, { read: true, isRead: true, readAt: nowIso }, true);
       }
+    }
+    const empId = verifiedUser?.employeeId || verifiedUser?.username || verifiedUser?.id;
+    if (empId) {
+      fetch('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId: empId, markAll: true }),
+      }).catch(() => {});
     }
     await refreshData();
   };
@@ -688,6 +712,68 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     const interval = setInterval(checkShiftReminders, 60 * 1000);
     return () => clearInterval(interval);
   }, [verifiedUser, refreshData]);
+
+  // Periodic MongoDB real-time push notification synchronization to device status bar
+  useEffect(() => {
+    if (!verifiedUser) return;
+    const empId = verifiedUser.employeeId || verifiedUser.username || verifiedUser.id || '';
+    if (!empId) return;
+
+    const syncMongoDBNotifications = async () => {
+      try {
+        const res = await fetch(`/api/notifications/my?employeeId=${encodeURIComponent(empId)}`);
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            const lastSeenId = typeof window !== 'undefined' ? (localStorage.getItem('sikka_last_shown_notif_id') || '') : '';
+            const unreadItems = list.filter((n: any) => n.read !== true && n.isRead !== true);
+
+            if (unreadItems.length > 0) {
+              const newest = unreadItems[0];
+              const newestId = String(newest.id || newest._id || newest.dedupeKey || '');
+
+              if (newestId && newestId !== lastSeenId) {
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('sikka_last_shown_notif_id', newestId);
+                }
+                postNativeNotification(
+                  newest.title || 'Sikka ERP - New Notification',
+                  newest.message || 'You have a new notification.',
+                  newest.type || 'CUSTOM_NOTIFICATION',
+                  empId,
+                  verifiedUser.role || 'EMPLOYEE'
+                );
+                await refreshData();
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Silent background sync
+      }
+    };
+
+    syncMongoDBNotifications();
+    const notifInterval = setInterval(syncMongoDBNotifications, 15 * 1000);
+    return () => clearInterval(notifInterval);
+  }, [verifiedUser, refreshData]);
+
+  // Real-time Service Worker push listener for foreground sound, vibration and instant red dot update
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PUSH_NOTIFICATION_RECEIVED') {
+        playNotificationSoundAndVibrate();
+        refreshData();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    };
+  }, [refreshData]);
 
   // Register active user credentials with Android Native Bridge & request notification permission
   useEffect(() => {

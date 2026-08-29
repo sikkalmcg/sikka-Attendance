@@ -2,6 +2,8 @@
  * Comprehensive Client Notification Manager for Mobile & Web (FCM / ServiceWorker / PWA).
  */
 
+import { playNotificationSoundAndVibrate, SIKKA_VIBRATION_PATTERN } from '@/lib/notification-sound';
+
 const SIKKA_LOGO = 'https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG';
 
 export interface DeviceRegistrationPayload {
@@ -86,7 +88,7 @@ export async function syncDeviceWithBackend(user: any): Promise<boolean> {
 
 /**
  * Request notification permission from user, register service worker, sync to DB,
- * and display a test confirmation notification.
+ * and display a test confirmation notification with sound and vibration.
  */
 export async function requestAndEnableNotifications(user: any): Promise<{
   granted: boolean;
@@ -106,26 +108,31 @@ export async function requestAndEnableNotifications(user: any): Promise<{
     const permission = await Notification.requestPermission();
 
     if (permission === 'granted') {
-      // 2. Register Service Worker
+      // 2. Play sound & vibrate
+      playNotificationSoundAndVibrate();
+
+      // 3. Register Service Worker
       const reg = await registerServiceWorker();
 
-      // 3. Sync Device ID with backend
+      // 4. Sync Device ID with backend
       await syncDeviceWithBackend(user);
 
-      // 4. Trigger Welcome / Success notification on device
+      // 5. Trigger Welcome / Success notification on device
       if (reg) {
         reg.showNotification('🔔 Notifications Enabled!', {
-          body: 'Sikka HRMS attendance alerts and shift reminders are now active on your device.',
+          body: 'Sikka ERP attendance alerts and notifications are now active on your device with sound & vibration.',
           icon: SIKKA_LOGO,
           badge: SIKKA_LOGO,
-          vibrate: [200, 100, 200],
+          vibrate: SIKKA_VIBRATION_PATTERN,
+          silent: false,
           tag: 'sikka-welcome-notification',
           data: { url: '/dashboard/attendance' },
         } as any);
       } else {
         new Notification('🔔 Notifications Enabled!', {
-          body: 'Sikka HRMS attendance alerts and shift reminders are now active on your device.',
+          body: 'Sikka ERP attendance alerts and notifications are now active on your device.',
           icon: SIKKA_LOGO,
+          silent: false,
         });
       }
 
@@ -161,25 +168,29 @@ export async function requestAndEnableNotifications(user: any): Promise<{
 }
 
 /**
- * Send an immediate test notification to verify mobile notifications.
+ * Send an immediate test notification with sound & vibration to verify mobile notifications.
  */
 export async function sendTestNotification(user: any): Promise<boolean> {
   try {
+    // 1. Play sound & vibration immediately
+    playNotificationSoundAndVibrate();
+
     const reg = await registerServiceWorker();
-    const title = '🔔 Sikka Attendance Test';
-    const message = 'Shift Reminders and Attendance Alerts are working perfectly on this phone!';
+    const title = '🔔 Sikka ERP Test Notification';
+    const message = 'Notification Sound & Vibration are working perfectly on this device!';
 
     if (reg) {
       reg.showNotification(title, {
         body: message,
         icon: SIKKA_LOGO,
         badge: SIKKA_LOGO,
-        vibrate: [300, 100, 300, 100, 300],
+        vibrate: SIKKA_VIBRATION_PATTERN,
+        silent: false,
         tag: 'sikka-test-' + Date.now(),
         data: { url: '/dashboard/attendance' },
       } as any);
     } else if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body: message, icon: SIKKA_LOGO });
+      new Notification(title, { body: message, icon: SIKKA_LOGO, silent: false });
     }
 
     // Also trigger server-side test endpoint to verify DB & logging
@@ -191,7 +202,7 @@ export async function sendTestNotification(user: any): Promise<boolean> {
         employeeId: empId,
         title,
         message,
-        type: 'DAY_IN_REMINDER',
+        type: 'CUSTOM_NOTIFICATION',
       }),
     }).catch(() => {});
 
