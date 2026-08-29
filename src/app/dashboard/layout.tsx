@@ -891,6 +891,52 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const isEmployee = String(verifiedUser?.role || '').toUpperCase() === 'EMPLOYEE';
+
+  if (isEmployee) {
+    return (
+      <div className="min-h-screen w-full bg-slate-100 flex justify-center">
+        {/* Strictly Mobile View Container: Locked to mobile view even on Desktop Site mode or Wide Screens */}
+        <div className="w-full max-w-lg min-h-screen bg-white shadow-2xl flex flex-col border-x border-slate-200/80">
+          {/* Mobile App Header */}
+          <header className="h-16 border-b border-slate-200/80 flex items-center justify-between px-4 sm:px-5 bg-white shrink-0 sticky top-0 z-30 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
+                <span className="text-white font-black text-lg">S</span>
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider leading-none">
+                  Sikka HRMS
+                </h2>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                  Employee Portal
+                </p>
+              </div>
+            </div>
+            
+            <HeaderActions />
+          </header>
+
+          <NotificationBanner user={verifiedUser} />
+
+          <main 
+            className="flex-1 p-3 sm:p-4 overflow-y-auto bg-slate-50/50 outline-none"
+            tabIndex={0}
+            role="main"
+          >
+            <div className="w-full mx-auto">
+              {children}
+            </div>
+          </main>
+          
+          <footer className="py-4 border-t border-slate-100 flex items-center justify-center px-4 bg-white text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0 text-center">
+            © Sikka Industries & Logistics – Version 1.0
+          </footer>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background overflow-hidden">

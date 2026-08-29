@@ -1944,11 +1944,9 @@ export default function AttendancePage() {
   // ONLY AUTHENTICATED EMPLOYEES CAN SEE & ACCESS THIS VIEW
   // =========================================================================
   return (
-    <div className="space-y-8 pb-12 px-4 max-w-5xl mx-auto">
-
-
+    <div className="space-y-6 pb-8 w-full mx-auto">
       {/* 0. GATEWAY PORTAL (MARK IN / MARK OUT) - STRICTLY FOR EMPLOYEE */}
-      <div className="max-w-xl mx-auto w-full space-y-6">
+      <div className="w-full space-y-6">
         {(locationPermissionStatus === "denied" || locationPermissionStatus === "unavailable" || locationPermissionMessage) && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm text-amber-900 animate-in fade-in">
             <div className="flex items-center gap-3">
