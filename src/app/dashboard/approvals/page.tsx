@@ -318,20 +318,44 @@ interface BulkEditRow {
   const allAttendanceList = useMemo(() => {
     if (!isMounted) return [];
     const now = new Date();
-    const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
+    const employeeMap = new Map<string, any>();
+    (employees || []).forEach(emp => {
+      if (emp.employeeId) employeeMap.set(String(emp.employeeId).trim(), emp);
+      if (emp.id) employeeMap.set(String(emp.id).trim(), emp);
+      if ((emp as any)._id) employeeMap.set(String((emp as any)._id).trim(), emp);
+      if (emp.aadhaar) employeeMap.set(String(emp.aadhaar).replace(/\s/g, ''), emp);
+      if (emp.aadhaarNumber) employeeMap.set(String(emp.aadhaarNumber).replace(/\s/g, ''), emp);
+      if (emp.mobile) employeeMap.set(String(emp.mobile).replace(/\s/g, ''), emp);
+      if (emp.mobileNumber) employeeMap.set(String(emp.mobileNumber).replace(/\s/g, ''), emp);
+      if (emp.username) employeeMap.set(String(emp.username).trim(), emp);
+      if (emp.name) employeeMap.set(String(emp.name).trim().toUpperCase(), emp);
+      const fullName = emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim().toUpperCase() : '';
+      if (fullName) employeeMap.set(fullName, emp);
+    });
+
+    const getEmp = (empId: string, empName?: string) => {
+      if (!empId && !empName) return null;
+      const cleanId = String(empId || '').trim();
+      const noSpaceId = cleanId.replace(/\s/g, '');
+      if (employeeMap.has(cleanId)) return employeeMap.get(cleanId);
+      if (employeeMap.has(noSpaceId)) return employeeMap.get(noSpaceId);
+      if (empName && employeeMap.has(String(empName).trim().toUpperCase())) return employeeMap.get(String(empName).trim().toUpperCase());
+      return null;
+    };
     
     const actual = (attendanceRecords || []).filter(rec => {
-      const emp = employeeMap.get(rec.employeeId);
-      if (!emp) return false;
-      if (!isEmployeeActiveOnDate(emp, rec.date)) return false;
+      const emp = getEmp(rec.employeeId, rec.employeeName);
+      if (emp && !isEmployeeActiveOnDate(emp, rec.date)) return false;
       if (!userAssignedPlantIds) return true;
-      return (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+      if (!emp) return true;
+      return (emp.unitIds || []).some((id: string) => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
     }).map(rec => {
-      const emp = employeeMap.get(rec.employeeId);
+      const emp = getEmp(rec.employeeId, rec.employeeName);
       const leave = approvedLeavesMap.get(`${rec.employeeId}:${rec.date}`);
       
       let processedRec: any = { 
         ...rec, 
+        employeeName: rec.employeeName || (emp?.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : (emp?.name || rec.employeeId)),
         dept: emp?.department || "N/A", 
         desig: emp?.designation || "N/A",
         inDate: rec.inDate || rec.date,
@@ -958,14 +982,14 @@ const allPlantExitHistory = useMemo(() => {
       return;
     }
 
-    setIsEditModalOpen(false);
-    setIsUpdatingAttendanceId(recId);  // Show spinner — MongoDB write in progress
+    const modifierName = verifiedUser?.fullName || "HR_ADMIN";
+    const rawId = selectedAttendance.id || (selectedAttendance as any)._id || '';
+    const finalDbId = rawId && !String(rawId).startsWith('v-') ? String(rawId) : '';
+
+    setIsUpdatingAttendanceId(recId);
 
     try {
-      const modifierName = verifiedUser?.fullName || "HR_ADMIN";
-      const finalDbId = selectedAttendance.id && !selectedAttendance.id.startsWith('v-') ? selectedAttendance.id : ((selectedAttendance as any)._id || '');
-
-      if (selectedAttendance.isVirtual) {
+      if (selectedAttendance.isVirtual || !finalDbId) {
         await addRecord('attendance', {
           inPlant: editData.plant,
           inDate: finalInDate,
@@ -988,6 +1012,8 @@ const allPlantExitHistory = useMemo(() => {
         });
       } else {
         await updateRecord('attendance', finalDbId, {
+          employeeId: selectedAttendance.employeeId,
+          date: selectedAttendance.date,
           inPlant: editData.plant,
           inDate: finalInDate,
           inTime: finalInTime,
@@ -1006,7 +1032,9 @@ const allPlantExitHistory = useMemo(() => {
           previousDate: selectedAttendance.date,
         });
       }
-      // MongoDB confirmed — refresh UI, then show success toast
+
+      setIsEditModalOpen(false);
+      setSelectedAttendance(null);
       await refreshData();
       toast({ title: "Attendance Entry Verified & Updated" });
     } catch (e) {
@@ -1014,7 +1042,6 @@ const allPlantExitHistory = useMemo(() => {
       toast({ variant: "destructive", title: "Update Failed", description: "Could not save to database. Please try again." });
     } finally {
       setIsUpdatingAttendanceId(null);
-      setSelectedAttendance(null);
     }
   };
 

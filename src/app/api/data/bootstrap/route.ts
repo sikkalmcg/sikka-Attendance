@@ -36,6 +36,20 @@ export async function GET(req: Request) {
     const isAdmin = ADMIN_ROLES.includes(sessionRole);
     const sessionEmpId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || empIdParam || '';
 
+    // Check high-speed in-memory cache
+    const cacheKey = isAdmin ? 'admin_all' : `emp_${sessionEmpId || 'public'}`;
+    if (!forceRefresh) {
+      const cached = getCachedBootstrapData(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            'Cache-Control': 'no-cache, must-revalidate',
+            'X-Cache-Status': 'HIT',
+          },
+        });
+      }
+    }
+
     const db = await getDb();
     if (!db) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
@@ -100,16 +114,45 @@ export async function GET(req: Request) {
       users,
       payroll,
     ] = await Promise.all([
-      db.collection('employees').find({}).toArray().catch(() => []),
-      db.collection('attendance').find(attendanceQuery).sort({ date: -1 }).toArray().catch(() => []),
-      db.collection('plants').find({}).toArray().catch(() => []),
-      db.collection('holidays').find({}).toArray().catch(() => []),
-      db.collection('leaveRequests').find({}).sort({ createdAt: -1, fromDate: -1 }).toArray().catch(() => []),
-      db.collection('notifications').find(notificationQuery).sort({ createdAt: -1, timestamp: -1, _id: -1 }).limit(isAdmin ? 200 : 100).toArray().catch(() => []),
-      db.collection('vouchers').find({}).sort({ date: -1 }).toArray().catch(() => []),
-      db.collection('firms').find({}).toArray().catch(() => []),
-      db.collection('users').find({}).toArray().catch(() => []),
-      db.collection('payroll').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
+      db.collection('employees').find({}).batchSize(500).toArray().catch((err) => { console.error('[Bootstrap] employees error:', err); return []; }),
+      db.collection('attendance').find(attendanceQuery, {
+        projection: {
+          employeeId: 1,
+          employeeName: 1,
+          date: 1,
+          inDate: 1,
+          outDate: 1,
+          inTime: 1,
+          outTime: 1,
+          hours: 1,
+          status: 1,
+          attendanceType: 1,
+          approved: 1,
+          approvedBy: 1,
+          inPlant: 1,
+          outPlant: 1,
+          remark: 1,
+          address: 1,
+          addressOut: 1,
+          autoCheckout: 1,
+          autoOut: 1,
+          unapprovedOutDuration: 1,
+          inDateTime: 1,
+          outDateTime: 1,
+          approvalActionDate: 1,
+          editedBy: 1,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      }).batchSize(5000).sort({ date: -1 }).toArray().catch((err) => { console.error('[Bootstrap] attendance error:', err); return []; }),
+      db.collection('plants').find({}).toArray().catch((err) => { console.error('[Bootstrap] plants error:', err); return []; }),
+      db.collection('holidays').find({}).toArray().catch((err) => { console.error('[Bootstrap] holidays error:', err); return []; }),
+      db.collection('leaveRequests').find({}).sort({ createdAt: -1, fromDate: -1 }).toArray().catch((err) => { console.error('[Bootstrap] leaveRequests error:', err); return []; }),
+      db.collection('notifications').find(notificationQuery).sort({ createdAt: -1, timestamp: -1, _id: -1 }).limit(isAdmin ? 200 : 100).toArray().catch((err) => { console.error('[Bootstrap] notifications error:', err); return []; }),
+      db.collection('vouchers').find({}).sort({ date: -1 }).toArray().catch((err) => { console.error('[Bootstrap] vouchers error:', err); return []; }),
+      db.collection('firms').find({}).toArray().catch((err) => { console.error('[Bootstrap] firms error:', err); return []; }),
+      db.collection('users').find({}).toArray().catch((err) => { console.error('[Bootstrap] users error:', err); return []; }),
+      db.collection('payroll').find({}).sort({ createdAt: -1 }).toArray().catch((err) => { console.error('[Bootstrap] payroll error:', err); return []; }),
     ]);
 
     const payload = {
@@ -124,6 +167,9 @@ export async function GET(req: Request) {
       users,
       payroll,
     };
+
+    // Store in in-memory cache for fast sub-millisecond future requests
+    setCachedBootstrapData(payload, cacheKey);
 
     return NextResponse.json(payload, {
       headers: {

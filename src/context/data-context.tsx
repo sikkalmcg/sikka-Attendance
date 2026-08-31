@@ -111,11 +111,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const currentUserRole = currentUser?.role ? String(currentUser.role).toUpperCase() : undefined;
 
   const fetchData = useCallback(async (isManualRefresh = false) => {
-    if (!currentUserId) {
-      setIsLoading(false);
-      return;
-    }
-    
     try {
       // 1. Single-roundtrip bootstrap API call (fetches all MongoDB tables in parallel)
       const role = currentUser?.role ? String(currentUser.role).toUpperCase() : '';
@@ -318,9 +313,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser, employees, users]);
 
   const addRecord = async (col: string, data: any, skipRefresh = false) => {
-    // MongoDB-first: do NOT update local state before the API confirms the write.
-    // The UI will reflect MongoDB state after fetchData() completes below.
     const newRecord = { ...data, createdAt: data.createdAt || new Date().toISOString() };
+
+    // Instant optimistic UI update
+    if (col === 'attendance') {
+      setAttendanceRecords(prev => [newRecord, ...prev.filter(r => !(r.employeeId === data.employeeId && r.date === data.date))]);
+    } else if (col === 'leaveRequests') {
+      setLeaveRequests(prev => [newRecord, ...prev]);
+    } else if (col === 'employees') {
+      setEmployees(prev => [...prev, newRecord]);
+    } else if (col === 'notifications') {
+      setNotifications(prev => [newRecord, ...prev]);
+    }
 
     try {
       const res = await fetch(`/api/data/${col}`, {
@@ -333,18 +337,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.error(`addRecord failed for ${col}:`, errData);
         throw new Error(errData?.error || `Failed to create record in ${col}`);
       }
-      // MongoDB confirmed the write — now re-hydrate all state from MongoDB
       if (!skipRefresh) await fetchData(true);
     } catch (e) {
       console.error(`addRecord error in ${col}:`, e);
-      throw e; // Re-throw so callers can handle (show error toast, etc.)
+      throw e;
     }
   };
 
   const updateRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
-    // MongoDB-first: do NOT patch local state before the API confirms the write.
-    // The UI will reflect MongoDB state after fetchData() completes below.
     const payload = { ...data, updatedAt: new Date().toISOString() };
+
+    // Instant optimistic UI update
+    if (col === 'attendance') {
+      setAttendanceRecords(prev => prev.map(r => {
+        const rId = String(r.id || (r as any)._id || '');
+        if (rId === String(id) || (data.employeeId && data.date && r.employeeId === data.employeeId && r.date === data.date)) {
+          return { ...r, ...payload };
+        }
+        return r;
+      }));
+    } else if (col === 'leaveRequests') {
+      setLeaveRequests(prev => prev.map(l => {
+        const lId = String(l.id || (l as any)._id || '');
+        return lId === String(id) ? { ...l, ...payload } : l;
+      }));
+    } else if (col === 'employees') {
+      setEmployees(prev => prev.map(e => {
+        const eId = String(e.id || (e as any)._id || '');
+        return eId === String(id) ? { ...e, ...payload } : e;
+      }));
+    }
 
     try {
       const res = await fetch(`/api/data/${col}?id=${id}`, {
@@ -357,11 +379,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         console.error(`updateRecord failed for ${col} id=${id}:`, errData);
         throw new Error(errData?.error || `Failed to update record in ${col}`);
       }
-      // MongoDB confirmed the write — now re-hydrate all state from MongoDB
       if (!skipRefresh) await fetchData(true);
     } catch (e) {
       console.error(`updateRecord error in ${col} id=${id}:`, e);
-      throw e; // Re-throw so callers can handle (show error toast, etc.)
+      throw e;
     }
   };
 
@@ -376,10 +397,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (col === 'notifications') {
-      setNotifications(prev => prev.filter(n => {
-        const nId = String(n.id || (n as any)._id || '');
-        return nId !== String(id);
-      }));
+      setNotifications(prev => prev.filter(n => String(n.id || (n as any)._id || '') !== String(id)));
+    } else if (col === 'attendance') {
+      setAttendanceRecords(prev => prev.filter(r => String(r.id || (r as any)._id || '') !== String(id)));
+    } else if (col === 'leaveRequests') {
+      setLeaveRequests(prev => prev.filter(l => String(l.id || (l as any)._id || '') !== String(id)));
     }
     try {
       await fetch(`/api/data/${col}?id=${id}`, { method: 'DELETE' });

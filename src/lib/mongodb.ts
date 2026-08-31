@@ -1,4 +1,10 @@
 import { MongoClient, type Db, type Collection, ObjectId } from 'mongodb';
+import dns from 'dns';
+
+// Ensure SRV DNS lookup resolves reliably on all network configurations
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+} catch {}
 
 const uri = process.env.MONGODB_URI as string;
 const dbName = (process.env.MONGODB_DB as string) || 'sikka_database';
@@ -20,9 +26,9 @@ function initMongoClient(): Promise<MongoClient> {
     maxPoolSize: 50,
     minPoolSize: 1,
     maxIdleTimeMS: 300000,
-    serverSelectionTimeoutMS: 10000,
-    connectTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: 30000,
+    connectTimeoutMS: 30000,
+    socketTimeoutMS: 120000,
     retryWrites: true,
   });
 

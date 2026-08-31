@@ -694,32 +694,6 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
 
   const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
 
-  // Periodic automated shift reminder evaluation
-  useEffect(() => {
-    if (!verifiedUser) return;
-    
-    const checkShiftReminders = async () => {
-      try {
-        const res = await fetch('/api/notifications/shift-reminders', { method: 'POST' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.newRemindersCount > 0) {
-            await refreshData();
-          }
-        }
-      } catch (err) {
-        console.error("Shift reminder check error:", err);
-      }
-    };
-
-    // Trigger on mount
-    checkShiftReminders();
-
-    // Check periodically every 60 seconds
-    const interval = setInterval(checkShiftReminders, 60 * 1000);
-    return () => clearInterval(interval);
-  }, [verifiedUser, refreshData]);
-
   // Periodic MongoDB real-time push notification synchronization to device status bar
   useEffect(() => {
     if (!verifiedUser) return;

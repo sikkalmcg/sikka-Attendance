@@ -56,27 +56,10 @@ export function startBackgroundScheduler() {
   console.log('[Scheduler] Active windows: 06:00 AM, 10:00 AM, 06:00 PM, 08:00 PM IST (±10 min).');
 
   // ── Startup sequence ────────────────────────────────────────────────────
-  // 1. After 20 s: run one-time historical audit to correct all past records.
-  // 2. After 30 s: begin normal scheduler cycles (auto-out + shift reminders).
-  setTimeout(async () => {
-    if (!historicalAuditDone) {
-      historicalAuditDone = true;
-      try {
-        console.log('[Scheduler] Starting one-time historical attendance audit...');
-        const { POST: handleAuditCorrect } = await import('@/app/api/attendance/audit-correct/route');
-        const auditRes = await handleAuditCorrect();
-        const auditData = await auditRes.json();
-        console.log(
-          `[Scheduler] Historical audit complete — ${auditData.scannedCount ?? 0} record(s) scanned, ` +
-          `${auditData.correctionsApplied ?? 0} corrected.`
-        );
-      } catch (auditErr) {
-        console.warn('[Scheduler] Historical audit error (non-fatal):', auditErr);
-      }
-    }
-    // Begin normal scheduler cycles after audit completes
+  // Begin normal scheduler cycles (auto-out + shift reminders) after server init
+  setTimeout(() => {
     runSchedulerCycle();
-  }, 20000);
+  }, 5000);
 
   // Poll every 60 seconds — auto-out + shift reminders
   setInterval(() => {

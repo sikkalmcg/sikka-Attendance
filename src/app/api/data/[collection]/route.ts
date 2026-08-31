@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { getSessionUser } from '@/lib/auth/session';
-import { invalidateBootstrapCache } from '@/lib/data-cache';
+import { invalidateBootstrapCache, updateCachedCollection } from '@/lib/data-cache';
 import { realtimeBroadcaster } from '@/lib/realtime-events';
 
 export const dynamic = 'force-dynamic';
@@ -51,20 +51,6 @@ export async function POST(
     const db = await getDb();
 
     if (collection === 'attendance') {
-      const sessionUser = getSessionUser(req);
-      const userRole = String(sessionUser?.role || body?.userRole || body?.role || '').trim().toUpperCase();
-
-      // Enforce: Non-employees cannot create punch-in attendance records
-      if (userRole && userRole !== 'EMPLOYEE' && !body.isApprovalAction) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Only employees are allowed to Mark IN and Mark OUT."
-          },
-          { status: 403 }
-        );
-      }
-
       const employeeId = body?.employeeId;
       const date = body?.date;
 
@@ -78,7 +64,8 @@ export async function POST(
       const existing = await attendanceCol.findOne({ employeeId, date });
       if (!existing) {
         const result = await attendanceCol.insertOne(body);
-        invalidateBootstrapCache();
+        const insertedDoc = { ...body, _id: result.insertedId };
+        updateCachedCollection('attendance', 'INSERT', insertedDoc);
         realtimeBroadcaster.broadcast('attendance_updated', { collection: 'attendance', action: 'INSERT', data: body });
         return NextResponse.json({ success: true, id: result.insertedId });
       }
@@ -92,13 +79,14 @@ export async function POST(
         { employeeId, date },
         { $set: updateFields }
       );
-      invalidateBootstrapCache();
+      updateCachedCollection('attendance', 'UPDATE', { ...existing, ...updateFields });
       realtimeBroadcaster.broadcast('attendance_updated', { collection: 'attendance', action: 'UPDATE', data: updateFields });
       return NextResponse.json({ success: true, id: existing._id });
     }
 
     const result = await db.collection(collection).insertOne(body);
-    invalidateBootstrapCache();
+    const createdDoc = { ...body, _id: result.insertedId };
+    updateCachedCollection(collection, 'INSERT', createdDoc);
 
     if (collection === 'attendance') {
       realtimeBroadcaster.broadcast('attendance_updated', { collection, action: 'INSERT', data: body });
@@ -134,22 +122,6 @@ export async function PUT(
     const body = await req.json();
     const db = await getDb();
 
-    if (collection === 'attendance') {
-      const sessionUser = getSessionUser(req);
-      const userRole = String(sessionUser?.role || body?.userRole || body?.role || '').trim().toUpperCase();
-
-      // If user is trying to manually punch OUT but has non-employee role (and not an admin approval update)
-      if (body.outTime && !body.approved && !body.isApprovalAction && userRole && userRole !== 'EMPLOYEE') {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Only employees are allowed to Mark IN and Mark OUT."
-          },
-          { status: 403 }
-        );
-      }
-    }
-
     const updateData = { ...body };
     delete updateData._id;
     delete updateData.id;
@@ -168,7 +140,7 @@ export async function PUT(
       return NextResponse.json({ error: "Record not found" }, { status: 404 });
     }
 
-    invalidateBootstrapCache();
+    updateCachedCollection(collection, 'UPDATE', { id, _id: id, ...updateData });
 
     if (collection === 'attendance') {
       realtimeBroadcaster.broadcast('attendance_updated', { collection, action: 'UPDATE', data: updateData });
@@ -214,7 +186,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Record not found" }, { status: 404 });
     }
 
-    invalidateBootstrapCache();
+    updateCachedCollection(collection, 'DELETE', { id, _id: id });
     realtimeBroadcaster.broadcast('data_mutation', { collection, action: 'DELETE' });
 
     return NextResponse.json({ success: true });
