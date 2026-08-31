@@ -37,8 +37,14 @@ const VAPID_PUBLIC_KEY =
 const VAPID_PRIVATE_KEY =
   process.env.VAPID_PRIVATE_KEY || 'EX38bR9X7vKUwe7gUMVhLA8vyDhoVUtse9_ygT0Vk0U';
 
-const VAPID_SUBJECT =
-  process.env.VAPID_SUBJECT || 'mailto:admin@sikkaenterprises.com';
+const RAW_VAPID_MAILTO =
+  process.env.VAPID_MAILTO ||
+  process.env.VAPID_SUBJECT ||
+  'mailto:admin@sikkaenterprises.com';
+
+const VAPID_SUBJECT = RAW_VAPID_MAILTO.startsWith('mailto:')
+  ? RAW_VAPID_MAILTO
+  : `mailto:${RAW_VAPID_MAILTO}`;
 
 try {
   if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
@@ -88,20 +94,56 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
       return result;
     }
 
-    // 1. Resolve target employee identifiers from MongoDB
+    // 1. Resolve target employee identifiers and check Role Filter for Attendance Reminders
+    const isAttendanceReminder =
+      String(type).toUpperCase().includes('REMINDER') ||
+      String(type).toUpperCase().startsWith('DAY_') ||
+      String(type).toUpperCase().startsWith('NIGHT_');
+
+    // Rule 10 & 11: Attendance reminders must NEVER be broadcast and NEVER sent to Admin or Users
+    if (isAttendanceReminder && (!employeeId || employeeId === 'ALL' || employeeId === 'GLOBAL')) {
+      console.warn('[Push Filter] Rejected attempt to broadcast attendance reminder.');
+      result.totalTokens = 0;
+      result.successCount = 0;
+      result.success = false;
+      result.error = 'Attendance reminders must be targeted to a specific employee only.';
+      return result;
+    }
+
     let targetIds: string[] = [employeeId];
     if (employeeId && employeeId !== 'ALL' && employeeId !== 'GLOBAL') {
-      const emp = await db.collection('employees').findOne({
-        $or: [
-          { employeeId },
-          { id: employeeId },
-          { mobile: employeeId },
-          { mobileNumber: employeeId },
-          { aadhaar: employeeId },
-          { aadhaarNumber: employeeId },
-          { username: employeeId },
-        ],
-      }).catch(() => null);
+      const [emp, usr] = await Promise.all([
+        db.collection('employees').findOne({
+          $or: [
+            { employeeId },
+            { id: employeeId },
+            { mobile: employeeId },
+            { mobileNumber: employeeId },
+            { aadhaar: employeeId },
+            { aadhaarNumber: employeeId },
+            { username: employeeId },
+          ],
+        }).catch(() => null),
+        db.collection('users').findOne({
+          $or: [
+            { username: employeeId },
+            { id: employeeId },
+            { employeeId },
+          ],
+        }).catch(() => null),
+      ]);
+
+      // Strict Attendance Reminder Check: Only role === 'Employee' / 'EMPLOYEE' can receive attendance reminders
+      if (isAttendanceReminder) {
+        const effectiveRole = String(usr?.role || emp?.role || (emp as any)?.userRole || targetRole || 'EMPLOYEE').toUpperCase();
+        if (effectiveRole !== 'EMPLOYEE') {
+          console.log(`[Push Filter] Excluded attendance reminder for non-employee role '${effectiveRole}' (${employeeId})`);
+          result.totalTokens = 0;
+          result.successCount = 0;
+          result.success = true;
+          return result;
+        }
+      }
 
       if (emp) {
         targetIds = [
@@ -118,7 +160,7 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
     }
 
     // 2. Query active registered devices & subscriptions from MongoDB
-    const queryED: any = { isActive: { $ne: false } };
+    const queryED: any = { isActive: { $ne: false }, deviceStatus: { $ne: 'INACTIVE' } };
     if (employeeId && employeeId !== 'ALL' && employeeId !== 'GLOBAL') {
       queryED.employeeId = { $in: targetIds };
     }
@@ -127,7 +169,7 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
     const queryDT: any = { active: { $ne: false } };
     if (employeeId && employeeId !== 'ALL' && employeeId !== 'GLOBAL') {
       queryDT.employeeId = { $in: targetIds };
-    } else if (targetRole) {
+    } else if (targetRole && !isAttendanceReminder) {
       queryDT.role = targetRole.toUpperCase();
     }
     const deviceTokens = await db.collection('device_tokens').find(queryDT).toArray();
@@ -176,7 +218,7 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
 
     // 3. Dispatch via Web-Push (VAPID) to all registered device subscriptions
     for (const device of allDevices) {
-      const sub = device.subscription;
+      const sub = device.pushSubscription || device.subscription;
       if (sub && sub.endpoint && !seenEndpoints.has(sub.endpoint)) {
         seenEndpoints.add(sub.endpoint);
         result.totalTokens++;
@@ -190,11 +232,21 @@ export async function sendFCMPushNotification(payload: FCMNotificationPayload): 
           if (pushErr?.statusCode === 404 || pushErr?.statusCode === 410) {
             result.invalidTokensCleaned.push(sub.endpoint);
             await db.collection('employee_devices').updateOne(
-              { 'subscription.endpoint': sub.endpoint },
-              { $set: { isActive: false, active: false, deactivatedAt: new Date() } }
+              {
+                $or: [
+                  { 'pushSubscription.endpoint': sub.endpoint },
+                  { 'subscription.endpoint': sub.endpoint },
+                ],
+              },
+              { $set: { isActive: false, active: false, deviceStatus: 'INACTIVE', deactivatedAt: new Date() } }
             ).catch(() => {});
             await db.collection('device_tokens').updateOne(
-              { 'subscription.endpoint': sub.endpoint },
+              {
+                $or: [
+                  { 'pushSubscription.endpoint': sub.endpoint },
+                  { 'subscription.endpoint': sub.endpoint },
+                ],
+              },
               { $set: { isActive: false, active: false, deactivatedAt: new Date() } }
             ).catch(() => {});
           }
@@ -466,7 +518,7 @@ export async function sendFCMPushNotificationToMany(
 
     // 3. Send to all discovered devices
     for (const device of allDevices) {
-      const sub = device.subscription;
+      const sub = device.pushSubscription || device.subscription;
       if (sub && sub.endpoint && !seenEndpoints.has(sub.endpoint)) {
         seenEndpoints.add(sub.endpoint);
         result.totalTokens++;
@@ -483,11 +535,21 @@ export async function sendFCMPushNotificationToMany(
           if (pushErr?.statusCode === 404 || pushErr?.statusCode === 410) {
             result.invalidTokensCleaned.push(sub.endpoint);
             await db.collection('employee_devices').updateOne(
-              { 'subscription.endpoint': sub.endpoint },
-              { $set: { isActive: false, active: false, deactivatedAt: new Date() } }
+              {
+                $or: [
+                  { 'pushSubscription.endpoint': sub.endpoint },
+                  { 'subscription.endpoint': sub.endpoint },
+                ],
+              },
+              { $set: { isActive: false, active: false, deviceStatus: 'INACTIVE', deactivatedAt: new Date() } }
             ).catch(() => {});
             await db.collection('device_tokens').updateOne(
-              { 'subscription.endpoint': sub.endpoint },
+              {
+                $or: [
+                  { 'pushSubscription.endpoint': sub.endpoint },
+                  { 'subscription.endpoint': sub.endpoint },
+                ],
+              },
               { $set: { isActive: false, active: false, deactivatedAt: new Date() } }
             ).catch(() => {});
             console.warn(`[FCM Batch] ✗ Invalid token for employee ${devEmpId} — deactivated.`);

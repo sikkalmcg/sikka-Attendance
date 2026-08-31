@@ -709,7 +709,11 @@ export default function AttendancePage() {
             let hours = typeof punchRec.hours === "number" ? punchRec.hours : 0;
             // Auto checkout rule if unclosed shift and >16h
             if (!punchRec.outTime && punchRec.inTime) {
-              const inDT = punchRec.inDateTime ? parseISO(punchRec.inDateTime) : (punchRec.inDate && punchRec.inTime ? parseDateTime(punchRec.inDate, punchRec.inTime) : null);
+              const inDT = (punchRec.inDate && punchRec.inTime)
+                ? parseDateTime(punchRec.inDate, punchRec.inTime)
+                : (punchRec.date && punchRec.inTime)
+                ? parseDateTime(punchRec.date, punchRec.inTime)
+                : (punchRec.inDateTime ? parseISO(punchRec.inDateTime) : null);
               if (inDT && isValid(inDT)) {
                 const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
                 if (diffHours >= 16) hours = 16.0;
@@ -812,12 +816,15 @@ export default function AttendancePage() {
       .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
   }, [myIdentitySet, leaveRequests, currentFYInfo]);
 
-  const { activeRecord, todayRecord, isStale, nextInAvailableAt, canMarkOut, nextOutAvailableAt } = useMemo(() => {
+  const { activeRecord, todayRecord, todaySessions, hasUsedMaxSessions, currentSessionIndex, isStale, nextInAvailableAt, canMarkOut, nextOutAvailableAt } = useMemo(() => {
     const now = currentTime || getISTTime();
     const todayStr = format(now, "yyyy-MM-dd");
 
     const active = employeeRecords.find((r) => r.status === "Open" || (r.inTime && !r.outTime && r.status !== "Closed" && r.status !== "Auto OUT"));
-    const todayRec = employeeRecords.find((r) => r.date === todayStr && !r.id?.startsWith('missing-'));
+    const todayRecs = employeeRecords.filter((r) => r.date === todayStr && !r.id?.startsWith('missing-')).sort((a, b) => (a.sessionIndex || 1) - (b.sessionIndex || 1));
+    const todayRec = todayRecs[todayRecs.length - 1] || null;
+    const maxSessionsUsed = todayRecs.length >= 2 && !active;
+    const sessIdx = active?.sessionIndex || (todayRecs.length + 1);
 
     const lastClosed = employeeRecords
       .filter((r) => r.status === "Closed" || r.status === "Auto OUT")
@@ -831,9 +838,11 @@ export default function AttendancePage() {
 
     const nextIn = lastClosed?.nextInEnableTime ? parseISO(lastClosed.nextInEnableTime) : null;
 
-    const inDT = active?.inDateTime
-      ? parseISO(active.inDateTime)
-      : (active?.inDate && active?.inTime ? parseDateTime(active.inDate, active.inTime) : null);
+    const inDT = (active?.inDate && active?.inTime)
+      ? parseDateTime(active.inDate, active.inTime)
+      : (active?.date && active?.inTime)
+      ? parseDateTime(active.date, active.inTime)
+      : (active?.inDateTime ? parseISO(active.inDateTime) : null);
 
     let canOut = false;
     let nextOutAt: Date | null = null;
@@ -845,13 +854,17 @@ export default function AttendancePage() {
 
     let stale = false;
     if (active && inDT && isValid(inDT)) {
-      const triggerTime = addHours(inDT, 16);
+      const staleThresholdHours = (active.sessionIndex === 2) ? 8 : 16;
+      const triggerTime = addHours(inDT, staleThresholdHours);
       if (isAfter(now, triggerTime)) stale = true;
     }
 
     return {
       activeRecord: active || null,
       todayRecord: todayRec || null,
+      todaySessions: todayRecs,
+      hasUsedMaxSessions: maxSessionsUsed,
+      currentSessionIndex: sessIdx,
       isStale: stale,
       nextInAvailableAt: nextIn && isValid(nextIn) ? nextIn : null,
       canMarkOut: !!(active && canOut),
@@ -986,6 +999,26 @@ export default function AttendancePage() {
               }
             }
 
+            // Immediately save to MongoDB plantExits collection via API
+            fetch('/api/exit-tracking', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                employeeCode: effectiveEmployeeId,
+                employeeName: effectiveEmployeeName,
+                designation: empDesignation,
+                plant: latestRecord.inPlant || "Salt Plant",
+                date: latestRecord.date,
+                attendanceId: latestRecord.id || latestRecord._id,
+                sessionIndex: latestRecord.sessionIndex || 1,
+                gpsLatitude: lat,
+                gpsLongitude: lng,
+                completeAddress: geocodedAddress,
+                distanceFromPlant: nearest ? Math.round(nearest.distanceM) : null,
+                action: 'OUT'
+              })
+            }).catch((err) => console.warn("Facility exit tracking POST failed", err));
+
             if (shouldUpdate) {
               await updateRecord('attendance', latestRecord.id || latestRecord._id, {
                 exitEvents: currentEvents,
@@ -1011,6 +1044,20 @@ export default function AttendancePage() {
               currentActiveEvent.totalOutDuration = `${hh}:${mm}`;
               currentActiveEvent.currentPlant = returnPlant?.name || latestRecord.inPlant || "Salt Plant";
               currentActiveEvent.trackingStatus = "Returned";
+
+              // Immediately update MongoDB plantExits via API
+              fetch('/api/exit-tracking', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  employeeCode: effectiveEmployeeId,
+                  attendanceId: latestRecord.id || latestRecord._id,
+                  plant: returnPlant?.name || latestRecord.inPlant || "Salt Plant",
+                  gpsLatitude: lat,
+                  gpsLongitude: lng,
+                  action: 'RETURN'
+                })
+              }).catch((err) => console.warn("Facility return tracking POST failed", err));
 
               await updateRecord('attendance', latestRecord.id || latestRecord._id, {
                 exitEvents: currentEvents,
@@ -1059,11 +1106,15 @@ export default function AttendancePage() {
     const today = format(now, "yyyy-MM-dd");
     const timeStr = format(now, "HH:mm");
 
+    const nextSessionIndex = todaySessions.length + 1;
+
     const newRecordData = {
       employeeId: effectiveEmployeeId,
       employeeName: effectiveEmployeeName,
       aadhaarNumber: "[Aadhaar Redacted]",
       mobileNumber: verifiedUser?.mobileNumber || "N/A",
+      sessionIndex: nextSessionIndex,
+      sessionNumber: nextSessionIndex,
       date: today,
       inDate: today,
       inTime: timeStr,
@@ -1080,7 +1131,7 @@ export default function AttendancePage() {
       state: detailedLocation.state || "Uttar Pradesh",
       pincode: detailedLocation.pincode || "N/A",
       inPlant: finalInPlant,
-      remark: `Checked IN for ${attendanceType}`,
+      remark: `Checked IN (Session ${nextSessionIndex}) for ${attendanceType}`,
       approved: false,
       unapprovedOutDuration: 0,
       currentGeofenceStatus: geofenceStatus,
@@ -1102,16 +1153,21 @@ export default function AttendancePage() {
       if (response.ok) {
         setSelectedType("");
         setActiveDialog("NONE");
-        toast({ title: "Mark IN Successful", description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
+        toast({ title: `Mark IN Successful (Session ${nextSessionIndex} of 2)`, description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
         await refreshData();
       } else {
+        const errData = await response.json().catch(() => ({}));
+        if (errData?.message) {
+          toast({ variant: "destructive", title: "Mark IN Failed", description: errData.message });
+          return;
+        }
         await addRecord('attendance', newRecordData);
         setSelectedType("");
         setActiveDialog("NONE");
-        toast({ title: "Mark IN Successful", description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
+        toast({ title: `Mark IN Successful (Session ${nextSessionIndex} of 2)`, description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
       }
 
-      const notifMsg = `${effectiveEmployeeName} – Mark IN Recorded | Time: ${timeStr} | ${detectedPlant ? plantName : attendanceType}`;
+      const notifMsg = `${effectiveEmployeeName} – Mark IN Recorded (Session ${nextSessionIndex}) | Time: ${timeStr} | ${detectedPlant ? plantName : attendanceType}`;
       postNativeNotification(
         "Mark IN Successful",
         notifMsg,
@@ -1143,6 +1199,14 @@ export default function AttendancePage() {
   const handleMarkInClick = (e?: React.MouseEvent | React.FormEvent) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
+    if (hasUsedMaxSessions) {
+      toast({
+        variant: "destructive",
+        title: "Daily Attendance Limit Reached",
+        description: "You have already used the maximum 2 attendance sessions allowed for today.",
+      });
+      return;
+    }
     if (isCooldownLocked || isLoadingLocation || isMutatingAttendance || !!activeRecord) return;
 
     clearActiveWatch();
@@ -1162,10 +1226,12 @@ export default function AttendancePage() {
     }
 
     const now = getISTTime();
-    const inDT = activeRecord.inDateTime
-      ? parseISO(activeRecord.inDateTime)
-      : parseDateTime(activeRecord.inDate || activeRecord.date, activeRecord.inTime || "");
-    const outDT = now;
+    const inDT = (activeRecord.inDate && activeRecord.inTime)
+      ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
+      : (activeRecord.date && activeRecord.inTime)
+      ? parseDateTime(activeRecord.date, activeRecord.inTime)
+      : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+    const outDT = parseDateTime(format(now, "yyyy-MM-dd"), format(now, "HH:mm")) || now;
 
     if (!inDT || !isValid(inDT)) {
       toast({
@@ -1176,10 +1242,14 @@ export default function AttendancePage() {
       return;
     }
 
+    const sessionIdx = activeRecord.sessionIndex || 1;
+    const maxSessionHours = sessionIdx === 2 ? 8 : 16;
+
     let finalHours = 0;
     if (isValid(inDT) && isValid(outDT)) {
       const diffHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-      finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
+      finalHours = Math.min(maxSessionHours, Math.max(0, diffHours));
+      finalHours = parseFloat(finalHours.toFixed(2));
     }
 
     const nextEnableDT = addHours(outDT, 1);
@@ -1240,15 +1310,15 @@ export default function AttendancePage() {
 
       if (response.ok) {
         setActiveDialog("NONE");
-        toast({ title: "Mark OUT Successful", description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
+        toast({ title: `Mark OUT Successful (Session ${sessionIdx})`, description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
         await refreshData();
       } else {
         await updateRecord('attendance', recordId, outPayload);
         setActiveDialog("NONE");
-        toast({ title: "Mark OUT Successful", description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
+        toast({ title: `Mark OUT Successful (Session ${sessionIdx})`, description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
       }
 
-      const notifMsg = `${effectiveEmployeeName} – Mark OUT Recorded | Time: ${format(outDT, "HH:mm")} | Worked: ${formatHoursToHHMM(finalHours)}`;
+      const notifMsg = `${effectiveEmployeeName} – Mark OUT Recorded (Session ${sessionIdx}) | Time: ${format(outDT, "HH:mm")} | Worked: ${formatHoursToHHMM(finalHours)}`;
       postNativeNotification(
         "Mark OUT Successful",
         notifMsg,
@@ -1290,14 +1360,20 @@ export default function AttendancePage() {
     if (!activeRecord || isMutatingAttendance) return;
 
     let inDT: Date | null = null;
-    if (activeRecord.inDateTime) {
-      inDT = parseISO(activeRecord.inDateTime);
-    } else if (activeRecord.inDate && activeRecord.inTime) {
+    if (activeRecord.inDate && activeRecord.inTime) {
       inDT = parseDateTime(activeRecord.inDate, activeRecord.inTime);
+    } else if (activeRecord.date && activeRecord.inTime) {
+      inDT = parseDateTime(activeRecord.date, activeRecord.inTime);
+    } else if (activeRecord.inDateTime) {
+      inDT = parseISO(activeRecord.inDateTime);
     }
     if (!inDT || !isValid(inDT)) return;
 
-    const creditOutDT = addHours(inDT, 8);
+    const sessionIdx = activeRecord.sessionIndex || 1;
+    const thresholdHours = sessionIdx === 2 ? 8 : 16;
+    const creditedHours = sessionIdx === 2 ? 4.0 : 8.0;
+
+    const creditOutDT = addHours(inDT, creditedHours);
     const finalOutDate = format(creditOutDT, "yyyy-MM-dd");
     const finalOutTime = format(creditOutDT, "HH:mm");
 
@@ -1310,7 +1386,7 @@ export default function AttendancePage() {
         outTime: finalOutTime,
         outDate: finalOutDate,
         outDateTime: creditOutDT.toISOString(),
-        hours: 8.0,
+        hours: creditedHours,
         status: 'Auto OUT',
         outType: 'Auto',
         latOut: lat,
@@ -1325,12 +1401,12 @@ export default function AttendancePage() {
         autoCheckout: true,
         autoOut: true,
         autoTriggerTime: getISTTime().toISOString(),
-        nextInEnableTime: addHours(creditOutDT, 9).toISOString(),
-        remark: "System Auto-Logged OUT (16h Limit Threshold reached); stored OUT = IN + 8h; next IN = IN + 17h (1h cooldown)"
+        nextInEnableTime: addHours(getISTTime(), 1).toISOString(),
+        remark: `System Auto-Logged OUT (${thresholdHours}h Limit reached for Session ${sessionIdx}); Credited ${creditedHours}h fixed working time.`
       });
 
       await addRecord('notifications', {
-        message: `${effectiveEmployeeName} – AUTO OUT Processed | Recorded OUT: ${format(creditOutDT, "dd-MMM HH:mm")}`,
+        message: `${effectiveEmployeeName} – AUTO OUT Processed (Session ${sessionIdx}) | Recorded OUT: ${format(creditOutDT, "dd-MMM HH:mm")} | Credited: ${creditedHours} hrs`,
         timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
         read: false,
         type: 'AUTO_OUT',
@@ -1339,7 +1415,7 @@ export default function AttendancePage() {
 
       toast({
         title: "Auto OUT Triggered",
-        description: "Session auto-closed at 16h limit (8h credited). Next Mark IN opens 1h later (IN + 17h)."
+        description: `Session ${sessionIdx} auto-closed at ${thresholdHours}h limit (${creditedHours}h credited).`
       });
 
       await refreshData();
@@ -2241,13 +2317,55 @@ export default function AttendancePage() {
               )}
             </div>
 
+            {/* Daily Sessions Limit Alert */}
+            {hasUsedMaxSessions && (
+              <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 shadow-sm flex items-center gap-3 animate-in fade-in">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                <div className="text-left">
+                  <p className="text-xs font-black uppercase tracking-tight text-amber-900">
+                    Daily Attendance Limit Reached
+                  </p>
+                  <p className="text-xs font-bold text-amber-700 mt-0.5">
+                    You have already used the maximum 2 attendance sessions allowed for today.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Session 2 Available Notice */}
+            {!activeRecord && todaySessions.length === 1 && !isCooldownLocked && (
+              <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl text-blue-900 shadow-sm flex items-center justify-between gap-2 animate-in fade-in">
+                <div className="flex items-center gap-2 text-left">
+                  <Badge className="bg-blue-600 text-white font-black text-[10px] uppercase px-2 py-0.5 rounded-lg">
+                    Session 2 of 2
+                  </Badge>
+                  <span className="text-xs font-bold text-blue-800">
+                    Available • Requires 700m Plant Proximity (or Field/WFH)
+                  </span>
+                </div>
+                <span className="text-[11px] font-semibold text-blue-600 hidden sm:inline">
+                  Max 8h Auto OUT (4h Credit)
+                </span>
+              </div>
+            )}
+
             {activeRecord && !canMarkOut && nextOutAvailableAt && (
               <div className="p-4 bg-[#FFFDE7] rounded-2xl border border-amber-200 text-amber-800 animate-in fade-in max-w-md mx-auto w-full text-left shadow-sm" suppressHydrationWarning>
                 <p className="text-xs font-black uppercase tracking-tight text-amber-900" suppressHydrationWarning>
-                  ACTIVE SHIFT SINCE {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "dd-MMM")}, {activeRecord.inTime} {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "aa")}
+                  {(() => {
+                    const startDT = (activeRecord.inDate && activeRecord.inTime)
+                      ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
+                      : (activeRecord.date && activeRecord.inTime)
+                      ? parseDateTime(activeRecord.date, activeRecord.inTime)
+                      : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+                    const formatted = startDT && isValid(startDT)
+                      ? format(startDT, "dd-MMM, hh:mm a")
+                      : `${activeRecord.inDate || activeRecord.date || 'Today'}, ${activeRecord.inTime}`;
+                    return `ACTIVE SHIFT (SESSION ${activeRecord.sessionIndex || 1} OF 2) SINCE ${formatted}`;
+                  })()}
                 </p>
                 <p className="text-[11px] font-bold text-amber-700 mt-1 leading-relaxed" suppressHydrationWarning>
-                  Mark OUT will be available on {format(nextOutAvailableAt, "dd-MMM-yyyy HH:mm")} (2h Minimum Rule)
+                  Mark OUT will be available on {format(nextOutAvailableAt, "dd-MMM-yyyy HH:mm")} (2h Minimum Rule) • Auto OUT threshold: {activeRecord.sessionIndex === 2 ? '8h (4h Credit)' : '16h (8h Credit)'}
                 </p>
               </div>
             )}
@@ -2257,14 +2375,20 @@ export default function AttendancePage() {
               <Button
                 type="button"
                 className={cn("flex-1 h-16 text-sm font-black rounded-2xl shadow-xl transition-all uppercase tracking-widest",
-                  (!activeRecord && !isCooldownLocked) ? "bg-primary text-white shadow-primary/20 hover:bg-primary/90" : "bg-slate-100 text-slate-400"
+                  (!activeRecord && !isCooldownLocked && !hasUsedMaxSessions) ? "bg-primary text-white shadow-primary/20 hover:bg-primary/90" : "bg-slate-100 text-slate-400"
                 )}
-                disabled={isLoadingLocation || isMutatingAttendance || !!activeRecord || isCooldownLocked}
+                disabled={isLoadingLocation || isMutatingAttendance || !!activeRecord || isCooldownLocked || hasUsedMaxSessions}
                 onClick={handleMarkInClick}
               >
                 {isLoadingLocation && activeDialog === 'NONE' ? (
                   <span className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Fetching GPS...</span>
-                ) : "Mark IN"}
+                ) : hasUsedMaxSessions ? (
+                  "2 Sessions Used"
+                ) : todaySessions.length === 1 ? (
+                  "Mark IN (Session 2)"
+                ) : (
+                  "Mark IN"
+                )}
               </Button>
               <Button
                 type="button"
@@ -2293,31 +2417,44 @@ export default function AttendancePage() {
                     {cooldownRemaining || "00:00:00"}
                   </span>
                 </div>
+              ) : hasUsedMaxSessions ? (
+                <div className="flex items-center justify-center gap-2 text-amber-700 bg-amber-50 px-5 py-3 rounded-xl w-full border border-amber-200 font-black uppercase tracking-wider text-xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span>Maximum 2 Sessions Completed Today (Daily Total: {formatHoursToHHMM(todaySessions.reduce((sum, s) => sum + (s.hours || 0), 0))})</span>
+                </div>
               ) : activeRecord ? (
                 <div className="w-full space-y-3">
-                  <div className={cn("flex items-center justify-center gap-2 px-5 py-3 rounded-xl w-full border font-black text-sm uppercase tracking-wider",
-                    activeRecord.currentGeofenceStatus === "Outside Plant" ? "text-rose-600 bg-rose-50 border-rose-100 animate-pulse" : "text-emerald-600 bg-emerald-50 border-emerald-100"
-                  )}>
-                    <MapPin className="w-4 h-4 animate-bounce" />
-                    <span>{activeRecord.currentGeofenceStatus || "Inside Plant"}</span>
+                  <div className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl w-full border font-black text-sm uppercase tracking-wider text-emerald-600 bg-emerald-50 border-emerald-100">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Active Shift (Session {activeRecord.sessionIndex || 1} of 2) in Progress</span>
                   </div>
 
                   <div className="flex items-center justify-center gap-2 text-slate-600 bg-[#F8F9FA] px-5 py-2.5 rounded-xl w-full border border-slate-200 shadow-sm font-black uppercase tracking-wider text-xs">
-                    <ShieldCheck className="w-4 h-4 text-slate-500" />
-                    <span>SHIFT STARTED: {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "dd-MMM-yyyy")} {activeRecord.inTime}</span>
+                    <Clock className="w-4 h-4 text-slate-500" />
+                    <span>
+                      {(() => {
+                        const startDT = (activeRecord.inDate && activeRecord.inTime)
+                          ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
+                          : (activeRecord.date && activeRecord.inTime)
+                          ? parseDateTime(activeRecord.date, activeRecord.inTime)
+                          : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+                        const dateFormatted = startDT && isValid(startDT) ? format(startDT, "dd-MMM-yyyy") : (activeRecord.inDate || activeRecord.date || format(getISTTime(), "dd-MMM-yyyy"));
+                        return `SHIFT STARTED: ${dateFormatted} ${activeRecord.inTime} • Max Auto OUT: ${activeRecord.sessionIndex === 2 ? '8h (4h Credit)' : '16h (8h Credit)'}`;
+                      })()}
+                    </span>
                   </div>
                 </div>
-              ) : todayRecord && todayRecord.outTime ? (
+              ) : todaySessions.length === 1 ? (
                 <div className="flex items-center justify-center gap-2 text-blue-600 bg-blue-50 px-5 py-3 rounded-xl w-full border border-blue-100">
                   <CheckCircle className="w-5 h-5" />
                   <span className="text-sm font-black uppercase tracking-wider">
-                    Completed Shift - Hours: {formatHoursToHHMM(todayRecord.hours || 0)}
+                    Session 1 Completed ({formatHoursToHHMM(todayRecord?.hours || 0)}) • Session 2 of 2 Available
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-slate-500 bg-slate-50 px-5 py-3 rounded-xl w-full border border-slate-200">
                   <Clock className="w-5 h-5" />
-                  <span className="text-sm font-black uppercase tracking-wider">Eligible for Mark IN</span>
+                  <span className="text-sm font-black uppercase tracking-wider">Eligible for Mark IN (Session 1 of 2)</span>
                 </div>
               )}
             </div>
@@ -2620,61 +2757,34 @@ export default function AttendancePage() {
               </div>
             </div>
 
-            {/* Plant & Distance Info (700m rule) */}
-            {detectedPlant ? (
-              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center gap-3.5">
-                <div className="bg-emerald-500 p-2.5 rounded-xl text-white shrink-0">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div className="space-y-0.5">
-                  <Label className="text-[9px] font-black uppercase text-emerald-700 tracking-wider">Facility Geofence Zone</Label>
-                  <p className="text-sm font-black text-emerald-900 uppercase">{detectedPlant.name}</p>
-                  <p className="text-[11px] font-bold text-emerald-700">
-                    Distance: <span className="font-mono font-black">{nearestPlantInfo?.distance || 0} meters</span> (Inside {detectedPlant.radius || 700}m radius)
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-1">
-                  <div className="flex items-center gap-2 text-amber-800 font-black text-xs uppercase">
-                    <AlertTriangle className="w-4 h-4 text-amber-600" />
-                    <span>Outside Plant Radius (700m)</span>
+            {/* Attendance Category Selection (if outside registered bounds) */}
+            {!detectedPlant && (
+              <div className="space-y-2 pt-1">
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                  Select Attendance Mode (Mandatory):
+                </Label>
+                <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-3">
+                  <div
+                    className={cn(
+                      "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2",
+                      selectedType === 'WFH' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
+                    )}
+                    onClick={() => setSelectedType('WFH')}
+                  >
+                    <Home className={cn("w-6 h-6", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
+                    <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Work From Home</span>
                   </div>
-                  {nearestPlantInfo && (
-                    <p className="text-[11px] font-bold text-amber-900">
-                      Nearest Plant: <span className="uppercase">{nearestPlantInfo.plant.name}</span> — Distance: <span className="font-mono font-black">{nearestPlantInfo.distance} meters</span>
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2 pt-1">
-                  <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                    Select Attendance Category (Mandatory):
-                  </Label>
-                  <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-3">
-                    <div
-                      className={cn(
-                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2",
-                        selectedType === 'WFH' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
-                      )}
-                      onClick={() => setSelectedType('WFH')}
-                    >
-                      <Home className={cn("w-6 h-6", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
-                      <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Work From Home</span>
-                    </div>
-                    <div
-                      className={cn(
-                        "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2",
-                        selectedType === 'FIELD' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
-                      )}
-                      onClick={() => setSelectedType('FIELD')}
-                    >
-                      <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
-                      <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Field Work</span>
-                    </div>
-                  </RadioGroup>
-                </div>
+                  <div
+                    className={cn(
+                      "p-4 border-2 rounded-2xl cursor-pointer transition-all flex flex-col items-center gap-2",
+                      selectedType === 'FIELD' ? "border-primary bg-primary/5 shadow-md shadow-primary/5" : "border-slate-200 bg-white hover:border-slate-300"
+                    )}
+                    onClick={() => setSelectedType('FIELD')}
+                  >
+                    <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
+                    <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Field Work</span>
+                  </div>
+                </RadioGroup>
               </div>
             )}
 
@@ -2708,7 +2818,7 @@ export default function AttendancePage() {
         </DialogContent>
       </Dialog>
 
-      {/* Mark OUT Confirmation Pop-up with Location and Distance */}
+      {/* Mark OUT Confirmation Pop-up */}
       <Dialog
         open={activeDialog === "OUT"}
         onOpenChange={(o) => {
@@ -2743,7 +2853,17 @@ export default function AttendancePage() {
             {activeRecord && (
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center gap-2 font-black text-slate-700 uppercase tracking-wider text-xs">
                 <ShieldCheck className="w-4 h-4 text-slate-500" />
-                <span>SHIFT STARTED: {format(activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : getISTTime(), "dd-MMM-yyyy")} {activeRecord.inTime}</span>
+                <span>
+                  {(() => {
+                    const startDT = (activeRecord.inDate && activeRecord.inTime)
+                      ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
+                      : (activeRecord.date && activeRecord.inTime)
+                      ? parseDateTime(activeRecord.date, activeRecord.inTime)
+                      : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+                    const dateFormatted = startDT && isValid(startDT) ? format(startDT, "dd-MMM-yyyy") : (activeRecord.inDate || activeRecord.date || format(getISTTime(), "dd-MMM-yyyy"));
+                    return `SHIFT STARTED: ${dateFormatted} ${activeRecord.inTime}`;
+                  })()}
+                </span>
               </div>
             )}
 
@@ -2761,18 +2881,6 @@ export default function AttendancePage() {
                   )}
                 </span>
               </div>
-            </div>
-
-            {/* Facility & Distance Information */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-              <Label className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Facility Distance Check</Label>
-              <p className="text-xs font-bold text-slate-800">
-                Nearest Plant: <span className="font-black uppercase">{nearestPlantInfo?.plant?.name || detectedPlant?.name || "Salt Plant"}</span>
-              </p>
-              <p className="text-[11px] font-bold text-slate-600">
-                Distance: <span className="font-mono font-black text-slate-900">{nearestPlantInfo?.distance || 0} meters</span>
-                {detectedPlant ? " (Within Geofence Radius)" : " (Outside Geofence Radius)"}
-              </p>
             </div>
 
             <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 pt-1 border-t border-slate-100">

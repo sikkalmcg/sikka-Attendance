@@ -223,6 +223,13 @@ export const evaluateShiftAttendanceReminders = (params: {
     // 1. Inactive Employee Check
     if (emp.active === false || (emp as any).status === 'Inactive') return;
 
+    // 1.1 Strict Role Filter: Attendance Reminders are for Employees ONLY
+    // Admin, Managers, HR, Super Admins, etc. must NEVER receive Attendance Reminders
+    const rawRole = String((emp as any).role || (emp as any).userRole || (emp as any).roleName || 'EMPLOYEE').trim().toUpperCase();
+    if (rawRole !== 'EMPLOYEE') {
+      return;
+    }
+
     const empId = String(emp.employeeId || emp.id || (emp as any)._id || '').trim();
     if (!empId) return;
 

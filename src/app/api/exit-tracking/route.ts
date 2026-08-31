@@ -77,14 +77,42 @@ export async function POST(req: Request) {
     const activeOut = await plantExits.findOne({ ...activeFilter, inPlantTime: null });
 
     if (action === 'OUT') {
+      let markInTime = null;
+      let sessionIndex = 1;
+      let attendanceDoc: any = null;
+
+      if (attendanceId) {
+        attendanceDoc = await attendanceCol.findOne({
+          $or: [
+            { _id: attendanceId },
+            ...(ObjectId.isValid(attendanceId) ? [{ _id: new ObjectId(attendanceId) }] : []),
+            { id: attendanceId }
+          ]
+        });
+      }
+
+      if (!attendanceDoc && employeeCode) {
+        attendanceDoc = await attendanceCol.findOne({
+          employeeId: employeeCode,
+          status: 'Open'
+        });
+      }
+
+      if (attendanceDoc) {
+        markInTime = attendanceDoc.inDateTime || `${attendanceDoc.inDate || attendanceDoc.date} ${attendanceDoc.inTime}`;
+        sessionIndex = attendanceDoc.sessionIndex || 1;
+      }
+
       // A new facility exit record (Outside Plant).
       const record = {
         employeeCode,
-        employeeName: employeeName || 'Unknown',
+        employeeName: employeeName || attendanceDoc?.employeeName || 'Unknown',
         designation: designation || 'Staff',
-        plant: plantName || 'N/A',
-        date,
-        attendanceId: attendanceId || null,
+        plant: plantName || attendanceDoc?.inPlant || 'N/A',
+        date: date || attendanceDoc?.date || formatDateTimeLocal(new Date()).split(' ')[0],
+        attendanceId: attendanceId || (attendanceDoc ? String(attendanceDoc._id) : null),
+        sessionIndex,
+        markInTime,
         outPlantTime: outPlantTime || timeNowStr,
         gpsLatitude,
         gpsLongitude,
@@ -108,19 +136,28 @@ export async function POST(req: Request) {
         resultId = result.insertedId;
       }
 
-      // Also persist onto the attendance record exitEvents for the approvals page (legacy path).
-      if (attendanceId) {
-        const att = await attendanceCol.findOne({ $or: [{ _id: attendanceId }, { _id: new ObjectId(attendanceId) }, { id: attendanceId }] });
+      // Also persist onto the attendance record exitEvents for immediate sync
+      const targetAttId = attendanceId || (attendanceDoc ? attendanceDoc._id : null);
+      if (targetAttId) {
+        const att = attendanceDoc || await attendanceCol.findOne({
+          $or: [
+            { _id: targetAttId },
+            ...(ObjectId.isValid(targetAttId) ? [{ _id: new ObjectId(targetAttId) }] : []),
+            { id: String(targetAttId) }
+          ]
+        });
+
         if (att) {
           const exitEvents = Array.isArray(att.exitEvents) ? att.exitEvents : [];
           const existingIdx = exitEvents.findIndex((e: any) => e.id === String(resultId));
           const event = {
             id: String(resultId),
             employeeCode,
-            employeeName: employeeName || 'Unknown',
+            employeeName: employeeName || att.employeeName || 'Unknown',
             designation: designation || 'Staff',
-            plant: plantName || 'N/A',
-            date,
+            plant: plantName || att.inPlant || 'N/A',
+            date: date || att.date,
+            markInTime,
             outPlantTime: outPlantTime || timeNowStr,
             gpsLatitude,
             gpsLongitude,
@@ -133,11 +170,11 @@ export async function POST(req: Request) {
           };
           if (existingIdx >= 0) exitEvents[existingIdx] = event;
           else exitEvents.push(event);
-          await attendanceCol.updateOne({ _id: att._id }, { $set: { exitEvents, currentGeofenceStatus: 'Outside Plant' } });
+          await attendanceCol.updateOne({ _id: att._id }, { $set: { exitEvents, currentGeofenceStatus: 'Outside Plant', updatedAt: nowIso } });
         }
       }
 
-      return NextResponse.json({ status: 'Outside Plant', id: String(resultId) }, { status: 201 });
+      return NextResponse.json({ status: 'Outside Plant', id: String(resultId), record }, { status: 201 });
     }
 
     if (action === 'RETURN') {

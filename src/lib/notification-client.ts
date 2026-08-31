@@ -88,9 +88,15 @@ export async function syncDeviceWithBackend(user: any): Promise<boolean> {
   try {
     const deviceId = getOrCreateDeviceId();
     const employeeId = user?.employeeId || user?.username || user?.id || '';
+    const employeeName = user?.name || user?.fullName || (user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : '');
     const role = user?.role || 'EMPLOYEE';
+    const department = user?.department || '';
+    const designation = user?.designation || '';
     const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Web Browser';
     const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+    const platform = isMobile ? 'android-web' : 'web';
+    const deviceName = isMobile ? 'Mobile Browser / Web Node' : 'Desktop Browser Node';
+    const permissionStatus = typeof Notification !== 'undefined' ? Notification.permission : 'default';
 
     let pushSubscriptionJson: PushSubscriptionJSON | null = null;
 
@@ -121,20 +127,37 @@ export async function syncDeviceWithBackend(user: any): Promise<boolean> {
       }
     }
 
-    const payload: DeviceRegistrationPayload = {
+    const payload = {
+      deviceId,
       token: deviceId,
       employeeId,
+      employeeName,
       role,
-      deviceName: isMobile ? 'Mobile Browser / APK Web' : 'Desktop Browser',
-      platform: isMobile ? 'android-web' : 'web',
+      department,
+      designation,
+      deviceName,
+      platform,
+      pushSubscription: pushSubscriptionJson,
       subscription: pushSubscriptionJson,
+      notificationPermission: permissionStatus,
+      deviceStatus: 'ACTIVE',
     };
 
-    const res = await fetch('/api/notifications/register-device', {
+    // Primary: /api/device-registry/subscribe
+    const res = await fetch('/api/device-registry/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+
+    if (!res.ok) {
+      // Fallback
+      await fetch('/api/notifications/register-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }
 
     return res.ok;
   } catch (e) {

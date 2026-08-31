@@ -110,5 +110,14 @@ export async function processAttendanceApproval(payload: ApprovalPayload): Promi
         : `Attendance log for ${payload.attendanceDate} processed.`,
   });
 
+  try {
+    const { realtimeBroadcaster } = await import('@/lib/realtime-events');
+    realtimeBroadcaster.broadcast('attendance_updated', {
+      collection: 'attendance',
+      action: normalizedStatus,
+      data: payload,
+    });
+  } catch {}
+
   return true;
 }

@@ -96,18 +96,38 @@ export async function POST(req: Request) {
     const todayStr = format(now, "yyyy-MM-dd");
     const timeStr = format(now, "HH:mm");
 
-    // 4. Check if already marked IN or existing Open shift for today
-    const existing = await attendanceCol.findOne({ employeeId: internalEmpId, date: todayStr });
-    if (existing && existing.status === 'Open') {
+    // 4. Check today's existing attendance sessions (Max 2 sessions per day)
+    const empIdMatches = [internalEmpId, matchedEmp.employeeId, matchedEmp.id, cleanSessionEmpId].filter(Boolean);
+    const todaySessions = await attendanceCol.find({
+      employeeId: { $in: empIdMatches },
+      date: todayStr
+    }).sort({ createdAt: 1 }).toArray();
+
+    // 4a. Check if already marked IN with an active Open shift
+    const openSession = todaySessions.find((s: any) => s.status === 'Open');
+    if (openSession) {
       return NextResponse.json(
         {
           success: false,
           message: "You already have an active Mark IN shift for today.",
-          data: existing
+          data: openSession
         },
         { status: 400 }
       );
     }
+
+    // 4b. Rule 6: No Third Mark IN (Max 2 attendance sessions per day)
+    if (todaySessions.length >= 2) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "You have already used the maximum 2 attendance sessions allowed for today."
+        },
+        { status: 400 }
+      );
+    }
+
+    const sessionIndex = todaySessions.length + 1; // 1 for first session, 2 for second session
 
     // 5. Build Attendance Record with all required fields
     const {
@@ -130,6 +150,42 @@ export async function POST(req: Request) {
 
     const finalLat = parseFloat(lat ?? latitude ?? 28.6329);
     const finalLng = parseFloat(lng ?? longitude ?? 77.4357);
+
+    // 4c. Rule 5: Second Mark IN Validation (Must be within 700m of a registered plant or valid Field/WFH)
+    if (sessionIndex === 2) {
+      const isSpecialType = selectedType === 'WFH' || selectedType === 'FIELD' || attendanceType === 'Work From Home' || attendanceType === 'Field Work';
+      if (!isSpecialType) {
+        const plants = await db.collection('plants').find({ active: { $ne: false } }).toArray().catch(() => []);
+        let isWithinAnyPlant = false;
+        const R_EARTH = 6371e3; // meters
+        for (const p of plants) {
+          if (typeof p.lat === 'number' && typeof p.lng === 'number') {
+            const phi1 = (finalLat * Math.PI) / 180;
+            const phi2 = (p.lat * Math.PI) / 180;
+            const deltaPhi = ((p.lat - finalLat) * Math.PI) / 180;
+            const deltaLambda = ((p.lng - finalLng) * Math.PI) / 180;
+            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                      Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = R_EARTH * c;
+            if (distance <= (p.radius || 700)) {
+              isWithinAnyPlant = true;
+              break;
+            }
+          }
+        }
+        if (!isWithinAnyPlant && plants.length > 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: "Second Mark IN requires you to be within 700 meters of a plant. Alternatively, select Field Work or WFH if applicable."
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const finalAddress = address || (inPlant ? String(inPlant) : "Registered Location");
     const finalPlant = inPlant || plantName || (selectedType === 'WFH' ? 'Outside-WFM' : selectedType === 'FIELD' ? 'Outside-Field Work' : 'N/A');
     const finalAttendanceType = attendanceType || (selectedType === 'WFH' ? 'Work From Home' : selectedType === 'FIELD' ? 'Field Work' : 'Plant Attendance');
@@ -142,6 +198,8 @@ export async function POST(req: Request) {
       mobileNumber: matchedEmp.mobileNumber || matchedEmp.mobile || undefined,
       firmId: matchedEmp.firmId || null,
       plantId: matchedEmp.plantId || null,
+      sessionIndex,
+      sessionNumber: sessionIndex,
       date: todayStr,
       inDate: todayStr,
       inTime: timeStr,
@@ -158,7 +216,7 @@ export async function POST(req: Request) {
       state: state || "Uttar Pradesh",
       pincode: pincode || "N/A",
       inPlant: finalPlant,
-      remark: body.remark || `Checked IN for ${finalAttendanceType}`,
+      remark: body.remark || `Checked IN (Session ${sessionIndex}) for ${finalAttendanceType}`,
       approved: false,
       unapprovedOutDuration: 0,
       currentGeofenceStatus: geofenceStatus,
@@ -167,20 +225,11 @@ export async function POST(req: Request) {
       updatedAt: now.toISOString(),
     };
 
-    let recordId: any;
-    if (existing) {
-      await attendanceCol.updateOne(
-        { _id: existing._id },
-        { $set: newAttendanceRecord }
-      );
-      recordId = existing._id;
-    } else {
-      const result = await attendanceCol.insertOne(newAttendanceRecord);
-      recordId = result.insertedId;
-    }
+    const result = await attendanceCol.insertOne(newAttendanceRecord);
+    const recordId = result.insertedId;
 
     // 6. Record in Notifications collection
-    const notifMsg = `${empFullName} – Mark IN Recorded | Time: ${timeStr} | ${finalPlant}`;
+    const notifMsg = `${empFullName} – Mark IN Recorded (Session ${sessionIndex}) | Time: ${timeStr} | ${finalPlant}`;
     await db.collection('notifications').insertOne({
       employeeId: internalEmpId,
       message: notifMsg,
@@ -195,7 +244,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: "Attendance Marked IN Successfully!",
+        message: `Attendance Marked IN Successfully! (Session ${sessionIndex} of 2)`,
         id: recordId,
         data: { ...newAttendanceRecord, id: String(recordId), _id: String(recordId) },
       },

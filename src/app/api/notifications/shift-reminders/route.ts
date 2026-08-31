@@ -32,8 +32,9 @@ async function handleShiftReminders() {
     const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     // 1. Fetch relevant collections with fast indexed range queries
-    const [employeesRaw, attendanceRaw, holidaysRaw, leaveRequestsRaw, existingNotificationsRaw] = await Promise.all([
+    const [employeesRaw, usersRaw, attendanceRaw, holidaysRaw, leaveRequestsRaw, existingNotificationsRaw] = await Promise.all([
       db.collection("employees").find({ active: { $ne: false } }).toArray().catch(() => []),
+      db.collection("users").find({}).toArray().catch(() => []),
       db.collection("attendance").find({ date: { $gte: fourteenDaysAgoStr } }).toArray().catch(() => []),
       db.collection("holidays").find({}).toArray().catch(() => []),
       db.collection("leaveRequests").find({ status: "APPROVED" }).toArray().catch(() => []),
@@ -46,10 +47,33 @@ async function handleShiftReminders() {
       }).toArray().catch(() => []),
     ]);
 
-    const employees: Employee[] = (employeesRaw || []).map((e: any) => ({
-      ...e,
-      id: e.id || e._id?.toString(),
-    }));
+    // Build set of admin/manager usernames or IDs to strictly exclude
+    const nonEmployeeUsernames = new Set<string>();
+    (usersRaw || []).forEach((u: any) => {
+      const roleStr = String(u.role || '').toUpperCase();
+      if (roleStr && roleStr !== 'EMPLOYEE') {
+        if (u.username) nonEmployeeUsernames.add(String(u.username).toUpperCase());
+        if (u.id) nonEmployeeUsernames.add(String(u.id).toUpperCase());
+        if (u._id) nonEmployeeUsernames.add(String(u._id).toUpperCase());
+        if (u.employeeId) nonEmployeeUsernames.add(String(u.employeeId).toUpperCase());
+      }
+    });
+
+    const employees: Employee[] = (employeesRaw || [])
+      .filter((e: any) => {
+        const role = String(e.role || e.userRole || 'EMPLOYEE').toUpperCase();
+        if (role !== 'EMPLOYEE') return false;
+        const empCode = String(e.employeeId || e.id || '').toUpperCase();
+        const username = String(e.username || '').toUpperCase();
+        if (nonEmployeeUsernames.has(empCode) || nonEmployeeUsernames.has(username)) {
+          return false;
+        }
+        return true;
+      })
+      .map((e: any) => ({
+        ...e,
+        id: e.id || e._id?.toString(),
+      }));
 
     const attendanceRecords: AttendanceRecord[] = (attendanceRaw || []).map((a: any) => ({
       ...a,

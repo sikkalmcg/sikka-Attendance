@@ -1,4 +1,5 @@
 let isSchedulerRunning = false;
+let historicalAuditDone = false;
 
 /**
  * IST-aware Background Scheduler for Server-side Automatic Shift Reminders.
@@ -54,21 +55,52 @@ export function startBackgroundScheduler() {
   console.log(`[Scheduler] IST-Aware Shift Reminder Scheduler started at ${istTime} IST.`);
   console.log('[Scheduler] Active windows: 06:00 AM, 10:00 AM, 06:00 PM, 08:00 PM IST (±10 min).');
 
-  // Initial check after 15s delay to allow DB connection to warm up
-  setTimeout(() => {
+  // ── Startup sequence ────────────────────────────────────────────────────
+  // 1. After 20 s: run one-time historical audit to correct all past records.
+  // 2. After 30 s: begin normal scheduler cycles (auto-out + shift reminders).
+  setTimeout(async () => {
+    if (!historicalAuditDone) {
+      historicalAuditDone = true;
+      try {
+        console.log('[Scheduler] Starting one-time historical attendance audit...');
+        const { POST: handleAuditCorrect } = await import('@/app/api/attendance/audit-correct/route');
+        const auditRes = await handleAuditCorrect();
+        const auditData = await auditRes.json();
+        console.log(
+          `[Scheduler] Historical audit complete — ${auditData.scannedCount ?? 0} record(s) scanned, ` +
+          `${auditData.correctionsApplied ?? 0} corrected.`
+        );
+      } catch (auditErr) {
+        console.warn('[Scheduler] Historical audit error (non-fatal):', auditErr);
+      }
+    }
+    // Begin normal scheduler cycles after audit completes
     runSchedulerCycle();
-  }, 15000);
+  }, 20000);
 
-  // Poll every 60 seconds — only evaluates during active windows
+  // Poll every 60 seconds — auto-out + shift reminders
   setInterval(() => {
     runSchedulerCycle();
   }, 60 * 1000);
 }
 
 async function runSchedulerCycle() {
+  // 1. Auto-Mark OUT: Evaluates every cycle for active sessions exceeding 16h (session 1) or 8h (session 2)
+  try {
+    const { GET: handleAutoMarkOut } = await import('@/app/api/attendance/auto-mark-out/route');
+    const autoOutRes = await handleAutoMarkOut();
+    const autoOutData = await autoOutRes.json();
+    if (autoOutData.processedCount > 0) {
+      console.log(`[Scheduler] Auto Mark OUT completed for ${autoOutData.processedCount} expired session(s).`);
+    }
+  } catch (autoErr) {
+    console.warn('[Scheduler] Auto Mark OUT cycle error:', autoErr);
+  }
+
+  // 2. Shift Reminders: Evaluates during scheduled IST windows (06:00 AM, 10:00 AM, 06:00 PM, 08:00 PM)
   const { active, windowName } = isWithinScheduledWindow();
   if (!active) {
-    // Outside all scheduled windows — skip DB query
+    // Outside all scheduled reminder windows — skip reminder query
     return;
   }
 
@@ -87,7 +119,7 @@ async function runSchedulerCycle() {
     const data = await result.json();
     console.log(`[Scheduler] Cycle complete — ${data.newRemindersCount ?? 0} new reminder(s) sent, ${data.evaluatedEmployees ?? 0} employee(s) evaluated.`);
   } catch (error) {
-    console.warn('[Scheduler] Cycle error:', error);
+    console.warn('[Scheduler] Shift reminders cycle error:', error);
   }
 }
 

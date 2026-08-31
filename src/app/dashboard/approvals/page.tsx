@@ -243,6 +243,26 @@ interface BulkEditRow {
     setSelectedRecordIds(new Set());
   }, [attendanceView, selectedPlantFilter, selectedStatusFilter, historyMonthFilter, searchTerm, selectedDateFilter]);
 
+  // Real-time synchronization for Approvals UI (Attendance, Leave Requests, Facility Exits)
+  useEffect(() => {
+    const handleRealtime = (e: any) => {
+      const detail = e?.detail;
+      if (
+        detail?.type === "attendance_updated" ||
+        detail?.type === "leave_updated" ||
+        detail?.type === "facility_exit_updated" ||
+        detail?.type === "data_mutation"
+      ) {
+        refreshData();
+      }
+    };
+
+    window.addEventListener("sikka:realtime-event", handleRealtime);
+    return () => {
+      window.removeEventListener("sikka:realtime-event", handleRealtime);
+    };
+  }, [refreshData]);
+
   const userAssignedPlantIds = useMemo(() => {
     if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
     return verifiedUser.plantIds || [];

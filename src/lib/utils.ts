@@ -147,20 +147,43 @@ export function formatHoursToHHMM(hours: number | null | undefined) {
 export function parseDateTime(dateStr: string, timeStr: string): Date | null {
   if (!dateStr || !timeStr) return null;
   try {
-    // If time is 12h format (e.g. "07:59 AM"), convert to 24h
     let cleanTime = timeStr.trim();
     const is12h = cleanTime.toLowerCase().includes('am') || cleanTime.toLowerCase().includes('pm');
     
+    let hour = 0;
+    let minute = 0;
+    let second = 0;
+
     if (is12h) {
-      const [time, modifier] = cleanTime.split(' ');
-      let [hours, minutes] = time.split(':');
-      if (hours === '12') hours = '00';
-      if (modifier.toLowerCase() === 'pm') hours = (parseInt(hours, 10) + 12).toString();
-      cleanTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+      const parts = cleanTime.split(/\s+/);
+      const timePart = parts[0];
+      const modifier = (parts[1] || '').toLowerCase();
+      const timeParts = timePart.split(':');
+      hour = parseInt(timeParts[0], 10) || 0;
+      minute = parseInt(timeParts[1] || '0', 10) || 0;
+      second = parseInt(timeParts[2] || '0', 10) || 0;
+      if (modifier === 'pm' && hour < 12) hour += 12;
+      if (modifier === 'am' && hour === 12) hour = 0;
+    } else {
+      const timeParts = cleanTime.split(':');
+      hour = parseInt(timeParts[0], 10) || 0;
+      minute = parseInt(timeParts[1] || '0', 10) || 0;
+      second = parseInt(timeParts[2] || '0', 10) || 0;
     }
 
-    const dt = new Date(`${dateStr}T${cleanTime}`);
-    return isValid(dt) ? dt : null;
+    const cleanDate = dateStr.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
+      const [year, month, day] = cleanDate.split('-').map(Number);
+      const dt = new Date(year, month - 1, day, hour, minute, second);
+      return isValid(dt) ? dt : null;
+    }
+
+    const cleanTimeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`;
+    const dt = new Date(`${cleanDate}T${cleanTimeStr}`);
+    if (isValid(dt)) return dt;
+
+    const fallback = new Date(`${cleanDate} ${cleanTimeStr}`);
+    return isValid(fallback) ? fallback : null;
   } catch (e) {
     return null;
   }

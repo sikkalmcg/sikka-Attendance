@@ -199,9 +199,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, [currentUser]);
 
-  // Real-time live synchronization for notifications
+  // Real-time live synchronization via Server-Sent Events (SSE) stream + polling fallback
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || typeof window === 'undefined') return;
+
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: any = null;
+
+    const connectSSE = () => {
+      try {
+        eventSource = new EventSource('/api/realtime/stream');
+
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload && payload.type && payload.type !== 'connected') {
+              // Dispatch event for UI components listening specifically
+              window.dispatchEvent(
+                new CustomEvent('sikka:realtime-event', { detail: payload })
+              );
+
+              // Auto-refresh context collections
+              fetchData(true);
+            }
+          } catch (e) {}
+        };
+
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          // Reconnect in 5 seconds
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(connectSSE, 5000);
+        };
+      } catch (err) {
+        console.warn('SSE connection attempt skipped:', err);
+      }
+    };
+
+    connectSSE();
 
     const syncNotifications = async () => {
       try {
@@ -216,24 +254,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const interval = setInterval(syncNotifications, 15000);
-
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        syncNotifications();
+        fetchData(true);
       }
     };
-    const onFocus = () => syncNotifications();
+    const onFocus = () => fetchData(true);
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('focus', onFocus);
 
     return () => {
-      clearInterval(interval);
+      if (eventSource) {
+        eventSource.close();
+      }
+      clearTimeout(reconnectTimeout);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onFocus);
     };
-  }, [currentUserId]);
+  }, [currentUserId, fetchData]);
 
   const verifiedUser = useMemo(() => {
     if (!currentUser) return null;

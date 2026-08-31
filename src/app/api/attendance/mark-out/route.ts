@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth/session';
 import { format, parseISO, addHours, isValid } from 'date-fns';
 import { ObjectId } from 'mongodb';
 import { invalidateBootstrapCache } from '@/lib/data-cache';
+import { parseDateTime } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,26 +112,54 @@ export async function POST(req: Request) {
     }
 
     const now = getISTTime();
-    const outDT = now;
-    const outTimeStr = format(outDT, "HH:mm");
-    const outDateStr = format(outDT, "yyyy-MM-dd");
+    const outTimeStr = format(now, "HH:mm");
+    const outDateStr = format(now, "yyyy-MM-dd");
+    const outDT = parseDateTime(outDateStr, outTimeStr) || now;
 
-    // Compute worked hours
+    // ── Working-Hour Calculation (Manual OUT) ──────────────────────────────
+    // Rule: Manual OUT = actual OUT timestamp − actual IN timestamp.
+    // No per-session cap is applied here (caps apply only to Auto Mark OUT).
+    // The only hard ceiling is the 24-hour combined daily total.
     let inDT: Date | null = null;
+    // Prefer the ISO inDateTime for maximum precision
     if (activeRecord.inDateTime) {
       try { inDT = parseISO(activeRecord.inDateTime); } catch {}
     }
     if (!inDT || !isValid(inDT)) {
       if (activeRecord.inDate && activeRecord.inTime) {
-        try { inDT = parseISO(`${activeRecord.inDate}T${activeRecord.inTime}:00`); } catch {}
+        inDT = parseDateTime(activeRecord.inDate, activeRecord.inTime);
+      } else if (activeRecord.date && activeRecord.inTime) {
+        inDT = parseDateTime(activeRecord.date, activeRecord.inTime);
       }
     }
 
+    const sessionIdx = activeRecord.sessionIndex || 1;
+
     let finalHours = 0;
     if (inDT && isValid(inDT)) {
-      const diffHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-      finalHours = parseFloat(Math.max(0, diffHours).toFixed(2));
+      const diffMs = outDT.getTime() - inDT.getTime();
+      if (diffMs < 0) {
+        // OUT is before IN — this is impossible; reject the request
+        return NextResponse.json(
+          { success: false, message: "Mark OUT time cannot be earlier than Mark IN time. Please check the system clock." },
+          { status: 400 }
+        );
+      }
+      // Store actual elapsed hours (no per-session cap — that is only for Auto OUT)
+      finalHours = diffMs / (1000 * 60 * 60);
     }
+
+    // Rule: Max 24 combined daily hours across all sessions
+    const otherSessions = await attendanceCol.find({
+      employeeId: { $in: [internalEmpId, matchedEmp.employeeId, matchedEmp.id].filter(Boolean) },
+      date: activeRecord.date || outDateStr,
+      _id: { $ne: activeRecord._id }
+    }).toArray();
+
+    const otherHoursTotal = otherSessions.reduce((acc: number, s: any) => acc + (parseFloat(s.hours) || 0), 0);
+    const maxAllowedRemaining = Math.max(0, 24 - otherHoursTotal);
+    finalHours = Math.min(finalHours, maxAllowedRemaining);
+    finalHours = parseFloat(finalHours.toFixed(2));
 
     // 1-hour rest period / cool-off after Mark OUT
     const nextEnableDT = addHours(outDT, 1);
@@ -191,6 +220,23 @@ export async function POST(req: Request) {
       updatePayload.exitEvents = updatedEvents;
     }
 
+    // Also close any active open plantExits in plantExits collection
+    await db.collection('plantExits').updateMany(
+      {
+        $or: [
+          { attendanceId: String(activeRecord._id) },
+          { employeeCode: { $in: [internalEmpId, matchedEmp.employeeId, matchedEmp.id].filter(Boolean) }, inPlantTime: null }
+        ]
+      },
+      {
+        $set: {
+          inPlantTime: format(now, "yyyy-MM-dd HH:mm"),
+          trackingStatus: "Shift Closed",
+          updatedAt: now.toISOString()
+        }
+      }
+    ).catch(() => {});
+
     await attendanceCol.updateOne(
       { _id: activeRecord._id },
       { $set: updatePayload }
@@ -201,7 +247,7 @@ export async function POST(req: Request) {
       : (matchedEmp.name || matchedEmp.fullName || "Employee");
 
     // Record in Notifications collection
-    const notifMsg = `${empFullName} – Mark OUT Recorded | Time: ${outTimeStr} | Worked: ${finalHours} hrs`;
+    const notifMsg = `${empFullName} – Mark OUT Recorded (Session ${sessionIdx}) | Time: ${outTimeStr} | Worked: ${finalHours} hrs`;
     await db.collection('notifications').insertOne({
       employeeId: internalEmpId,
       message: notifMsg,

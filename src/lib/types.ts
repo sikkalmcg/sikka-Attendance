@@ -238,16 +238,20 @@ export interface AttendanceRecord {
   autoCheckout?: boolean; 
   
   // New Business Fields
+  sessionIndex?: number;
+  sessionNumber?: number;
   inDateTime?: string; 
   outDateTime?: string;
-  outType?: 'MANUAL' | 'AUTO';
+  outType?: 'MANUAL' | 'AUTO' | 'Manual' | 'Auto';
   nextInEnableTime?: string;
+  autoTriggerTime?: string;
   street?: string;
   area?: string;
   city?: string;
   state?: string;
+  pincode?: string;
 
-unapprovedOutDuration?: number; 
+  unapprovedOutDuration?: number; 
   lastDetectedOutAt?: string | null; 
   lastOutCheckTime?: string; 
   exitEvents?: ExitEvent[];

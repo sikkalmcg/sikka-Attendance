@@ -3,6 +3,7 @@ import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { getSessionUser } from '@/lib/auth/session';
 import { invalidateBootstrapCache } from '@/lib/data-cache';
+import { realtimeBroadcaster } from '@/lib/realtime-events';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -78,6 +79,7 @@ export async function POST(
       if (!existing) {
         const result = await attendanceCol.insertOne(body);
         invalidateBootstrapCache();
+        realtimeBroadcaster.broadcast('attendance_updated', { collection: 'attendance', action: 'INSERT', data: body });
         return NextResponse.json({ success: true, id: result.insertedId });
       }
 
@@ -91,11 +93,23 @@ export async function POST(
         { $set: updateFields }
       );
       invalidateBootstrapCache();
+      realtimeBroadcaster.broadcast('attendance_updated', { collection: 'attendance', action: 'UPDATE', data: updateFields });
       return NextResponse.json({ success: true, id: existing._id });
     }
 
     const result = await db.collection(collection).insertOne(body);
     invalidateBootstrapCache();
+
+    if (collection === 'attendance') {
+      realtimeBroadcaster.broadcast('attendance_updated', { collection, action: 'INSERT', data: body });
+    } else if (collection === 'leaveRequests') {
+      realtimeBroadcaster.broadcast('leave_updated', { collection, action: 'INSERT', data: body });
+    } else if (collection === 'notifications') {
+      realtimeBroadcaster.broadcast('notification_created', { collection, action: 'INSERT', data: body });
+    } else {
+      realtimeBroadcaster.broadcast('data_mutation', { collection, action: 'INSERT', data: body });
+    }
+
     return NextResponse.json({ success: true, id: result.insertedId });
   } catch (error: any) {
     console.error(`POST Error in ${params.collection}:`, error);
@@ -155,6 +169,17 @@ export async function PUT(
     }
 
     invalidateBootstrapCache();
+
+    if (collection === 'attendance') {
+      realtimeBroadcaster.broadcast('attendance_updated', { collection, action: 'UPDATE', data: updateData });
+    } else if (collection === 'leaveRequests') {
+      realtimeBroadcaster.broadcast('leave_updated', { collection, action: 'UPDATE', data: updateData });
+    } else if (collection === 'notifications') {
+      realtimeBroadcaster.broadcast('notification_created', { collection, action: 'UPDATE', data: updateData });
+    } else {
+      realtimeBroadcaster.broadcast('data_mutation', { collection, action: 'UPDATE', data: updateData });
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error(`PUT Error in ${params.collection}:`, error);
@@ -190,6 +215,8 @@ export async function DELETE(
     }
 
     invalidateBootstrapCache();
+    realtimeBroadcaster.broadcast('data_mutation', { collection, action: 'DELETE' });
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error(`DELETE Error in ${params.collection}:`, error);
