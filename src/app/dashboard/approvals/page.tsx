@@ -926,6 +926,15 @@ const allPlantExitHistory = useMemo(() => {
   };
 
   const handleOpenEditModal = (rec: AttendanceItem) => {
+    const isMarkOutPending = !rec.isVirtual && Boolean(rec.inTime) && !rec.outTime && !rec.autoCheckout && !rec.autoOut && rec.status !== 'Closed';
+    if (isMarkOutPending) {
+      toast({
+        variant: "destructive",
+        title: "Active Session",
+        description: "Jab tak employee Mark OUT nahi karega, tab tak attendance edit nahi ki ja sakti."
+      });
+      return;
+    }
     setSelectedAttendance(rec);
     setEditData({
       plant: rec.inPlant || (authorizedPlants[0]?.name || "Salt Plant"),
@@ -1693,6 +1702,7 @@ const allPlantExitHistory = useMemo(() => {
                 ) : (
                   currentData.items.map((rec: any) => {
                     const canApprove = rec.isVirtual || (rec.inTime && (rec.outTime || rec.autoCheckout));
+                    const isMarkOutPending = !rec.isVirtual && Boolean(rec.inTime) && !rec.outTime && !rec.autoCheckout && !rec.autoOut && rec.status !== 'Closed';
                     const inDisplay = rec.inTime ? `${formatDate(rec.inDate || rec.date)} ${rec.inTime}` : "--";
                     
                     let outDisplay = "--";
@@ -1764,7 +1774,19 @@ const allPlantExitHistory = useMemo(() => {
                           <div className="flex justify-end items-center gap-1.5">
                             {attendanceView === 'pending' ? (
                               <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" onClick={() => handleOpenEditModal(rec)} title="Edit Attendance Entry" disabled={isApprovingId === (rec.id || (rec as any)._id)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className={cn(
+                                    "h-8 w-8 transition-opacity",
+                                    isMarkOutPending ? "text-slate-300 opacity-40 cursor-not-allowed hover:bg-transparent" : "text-slate-400 hover:text-slate-600"
+                                  )} 
+                                  onClick={() => handleOpenEditModal(rec)} 
+                                  title={isMarkOutPending ? "Employee must Mark OUT first before record can be edited" : "Edit Attendance Entry"} 
+                                  disabled={isMarkOutPending || isApprovingId === (rec.id || (rec as any)._id)}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }} disabled={isApprovingId === (rec.id || (rec as any)._id)}><XCircle className="w-3.5 h-3.5" /></Button>
                                 <Button 
                                   size="sm" 
