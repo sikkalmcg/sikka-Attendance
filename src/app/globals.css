@@ -39,6 +39,37 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217 91% 60%;
   }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217 33% 14%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 14%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 16%;
+    --input: 217 33% 16%;
+    --ring: 217 91% 60%;
+
+    --sidebar-background: 224 71% 5%;
+    --sidebar-foreground: 240 5% 96%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 14%;
+    --sidebar-accent-foreground: 240 5% 96%;
+    --sidebar-border: 217 33% 16%;
+    --sidebar-ring: 217 91% 60%;
+  }
 }
 
 @layer base {
@@ -69,6 +100,86 @@
     font-family: 'Calibri', 'Candara', 'Segoe UI', 'Optima', 'Arial', sans-serif;
   }
 
+  /* Dark mode class overrides for seamless auto-switching */
+  html.dark body {
+    background-color: hsl(224 71% 4%) !important;
+    color: hsl(210 40% 98%) !important;
+  }
+
+  html.dark .bg-white {
+    background-color: hsl(222 47% 8%) !important;
+    color: hsl(210 40% 98%);
+  }
+
+  html.dark .bg-slate-50,
+  html.dark .bg-slate-50\/50,
+  html.dark .bg-slate-50\/80 {
+    background-color: hsl(222 47% 6%) !important;
+  }
+
+  html.dark .bg-slate-100 {
+    background-color: hsl(222 47% 10%) !important;
+  }
+
+  html.dark .text-slate-900 {
+    color: #f8fafc !important;
+  }
+
+  html.dark .text-slate-800 {
+    color: #f1f5f9 !important;
+  }
+
+  html.dark .text-slate-700 {
+    color: #e2e8f0 !important;
+  }
+
+  html.dark .text-slate-600 {
+    color: #cbd5e1 !important;
+  }
+
+  html.dark .text-slate-500 {
+    color: #94a3b8 !important;
+  }
+
+  html.dark .text-slate-400 {
+    color: #64748b !important;
+  }
+
+  html.dark .border-slate-200,
+  html.dark .border-slate-200\/60,
+  html.dark .border-slate-200\/80,
+  html.dark .border-slate-100 {
+    border-color: #1e293b !important;
+  }
+
+  html.dark .border-slate-300 {
+    border-color: #334155 !important;
+  }
+
+  html.dark input:not([type="checkbox"]):not([type="radio"]),
+  html.dark textarea,
+  html.dark select {
+    background-color: hsl(222 47% 7%) !important;
+    color: #f8fafc !important;
+    border-color: #334155 !important;
+  }
+
+  html.dark [role="dialog"],
+  html.dark [data-radix-popper-content-wrapper] > div {
+    background-color: hsl(222 47% 8%) !important;
+    color: #f8fafc !important;
+    border-color: #1e293b !important;
+  }
+
+  html.dark thead.bg-slate-50 {
+    background-color: hsl(222 47% 6%) !important;
+  }
+
+  html.dark tr.hover\:bg-slate-50\/50:hover,
+  html.dark tr:hover {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+  }
+
   /* Global Scrollbar Styles - Standardized for Sikka HR */
   ::-webkit-scrollbar {
     width: 8px;
@@ -77,11 +188,11 @@
   }
   
   ::-webkit-scrollbar-track {
-    @apply bg-slate-100;
+    @apply bg-slate-100 dark:bg-slate-900;
   }
   
   ::-webkit-scrollbar-thumb {
-    @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors border-2 border-slate-100;
+    @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors border-2 border-slate-100 dark:border-slate-900;
     display: block !important;
   }
 
