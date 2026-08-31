@@ -54,7 +54,7 @@ import {
 } from "lucide-react";
 import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
-import { parseISO, format, addHours, addDays, isSunday, isBefore, startOfMonth, eachDayOfInterval, isValid, startOfDay, endOfMonth, startOfToday } from "date-fns";
+import { parseISO, format, addHours, addDays, isSunday, isBefore, isAfter, startOfMonth, eachDayOfInterval, isValid, startOfDay, endOfMonth, startOfToday } from "date-fns";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const ITEMS_PER_PAGE = 15;
@@ -284,14 +284,18 @@ interface BulkEditRow {
     const map = new Map<string, any>();
     if (!leaveRequests) return map;
     leaveRequests.filter(l => {
-      const statusStr = String(l.status).toUpperCase();
+      const statusStr = String(l.status || '').toUpperCase();
       return statusStr === 'APPROVED';
     }).forEach(l => {
       const start = startOfDay(parseISO(l.fromDate));
       const end = startOfDay(parseISO(l.toDate));
       if (!isValid(start) || !isValid(end)) return;
       eachDayOfInterval({ start, end }).forEach(d => {
-        map.set(`${l.employeeId}:${format(d, 'yyyy-MM-dd')}`, l);
+        const dStr = format(d, 'yyyy-MM-dd');
+        const rawId = String(l.employeeId || '').trim();
+        map.set(`${rawId}:${dStr}`, l);
+        map.set(`${rawId.toUpperCase()}:${dStr}`, l);
+        map.set(`${rawId.replace(/\s/g, '')}:${dStr}`, l);
       });
     });
     return map;
@@ -300,7 +304,11 @@ interface BulkEditRow {
   const getCalculatedStatus = (dateStr: string, record: any, empId: string) => {
     const isSun = isSunday(parseISO(dateStr));
     const customHoliday = (holidays || []).find(h => h.date === dateStr && !h.auto);
-    const approvedLeave = approvedLeavesMap.get(`${empId}:${dateStr}`);
+    const cleanId = String(empId || '').trim();
+    const approvedLeave = approvedLeavesMap.get(`${cleanId}:${dateStr}`) || 
+                          approvedLeavesMap.get(`${cleanId.toUpperCase()}:${dateStr}`) || 
+                          approvedLeavesMap.get(`${cleanId.replace(/\s/g, '')}:${dateStr}`) ||
+                          approvedLeavesMap.get(`${empId}:${dateStr}`);
 
     if (record && record.inTime) {
       if (isSun) return "Present on Weekly Off";
@@ -351,7 +359,11 @@ interface BulkEditRow {
       return (emp.unitIds || []).some((id: string) => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
     }).map(rec => {
       const emp = getEmp(rec.employeeId, rec.employeeName);
-      const leave = approvedLeavesMap.get(`${rec.employeeId}:${rec.date}`);
+      const cleanEmpId = String(rec.employeeId || '').trim();
+      const leave = approvedLeavesMap.get(`${cleanEmpId}:${rec.date}`) || 
+                    approvedLeavesMap.get(`${cleanEmpId.toUpperCase()}:${rec.date}`) || 
+                    approvedLeavesMap.get(`${cleanEmpId.replace(/\s/g, '')}:${rec.date}`) ||
+                    approvedLeavesMap.get(`${rec.employeeId}:${rec.date}`);
       
       let processedRec: any = { 
         ...rec, 
@@ -384,9 +396,12 @@ interface BulkEditRow {
 
     const missing: AttendanceItem[] = [];
     const projectStartDate = parseISO(PROJECT_START_DATE_STR);
-    const handledRecordsKeySet = new Set(actual.map(r => `${r.employeeId}:${r.date}`));
+    const handledRecordsKeySet = new Set(actual.map(r => `${String(r.employeeId).trim()}:${r.date}`));
 
-    // Only generate missing items when viewing history for a specific month, avoiding memory & UI overflow
+    // Determine the date range to generate missing/virtual logs for (Absent, Weekly Off, Holiday, Leave)
+    let genStart = startOfMonth(now);
+    let genEnd = now;
+
     if (historyMonthFilter && historyMonthFilter !== 'all') {
       const [mmm, yy] = historyMonthFilter.toLowerCase().split('-');
       const shortMonths = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -395,56 +410,77 @@ interface BulkEditRow {
         const targetYear = 2000 + parseInt(yy);
         const startOfFilterMonth = new Date(targetYear, targetMonthIdx, 1);
         const lastDayOfFilterMonth = endOfMonth(startOfFilterMonth);
-        const generationEndDate = isBefore(lastDayOfFilterMonth, now) ? lastDayOfFilterMonth : now;
-        const generationStartDate = isBefore(startOfFilterMonth, projectStartDate) ? projectStartDate : startOfFilterMonth;
-
-        if (!isBefore(generationEndDate, generationStartDate)) {
-          const intervalDates = eachDayOfInterval({ 
-            start: generationStartDate, 
-            end: generationEndDate
-          }).map(d => format(d, "yyyy-MM-dd"));
-          
-          (employees || []).forEach(emp => {
-            if (userAssignedPlantIds) {
-              const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
-              if (!hasAccess) return;
-            }
-
-            intervalDates.forEach(dStr => {
-              if (!isEmployeeActiveOnDate(emp, dStr)) return;
-              const key = `${emp.employeeId}:${dStr}`;
-              
-              if (!handledRecordsKeySet.has(key)) {
-                const displayStatus = getCalculatedStatus(dStr, null, emp.employeeId);
-                const leave = approvedLeavesMap.get(`${emp.employeeId}:${dStr}`);
-                
-                let virtualItem: any = { 
-                  id: `v-abs-${emp.employeeId}-${dStr}`, 
-                  employeeId: emp.employeeId, 
-                  employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name, 
-                  date: dStr, 
-                  status: 'ABSENT', 
-                  displayStatus, 
-                  attendanceType: 'ABSENT', 
-                  approved: false, 
-                  dept: emp.department || "Operations", 
-                  desig: emp.designation || "Staff", 
-                  isVirtual: true, 
-                  hours: 0, 
-                  workingHourDisplay: "00:00",
-                  inTime: null,
-                  outTime: null,
-                  remark: null,
-                  leaveType: leave ? leave.purpose : "-",
-                  leaveStatus: leave ? "Approved" : "-",
-                };
-
-                missing.push(virtualItem as AttendanceItem);
-              }
-            });
-          });
-        }
+        genStart = isBefore(startOfFilterMonth, projectStartDate) ? projectStartDate : startOfFilterMonth;
+        genEnd = isBefore(lastDayOfFilterMonth, now) ? lastDayOfFilterMonth : lastDayOfFilterMonth;
       }
+    } else {
+      // Default: Last 45 days up to today
+      genStart = addDays(now, -45);
+      if (isBefore(genStart, projectStartDate)) genStart = projectStartDate;
+      genEnd = now;
+    }
+
+    if (selectedDateFilter) {
+      const dParsed = parseISO(selectedDateFilter);
+      if (isValid(dParsed)) {
+        if (isBefore(dParsed, genStart)) genStart = dParsed;
+        if (isAfter(dParsed, genEnd)) genEnd = dParsed;
+      }
+    }
+
+    if (!isBefore(genEnd, genStart)) {
+      const intervalDates = eachDayOfInterval({ 
+        start: startOfDay(genStart), 
+        end: startOfDay(genEnd)
+      }).map(d => format(d, "yyyy-MM-dd"));
+      
+      (employees || []).forEach(emp => {
+        if (userAssignedPlantIds) {
+          const hasAccess = (emp.unitIds || []).some((id: string) => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+          if (!hasAccess) return;
+        }
+
+        const empName = emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : (emp.name || emp.employeeId);
+        const empUnit = (plants || []).find(p => p.id === emp.unitId || (p as any)._id === emp.unitId || (emp.unitIds || []).includes(p.id) || (emp.unitIds || []).includes((p as any)._id))?.name || (authorizedPlants[0]?.name || "Salt Plant");
+
+        intervalDates.forEach(dStr => {
+          if (!isEmployeeActiveOnDate(emp, dStr)) return;
+          const cleanEmpId = String(emp.employeeId || '').trim();
+          const key = `${cleanEmpId}:${dStr}`;
+          
+          if (!handledRecordsKeySet.has(key)) {
+            const displayStatus = getCalculatedStatus(dStr, null, emp.employeeId);
+            const leave = approvedLeavesMap.get(`${cleanEmpId}:${dStr}`) || 
+                          approvedLeavesMap.get(`${cleanEmpId.toUpperCase()}:${dStr}`) || 
+                          approvedLeavesMap.get(`${cleanEmpId.replace(/\s/g, '')}:${dStr}`) ||
+                          approvedLeavesMap.get(`${emp.employeeId}:${dStr}`);
+            
+            let virtualItem: any = { 
+              id: `v-abs-${emp.employeeId}-${dStr}`, 
+              employeeId: emp.employeeId, 
+              employeeName: empName, 
+              date: dStr, 
+              status: displayStatus === 'Present' ? 'PRESENT' : (displayStatus === 'Weekly Off' ? 'Weekly Off' : (displayStatus === 'Holiday' ? 'Holiday' : (displayStatus === 'Absent on Leave' ? 'Leave' : 'ABSENT'))), 
+              displayStatus, 
+              attendanceType: displayStatus, 
+              inPlant: empUnit,
+              approved: false, 
+              dept: emp.department || "Operations", 
+              desig: emp.designation || "Staff", 
+              isVirtual: true, 
+              hours: 0, 
+              workingHourDisplay: "00:00",
+              inTime: null,
+              outTime: null,
+              remark: displayStatus === 'Absent on Leave' && leave ? `Approved Leave (${leave.purpose || 'Leave'})` : (displayStatus === 'Weekly Off' ? 'Weekly Off' : (displayStatus === 'Holiday' ? 'Holiday' : null)),
+              leaveType: leave ? leave.purpose : "-",
+              leaveStatus: leave ? "Approved" : "-",
+            };
+
+            missing.push(virtualItem as AttendanceItem);
+          }
+        });
+      });
     }
 
     let combined = [...actual, ...missing];
@@ -475,17 +511,15 @@ interface BulkEditRow {
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
-      // Pending Approvals must ONLY display actual employee submissions requiring approval (not virtual absent rows)
-      if (rec.isVirtual) return false;
-      const matchesApproval = !rec.approved;
+      if (rec.approved) return false;
       const matchesStatus = selectedStatusFilter === "ALL" ? true : rec.displayStatus === selectedStatusFilter;
-      return matchesApproval && matchesStatus;
-    }).sort((a, b) => b.date.localeCompare(a.date));
+      return matchesStatus;
+    }).sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
   }, [allAttendanceList, selectedStatusFilter]);
 
   const historyAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
-      const matchesApproval = rec.approved;
+      const matchesApproval = rec.approved || rec.isVirtual;
       if (!matchesApproval) return false;
       
       if (historyMonthFilter && historyMonthFilter !== 'all') {
