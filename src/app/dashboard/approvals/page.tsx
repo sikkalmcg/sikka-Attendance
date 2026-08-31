@@ -327,7 +327,7 @@ interface BulkEditRow {
       if (emp.aadhaarNumber) employeeMap.set(String(emp.aadhaarNumber).replace(/\s/g, ''), emp);
       if (emp.mobile) employeeMap.set(String(emp.mobile).replace(/\s/g, ''), emp);
       if (emp.mobileNumber) employeeMap.set(String(emp.mobileNumber).replace(/\s/g, ''), emp);
-      if (emp.username) employeeMap.set(String(emp.username).trim(), emp);
+      if ((emp as any).username) employeeMap.set(String((emp as any).username).trim(), emp);
       if (emp.name) employeeMap.set(String(emp.name).trim().toUpperCase(), emp);
       const fullName = emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim().toUpperCase() : '';
       if (fullName) employeeMap.set(fullName, emp);
@@ -921,14 +921,18 @@ const allPlantExitHistory = useMemo(() => {
     return address || "Location Not Available";
   };
 
+  const getISTTime = () => {
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  };
+
   const handleOpenEditModal = (rec: AttendanceItem) => {
     setSelectedAttendance(rec);
     setEditData({
       plant: rec.inPlant || (authorizedPlants[0]?.name || "Salt Plant"),
-      inDate: rec.inDate || rec.date,
-      inTime: rec.inTime || "09:00",
-      outDate: rec.outDate || rec.date,
-      outTime: rec.outTime || "18:00",
+      inDate: rec.inDate || rec.date || "",
+      inTime: rec.inTime || "",
+      outDate: rec.outDate || "",
+      outTime: rec.outTime || "",
       remark: rec.remark || ""
     });
     setIsEditModalOpen(true);
@@ -937,109 +941,209 @@ const allPlantExitHistory = useMemo(() => {
   const handleUpdateAttendance = async () => {
     if (!selectedAttendance) return;
 
-    if (!editData.plant || !editData.inDate || !editData.inTime || !editData.outDate || !editData.outTime || !editData.remark.trim()) {
-      toast({ variant: "destructive", title: "Incomplete Form", description: "All fields including modification remarks are mandatory." });
+    // 1. Mandatory IN Date & IN Time
+    if (!editData.inDate || !editData.inDate.trim() || !editData.inTime || !editData.inTime.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Mandatory Fields Missing",
+        description: "IN Date and IN Time are mandatory."
+      });
+      return;
+    }
+
+    // 2. Remark / Reason is mandatory
+    if (!editData.remark || !editData.remark.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Remark Required",
+        description: "Please enter a remark/reason before saving changes."
+      });
       return;
     }
 
     if (editData.remark.trim().length < 3) {
-      toast({ variant: "destructive", title: "Invalid Remark", description: "Please enter a valid descriptive adjustment audit remark." });
+      toast({
+        variant: "destructive",
+        title: "Invalid Remark",
+        description: "Please enter a valid descriptive adjustment audit remark."
+      });
       return;
     }
 
-    const recId = selectedAttendance.id || (selectedAttendance as any)._id || `${selectedAttendance.employeeId}:${selectedAttendance.date}`;
+    // 3. OUT Date/Time partial check
+    const hasOutDate = Boolean(editData.outDate && editData.outDate.trim());
+    const hasOutTime = Boolean(editData.outTime && editData.outTime.trim());
 
-    const finalInDate = editData.inDate;
-    const finalInTime = editData.inTime;
-    const finalOutDate = editData.outDate;
-    const finalOutTime = editData.outTime;
+    if (hasOutDate !== hasOutTime) {
+      toast({
+        variant: "destructive",
+        title: "Incomplete OUT Entry",
+        description: "Both OUT Date and OUT Time must be provided if OUT is entered."
+      });
+      return;
+    }
+
+    const hasOut = hasOutDate && hasOutTime;
+
+    // 4. Current Server Time in Asia/Kolkata (IST)
+    const nowIST = getISTTime();
+    const todayISTStr = format(nowIST, "yyyy-MM-dd");
+    const nowISTTimeStr = format(nowIST, "HH:mm");
+
+    const finalInDate = editData.inDate.trim();
+    const finalInTime = editData.inTime.trim();
+
+    // IN Future Date Check
+    if (finalInDate > todayISTStr) {
+      toast({
+        variant: "destructive",
+        title: "Future Date Not Allowed",
+        description: "Future date and time are not allowed. Please select the current or a previous date and time."
+      });
+      return;
+    }
+
+    // IN Future Time Check (if IN Date is today)
+    if (finalInDate === todayISTStr && finalInTime > nowISTTimeStr) {
+      toast({
+        variant: "destructive",
+        title: "Future Time Not Allowed",
+        description: "Future date and time are not allowed. Please select the current or a previous date and time."
+      });
+      return;
+    }
 
     const inDT = parseISO(`${finalInDate}T${finalInTime}:00`);
-    const outDT = parseISO(`${finalOutDate}T${finalOutTime}:00`);
-
-    if (!isValid(inDT) || !isValid(outDT)) {
-      toast({ variant: "destructive", title: "Invalid Timestamps", description: "Provided date or time formatting strings broken." });
-      return;
-    }
-
-    if (isBefore(outDT, inDT)) {
-      toast({ 
-        variant: "destructive", 
-        title: "Chronology Error", 
-        description: "OUT session checkpoint cannot exist before the IN session checkpoint." 
+    if (!isValid(inDT)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid IN Timestamp",
+        description: "Provided IN date or time formatting is invalid."
       });
       return;
     }
 
-    let calculatedHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-    
-    if (calculatedHours <= 0) {
-      toast({ 
-        variant: "destructive", 
-        title: "Zero Duration Conflict", 
-        description: "OUT time must be later than IN time to calculate valid shift sessions." 
-      });
-      return;
+    let outDT: Date | null = null;
+    let finalOutDate: string | null = null;
+    let finalOutTime: string | null = null;
+    let calculatedHours = 0;
+
+    if (hasOut) {
+      finalOutDate = editData.outDate.trim();
+      finalOutTime = editData.outTime.trim();
+
+      // OUT Future Date Check
+      if (finalOutDate > todayISTStr) {
+        toast({
+          variant: "destructive",
+          title: "Future Date Not Allowed",
+          description: "Future date and time are not allowed. Please select the current or a previous date and time."
+        });
+        return;
+      }
+
+      // OUT Future Time Check (if OUT Date is today)
+      if (finalOutDate === todayISTStr && finalOutTime > nowISTTimeStr) {
+        toast({
+          variant: "destructive",
+          title: "Future Time Not Allowed",
+          description: "Future date and time are not allowed. Please select the current or a previous date and time."
+        });
+        return;
+      }
+
+      outDT = parseISO(`${finalOutDate}T${finalOutTime}:00`);
+      if (!isValid(outDT)) {
+        toast({
+          variant: "destructive",
+          title: "Invalid OUT Timestamp",
+          description: "Provided OUT date or time formatting is invalid."
+        });
+        return;
+      }
+
+      // OUT cannot be earlier than IN
+      if (isBefore(outDT, inDT)) {
+        toast({
+          variant: "destructive",
+          title: "Chronology Error",
+          description: "OUT date and time cannot be earlier than IN date and time."
+        });
+        return;
+      }
+
+      calculatedHours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
+      calculatedHours = parseFloat(calculatedHours.toFixed(2));
     }
 
-    const modifierName = verifiedUser?.fullName || "HR_ADMIN";
+    const modifierId = verifiedUser?.username || verifiedUser?.id || "ADMIN";
+    const modifierName = verifiedUser?.fullName || verifiedUser?.name || "HR_ADMIN";
     const rawId = selectedAttendance.id || (selectedAttendance as any)._id || '';
     const finalDbId = rawId && !String(rawId).startsWith('v-') ? String(rawId) : '';
+    const recId = finalDbId || `${selectedAttendance.employeeId}:${selectedAttendance.date}`;
 
     setIsUpdatingAttendanceId(recId);
+
+    const prevInDTStr = (selectedAttendance as any).inDateTime || (selectedAttendance.inDate && selectedAttendance.inTime ? `${selectedAttendance.inDate}T${selectedAttendance.inTime}:00` : (selectedAttendance.date && selectedAttendance.inTime ? `${selectedAttendance.date}T${selectedAttendance.inTime}:00` : null));
+    const prevOutDTStr = (selectedAttendance as any).outDateTime || (selectedAttendance.outDate && selectedAttendance.outTime ? `${selectedAttendance.outDate}T${selectedAttendance.outTime}:00` : null);
+
+    const updatePayload: any = {
+      employeeId: selectedAttendance.employeeId,
+      employeeName: selectedAttendance.employeeName,
+      date: finalInDate,
+      inPlant: editData.plant || (authorizedPlants[0]?.name || "Salt Plant"),
+      inDate: finalInDate,
+      inTime: finalInTime,
+      inDateTime: inDT.toISOString(),
+      outDate: hasOut ? finalOutDate : null,
+      outTime: hasOut ? finalOutTime : null,
+      outDateTime: hasOut && outDT ? outDT.toISOString() : null,
+      hours: calculatedHours,
+      status: hasOut ? 'PRESENT' : 'Open',
+      attendanceType: selectedAttendance.attendanceType || 'Plant Attendance',
+      remark: editData.remark.trim(),
+      updatedAt: new Date().toISOString(),
+      // Audit Information
+      editedBy: modifierId,
+      editedByName: modifierName,
+      editedAt: new Date().toISOString(),
+      editReason: editData.remark.trim(),
+      previousInDateTime: prevInDTStr,
+      previousOutDateTime: prevOutDTStr,
+      newInDateTime: inDT.toISOString(),
+      newOutDateTime: hasOut && outDT ? outDT.toISOString() : null,
+      previousInTime: selectedAttendance.inTime || null,
+      previousOutTime: selectedAttendance.outTime || null,
+      previousHours: selectedAttendance.hours || 0,
+      previousDate: selectedAttendance.date,
+    };
 
     try {
       if (selectedAttendance.isVirtual || !finalDbId) {
         await addRecord('attendance', {
-          inPlant: editData.plant,
-          inDate: finalInDate,
-          inTime: finalInTime,
-          outDate: finalOutDate,
-          outTime: finalOutTime,
-          hours: calculatedHours,
-          remark: editData.remark,
-          employeeId: selectedAttendance.employeeId,
-          employeeName: selectedAttendance.employeeName,
-          date: selectedAttendance.date,
-          status: 'PRESENT',
-          attendanceType: 'OFFICE',
+          ...updatePayload,
           approved: false,
           address: 'Manually Created Log',
           unapprovedOutDuration: 0,
-          editedBy: modifierName,
-          editedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         });
       } else {
-        await updateRecord('attendance', finalDbId, {
-          employeeId: selectedAttendance.employeeId,
-          date: selectedAttendance.date,
-          inPlant: editData.plant,
-          inDate: finalInDate,
-          inTime: finalInTime,
-          outDate: finalOutDate,
-          outTime: finalOutTime,
-          hours: calculatedHours,
-          status: 'PRESENT',
-          remark: editData.remark,
-          editedBy: modifierName,
-          editedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          // Audit trail: snapshot of previous values
-          previousInTime: selectedAttendance.inTime || null,
-          previousOutTime: selectedAttendance.outTime || null,
-          previousHours: selectedAttendance.hours || 0,
-          previousDate: selectedAttendance.date,
-        });
+        await updateRecord('attendance', finalDbId, updatePayload);
       }
 
       setIsEditModalOpen(false);
       setSelectedAttendance(null);
       await refreshData();
-      toast({ title: "Attendance Entry Verified & Updated" });
-    } catch (e) {
+      toast({
+        title: "Attendance Record Updated",
+        description: hasOut ? "Attendance entry verified and saved with IN/OUT checkpoints." : "Attendance IN record saved. Active session created for employee."
+      });
+    } catch (e: any) {
       console.error("Edit attendance error:", e);
-      toast({ variant: "destructive", title: "Update Failed", description: "Could not save to database. Please try again." });
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: e?.message || "Could not save to database. Please try again."
+      });
     } finally {
       setIsUpdatingAttendanceId(null);
     }
@@ -2088,23 +2192,47 @@ const allPlantExitHistory = useMemo(() => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Date</Label>
-                <Input type="date" value={editData.inDate} onChange={(e) => setEditData(prev => ({ ...prev, inDate: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Date *</Label>
+                <Input 
+                  type="date" 
+                  max={format(getISTTime(), "yyyy-MM-dd")} 
+                  value={editData.inDate} 
+                  onChange={(e) => setEditData(prev => ({ ...prev, inDate: e.target.value }))} 
+                  className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" 
+                  required
+                />
               </div>
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Time</Label>
-                <Input type="time" value={editData.inTime} onChange={(e) => setEditData(prev => ({ ...prev, inTime: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">IN Time *</Label>
+                <Input 
+                  type="time" 
+                  value={editData.inTime} 
+                  onChange={(e) => setEditData(prev => ({ ...prev, inTime: e.target.value }))} 
+                  className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" 
+                  required
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Date</Label>
-                <Input type="date" value={editData.outDate} onChange={(e) => setEditData(prev => ({ ...prev, outDate: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Date (Optional)</Label>
+                <Input 
+                  type="date" 
+                  max={format(getISTTime(), "yyyy-MM-dd")} 
+                  value={editData.outDate} 
+                  onChange={(e) => setEditData(prev => ({ ...prev, outDate: e.target.value }))} 
+                  className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" 
+                />
               </div>
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Time</Label>
-                <Input type="time" value={editData.outTime} onChange={(e) => setEditData(prev => ({ ...prev, outTime: e.target.value }))} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" />
+                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">OUT Time (Optional)</Label>
+                <Input 
+                  type="time" 
+                  value={editData.outTime} 
+                  onChange={(e) => setEditData(prev => ({ ...prev, outTime: e.target.value }))} 
+                  className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" 
+                />
               </div>
             </div>
 

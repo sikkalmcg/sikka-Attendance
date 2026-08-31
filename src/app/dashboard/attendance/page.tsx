@@ -848,8 +848,8 @@ export default function AttendancePage() {
     let nextOutAt: Date | null = null;
 
     if (active && inDT && isValid(inDT)) {
-      nextOutAt = addHours(inDT, 2);
-      canOut = !isAfter(nextOutAt, now);
+      canOut = !isAfter(inDT, now);
+      nextOutAt = inDT;
     }
 
     let stale = false;

@@ -4,10 +4,73 @@ import { ObjectId } from 'mongodb';
 import { getSessionUser } from '@/lib/auth/session';
 import { invalidateBootstrapCache, updateCachedCollection } from '@/lib/data-cache';
 import { realtimeBroadcaster } from '@/lib/realtime-events';
+import { format, parseISO, isValid, isBefore } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
+
+function validateAttendancePayload(payload: any) {
+  const inDate = (payload.inDate || payload.date || "").trim();
+  const inTime = (payload.inTime || "").trim();
+
+  // If this update doesn't touch attendance timestamps (e.g. only approving or status flag without modifying inTime), skip
+  if (!inDate && !inTime && (payload.approved !== undefined || payload.exitEvents !== undefined || payload.currentGeofenceStatus !== undefined)) {
+    return { valid: true };
+  }
+
+  if (!inDate || !inTime) {
+    return { valid: false, error: "IN Date and IN Time are mandatory." };
+  }
+
+  // Server time in Asia/Kolkata (IST)
+  const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  const todayISTStr = format(nowIST, "yyyy-MM-dd");
+  const nowISTTimeStr = format(nowIST, "HH:mm");
+
+  // Check IN Date/Time future restriction
+  if (inDate > todayISTStr) {
+    return { valid: false, error: "Future date and time are not allowed. Please select the current or a previous date and time." };
+  }
+
+  if (inDate === todayISTStr && inTime > nowISTTimeStr) {
+    return { valid: false, error: "Future date and time are not allowed. Please select the current or a previous date and time." };
+  }
+
+  const inDT = parseISO(`${inDate}T${inTime}:00`);
+  if (!isValid(inDT)) {
+    return { valid: false, error: "Invalid IN Date or Time format." };
+  }
+
+  // OUT Date & Time validation (if provided)
+  const outDate = (payload.outDate || "").trim();
+  const outTime = (payload.outTime || "").trim();
+
+  if (outDate || outTime) {
+    if (!outDate || !outTime) {
+      return { valid: false, error: "Both OUT Date and OUT Time must be provided if OUT is entered." };
+    }
+
+    if (outDate > todayISTStr) {
+      return { valid: false, error: "Future date and time are not allowed. Please select the current or a previous date and time." };
+    }
+
+    if (outDate === todayISTStr && outTime > nowISTTimeStr) {
+      return { valid: false, error: "Future date and time are not allowed. Please select the current or a previous date and time." };
+    }
+
+    const outDT = parseISO(`${outDate}T${outTime}:00`);
+    if (!isValid(outDT)) {
+      return { valid: false, error: "Invalid OUT Date or Time format." };
+    }
+
+    if (isBefore(outDT, inDT)) {
+      return { valid: false, error: "OUT date and time cannot be earlier than IN date and time." };
+    }
+  }
+
+  return { valid: true };
+}
 
 // 1. GET HANDLER: Saari collections ka data read karne ke liye
 export async function GET(
@@ -52,10 +115,15 @@ export async function POST(
 
     if (collection === 'attendance') {
       const employeeId = body?.employeeId;
-      const date = body?.date;
+      const date = body?.date || body?.inDate;
 
       if (!employeeId || !date) {
         return NextResponse.json({ error: 'Missing employeeId/date for attendance upsert' }, { status: 400 });
+      }
+
+      const validation = validateAttendancePayload(body);
+      if (!validation.valid) {
+        return NextResponse.json({ error: validation.error, message: validation.error }, { status: 400 });
       }
 
       const attendanceCol = db.collection(collection);
@@ -121,6 +189,13 @@ export async function PUT(
 
     const body = await req.json();
     const db = await getDb();
+
+    if (collection === 'attendance') {
+      const validation = validateAttendancePayload(body);
+      if (!validation.valid) {
+        return NextResponse.json({ error: validation.error, message: validation.error }, { status: 400 });
+      }
+    }
 
     const updateData = { ...body };
     delete updateData._id;
