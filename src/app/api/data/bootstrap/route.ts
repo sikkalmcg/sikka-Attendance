@@ -20,16 +20,21 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const forceRefresh = searchParams.get('refresh') === 'true';
 
-    // Resolve session user for notification filtering
+    // Resolve session user for notification & query filtering
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('sikka_session')?.value;
     let sessionUser: any = null;
     if (sessionCookie) {
       try { sessionUser = JSON.parse(sessionCookie); } catch {}
     }
-    const sessionRole = String(sessionUser?.role || '').toUpperCase();
+
+    // Header/Query fallback if cookie is absent
+    const roleParam = searchParams.get('role') || req.headers.get('x-user-role');
+    const empIdParam = searchParams.get('empId') || req.headers.get('x-employee-id');
+
+    const sessionRole = String(sessionUser?.role || roleParam || '').toUpperCase();
     const isAdmin = ADMIN_ROLES.includes(sessionRole);
-    const sessionEmpId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || '';
+    const sessionEmpId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || empIdParam || '';
 
     const db = await getDb();
     if (!db) {
@@ -82,7 +87,7 @@ export async function GET(req: Request) {
       };
     }
 
-    // Fetch all collections in parallel
+    // Fetch all collections in parallel without arbitrary truncation
     const [
       employees,
       attendance,
@@ -96,15 +101,15 @@ export async function GET(req: Request) {
       payroll,
     ] = await Promise.all([
       db.collection('employees').find({}).toArray().catch(() => []),
-      db.collection('attendance').find(attendanceQuery).sort({ date: -1 }).limit(isAdmin ? 3000 : 1000).toArray().catch(() => []),
+      db.collection('attendance').find(attendanceQuery).sort({ date: -1 }).toArray().catch(() => []),
       db.collection('plants').find({}).toArray().catch(() => []),
       db.collection('holidays').find({}).toArray().catch(() => []),
-      db.collection('leaveRequests').find({}).sort({ createdAt: -1, fromDate: -1 }).limit(isAdmin ? 500 : 200).toArray().catch(() => []),
+      db.collection('leaveRequests').find({}).sort({ createdAt: -1, fromDate: -1 }).toArray().catch(() => []),
       db.collection('notifications').find(notificationQuery).sort({ createdAt: -1, timestamp: -1, _id: -1 }).limit(isAdmin ? 200 : 100).toArray().catch(() => []),
-      db.collection('vouchers').find({}).sort({ date: -1 }).limit(isAdmin ? 500 : 100).toArray().catch(() => []),
+      db.collection('vouchers').find({}).sort({ date: -1 }).toArray().catch(() => []),
       db.collection('firms').find({}).toArray().catch(() => []),
       db.collection('users').find({}).toArray().catch(() => []),
-      db.collection('payroll').find({}).sort({ createdAt: -1 }).limit(isAdmin ? 500 : 100).toArray().catch(() => []),
+      db.collection('payroll').find({}).sort({ createdAt: -1 }).toArray().catch(() => []),
     ]);
 
     const payload = {

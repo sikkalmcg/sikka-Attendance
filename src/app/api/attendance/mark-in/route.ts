@@ -3,6 +3,7 @@ import { getDb } from '@/lib/mongodb';
 import { getSessionUser, isEmployeeRole } from '@/lib/auth/session';
 import { format } from 'date-fns';
 import { invalidateBootstrapCache } from '@/lib/data-cache';
+import { realtimeBroadcaster } from '@/lib/realtime-events';
 
 export const dynamic = 'force-dynamic';
 
@@ -227,6 +228,7 @@ export async function POST(req: Request) {
 
     const result = await attendanceCol.insertOne(newAttendanceRecord);
     const recordId = result.insertedId;
+    const savedRecord = { ...newAttendanceRecord, id: String(recordId), _id: String(recordId) };
 
     // 6. Record in Notifications collection
     const notifMsg = `${empFullName} – Mark IN Recorded (Session ${sessionIndex}) | Time: ${timeStr} | ${finalPlant}`;
@@ -241,12 +243,20 @@ export async function POST(req: Request) {
 
     invalidateBootstrapCache();
 
+    // 7. Broadcast real-time event AFTER confirmed MongoDB save
+    //    This triggers SSE push to all connected clients (Mark Attendance + Approvals pages)
+    realtimeBroadcaster.broadcast('attendance_updated', {
+      collection: 'attendance',
+      action: 'insert',
+      data: savedRecord,
+    });
+
     return NextResponse.json(
       {
         success: true,
         message: `Attendance Marked IN Successfully! (Session ${sessionIndex} of 2)`,
         id: recordId,
-        data: { ...newAttendanceRecord, id: String(recordId), _id: String(recordId) },
+        data: savedRecord,
       },
       { status: 200 }
     );

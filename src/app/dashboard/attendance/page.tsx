@@ -1151,43 +1151,42 @@ export default function AttendancePage() {
       });
 
       if (response.ok) {
+        // MongoDB confirmed the save — update UI from fresh server data
         setSelectedType("");
         setActiveDialog("NONE");
         toast({ title: `Mark IN Successful (Session ${nextSessionIndex} of 2)`, description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
         await refreshData();
+
+        const notifMsg = `${effectiveEmployeeName} – Mark IN Recorded (Session ${nextSessionIndex}) | Time: ${timeStr} | ${detectedPlant ? plantName : attendanceType}`;
+        postNativeNotification(
+          "Mark IN Successful",
+          notifMsg,
+          "MARK_IN",
+          effectiveEmployeeId,
+          "EMPLOYEE"
+        );
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: "Mark IN Successful",
+            message: notifMsg,
+            type: 'MARK_IN',
+            employeeId: effectiveEmployeeId,
+            targetRole: 'EMPLOYEE'
+          })
+        }).catch((err) => console.warn("Push notification deferred:", err));
       } else {
+        // Always treat non-OK as a hard failure — never fall through to a local-only record.
+        // MongoDB has not confirmed the save, so we must not show a success state.
         const errData = await response.json().catch(() => ({}));
-        if (errData?.message) {
-          toast({ variant: "destructive", title: "Mark IN Failed", description: errData.message });
-          return;
-        }
-        await addRecord('attendance', newRecordData);
-        setSelectedType("");
-        setActiveDialog("NONE");
-        toast({ title: `Mark IN Successful (Session ${nextSessionIndex} of 2)`, description: detectedPlant ? `Welcome back to ${plantName}` : `Logged as ${attendanceType}` });
+        toast({
+          variant: "destructive",
+          title: "Mark IN Failed",
+          description: errData?.message || "Server rejected the request. Please try again.",
+        });
+        return;
       }
-
-      const notifMsg = `${effectiveEmployeeName} – Mark IN Recorded (Session ${nextSessionIndex}) | Time: ${timeStr} | ${detectedPlant ? plantName : attendanceType}`;
-      postNativeNotification(
-        "Mark IN Successful",
-        notifMsg,
-        "MARK_IN",
-        effectiveEmployeeId,
-        "EMPLOYEE"
-      );
-
-      fetch('/api/notifications/send-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: "Mark IN Successful",
-          message: notifMsg,
-          type: 'MARK_IN',
-          employeeId: effectiveEmployeeId,
-          targetRole: 'EMPLOYEE'
-        })
-      }).catch((err) => console.warn("Push notification deferred:", err));
-
     } catch (e) {
       console.error("Check-in error:", e);
       toast({ variant: "destructive", title: "Error", description: "Failed to process database entry register log." });
@@ -1309,35 +1308,41 @@ export default function AttendancePage() {
       });
 
       if (response.ok) {
+        // MongoDB confirmed the save — update UI from fresh server data
         setActiveDialog("NONE");
         toast({ title: `Mark OUT Successful (Session ${sessionIdx})`, description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
         await refreshData();
+
+        const notifMsg = `${effectiveEmployeeName} – Mark OUT Recorded (Session ${sessionIdx}) | Time: ${format(outDT, "HH:mm")} | Worked: ${formatHoursToHHMM(finalHours)}`;
+        postNativeNotification(
+          "Mark OUT Successful",
+          notifMsg,
+          "MARK_OUT",
+          effectiveEmployeeId,
+          "EMPLOYEE"
+        );
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: "Mark OUT Successful",
+            message: notifMsg,
+            type: 'MARK_OUT',
+            employeeId: effectiveEmployeeId,
+            targetRole: 'EMPLOYEE'
+          })
+        }).catch((err) => console.warn("Push notification deferred:", err));
       } else {
-        await updateRecord('attendance', recordId, outPayload);
-        setActiveDialog("NONE");
-        toast({ title: `Mark OUT Successful (Session ${sessionIdx})`, description: `Shift completed. Hours: ${formatHoursToHHMM(finalHours)}` });
+        // Always treat non-OK as a hard failure — never fall through to a local-only update.
+        // MongoDB has not confirmed the save, so we must not show a success state.
+        const errData = await response.json().catch(() => ({}));
+        toast({
+          variant: "destructive",
+          title: "Mark OUT Failed",
+          description: errData?.message || "Server rejected the request. Please try again.",
+        });
+        return;
       }
-
-      const notifMsg = `${effectiveEmployeeName} – Mark OUT Recorded (Session ${sessionIdx}) | Time: ${format(outDT, "HH:mm")} | Worked: ${formatHoursToHHMM(finalHours)}`;
-      postNativeNotification(
-        "Mark OUT Successful",
-        notifMsg,
-        "MARK_OUT",
-        effectiveEmployeeId,
-        "EMPLOYEE"
-      );
-
-      fetch('/api/notifications/send-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: "Mark OUT Successful",
-          message: notifMsg,
-          type: 'MARK_OUT',
-          employeeId: effectiveEmployeeId,
-          targetRole: 'EMPLOYEE'
-        })
-      }).catch((err) => console.warn("Push notification deferred:", err));
 
     } catch (e) {
       console.error("Check-out error:", e);
@@ -1373,45 +1378,31 @@ export default function AttendancePage() {
     const thresholdHours = sessionIdx === 2 ? 8 : 16;
     const creditedHours = sessionIdx === 2 ? 4.0 : 8.0;
 
-    const creditOutDT = addHours(inDT, creditedHours);
-    const finalOutDate = format(creditOutDT, "yyyy-MM-dd");
-    const finalOutTime = format(creditOutDT, "HH:mm");
-
-    const recordId = activeRecord.id || (activeRecord as any)._id;
-    if (!recordId) return;
-
     setIsMutatingAttendance(true);
     try {
-      await updateRecord('attendance', recordId, {
-        outTime: finalOutTime,
-        outDate: finalOutDate,
-        outDateTime: creditOutDT.toISOString(),
-        hours: creditedHours,
-        status: 'Auto OUT',
-        outType: 'Auto',
-        latOut: lat,
-        lngOut: lng,
-        addressOut: address || "",
-        streetOut: components.street || "Unknown Street",
-        areaOut: components.area || "Unknown Area",
-        cityOut: components.city || "NCR",
-        stateOut: components.state || "Uttar Pradesh",
-        pincodeOut: components.pincode || "N/A",
-        outPlant: plant ? plant.name : "N/A",
-        autoCheckout: true,
-        autoOut: true,
-        autoTriggerTime: getISTTime().toISOString(),
-        nextInEnableTime: addHours(getISTTime(), 1).toISOString(),
-        remark: `System Auto-Logged OUT (${thresholdHours}h Limit reached for Session ${sessionIdx}); Credited ${creditedHours}h fixed working time.`
-      });
+      // Route through the dedicated auto-mark-out API.
+      // This ensures: business rules are enforced, MongoDB is written atomically,
+      // and realtimeBroadcaster fires AFTER the confirmed save.
+      const res = await fetch('/api/attendance/auto-mark-out', { method: 'POST' });
 
-      await addRecord('notifications', {
-        message: `${effectiveEmployeeName} – AUTO OUT Processed (Session ${sessionIdx}) | Recorded OUT: ${format(creditOutDT, "dd-MMM HH:mm")} | Credited: ${creditedHours} hrs`,
-        timestamp: format(getISTTime(), "yyyy-MM-dd HH:mm:ss"),
-        read: false,
-        type: 'AUTO_OUT',
-        employeeId: effectiveEmployeeId
-      });
+      if (!res.ok) {
+        // Graceful degradation: if the dedicated API is unavailable, fall back to
+        // a direct generic update so the employee isn't left with a stuck shift.
+        const creditOutDT = addHours(inDT, creditedHours);
+        await updateRecord('attendance', activeRecord.id || (activeRecord as any)._id, {
+          outTime: format(creditOutDT, "HH:mm"),
+          outDate: format(creditOutDT, "yyyy-MM-dd"),
+          outDateTime: creditOutDT.toISOString(),
+          hours: creditedHours,
+          status: 'Auto OUT',
+          outType: 'Auto',
+          autoCheckout: true,
+          autoOut: true,
+          autoTriggerTime: getISTTime().toISOString(),
+          nextInEnableTime: addHours(getISTTime(), 1).toISOString(),
+          remark: `System Auto-Logged OUT (${thresholdHours}h Limit reached for Session ${sessionIdx}); Credited ${creditedHours}h fixed working time.`
+        });
+      }
 
       toast({
         title: "Auto OUT Triggered",

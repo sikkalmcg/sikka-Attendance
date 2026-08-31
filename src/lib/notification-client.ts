@@ -357,3 +357,42 @@ export async function sendTestNotification(user: any): Promise<boolean> {
     return true;
   }
 }
+
+/**
+ * Periodically or on user activity, sends a lightweight heartbeat to MongoDB
+ * updating lastActiveAt, lastHeartbeatAt, and current permission states.
+ */
+let lastHeartbeatTime = 0;
+export async function sendDeviceHeartbeat(user: any): Promise<boolean> {
+  try {
+    const now = Date.now();
+    // Throttle heartbeat to once every 2 minutes max on client
+    if (now - lastHeartbeatTime < 2 * 60 * 1000) {
+      return true;
+    }
+    lastHeartbeatTime = now;
+
+    const deviceId = getOrCreateDeviceId();
+    const employeeId = user?.employeeId || user?.username || user?.id || '';
+    const permissionStatus = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+
+    if (!employeeId && !deviceId) return false;
+
+    const res = await fetch('/api/device-registry/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employeeId,
+        deviceId,
+        notificationPermission: permissionStatus,
+        locationPermission: 'granted',
+      }),
+    });
+
+    return res.ok;
+  } catch (e) {
+    // Non-blocking error
+    return false;
+  }
+}
+

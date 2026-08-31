@@ -19,16 +19,24 @@ export async function POST(req: Request) {
       designation = '',
       deviceId = '',
       deviceName = '',
-      platform = '',
+      platform = 'Android',
+      manufacturer = '',
+      model = '',
+      osVersion = '',
+      appVersion = '1.0.0',
       pushSubscription = null,
       subscription = null,
-      notificationPermission = 'granted',
-      deviceStatus = 'ACTIVE',
+      fcmToken = '',
       token = '',
+      notificationPermission = 'granted',
+      locationPermission = 'granted',
+      backgroundEnabled = true,
+      deviceStatus = 'ACTIVE',
     } = body;
 
     const resolvedPushSub = pushSubscription || subscription || null;
-    const resolvedDeviceId = String(deviceId || token || '').trim() || `device_${Date.now()}`;
+    const resolvedFcm = String(fcmToken || token || resolvedPushSub?.endpoint || '').trim();
+    const resolvedDeviceId = String(deviceId || resolvedFcm || '').trim() || `device_${Date.now()}`;
     let cleanEmpId = String(employeeId || '').trim();
 
     const db = await getDb();
@@ -36,7 +44,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Database unavailable' }, { status: 503 });
     }
 
-    // 1. Enrich missing employee metadata from MongoDB `employees` or `users` collection
+    // 1. Resolve employee canonical ID and details from MongoDB `employees` or `users`
     let resolvedName = employeeName;
     let resolvedRole = role;
     let resolvedDept = department;
@@ -86,31 +94,54 @@ export async function POST(req: Request) {
     const now = new Date();
     const nowIso = now.toISOString();
 
+    const calculatedDeviceName =
+      deviceName ||
+      (model ? `${manufacturer || ''} ${model}`.trim() : '') ||
+      (platform === 'android' || platform === 'Android' ? 'Android Device' : 'Authorized Web Node');
+
     const deviceDoc: any = {
       employeeId: cleanEmpId,
       employeeName: resolvedName,
       role: String(resolvedRole).toUpperCase(),
       department: resolvedDept,
       designation: resolvedDesig,
+
       deviceId: resolvedDeviceId,
-      deviceName: deviceName || 'Web Browser',
-      platform: platform || 'web',
+      fcmToken: resolvedFcm || resolvedDeviceId,
+      token: resolvedFcm || resolvedDeviceId,
+      deviceToken: resolvedFcm || resolvedDeviceId,
+
+      platform: platform || 'Android',
+      manufacturer: manufacturer || '',
+      model: model || '',
+      osVersion: osVersion || '',
+      appVersion: appVersion || '1.0.0',
+      deviceName: calculatedDeviceName,
+
       pushSubscription: resolvedPushSub,
-      subscription: resolvedPushSub, // legacy alias compatibility
-      token: resolvedDeviceId, // token alias
-      deviceToken: resolvedDeviceId,
+      subscription: resolvedPushSub,
+
       notificationPermission: notificationPermission || 'granted',
+      locationPermission: locationPermission || 'granted',
+      backgroundEnabled: backgroundEnabled ?? true,
+
       deviceStatus: deviceStatus || 'ACTIVE',
+      status: deviceStatus || 'ACTIVE',
       isActive: deviceStatus !== 'INACTIVE',
       active: deviceStatus !== 'INACTIVE',
-      lastTokenUpdated: nowIso,
+
       lastTokenUpdatedAt: nowIso,
+      lastTokenUpdated: nowIso,
       lastActiveAt: nowIso,
+      lastHeartbeatAt: nowIso,
       updatedAt: nowIso,
     };
 
-    // 2. Query filter: Find if device already exists for this deviceId OR this subscription endpoint
-    const orFilters: any[] = [{ deviceId: resolvedDeviceId }, { token: resolvedDeviceId }];
+    // 2. Query filter: Find if device already exists for this deviceId or fcmToken
+    const orFilters: any[] = [{ deviceId: resolvedDeviceId }];
+    if (resolvedFcm) {
+      orFilters.push({ fcmToken: resolvedFcm }, { token: resolvedFcm }, { deviceToken: resolvedFcm });
+    }
     if (resolvedPushSub && resolvedPushSub.endpoint) {
       orFilters.push({ 'pushSubscription.endpoint': resolvedPushSub.endpoint });
       orFilters.push({ 'subscription.endpoint': resolvedPushSub.endpoint });
@@ -123,12 +154,13 @@ export async function POST(req: Request) {
         $set: deviceDoc,
         $setOnInsert: {
           createdAt: nowIso,
+          deviceRegisteredAt: nowIso,
         },
       },
       { upsert: true }
     );
 
-    // 4. Also keep `device_tokens` synchronized for multi-table compatibility
+    // 4. Also keep `device_tokens` synchronized
     await db.collection('device_tokens').updateOne(
       { $or: orFilters },
       {
@@ -140,24 +172,31 @@ export async function POST(req: Request) {
       { upsert: true }
     );
 
-    // Broadcast device registration event
+    // 5. Broadcast real-time event
     realtimeBroadcaster.broadcast('device_registered', {
       collection: 'employee_devices',
       action: 'UPSERT',
-      data: { employeeId: cleanEmpId, deviceId: resolvedDeviceId, deviceName },
+      data: {
+        employeeId: cleanEmpId,
+        deviceId: resolvedDeviceId,
+        deviceName: calculatedDeviceName,
+        platform,
+        status: 'ACTIVE',
+      },
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Device and Web-Push subscription registered successfully in MongoDB',
+      message: 'Device and FCM registration saved successfully in MongoDB',
       device: {
         employeeId: cleanEmpId,
         employeeName: resolvedName,
         role: resolvedRole,
         deviceId: resolvedDeviceId,
-        hasPushSubscription: Boolean(resolvedPushSub?.endpoint),
+        fcmToken: resolvedFcm ? 'Registered' : 'Not Registered',
         notificationPermission,
-        lastTokenUpdated: nowIso,
+        deviceStatus: 'ACTIVE',
+        lastActiveAt: nowIso,
       },
     });
   } catch (error: any) {

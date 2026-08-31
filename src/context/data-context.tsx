@@ -118,8 +118,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     
     try {
       // 1. Single-roundtrip bootstrap API call (fetches all MongoDB tables in parallel)
-      const url = isManualRefresh ? '/api/data/bootstrap?refresh=true' : '/api/data/bootstrap';
-      const res = await fetch(url, { cache: 'no-store' });
+      const role = currentUser?.role ? String(currentUser.role).toUpperCase() : '';
+      const empId = currentUser?.employeeId || currentUser?.username || currentUser?.id || '';
+      const queryParams = new URLSearchParams();
+      if (isManualRefresh) queryParams.set('refresh', 'true');
+      if (role) queryParams.set('role', role);
+      if (empId) queryParams.set('empId', empId);
+
+      const url = `/api/data/bootstrap?${queryParams.toString()}`;
+      const res = await fetch(url, { 
+        cache: 'no-store',
+        headers: {
+          'x-user-role': role,
+          'x-employee-id': empId
+        }
+      });
 
       if (res.ok) {
         const bundle = await res.json();
@@ -184,7 +197,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, currentUser?.role, currentUser?.employeeId, currentUser?.username, currentUser?.id]);
 
   useEffect(() => {
     fetchData();
@@ -305,20 +318,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser, employees, users]);
 
   const addRecord = async (col: string, data: any, skipRefresh = false) => {
-    const tempId = data.id || `temp-${Date.now()}`;
-    const newRecord = { ...data, id: tempId, _id: tempId, createdAt: new Date().toISOString() };
-
-    // Optimistic UI update
-    if (col === 'attendance') {
-      setAttendanceRecords(prev => {
-        const filtered = prev.filter(r => !(r.employeeId === newRecord.employeeId && r.date === newRecord.date));
-        return [newRecord, ...filtered];
-      });
-    } else if (col === 'leaveRequests') {
-      setLeaveRequests(prev => [newRecord, ...prev]);
-    } else if (col === 'notifications') {
-      setNotifications(prev => [newRecord, ...prev]);
-    }
+    // MongoDB-first: do NOT update local state before the API confirms the write.
+    // The UI will reflect MongoDB state after fetchData() completes below.
+    const newRecord = { ...data, createdAt: data.createdAt || new Date().toISOString() };
 
     try {
       const res = await fetch(`/api/data/${col}`, {
@@ -326,50 +328,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRecord)
       });
-      if (res.ok) {
-        const resData = await res.json();
-        if (resData?.id && col === 'attendance') {
-          setAttendanceRecords(prev => prev.map(r => (r.id === tempId ? { ...r, id: resData.id, _id: resData.id } : r)));
-        } else if (resData?.id && col === 'notifications') {
-          setNotifications(prev => prev.map(n => (n.id === tempId ? { ...n, id: resData.id, _id: resData.id } : n)));
-        }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error(`addRecord failed for ${col}:`, errData);
+        throw new Error(errData?.error || `Failed to create record in ${col}`);
       }
-      if (!skipRefresh) await fetchData();
+      // MongoDB confirmed the write — now re-hydrate all state from MongoDB
+      if (!skipRefresh) await fetchData(true);
     } catch (e) {
-      console.error(e);
+      console.error(`addRecord error in ${col}:`, e);
+      throw e; // Re-throw so callers can handle (show error toast, etc.)
     }
   };
 
   const updateRecord = async (col: string, id: string, data: any, skipRefresh = false) => {
-    if (col === 'attendance') {
-      setAttendanceRecords(prev => prev.map(r => {
-        const rId = String(r.id || (r as any)._id || '');
-        const targetId = String(id || '');
-        if (rId === targetId) {
-          return { ...r, ...data, updatedAt: new Date().toISOString() };
-        }
-        return r;
-      }));
-    } else if (col === 'notifications') {
-      setNotifications(prev => prev.map(n => {
-        const nId = String(n.id || (n as any)._id || '');
-        const targetId = String(id || '');
-        if (nId === targetId) {
-          return { ...n, ...data };
-        }
-        return n;
-      }));
-    }
+    // MongoDB-first: do NOT patch local state before the API confirms the write.
+    // The UI will reflect MongoDB state after fetchData() completes below.
+    const payload = { ...data, updatedAt: new Date().toISOString() };
 
     try {
-      await fetch(`/api/data/${col}?id=${id}`, {
+      const res = await fetch(`/api/data/${col}?id=${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, updatedAt: new Date().toISOString() })
+        body: JSON.stringify(payload)
       });
-      if (!skipRefresh) await fetchData();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error(`updateRecord failed for ${col} id=${id}:`, errData);
+        throw new Error(errData?.error || `Failed to update record in ${col}`);
+      }
+      // MongoDB confirmed the write — now re-hydrate all state from MongoDB
+      if (!skipRefresh) await fetchData(true);
     } catch (e) {
-      console.error(e);
+      console.error(`updateRecord error in ${col} id=${id}:`, e);
+      throw e; // Re-throw so callers can handle (show error toast, etc.)
     }
   };
 
@@ -391,7 +383,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       await fetch(`/api/data/${col}?id=${id}`, { method: 'DELETE' });
-      if (!skipRefresh) await fetchData();
+      if (!skipRefresh) await fetchData(true);
     } catch (e) {
       console.error(e);
     }
@@ -404,7 +396,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...data, id, updatedAt: new Date().toISOString() })
       });
-      if (!skipRefresh) await fetchData();
+      if (!skipRefresh) await fetchData(true);
     } catch (e) {
       console.error(e);
     }

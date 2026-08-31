@@ -49,7 +49,8 @@ import {
   LogOut,
   Eye,
   MapPin,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Loader2
 } from "lucide-react";
 import { cn, formatDate, formatHoursToHHMM, isEmployeeActiveOnDate } from "@/lib/utils";
 import { useData } from "@/context/data-context";
@@ -204,8 +205,14 @@ interface BulkEditRow {
   const [selectedExitEvent, setSelectedExitEvent] = useState<any>(null);
   const [isExitDetailsOpen, setIsExitDetailsOpen] = useState(false);
 
-  const [localApprovals, setLocalApprovals] = useState<Record<string, boolean>>({});
-  const [localEdits, setLocalEdits] = useState<Record<string, Partial<AttendanceItem>>>({});
+  // Per-handler loading states — shown as spinners on action buttons while MongoDB write is in progress
+  const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
+  const [isRejectingId, setIsRejectingId] = useState<string | null>(null);
+  const [isRestoringId, setIsRestoringId] = useState<string | null>(null);
+  const [isUpdatingAttendanceId, setIsUpdatingAttendanceId] = useState<string | null>(null);
+  const [isApprovingLeave, setIsApprovingLeave] = useState(false);
+  const [isRejectingLeave, setIsRejectingLeave] = useState(false);
 
   const { toast } = useToast();
   
@@ -322,11 +329,7 @@ interface BulkEditRow {
     }).map(rec => {
       const emp = employeeMap.get(rec.employeeId);
       const leave = approvedLeavesMap.get(`${rec.employeeId}:${rec.date}`);
-      const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
       
-      const currentApprovalState = localApprovals[recId] !== undefined ? localApprovals[recId] : rec.approved;
-      const cachedEdit = localEdits[recId] || {};
-
       let processedRec: any = { 
         ...rec, 
         dept: emp?.department || "N/A", 
@@ -336,13 +339,8 @@ interface BulkEditRow {
         leaveType: leave ? leave.purpose : "-",
         leaveStatus: leave ? "Approved" : "-",
         workingHourDisplay: formatHoursToHHMM(rec.hours || 0),
-        approved: currentApprovalState === true || String(currentApprovalState) === "true",
-        ...cachedEdit
+        approved: rec.approved === true || String(rec.approved) === "true",
       };
-      
-      if (cachedEdit.hours !== undefined) {
-        processedRec.workingHourDisplay = formatHoursToHHMM(cachedEdit.hours);
-      }
       
       if (!processedRec.outTime && processedRec.inTime && processedRec.inTime.trim() !== "") {
         const inDT = parseISO(processedRec.inDateTime || `${processedRec.inDate}T${processedRec.inTime}:00`);
@@ -364,67 +362,65 @@ interface BulkEditRow {
     const projectStartDate = parseISO(PROJECT_START_DATE_STR);
     const handledRecordsKeySet = new Set(actual.map(r => `${r.employeeId}:${r.date}`));
 
-    if (isBefore(projectStartDate, now)) {
-      let generationEndDate = now;
-      if (historyMonthFilter && historyMonthFilter !== 'all') {
-         const [mmm, yy] = historyMonthFilter.split('-');
-         const filterDate = parseISO(`20${yy}-${mmm}-01`);
-         const lastDayOfFilterMonth = endOfMonth(filterDate);
-         generationEndDate = isBefore(lastDayOfFilterMonth, now) ? lastDayOfFilterMonth : now;
-      }
+    // Only generate missing items when viewing history for a specific month, avoiding memory & UI overflow
+    if (historyMonthFilter && historyMonthFilter !== 'all') {
+      const [mmm, yy] = historyMonthFilter.toLowerCase().split('-');
+      const shortMonths = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+      const targetMonthIdx = shortMonths.indexOf(mmm);
+      if (targetMonthIdx !== -1) {
+        const targetYear = 2000 + parseInt(yy);
+        const startOfFilterMonth = new Date(targetYear, targetMonthIdx, 1);
+        const lastDayOfFilterMonth = endOfMonth(startOfFilterMonth);
+        const generationEndDate = isBefore(lastDayOfFilterMonth, now) ? lastDayOfFilterMonth : now;
+        const generationStartDate = isBefore(startOfFilterMonth, projectStartDate) ? projectStartDate : startOfFilterMonth;
 
-      const intervalDates = eachDayOfInterval({ 
-        start: projectStartDate, 
-        end: generationEndDate
-      }).map(d => format(d, "yyyy-MM-dd"));
-      
-      (employees || []).forEach(emp => {
-        if (userAssignedPlantIds) {
-          const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
-          if (!hasAccess) return;
-        }
-
-        intervalDates.forEach(dStr => {
-          if (!isEmployeeActiveOnDate(emp, dStr)) return;
-          const key = `${emp.employeeId}:${dStr}`;
-          const virtualKey = `v-abs-${emp.employeeId}-${dStr}`;
+        if (!isBefore(generationEndDate, generationStartDate)) {
+          const intervalDates = eachDayOfInterval({ 
+            start: generationStartDate, 
+            end: generationEndDate
+          }).map(d => format(d, "yyyy-MM-dd"));
           
-          if (!handledRecordsKeySet.has(key)) {
-            const currentApprovalState = localApprovals[virtualKey] !== undefined ? localApprovals[virtualKey] : false;
-            const cachedEdit = localEdits[virtualKey] || {};
-            const displayStatus = getCalculatedStatus(dStr, null, emp.employeeId);
-            const leave = approvedLeavesMap.get(`${emp.employeeId}:${dStr}`);
-            
-            let virtualItem: any = { 
-              id: virtualKey, 
-              employeeId: emp.employeeId, 
-              employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name, 
-              date: dStr, 
-              status: 'ABSENT', 
-              displayStatus, 
-              attendanceType: 'ABSENT', 
-              approved: currentApprovalState, 
-              dept: emp.department || "Operations", 
-              desig: emp.designation || "Staff", 
-              isVirtual: true, 
-              hours: 0, 
-              workingHourDisplay: "00:00",
-              inTime: null,
-              outTime: null,
-              remark: null,
-              leaveType: leave ? leave.purpose : "-",
-              leaveStatus: leave ? "Approved" : "-",
-              ...cachedEdit
-            };
-
-            if (cachedEdit.hours !== undefined) {
-              virtualItem.workingHourDisplay = formatHoursToHHMM(cachedEdit.hours);
+          (employees || []).forEach(emp => {
+            if (userAssignedPlantIds) {
+              const hasAccess = (emp.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp.unitId);
+              if (!hasAccess) return;
             }
 
-            missing.push(virtualItem as AttendanceItem);
-          }
-        });
-      });
+            intervalDates.forEach(dStr => {
+              if (!isEmployeeActiveOnDate(emp, dStr)) return;
+              const key = `${emp.employeeId}:${dStr}`;
+              
+              if (!handledRecordsKeySet.has(key)) {
+                const displayStatus = getCalculatedStatus(dStr, null, emp.employeeId);
+                const leave = approvedLeavesMap.get(`${emp.employeeId}:${dStr}`);
+                
+                let virtualItem: any = { 
+                  id: `v-abs-${emp.employeeId}-${dStr}`, 
+                  employeeId: emp.employeeId, 
+                  employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : emp.name, 
+                  date: dStr, 
+                  status: 'ABSENT', 
+                  displayStatus, 
+                  attendanceType: 'ABSENT', 
+                  approved: false, 
+                  dept: emp.department || "Operations", 
+                  desig: emp.designation || "Staff", 
+                  isVirtual: true, 
+                  hours: 0, 
+                  workingHourDisplay: "00:00",
+                  inTime: null,
+                  outTime: null,
+                  remark: null,
+                  leaveType: leave ? leave.purpose : "-",
+                  leaveStatus: leave ? "Approved" : "-",
+                };
+
+                missing.push(virtualItem as AttendanceItem);
+              }
+            });
+          });
+        }
+      }
     }
 
     let combined = [...actual, ...missing];
@@ -451,10 +447,12 @@ interface BulkEditRow {
     }
 
     return combined;
-  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, selectedDateFilter, plants, approvedLeavesMap, historyMonthFilter, localApprovals, localEdits]);
+  }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, selectedDateFilter, plants, approvedLeavesMap, historyMonthFilter]);
 
   const pendingAttendanceList = useMemo(() => {
     return allAttendanceList.filter(rec => {
+      // Pending Approvals must ONLY display actual employee submissions requiring approval (not virtual absent rows)
+      if (rec.isVirtual) return false;
       const matchesApproval = !rec.approved;
       const matchesStatus = selectedStatusFilter === "ALL" ? true : rec.displayStatus === selectedStatusFilter;
       return matchesApproval && matchesStatus;
@@ -552,8 +550,7 @@ const allPlantExitHistory = useMemo(() => {
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
 
     setIsApproveConfirmOpen(false);
-    setLocalApprovals(prev => ({ ...prev, [recId]: true }));
-    toast({ title: "Attendance approved successfully and moved to History." });
+    setIsApprovingId(recId);  // Show spinner — MongoDB write in progress
 
     try {
       let finalOutTime = rec.outTime;
@@ -581,6 +578,8 @@ const allPlantExitHistory = useMemo(() => {
           attendanceType: rec.attendanceType || 'ABSENT',
           approved: true,
           approvedBy: approverName,
+          approvalActionDate: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           remark: finalRemarks || "Approved as Absent",
         });
       } else {
@@ -591,13 +590,19 @@ const allPlantExitHistory = useMemo(() => {
           hours: finalHours,
           approved: true,
           approvedBy: approverName,
+          approvalActionDate: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           remark: finalRemarks,
         });
       }
+      // MongoDB confirmed — refresh UI from MongoDB, then show success toast
       await refreshData();
+      toast({ title: "Attendance approved successfully and moved to History." });
     } catch (e) {
-      setLocalApprovals(prev => ({ ...prev, [recId]: false }));
+      console.error("Approval error:", e);
+      toast({ variant: "destructive", title: "Approval Failed", description: "Could not save to database. Please try again." });
     } finally {
+      setIsApprovingId(null);
       setSelectedAttendance(null);
     }
   };
@@ -744,42 +749,8 @@ const allPlantExitHistory = useMemo(() => {
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
     const rowsToSave = [...bulkEditRows];
 
-    // Optimistic UI updates
-    const newEdits = { ...localEdits };
-    rowsToSave.forEach(row => {
-      const recId = row.id;
-      const recInDate = row.date;
-      const isNightShift = row.outTime <= row.inTime;
-      const recOutDate = isNightShift ? format(addDays(parseISO(recInDate), 1), "yyyy-MM-dd") : row.date;
-
-      const inDT = parseISO(`${recInDate}T${row.inTime}:00`);
-      const outDT = parseISO(`${recOutDate}T${row.outTime}:00`);
-      let hours = 0;
-      if (isValid(inDT) && isValid(outDT) && isBefore(inDT, outDT)) {
-        hours = (outDT.getTime() - inDT.getTime()) / (1000 * 60 * 60);
-      }
-
-      newEdits[recId] = {
-        inPlant: row.plant,
-        inDate: recInDate,
-        inTime: row.inTime,
-        outDate: recOutDate,
-        outTime: row.outTime,
-        hours,
-        status: 'PRESENT',
-        displayStatus: 'Present',
-        remark: row.remark
-      };
-    });
-
-    setLocalEdits(newEdits);
     setIsBulkEditModalOpen(false);
     setSelectedRecordIds(new Set());
-
-    toast({
-      title: "Bulk Edit Applied",
-      description: `Updating ${rowsToSave.length} date record(s) for ${targetEmployee?.employeeName || 'employee'}...`
-    });
 
     try {
       const promises = rowsToSave.map(async (row) => {
@@ -805,7 +776,8 @@ const allPlantExitHistory = useMemo(() => {
           attendanceType: 'OFFICE',
           remark: row.remark,
           editedBy: approverName,
-          editedAt: new Date().toISOString()
+          editedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
 
         if (row.isVirtual) {
@@ -825,17 +797,18 @@ const allPlantExitHistory = useMemo(() => {
       });
 
       await Promise.all(promises);
+      // MongoDB confirmed all writes — refresh UI, then show success toast
       await refreshData();
       toast({
-        title: "Success",
+        title: "Bulk Edit Saved",
         description: `Successfully updated ${rowsToSave.length} date record(s) for ${targetEmployee?.employeeName || 'employee'}.`
       });
     } catch (e) {
       console.error("Bulk edit error", e);
       toast({
         variant: "destructive",
-        title: "Bulk Edit Sync Issue",
-        description: "Some entries failed to update. Refreshing queue..."
+        title: "Bulk Edit Failed",
+        description: "Some entries failed to update. Data refreshed from database."
       });
       await refreshData();
     } finally {
@@ -852,14 +825,8 @@ const allPlantExitHistory = useMemo(() => {
       return selectedRecordIds.has(rId);
     });
 
-    const newApprovals = { ...localApprovals };
-    recordsToApprove.forEach(r => {
-      const rId = r.id || (r as any)._id || `${r.employeeId}:${r.date}`;
-      newApprovals[rId] = true;
-    });
-    setLocalApprovals(newApprovals);
+    setIsBulkApproving(true);  // Show spinner — MongoDB writes in progress
     setSelectedRecordIds(new Set());
-    toast({ title: `Bulk approved ${recordsToApprove.length} records successfully.` });
 
     try {
       const promises = recordsToApprove.map(async (rec) => {
@@ -888,6 +855,8 @@ const allPlantExitHistory = useMemo(() => {
             attendanceType: rec.attendanceType || 'ABSENT',
             approved: true,
             approvedBy: approverName,
+            approvalActionDate: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             remark: finalRemarks || "Approved as Absent",
           }, true);
         } else {
@@ -898,14 +867,22 @@ const allPlantExitHistory = useMemo(() => {
             hours: finalHours,
             approved: true,
             approvedBy: approverName,
+            approvalActionDate: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             remark: finalRemarks,
           }, true);
         }
       });
       await Promise.all(promises);
+      // MongoDB confirmed all writes — refresh UI, then show success toast
       await refreshData();
+      toast({ title: `Bulk approved ${recordsToApprove.length} records successfully.` });
     } catch (e) {
-      console.error("Bulk approve synchronization failure", e);
+      console.error("Bulk approve error:", e);
+      toast({ variant: "destructive", title: "Bulk Approval Failed", description: "Some records could not be saved. Please refresh and retry." });
+      await refreshData();
+    } finally {
+      setIsBulkApproving(false);
     }
   };
 
@@ -982,23 +959,7 @@ const allPlantExitHistory = useMemo(() => {
     }
 
     setIsEditModalOpen(false);
-
-    setLocalEdits(prev => ({
-      ...prev,
-      [recId]: {
-        inPlant: editData.plant,
-        inDate: finalInDate,
-        inTime: finalInTime,
-        outDate: finalOutDate,
-        outTime: finalOutTime,
-        hours: calculatedHours,
-        status: 'PRESENT',
-        displayStatus: 'Present',
-        remark: editData.remark
-      }
-    }));
-    
-    toast({ title: "Attendance Entry Verified & Updated" });
+    setIsUpdatingAttendanceId(recId);  // Show spinner — MongoDB write in progress
 
     try {
       const modifierName = verifiedUser?.fullName || "HR_ADMIN";
@@ -1020,7 +981,10 @@ const allPlantExitHistory = useMemo(() => {
           attendanceType: 'OFFICE',
           approved: false,
           address: 'Manually Created Log',
-          unapprovedOutDuration: 0
+          unapprovedOutDuration: 0,
+          editedBy: modifierName,
+          editedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         });
       } else {
         await updateRecord('attendance', finalDbId, {
@@ -1033,17 +997,23 @@ const allPlantExitHistory = useMemo(() => {
           status: 'PRESENT',
           remark: editData.remark,
           editedBy: modifierName,
-          editedAt: new Date().toISOString()
+          editedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          // Audit trail: snapshot of previous values
+          previousInTime: selectedAttendance.inTime || null,
+          previousOutTime: selectedAttendance.outTime || null,
+          previousHours: selectedAttendance.hours || 0,
+          previousDate: selectedAttendance.date,
         });
       }
+      // MongoDB confirmed — refresh UI, then show success toast
       await refreshData();
+      toast({ title: "Attendance Entry Verified & Updated" });
     } catch (e) {
-      setLocalEdits(prev => {
-        const fresh = { ...prev };
-        delete fresh[recId];
-        return fresh;
-      });
+      console.error("Edit attendance error:", e);
+      toast({ variant: "destructive", title: "Update Failed", description: "Could not save to database. Please try again." });
     } finally {
+      setIsUpdatingAttendanceId(null);
       setSelectedAttendance(null);
     }
   };
@@ -1056,20 +1026,7 @@ const allPlantExitHistory = useMemo(() => {
     const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
     const approver = verifiedUser?.fullName || "HR_ADMIN";
 
-    setLocalApprovals(prev => ({ ...prev, [recId]: true }));
-    setLocalEdits(prev => ({
-      ...prev,
-      [recId]: {
-        inTime: null,
-        outTime: null,
-        hours: 0,
-        workingHourDisplay: "00:00",
-        displayStatus: "Absent",
-        remark: attendanceRejectReason
-      }
-    }));
-    
-    toast({ title: "Log Rejected Successfully", description: "Record has been invalidated and moved to History Queue." });
+    setIsRejectingId(recId);  // Show spinner — MongoDB write in progress
 
     try {
       if (rec.isVirtual) {
@@ -1081,6 +1038,8 @@ const allPlantExitHistory = useMemo(() => {
           attendanceType: 'ABSENT',
           approved: true,
           approvedBy: approver,
+          rejectedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           remark: attendanceRejectReason,
         });
       } else {
@@ -1091,19 +1050,19 @@ const allPlantExitHistory = useMemo(() => {
           attendanceType: 'ABSENT',
           approved: true,
           approvedBy: approver,
+          rejectedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           remark: attendanceRejectReason,
         });
       }
+      // MongoDB confirmed — refresh UI, then show success toast
       await refreshData();
+      toast({ title: "Log Rejected Successfully", description: "Record has been invalidated and moved to History Queue." });
     } catch (e) {
-      setLocalApprovals(prev => ({ ...prev, [recId]: false }));
-      setLocalEdits(prev => {
-        const fresh = { ...prev };
-        delete fresh[recId];
-        return fresh;
-      });
-      toast({ variant: "destructive", title: "Action Failed", description: "Rejection failed to sync." });
+      console.error("Reject error:", e);
+      toast({ variant: "destructive", title: "Action Failed", description: "Rejection failed to sync with database." });
     } finally {
+      setIsRejectingId(null);
       setAttendanceRejectReason("");
       setSelectedAttendance(null);
     }
@@ -1113,19 +1072,26 @@ const allPlantExitHistory = useMemo(() => {
     if (rec.isVirtual) return; 
     const recId = rec.id || (rec as any)._id || '';
 
-    setLocalApprovals(prev => ({ ...prev, [recId]: false }));
-    toast({ title: "Record Restored", description: "Moved back to Pending queue." });
+    setIsRestoringId(recId);  // Show spinner — MongoDB write in progress
 
     try {
       const finalDbId = rec.id || (rec as any)._id;
       await updateRecord('attendance', finalDbId, {
         approved: false,
         approvedBy: null,
-        editedBy: null
+        editedBy: null,
+        restoredBy: verifiedUser?.fullName || "HR_ADMIN",
+        restoredAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
+      // MongoDB confirmed — refresh UI, then show success toast
       await refreshData();
+      toast({ title: "Record Restored", description: "Moved back to Pending queue." });
     } catch (e) {
-      setLocalApprovals(prev => ({ ...prev, [recId]: true }));
+      console.error("Restore error:", e);
+      toast({ variant: "destructive", title: "Restore Failed", description: "Could not restore the record. Please try again." });
+    } finally {
+      setIsRestoringId(null);
     }
   };
 
@@ -1185,6 +1151,7 @@ const allPlantExitHistory = useMemo(() => {
   
     const days = differenceInCalendarDays(new Date(editLeaveData.toDate), new Date(editLeaveData.fromDate)) + 1;
     const reqId = selectedLeaveRequest.id || (selectedLeaveRequest as any)._id;
+    setIsApprovingLeave(true);
   
     try {
       await updateLeaveRequest('leaveRequests', reqId, {
@@ -1194,13 +1161,15 @@ const allPlantExitHistory = useMemo(() => {
         days,
         processedByUserId: verifiedUser?.fullName || "HR_ADMIN",
         processedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
 
-      toast({ title: "Leave Approved", description: "The leave request has been approved successfully." });
       await refreshData();
+      toast({ title: "Leave Approved", description: "The leave request has been approved successfully." });
     } catch (error) {
-      toast({ variant: "destructive", title: "Error", description: "Failed to update leave status sync." });
+      toast({ variant: "destructive", title: "Error", description: "Failed to update leave status in database." });
     } finally {
+      setIsApprovingLeave(false);
       setIsLeaveApproveOpen(false);
       setSelectedLeaveRequest(null);
     }
@@ -1218,6 +1187,7 @@ const allPlantExitHistory = useMemo(() => {
     }
 
     const reqId = selectedLeaveRequest.id || (selectedLeaveRequest as any)._id;
+    setIsRejectingLeave(true);
 
     try {
       await updateLeaveRequest('leaveRequests', reqId, {
@@ -1225,13 +1195,15 @@ const allPlantExitHistory = useMemo(() => {
         remark: leaveRejectReason, 
         processedByUserId: verifiedUser?.fullName || "HR_ADMIN",
         processedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
   
-      toast({ title: "Leave Rejected", description: "The leave request has been rejected and moved to history." });
       await refreshData();
+      toast({ title: "Leave Rejected", description: "The leave request has been rejected and moved to history." });
     } catch (error) {
       toast({ variant: "destructive", title: "Error", description: "Failed to reject leave request." });
     } finally {
+      setIsRejectingLeave(false);
       setIsLeaveRejectOpen(false);
       setSelectedLeaveRequest(null);
       setLeaveRejectReason("");
@@ -1661,21 +1633,29 @@ const allPlantExitHistory = useMemo(() => {
                           <div className="flex justify-end items-center gap-1.5">
                             {attendanceView === 'pending' ? (
                               <>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" onClick={() => handleOpenEditModal(rec)} title="Edit Attendance Entry"><Pencil className="w-3.5 h-3.5" /></Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }}><XCircle className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600" onClick={() => handleOpenEditModal(rec)} title="Edit Attendance Entry" disabled={isApprovingId === (rec.id || (rec as any)._id)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }} disabled={isApprovingId === (rec.id || (rec as any)._id)}><XCircle className="w-3.5 h-3.5" /></Button>
                                 <Button 
                                   size="sm" 
-                                  className="h-8 font-black text-[10px] uppercase bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/10 rounded-lg px-4" 
+                                  className="h-8 font-black text-[10px] uppercase bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/10 rounded-lg px-4 gap-1.5" 
                                   onClick={() => handleOpenApproveConfirmation(rec)}
-                                  disabled={!canApprove}
+                                  disabled={!canApprove || isApprovingId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
                                 >
+                                  {isApprovingId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`) && <Loader2 className="w-3 h-3 animate-spin" />}
                                   Approve
                                 </Button>
                               </>
                             ) : (
                               !rec.isVirtual && (
-                                <Button variant="secondary" size="sm" className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg" onClick={() => handleRestoreAttendance(rec)}>
-                                  <RotateCcw className="w-3 h-3" /> Restore
+                                <Button 
+                                  variant="secondary" 
+                                  size="sm" 
+                                  className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg" 
+                                  onClick={() => handleRestoreAttendance(rec)}
+                                  disabled={isRestoringId === (rec.id || (rec as any)._id)}
+                                >
+                                  {isRestoringId === (rec.id || (rec as any)._id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                                  Restore
                                 </Button>
                               )
                             )}
@@ -1923,8 +1903,11 @@ const allPlantExitHistory = useMemo(() => {
              <div><strong>Total Days:</strong> {editLeaveData.fromDate && editLeaveData.toDate ? differenceInCalendarDays(new Date(editLeaveData.toDate), new Date(editLeaveData.fromDate)) + 1 : selectedLeaveRequest?.days}</div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsLeaveApproveOpen(false)}>Cancel</Button>
-            <Button onClick={handleConfirmLeaveApproval}>Confirm Approve</Button>
+            <Button variant="ghost" onClick={() => setIsLeaveApproveOpen(false)} disabled={isApprovingLeave}>Cancel</Button>
+            <Button onClick={handleConfirmLeaveApproval} disabled={isApprovingLeave} className="gap-2">
+              {isApprovingLeave && <Loader2 className="w-4 h-4 animate-spin" />}
+              Confirm Approve
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1940,8 +1923,11 @@ const allPlantExitHistory = useMemo(() => {
             <Textarea id="leaveRejectReason" value={leaveRejectReason} onChange={(e) => setLeaveRejectReason(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsLeaveRejectOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleConfirmLeaveReject} disabled={!leaveRejectReason.trim()}>Confirm Reject</Button>
+            <Button variant="ghost" onClick={() => setIsLeaveRejectOpen(false)} disabled={isRejectingLeave}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmLeaveReject} disabled={!leaveRejectReason.trim() || isRejectingLeave} className="gap-2">
+              {isRejectingLeave && <Loader2 className="w-4 h-4 animate-spin" />}
+              Confirm Reject
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1987,8 +1973,9 @@ const allPlantExitHistory = useMemo(() => {
           </div>
 
           <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
-            <Button variant="ghost" className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" onClick={() => setIsApproveConfirmOpen(false)}>Cancel</Button>
-            <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10" onClick={handleConfirmApproval}>
+            <Button variant="ghost" className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" onClick={() => setIsApproveConfirmOpen(false)} disabled={isApprovingId !== null}>Cancel</Button>
+            <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10 gap-2" onClick={handleConfirmApproval} disabled={isApprovingId !== null}>
+              {isApprovingId !== null && <Loader2 className="w-4 h-4 animate-spin" />}
               Confirm Approve
             </Button>
           </DialogFooter>
@@ -2013,8 +2000,9 @@ const allPlantExitHistory = useMemo(() => {
           </div>
 
           <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
-            <Button variant="ghost" className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" onClick={() => setIsBulkApproveConfirmOpen(false)}>Cancel</Button>
-            <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10" onClick={handleBulkApprove}>
+            <Button variant="ghost" className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" onClick={() => setIsBulkApproveConfirmOpen(false)} disabled={isBulkApproving}>Cancel</Button>
+            <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10 gap-2" onClick={handleBulkApprove} disabled={isBulkApproving}>
+              {isBulkApproving && <Loader2 className="w-4 h-4 animate-spin" />}
               Confirm Bulk Approve
             </Button>
           </DialogFooter>
@@ -2034,8 +2022,11 @@ const allPlantExitHistory = useMemo(() => {
              <Textarea placeholder="Specify exact discrepancy details for record rejection..." value={attendanceRejectReason} onChange={(e) => setAttendanceRejectReason(e.target.value)} className="min-h-[100px] border-slate-200 bg-slate-50 rounded-xl font-medium" />
           </div>
           <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
-             <Button variant="ghost" onClick={() => { setIsAttendanceRejectOpen(false); setSelectedAttendance(null); }} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
-             <Button onClick={handlePostAttendanceReject} disabled={!attendanceRejectReason.trim()} className="flex-1 bg-rose-600 hover:bg-rose-700 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-rose-600/10">Reject Entry</Button>
+             <Button variant="ghost" onClick={() => { setIsAttendanceRejectOpen(false); setSelectedAttendance(null); }} disabled={isRejectingId !== null} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
+             <Button onClick={handlePostAttendanceReject} disabled={!attendanceRejectReason.trim() || isRejectingId !== null} className="flex-1 bg-rose-600 hover:bg-rose-700 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-rose-600/10 gap-2">
+               {isRejectingId !== null && <Loader2 className="w-4 h-4 animate-spin" />}
+               Reject Entry
+             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2097,8 +2088,11 @@ const allPlantExitHistory = useMemo(() => {
           </div>
           
           <div className="p-4 bg-slate-50 border-t flex flex-row gap-3">
-             <Button variant="ghost" onClick={() => { setIsEditModalOpen(false); setSelectedAttendance(null); }} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
-             <Button onClick={handleUpdateAttendance} className="flex-1 bg-primary hover:bg-primary/90 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-primary/10">Save Changes</Button>
+             <Button variant="ghost" onClick={() => { setIsEditModalOpen(false); setSelectedAttendance(null); }} disabled={isUpdatingAttendanceId !== null} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
+             <Button onClick={handleUpdateAttendance} disabled={isUpdatingAttendanceId !== null} className="flex-1 bg-primary hover:bg-primary/90 font-black text-white rounded-xl h-11 uppercase text-xs shadow-lg shadow-primary/10 gap-2">
+               {isUpdatingAttendanceId !== null && <Loader2 className="w-4 h-4 animate-spin" />}
+               Save Changes
+             </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -3,6 +3,7 @@ import { getDb } from '@/lib/mongodb';
 import { format, parseISO, addHours, isValid } from 'date-fns';
 import { invalidateBootstrapCache } from '@/lib/data-cache';
 import { parseDateTime } from '@/lib/utils';
+import { realtimeBroadcaster } from '@/lib/realtime-events';
 
 export const dynamic = 'force-dynamic';
 
@@ -113,6 +114,14 @@ async function processAutoMarkOut() {
           { _id: record._id },
           { $set: updatePayload }
         );
+
+        // Broadcast real-time event AFTER confirmed MongoDB save
+        //    Each auto-out record gets its own push so clients refresh immediately
+        realtimeBroadcaster.broadcast('attendance_updated', {
+          collection: 'attendance',
+          action: 'auto_out',
+          data: { ...record, ...updatePayload, id: String(record._id) },
+        });
 
         // Record notification in MongoDB
         const notifMsg = `${record.employeeName || 'Employee'} – AUTO OUT Processed (Session ${sessionIdx}) | Recorded: ${creditedHours} hrs worked.`;

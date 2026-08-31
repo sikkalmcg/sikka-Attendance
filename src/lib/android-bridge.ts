@@ -63,18 +63,32 @@ export const registerNativeUser = async (employeeId: string, role: string, fullN
     const deviceId = getOrCreateDeviceId();
     const userAgent = navigator.userAgent || '';
     const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+    const permissionStatus = typeof Notification !== 'undefined' ? Notification.permission : 'default';
 
-    fetch('/api/notifications/register-device', {
+    const payload = {
+      deviceId,
+      token: deviceId,
+      fcmToken: deviceId,
+      employeeId: employeeId || '',
+      employeeName: fullName || '',
+      role: role || 'EMPLOYEE',
+      deviceName: isMobile ? 'Mobile APK / Android Node' : 'Desktop Browser Node',
+      platform: isMobile ? 'Android' : 'Web',
+      notificationPermission: permissionStatus,
+      deviceStatus: 'ACTIVE',
+    };
+
+    fetch('/api/device-registry/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: deviceId,
-        employeeId: employeeId || '',
-        role: role || 'EMPLOYEE',
-        deviceName: isMobile ? 'Mobile APK / Browser' : 'Desktop Browser',
-        platform: isMobile ? 'android-web' : 'web',
-      }),
-    }).catch((err) => console.warn('Device register error:', err));
+      body: JSON.stringify(payload),
+    }).catch(() => {
+      fetch('/api/notifications/register-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch((err) => console.warn('Device register error:', err));
+    });
   } catch (e) {
     console.warn('registerNativeUser error:', e);
   }

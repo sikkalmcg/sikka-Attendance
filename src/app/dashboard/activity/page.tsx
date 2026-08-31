@@ -100,6 +100,21 @@ export default function ActivityPage() {
   const [jumpDevicePage, setJumpDevicePage] = useState<string>("1");
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [copiedTokenEndpoint, setCopiedTokenEndpoint] = useState<string | null>(null);
+  const [deviceStats, setDeviceStats] = useState<{
+    totalEmployees: number;
+    registeredCount: number;
+    notRegisteredCount: number;
+    activeCount: number;
+    inactiveCount: number;
+    permissionDisabledCount: number;
+  }>({
+    totalEmployees: 0,
+    registeredCount: 0,
+    notRegisteredCount: 0,
+    activeCount: 0,
+    inactiveCount: 0,
+    permissionDisabledCount: 0,
+  });
 
   useEffect(() => {
     setIsMounted(true);
@@ -126,7 +141,7 @@ export default function ActivityPage() {
     }
   }, []);
 
-  // Fetch paginated device registry from server
+  // Fetch paginated device registry from server (Left-join with all employees)
   const fetchDevices = useCallback(async (page: number, search: string) => {
     setDeviceLoading(true);
     try {
@@ -139,6 +154,9 @@ export default function ActivityPage() {
         setDeviceTotalPages(json.pagination?.totalPages || 1);
         setDevicePage(json.pagination?.page || page);
         setJumpDevicePage(String(json.pagination?.page || page));
+        if (json.stats) {
+          setDeviceStats(json.stats);
+        }
       }
     } catch (e) {
       console.warn("Failed to fetch device registry:", e);
@@ -731,7 +749,7 @@ export default function ActivityPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -742,55 +760,64 @@ export default function ActivityPage() {
                 >
                   <RefreshCw className={cn("w-3.5 h-3.5", deviceLoading && "animate-spin")} /> Refresh
                 </Button>
-                <Badge variant="outline" className="font-mono text-xs font-bold bg-white border-slate-200 text-slate-700 px-3 py-1">
-                  {deviceTotal} Registered Device{deviceTotal === 1 ? '' : 's'}
+                <Badge variant="outline" className="font-mono text-xs font-bold bg-white border-slate-300 text-slate-800 px-3 py-1.5 shadow-sm">
+                  {deviceStats.totalEmployees || employees.length || deviceTotal} Employees
+                </Badge>
+                <Badge className="font-mono text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 shadow-sm">
+                  {deviceStats.registeredCount} Registered
+                </Badge>
+                <Badge className="font-mono text-xs font-bold bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 px-3 py-1.5 shadow-sm">
+                  {deviceStats.notRegisteredCount} Not Registered
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               <ScrollArea className="w-full">
-                <Table className="min-w-[1350px]">
+                <Table className="min-w-[1450px]">
                   <TableHeader className="bg-slate-50/50">
                     <TableRow>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-5 px-6">Employee Name / ID</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">Role / Department / Designation</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">Device Name & Platform</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-primary">Current Device ID</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-700">FCM Token / Subscription Ref</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">Permission / Status</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500">Last Active / Updated</TableHead>
-                      <TableHead className="text-right font-black uppercase text-[10px] tracking-widest text-slate-500 pr-6">Action</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 py-5 px-6 w-[200px]">Employee Name / ID</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[180px]">Role / Dept / Desig</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[170px]">Device & Platform</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-primary w-[160px]">Current Device ID</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-700 w-[200px]">FCM Token / Ref</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[130px]">Permission</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[130px]">Background Status</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[150px]">Last Active</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-widest text-slate-500 w-[130px]">Device Status</TableHead>
+                      <TableHead className="text-right font-black uppercase text-[10px] tracking-widest text-slate-500 pr-6 w-[100px]">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {deviceLoading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-16 text-slate-400">
+                        <TableCell colSpan={10} className="text-center py-16 text-slate-400">
                           <RefreshCw className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
-                          <p className="text-xs font-bold uppercase tracking-wider">Loading device registry records...</p>
+                          <p className="text-xs font-bold uppercase tracking-wider">Loading employee device records from MongoDB...</p>
                         </TableCell>
                       </TableRow>
                     ) : deviceItems.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-20 text-muted-foreground font-bold">
-                          No active hardware or registered device records found.
+                        <TableCell colSpan={10} className="text-center py-20 text-muted-foreground font-bold">
+                          {deviceSearchTerm ? `No matching employee or device records found for "${deviceSearchTerm}".` : "No employees found in the database."}
                         </TableCell>
                       </TableRow>
                     ) : (
                       deviceItems.map((dev: any) => {
-                        const subEndpoint = dev.pushSubscription?.endpoint || dev.subscription?.endpoint || dev.token || "";
-                        const hasPushSub = Boolean(dev.pushSubscription?.endpoint || dev.subscription?.endpoint);
+                        const isRegistered = Boolean(dev.isRegistered);
+                        const subEndpoint = dev.rawToken || dev.fcmToken || "";
+                        const hasPushSub = Boolean(dev.hasPushSubscription || (subEndpoint && subEndpoint !== "Not Registered" && subEndpoint !== "Registered"));
                         const isCopied = copiedTokenEndpoint === subEndpoint && subEndpoint.length > 0;
 
                         return (
-                          <TableRow key={dev.id || dev._id} className="hover:bg-slate-50/50 transition-colors">
+                          <TableRow key={dev.id || dev._id || dev.employeeId} className="hover:bg-slate-50/50 transition-colors">
                             {/* 1. Employee Name / ID */}
                             <TableCell className="px-6 py-4">
                               <div className="flex flex-col">
                                 <span className="font-bold text-slate-900 uppercase text-sm">
-                                  {dev.employeeName || dev.employeeId || "Employee"}
+                                  {dev.employeeName || "Employee"}
                                 </span>
-                                <span className="text-[10px] font-mono text-primary font-black uppercase tracking-tighter">
+                                <span className="text-[10px] font-mono text-primary font-black uppercase tracking-tight">
                                   {dev.employeeId}
                                 </span>
                               </div>
@@ -803,9 +830,9 @@ export default function ActivityPage() {
                                   <Badge className="bg-slate-100 text-slate-800 border-none font-bold text-[9px] uppercase px-1.5 py-0.5">
                                     {dev.role || "EMPLOYEE"}
                                   </Badge>
-                                  <span className="text-xs font-bold text-slate-700">{dev.department || "General"}</span>
+                                  <span className="text-xs font-bold text-slate-700 truncate max-w-[110px]">{dev.department || "General"}</span>
                                 </div>
-                                <span className="text-[10px] text-muted-foreground uppercase font-medium mt-0.5">
+                                <span className="text-[10px] text-muted-foreground uppercase font-medium mt-0.5 truncate max-w-[150px]">
                                   {dev.designation || "Staff"}
                                 </span>
                               </div>
@@ -813,92 +840,154 @@ export default function ActivityPage() {
 
                             {/* 3. Device Name & Platform */}
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                <MonitorSmartphone className="w-3.5 h-3.5 text-slate-400" />
-                                <div className="flex flex-col">
-                                  <span className="text-xs font-bold text-slate-700 uppercase">
-                                    {dev.deviceName || "Authorized Web Node"}
-                                  </span>
-                                  <span className="text-[9px] text-slate-400 uppercase font-mono">
-                                    {dev.platform || "web"}
-                                  </span>
+                              {isRegistered ? (
+                                <div className="flex items-center gap-2">
+                                  <MonitorSmartphone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-xs font-bold text-slate-700 uppercase truncate">
+                                      {dev.deviceName || "Authorized Device"}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 uppercase font-mono">
+                                      {dev.platform || "Android"}
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <span className="text-slate-400 text-xs font-mono">—</span>
+                              )}
                             </TableCell>
 
                             {/* 4. Current Device ID */}
                             <TableCell>
-                              <Badge variant="outline" className="font-mono text-[10px] font-black uppercase bg-white border-primary/20 text-primary px-3 py-1 shadow-sm">
-                                {dev.deviceId || "NOT_SYNCED"}
-                              </Badge>
+                              {isRegistered ? (
+                                <Badge variant="outline" className="font-mono text-[10px] font-black uppercase bg-white border-primary/20 text-primary px-2.5 py-0.5 shadow-sm max-w-[140px] truncate" title={dev.deviceId}>
+                                  {dev.deviceId}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400 text-xs font-mono">—</span>
+                              )}
                             </TableCell>
 
                             {/* 5. FCM Token / Subscription Ref Column */}
                             <TableCell>
-                              {subEndpoint ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="flex flex-col max-w-[220px]">
-                                    {hasPushSub && (
-                                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] font-bold uppercase w-fit px-1.5 py-0.2 mb-0.5">
-                                        Web-Push Active
-                                      </Badge>
-                                    )}
-                                    <span 
-                                      className="font-mono text-[10px] text-slate-600 truncate bg-slate-100 px-2 py-0.5 rounded border border-slate-200 cursor-pointer"
-                                      title={subEndpoint}
+                              {isRegistered ? (
+                                subEndpoint && subEndpoint !== "Not Registered" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="flex flex-col max-w-[170px]">
+                                      {hasPushSub && (
+                                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] font-bold uppercase w-fit px-1.5 py-0.2 mb-0.5">
+                                          Registered
+                                        </Badge>
+                                      )}
+                                      <span 
+                                        className="font-mono text-[10px] text-slate-600 truncate bg-slate-100 px-2 py-0.5 rounded border border-slate-200 cursor-pointer"
+                                        title={subEndpoint}
+                                        onClick={() => handleCopyTokenRef(subEndpoint)}
+                                      >
+                                        {subEndpoint.length > 20 ? `${subEndpoint.substring(0, 10)}...${subEndpoint.substring(subEndpoint.length - 8)}` : subEndpoint}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
                                       onClick={() => handleCopyTokenRef(subEndpoint)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-slate-900 hover:bg-slate-200 transition-colors"
+                                      title="Copy token reference"
                                     >
-                                      {subEndpoint.length > 25 ? `${subEndpoint.substring(0, 12)}...${subEndpoint.substring(subEndpoint.length - 10)}` : subEndpoint}
-                                    </span>
+                                      {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                    </button>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopyTokenRef(subEndpoint)}
-                                    className="p-1 rounded-md text-slate-400 hover:text-slate-900 hover:bg-slate-200 transition-colors"
-                                    title="Copy reference"
-                                  >
-                                    {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                                  </button>
-                                </div>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-200 bg-emerald-50 font-bold">
+                                    Registered
+                                  </Badge>
+                                )
                               ) : (
-                                <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200">
-                                  No Active Push Ref
+                                <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200 font-medium">
+                                  Not Registered
                                 </Badge>
                               )}
                             </TableCell>
 
-                            {/* 6. Permission / Status */}
+                            {/* 6. Permission / Notification Status */}
                             <TableCell>
-                              <div className="flex flex-col gap-1">
+                              {isRegistered ? (
                                 <Badge className={cn(
-                                  "font-bold text-[9px] uppercase px-1.5 py-0.2 w-fit",
-                                  dev.notificationPermission === 'granted' ? "bg-emerald-100 text-emerald-800" : (dev.notificationPermission === 'denied' ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-700")
+                                  "font-bold text-[9px] uppercase px-2 py-0.5 border",
+                                  dev.notificationPermission === 'Allowed'
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : dev.notificationPermission === 'Denied'
+                                    ? "bg-rose-50 text-rose-700 border-rose-200"
+                                    : "bg-slate-100 text-slate-700 border-slate-200"
                                 )}>
-                                  Perm: {dev.notificationPermission || 'granted'}
+                                  {dev.notificationPermission || 'Allowed'}
                                 </Badge>
-                                <Badge className={cn(
-                                  "font-bold text-[9px] uppercase px-1.5 py-0.2 w-fit",
-                                  dev.deviceStatus === 'ACTIVE' || dev.isActive !== false ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-slate-100 text-slate-500"
-                                )}>
-                                  Status: {dev.deviceStatus || 'ACTIVE'}
-                                </Badge>
-                              </div>
+                              ) : (
+                                <span className="text-slate-400 text-xs font-mono">—</span>
+                              )}
                             </TableCell>
 
-                            {/* 7. Last Active / Updated */}
+                            {/* 7. Background Status */}
                             <TableCell>
-                              <div className="flex items-center gap-1.5 text-xs text-slate-600 font-mono">
-                                <Clock className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                                <span>{formatNotificationDateTime(dev.lastActiveAt || dev.lastTokenUpdated || dev.updatedAt)}</span>
-                              </div>
+                              {isRegistered ? (
+                                <Badge className={cn(
+                                  "font-bold text-[9px] uppercase px-2 py-0.5 border",
+                                  dev.backgroundStatus === 'Active'
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : dev.backgroundStatus === 'Restricted'
+                                    ? "bg-rose-50 text-rose-700 border-rose-200"
+                                    : "bg-slate-100 text-slate-600 border-slate-200"
+                                )}>
+                                  {dev.backgroundStatus || 'Active'}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] text-slate-400 border-slate-200 font-medium">
+                                  Not Registered
+                                </Badge>
+                              )}
                             </TableCell>
 
-                            {/* 8. Action */}
+                            {/* 8. Last Active / Updated */}
+                            <TableCell>
+                              {isRegistered && dev.lastActiveAt ? (
+                                <div className="flex items-center gap-1.5 text-xs text-slate-600 font-mono">
+                                  <Clock className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                                  <span>{formatNotificationDateTime(dev.lastActiveAt)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-xs font-mono">—</span>
+                              )}
+                            </TableCell>
+
+                            {/* 9. Device Status */}
+                            <TableCell>
+                              {isRegistered ? (
+                                dev.deviceStatus === 'ACTIVE' ? (
+                                  <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] uppercase px-2 py-0.5 flex items-center gap-1.5 w-fit">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    Active
+                                  </Badge>
+                                ) : dev.deviceStatus === 'PERMISSION_DISABLED' ? (
+                                  <Badge className="bg-rose-50 text-rose-700 border border-rose-200 font-bold text-[9px] uppercase px-2 py-0.5 w-fit">
+                                    Permission Disabled
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[9px] uppercase px-2 py-0.5 w-fit">
+                                    Inactive
+                                  </Badge>
+                                )
+                              ) : (
+                                <Badge className="bg-slate-100 text-slate-600 border border-slate-200 font-bold text-[9px] uppercase px-2 py-0.5 w-fit">
+                                  Not Registered
+                                </Badge>
+                              )}
+                            </TableCell>
+
+                            {/* 10. Action */}
                             <TableCell className="text-right pr-6">
                               <Button 
                                 variant="secondary" 
                                 size="sm" 
-                                className="h-9 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-xl"
+                                className="h-9 gap-1.5 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-xl"
                                 onClick={() => setSelectedEmployee(dev)}
                               >
                                 <History className="w-3.5 h-3.5" /> History
@@ -918,7 +1007,7 @@ export default function ActivityPage() {
             <CardFooter className="bg-slate-50 border-t p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-xs text-slate-500 font-medium">
                 Showing {deviceItems.length > 0 ? (devicePage - 1) * PAGE_SIZE + 1 : 0} to{" "}
-                {Math.min(devicePage * PAGE_SIZE, deviceTotal)} of {deviceTotal} registered devices
+                {Math.min(devicePage * PAGE_SIZE, deviceTotal)} of {deviceTotal} employees
               </div>
 
               <div className="flex items-center gap-3">
@@ -1159,7 +1248,7 @@ export default function ActivityPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Hardware Audit Trail Dialog */}
+      {/* Hardware Audit Trail & Device Specs Dialog */}
       <Dialog open={!!selectedEmployee} onOpenChange={(o) => !o && setSelectedEmployee(null)}>
         <DialogContent className="sm:max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-3xl bg-white">
           <DialogHeader className="bg-slate-900 text-white p-8 space-y-4 shrink-0">
@@ -1169,10 +1258,10 @@ export default function ActivityPage() {
                 </div>
                 <div className="flex-1">
                    <DialogTitle className="text-2xl font-black uppercase tracking-tight">{selectedEmployee?.employeeName || selectedEmployee?.name}</DialogTitle>
-                   <p className="text-[11px] font-bold text-primary uppercase tracking-[0.2em] mt-1">Hardware Audit Trail & Session Logs</p>
+                   <p className="text-[11px] font-bold text-primary uppercase tracking-[0.2em] mt-1">Hardware Audit Trail & Device Registry</p>
                 </div>
              </div>
-             <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 pt-4 border-t border-white/10">
+             <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-4 border-t border-white/10">
                 <div>
                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Employee Code</Label>
                    <p className="text-sm font-mono font-bold mt-0.5">{selectedEmployee?.employeeId || "N/A"}</p>
@@ -1181,73 +1270,146 @@ export default function ActivityPage() {
                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Department & Role</Label>
                    <p className="text-sm font-bold mt-0.5">{selectedEmployee?.department || "General"} ({selectedEmployee?.role || "EMPLOYEE"})</p>
                 </div>
-                <div className="hidden sm:block">
-                   <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">System Status</Label>
-                   <Badge className="bg-primary hover:bg-primary text-[10px] font-black uppercase block w-fit mt-0.5">{selectedEmployee?.deviceStatus || "ACTIVE"}</Badge>
+                <div>
+                   <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Registration Status</Label>
+                   <Badge className={cn(
+                     "text-[10px] font-black uppercase block w-fit mt-0.5",
+                     selectedEmployee?.isRegistered ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-200"
+                   )}>
+                     {selectedEmployee?.isRegistered ? "Registered" : "Not Registered"}
+                   </Badge>
+                </div>
+                <div>
+                   <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Device Status</Label>
+                   <Badge className={cn(
+                     "text-[10px] font-black uppercase block w-fit mt-0.5",
+                     selectedEmployee?.deviceStatus === 'ACTIVE'
+                       ? "bg-emerald-500 text-white"
+                       : selectedEmployee?.deviceStatus === 'PERMISSION_DISABLED'
+                       ? "bg-rose-500 text-white"
+                       : "bg-amber-500 text-white"
+                   )}>
+                     {selectedEmployee?.deviceStatus || "INACTIVE"}
+                   </Badge>
                 </div>
              </div>
           </DialogHeader>
 
-          <div className="p-8 bg-slate-50/50">
-             <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                   <Clock className="w-4 h-4" /> Activity Log (Actual Login Records)
-                </h3>
-                <Badge variant="outline" className="font-bold text-[10px] border-slate-200">System Records Only</Badge>
-             </div>
+          <div className="p-8 bg-slate-50/50 space-y-6 max-h-[60vh] overflow-y-auto">
+             {selectedEmployee?.isRegistered ? (
+               <>
+                 {/* Device Specifications Card */}
+                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                   <h4 className="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
+                     <Smartphone className="w-4 h-4 text-primary" /> Active Hardware Specifications
+                   </h4>
+                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 text-xs">
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Device Model</span>
+                       <span className="font-bold text-slate-800">{selectedEmployee.deviceName || selectedEmployee.model || "Web Node"}</span>
+                     </div>
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Platform</span>
+                       <span className="font-bold text-slate-800">{selectedEmployee.platform || "Android"}</span>
+                     </div>
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Current Device ID</span>
+                       <span className="font-mono text-primary font-bold truncate block">{selectedEmployee.deviceId || "—"}</span>
+                     </div>
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Notification Permission</span>
+                       <span className="font-bold text-emerald-700">{selectedEmployee.notificationPermission || "Allowed"}</span>
+                     </div>
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Background Status</span>
+                       <span className="font-bold text-slate-800">{selectedEmployee.backgroundStatus || "Active"}</span>
+                     </div>
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Registered At</span>
+                       <span className="font-mono text-slate-600">{formatNotificationDateTime(selectedEmployee.deviceRegisteredAt)}</span>
+                     </div>
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Last Heartbeat</span>
+                       <span className="font-mono text-slate-600">{formatNotificationDateTime(selectedEmployee.lastHeartbeatAt || selectedEmployee.lastActiveAt)}</span>
+                     </div>
+                     <div>
+                       <span className="text-slate-400 text-[10px] uppercase font-bold block">Last Active</span>
+                       <span className="font-mono text-slate-600">{formatNotificationDateTime(selectedEmployee.lastActiveAt)}</span>
+                     </div>
+                   </div>
+                 </div>
 
-             <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
-                <Table>
-                   <TableHeader className="bg-white">
-                      <TableRow>
-                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">From Date & Time</TableHead>
-                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">To Date & Time</TableHead>
-                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device Name</TableHead>
-                         <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device ID Login</TableHead>
-                         <TableHead className="font-black text-[10px] uppercase tracking-tighter text-right">Status</TableHead>
-                      </TableRow>
-                   </TableHeader>
-                   <TableBody>
-                      {getActualHistory(selectedEmployee).length === 0 ? (
-                         <TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground font-bold italic">No hardware transition records found.</TableCell></TableRow>
-                      ) : (
-                         getActualHistory(selectedEmployee).map((log: any, idx: number) => (
-                           <TableRow key={log.id || idx} className="hover:bg-slate-50 transition-colors">
-                              <TableCell className="font-bold text-slate-700 text-xs py-4">{formatDateTime(log.from)}</TableCell>
-                              <TableCell className="font-bold text-slate-700 text-xs py-4">
-                                 {log.to === "Present" ? (
-                                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none font-black text-[9px] px-2 uppercase">Active Now</Badge>
-                                 ) : formatDateTime(log.to)}
-                              </TableCell>
-                              <TableCell className="font-bold text-slate-500 text-[10px] uppercase">
-                                 {log.deviceName}
-                              </TableCell>
-                              <TableCell>
-                                 <div className="flex items-center gap-2">
-                                    <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                                    <span className="text-xs font-mono font-bold text-slate-500">{log.deviceId}</span>
-                                 </div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                 <CheckCircle2 className={cn("w-4 h-4 ml-auto", log.to === "Present" ? "text-emerald-500" : "text-slate-300")} />
-                              </TableCell>
-                           </TableRow>
-                         ))
-                      )}
-                   </TableBody>
-                </Table>
-             </Card>
+                 {/* Activity Log (Actual Login Records) */}
+                 <div className="space-y-3">
+                   <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
+                         <Clock className="w-4 h-4" /> Activity Log (Hardware Transition Records)
+                      </h3>
+                      <Badge variant="outline" className="font-bold text-[10px] border-slate-200">MongoDB Records</Badge>
+                   </div>
+
+                   <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
+                      <Table>
+                         <TableHeader className="bg-slate-50">
+                            <TableRow>
+                               <TableHead className="font-black text-[10px] uppercase tracking-tighter">Last Active Date & Time</TableHead>
+                               <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device Name</TableHead>
+                               <TableHead className="font-black text-[10px] uppercase tracking-tighter">Device ID Login</TableHead>
+                               <TableHead className="font-black text-[10px] uppercase tracking-tighter text-right">Status</TableHead>
+                            </TableRow>
+                         </TableHeader>
+                         <TableBody>
+                            {getActualHistory(selectedEmployee).length === 0 ? (
+                               <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground font-bold italic">No transition records found.</TableCell></TableRow>
+                            ) : (
+                               getActualHistory(selectedEmployee).map((log: any, idx: number) => (
+                                 <TableRow key={log.id || idx} className="hover:bg-slate-50 transition-colors">
+                                    <TableCell className="font-bold text-slate-700 text-xs py-3">{formatDateTime(log.from || log.lastActiveAt)}</TableCell>
+                                    <TableCell className="font-bold text-slate-600 text-xs">
+                                       {log.deviceName || selectedEmployee.deviceName || "Hardware Node"}
+                                    </TableCell>
+                                    <TableCell>
+                                       <div className="flex items-center gap-2">
+                                          <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                                          <span className="text-xs font-mono font-bold text-slate-600">{log.deviceId || selectedEmployee.deviceId}</span>
+                                       </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                       <Badge className="bg-emerald-100 text-emerald-700 border-none font-bold text-[9px] uppercase">
+                                          {selectedEmployee.deviceStatus || "ACTIVE"}
+                                       </Badge>
+                                    </TableCell>
+                                 </TableRow>
+                               ))
+                            )}
+                         </TableBody>
+                      </Table>
+                   </Card>
+                 </div>
+               </>
+             ) : (
+               <div className="py-12 px-6 text-center bg-white rounded-2xl border border-dashed border-slate-300 space-y-3">
+                 <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                   <Smartphone className="w-7 h-7" />
+                 </div>
+                 <h4 className="text-base font-bold text-slate-900">No Device Registered Yet</h4>
+                 <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                   This employee has not registered a hardware device. Device information, push token, and background status will automatically be recorded when the employee logs in via the Android mobile app or browser terminal.
+                 </p>
+               </div>
+             )}
           </div>
 
           <DialogFooter className="p-6 bg-white border-t flex items-center justify-between">
              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                Verified Infrastructure Node
+                Verified Sikka ERP Infrastructure Node
              </div>
-             <Button onClick={() => setSelectedEmployee(null)} className="h-11 px-8 rounded-xl font-black bg-slate-900 hover:bg-primary transition-all">Close History</Button>
+             <Button onClick={() => setSelectedEmployee(null)} className="h-11 px-8 rounded-xl font-black bg-slate-900 hover:bg-primary transition-all">Close Details</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+

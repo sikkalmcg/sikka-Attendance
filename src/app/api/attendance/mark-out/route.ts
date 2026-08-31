@@ -5,6 +5,7 @@ import { format, parseISO, addHours, isValid } from 'date-fns';
 import { ObjectId } from 'mongodb';
 import { invalidateBootstrapCache } from '@/lib/data-cache';
 import { parseDateTime } from '@/lib/utils';
+import { realtimeBroadcaster } from '@/lib/realtime-events';
 
 export const dynamic = 'force-dynamic';
 
@@ -242,6 +243,8 @@ export async function POST(req: Request) {
       { $set: updatePayload }
     );
 
+    const savedRecord = { ...activeRecord, ...updatePayload, id: String(activeRecord._id) };
+
     const empFullName = matchedEmp.firstName
       ? `${matchedEmp.firstName} ${matchedEmp.lastName || ''}`.trim()
       : (matchedEmp.name || matchedEmp.fullName || "Employee");
@@ -259,11 +262,19 @@ export async function POST(req: Request) {
 
     invalidateBootstrapCache();
 
+    // Broadcast real-time event AFTER confirmed MongoDB save
+    //    This triggers SSE push to all connected clients (Mark Attendance + Approvals pages)
+    realtimeBroadcaster.broadcast('attendance_updated', {
+      collection: 'attendance',
+      action: 'update',
+      data: savedRecord,
+    });
+
     return NextResponse.json(
       {
         success: true,
         message: "Attendance Marked OUT Successfully!",
-        data: { ...activeRecord, ...updatePayload, id: String(activeRecord._id) }
+        data: savedRecord
       },
       { status: 200 }
     );
