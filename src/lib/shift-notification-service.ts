@@ -1,5 +1,6 @@
 import { format, isSunday, subDays, parseISO, isValid } from "date-fns";
 import type { AttendanceRecord, Employee, Holiday, LeaveRequest } from "@/lib/types";
+import { getTranslation, Language } from "@/lib/translations";
 
 export type EmployeeShift = 'DAY' | 'NIGHT';
 
@@ -158,6 +159,8 @@ export interface ShiftReminderNotificationItem {
   employeeName: string;
   dedupeKey: string;
   shiftDate: string;
+  workingDate: string;
+  language: 'en' | 'hi';
   action: 'MARK_IN' | 'MARK_OUT';
   deepLink: string;
   source: 'SYSTEM_SCHEDULER';
@@ -166,10 +169,10 @@ export interface ShiftReminderNotificationItem {
 /**
  * Evaluates shift reminder notifications for all active employees based on current IST time.
  * Covers:
- * 1. 10:00 AM IST - Day Shift Mark IN Reminder (Section 7)
- * 2. 06:00 PM IST - Day Shift Mark OUT Reminder (Section 8)
- * 3. 08:00 PM IST - Night Shift Mark IN Reminder (Section 9)
- * 4. 06:00 AM IST - Night Shift Mark OUT Reminder (Section 10)
+ * 1. 10:00 AM IST - Day Shift Mark IN Reminder
+ * 2. 06:00 PM IST - Day Shift Mark OUT Reminder
+ * 3. 08:00 PM IST - Night Shift Mark IN Reminder
+ * 4. 06:00 AM IST - Night Shift Mark OUT Reminder
  */
 export const evaluateShiftAttendanceReminders = (params: {
   employees: Employee[];
@@ -239,6 +242,9 @@ export const evaluateShiftAttendanceReminders = (params: {
       ? `${emp.firstName} ${emp.lastName || ''}`.trim()
       : (emp.name || (emp as any).fullName || "Employee");
 
+    const empLang: Language = (emp.language === 'hi' || (emp as any).lang === 'hi') ? 'hi' : 'en';
+    const t = getTranslation(empLang);
+
     // Match employee's attendance records by any identifier
     const empHistory = attendanceRecords.filter((r) => {
       if (!r) return false;
@@ -248,7 +254,7 @@ export const evaluateShiftAttendanceReminders = (params: {
       return recEmpId === targetEmpId || (userIdent && recEmpId === userIdent);
     });
 
-    // 2. Determine applicable shift (from previous attendance history - Section 6)
+    // 2. Determine applicable shift (from previous attendance history)
     const shift = determineEmployeeShift(empHistory);
 
     // 3. Find today's and yesterday's attendance records
@@ -267,18 +273,23 @@ export const evaluateShiftAttendanceReminders = (params: {
     const nowFormatted = format(currentISTTime, "yyyy-MM-dd HH:mm:ss");
 
     // ==========================================
-    // DAY SHIFT NOTIFICATIONS (Section 7 & 8)
+    // DAY SHIFT NOTIFICATIONS (Section 3 & 4)
     // ==========================================
     if (shift === 'DAY') {
-      // PART 3: Day Shift - 10:00 AM Mark IN Reminder (Section 7)
-      // Condition: Current Date AND Day Shift AND Mark IN does NOT exist for today
+      // 10:00 AM Mark IN Reminder (Section 3)
+      // Condition: Current Date AND Day Shift AND Mark IN does NOT exist for today AND not holiday / weekly off
       if (isTodayWorkingDay && !isTodayOnLeave && isDayInWindow) {
-        const dedupeKey = `${empId}_${todayStr}_DAY_MARK_IN_REMINDER_10:00`;
-        const legacyDedupeKey = `${empId}_${todayStr}_DAY_IN_REMINDER`;
-        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey)) {
+        const dedupeKey = `${empId}-${todayStr}-DAY-MARK_IN`;
+        const legacyDedupeKey1 = `${empId}_${todayStr}_DAY_MARK_IN_REMINDER_10:00`;
+        const legacyDedupeKey2 = `${empId}_${todayStr}_DAY_IN_REMINDER`;
+
+        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey1) && !existingDedupeKeys.has(legacyDedupeKey2)) {
+          const message = t.dayMarkInReminder(empFullName);
+          const title = empLang === 'hi' ? "उपस्थिति रिमाइंडर" : "Attendance Reminder";
+
           remindersToCreate.push({
-            title: "Attendance Reminder",
-            message: "You have not marked IN today. Please Mark IN.",
+            title,
+            message,
             timestamp: nowFormatted,
             read: false,
             type: 'DAY_MARK_IN_REMINDER',
@@ -289,6 +300,8 @@ export const evaluateShiftAttendanceReminders = (params: {
             employeeName: empFullName,
             dedupeKey,
             shiftDate: todayStr,
+            workingDate: todayStr,
+            language: empLang,
             action: 'MARK_IN',
             deepLink: '/dashboard/attendance?action=mark_in',
             source: 'SYSTEM_SCHEDULER',
@@ -297,16 +310,21 @@ export const evaluateShiftAttendanceReminders = (params: {
         }
       }
 
-      // PART 4: Day Shift - 06:00 PM Mark OUT Reminder (Section 8)
+      // 06:00 PM Mark OUT Reminder (Section 4)
       // Condition: Day Shift AND Today's Mark IN exists AND Today's Mark OUT does NOT exist
       if (isTodayWorkingDay && isDayOutWindow) {
-        const dedupeKey = `${empId}_${todayStr}_DAY_MARK_OUT_REMINDER_18:00`;
-        const legacyDedupeKey = `${empId}_${todayStr}_DAY_OUT_REMINDER`;
+        const dedupeKey = `${empId}-${todayStr}-DAY-MARK_OUT`;
+        const legacyDedupeKey1 = `${empId}_${todayStr}_DAY_MARK_OUT_REMINDER_18:00`;
+        const legacyDedupeKey2 = `${empId}_${todayStr}_DAY_OUT_REMINDER`;
+
         // Send only if marked IN but has not marked OUT
-        if (hasMarkedInToday && !hasMarkedOutToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey)) {
+        if (hasMarkedInToday && !hasMarkedOutToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey1) && !existingDedupeKeys.has(legacyDedupeKey2)) {
+          const message = t.dayMarkOutReminder(empFullName);
+          const title = empLang === 'hi' ? "मार्क आउट रिमाइंडर" : "Mark OUT Reminder";
+
           remindersToCreate.push({
-            title: "Mark OUT Reminder",
-            message: "You have marked IN today but have not marked OUT. Please Mark OUT.",
+            title,
+            message,
             timestamp: nowFormatted,
             read: false,
             type: 'DAY_MARK_OUT_REMINDER',
@@ -317,6 +335,8 @@ export const evaluateShiftAttendanceReminders = (params: {
             employeeName: empFullName,
             dedupeKey,
             shiftDate: todayStr,
+            workingDate: todayStr,
+            language: empLang,
             action: 'MARK_OUT',
             deepLink: '/dashboard/attendance?action=mark_out',
             source: 'SYSTEM_SCHEDULER',
@@ -327,18 +347,23 @@ export const evaluateShiftAttendanceReminders = (params: {
     }
 
     // ==========================================
-    // NIGHT SHIFT NOTIFICATIONS (Section 9 & 10)
+    // NIGHT SHIFT NOTIFICATIONS (Section 5 & 6)
     // ==========================================
     if (shift === 'NIGHT') {
-      // PART 5: Night Shift - 08:00 PM Mark IN Reminder (Section 9)
-      // Condition: Night Shift AND applicable Mark IN does NOT exist
+      // 08:00 PM Mark IN Reminder (Section 5)
+      // Condition: Night Shift AND applicable Mark IN does NOT exist AND today is working day
       if (isTodayWorkingDay && !isTodayOnLeave && isNightInWindow) {
-        const dedupeKey = `${empId}_${todayStr}_NIGHT_MARK_IN_REMINDER_20:00`;
-        const legacyDedupeKey = `${empId}_${todayStr}_NIGHT_IN_REMINDER`;
-        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey)) {
+        const dedupeKey = `${empId}-${todayStr}-NIGHT-MARK_IN`;
+        const legacyDedupeKey1 = `${empId}_${todayStr}_NIGHT_MARK_IN_REMINDER_20:00`;
+        const legacyDedupeKey2 = `${empId}_${todayStr}_NIGHT_IN_REMINDER`;
+
+        if (!hasMarkedInToday && !existingDedupeKeys.has(dedupeKey) && !existingDedupeKeys.has(legacyDedupeKey1) && !existingDedupeKeys.has(legacyDedupeKey2)) {
+          const message = t.nightMarkInReminder(empFullName);
+          const title = empLang === 'hi' ? "उपस्थिति रिमाइंडर" : "Attendance Reminder";
+
           remindersToCreate.push({
-            title: "Attendance Reminder",
-            message: "Your Night Shift is starting. Please Mark IN.",
+            title,
+            message,
             timestamp: nowFormatted,
             read: false,
             type: 'NIGHT_MARK_IN_REMINDER',
@@ -349,6 +374,8 @@ export const evaluateShiftAttendanceReminders = (params: {
             employeeName: empFullName,
             dedupeKey,
             shiftDate: todayStr,
+            workingDate: todayStr,
+            language: empLang,
             action: 'MARK_IN',
             deepLink: '/dashboard/attendance?action=mark_in',
             source: 'SYSTEM_SCHEDULER',
@@ -357,12 +384,14 @@ export const evaluateShiftAttendanceReminders = (params: {
         }
       }
 
-      // PART 6: Night Shift - 06:00 AM (Next Day) Mark OUT Reminder (Section 10)
+      // 06:00 AM (Next Day) Mark OUT Reminder (Section 6)
       // Condition: Night Shift AND Applicable Night Shift Mark IN exists (started yesterday) AND Mark OUT does NOT exist.
       // An employee who did not Mark IN must NOT receive the Night Shift Mark OUT notification.
       if (isNightOutWindow) {
-        const dedupeKey = `${empId}_${yesterdayStr}_NIGHT_MARK_OUT_REMINDER_06:00`;
-        const legacyDedupeKey = `${empId}_${yesterdayStr}_NIGHT_OUT_REMINDER`;
+        const dedupeKey = `${empId}-${yesterdayStr}-NIGHT-MARK_OUT`;
+        const legacyDedupeKey1 = `${empId}_${yesterdayStr}_NIGHT_MARK_OUT_REMINDER_06:00`;
+        const legacyDedupeKey2 = `${empId}_${yesterdayStr}_NIGHT_OUT_REMINDER`;
+
         const hasYesterdayNightIn = Boolean(yesterdayRecord && yesterdayRecord.inTime);
         const hasYesterdayNightOut = Boolean(
           yesterdayRecord &&
@@ -373,13 +402,17 @@ export const evaluateShiftAttendanceReminders = (params: {
           hasYesterdayNightIn &&
           !hasYesterdayNightOut &&
           !existingDedupeKeys.has(dedupeKey) &&
-          !existingDedupeKeys.has(legacyDedupeKey) &&
+          !existingDedupeKeys.has(legacyDedupeKey1) &&
+          !existingDedupeKeys.has(legacyDedupeKey2) &&
           isYesterdayWorkingDay &&
           !isYesterdayOnLeave
         ) {
+          const message = t.nightMarkOutReminder(empFullName);
+          const title = empLang === 'hi' ? "मार्क आउट रिमाइंडर" : "Mark OUT Reminder";
+
           remindersToCreate.push({
-            title: "Mark OUT Reminder",
-            message: "Your Night Shift attendance is active. Please Mark OUT.",
+            title,
+            message,
             timestamp: nowFormatted,
             read: false,
             type: 'NIGHT_MARK_OUT_REMINDER',
@@ -390,6 +423,8 @@ export const evaluateShiftAttendanceReminders = (params: {
             employeeName: empFullName,
             dedupeKey,
             shiftDate: yesterdayStr,
+            workingDate: yesterdayStr,
+            language: empLang,
             action: 'MARK_OUT',
             deepLink: '/dashboard/attendance?action=mark_out',
             source: 'SYSTEM_SCHEDULER',

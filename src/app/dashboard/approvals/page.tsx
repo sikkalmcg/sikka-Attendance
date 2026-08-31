@@ -639,7 +639,7 @@ const allPlantExitHistory = useMemo(() => {
           approvalActionDate: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           remark: finalRemarks || "Approved as Absent",
-        });
+        }, true);
       } else {
         const finalDbId = rec.id || (rec as any)._id;
         await updateRecord('attendance', finalDbId, {
@@ -651,17 +651,17 @@ const allPlantExitHistory = useMemo(() => {
           approvalActionDate: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           remark: finalRemarks,
-        });
+        }, true);
       }
-      // MongoDB confirmed — refresh UI from MongoDB, then show success toast
-      await refreshData();
+
+      setIsApprovingId(null);
+      setSelectedAttendance(null);
       toast({ title: "Attendance approved successfully and moved to History." });
+      refreshData().catch(() => {});
     } catch (e) {
       console.error("Approval error:", e);
       toast({ variant: "destructive", title: "Approval Failed", description: "Could not save to database. Please try again." });
-    } finally {
       setIsApprovingId(null);
-      setSelectedAttendance(null);
     }
   };
 
@@ -1168,18 +1168,22 @@ const allPlantExitHistory = useMemo(() => {
           approved: false,
           address: 'Manually Created Log',
           unapprovedOutDuration: 0,
-        });
+        }, true);
       } else {
-        await updateRecord('attendance', finalDbId, updatePayload);
+        await updateRecord('attendance', finalDbId, updatePayload, true);
       }
 
       setIsEditModalOpen(false);
       setSelectedAttendance(null);
-      await refreshData();
+      setIsUpdatingAttendanceId(null);
+
       toast({
         title: "Attendance Record Updated",
         description: hasOut ? "Attendance entry verified and saved with IN/OUT checkpoints." : "Attendance IN record saved. Active session created for employee."
       });
+
+      // Background silent data sync
+      refreshData().catch(() => {});
     } catch (e: any) {
       console.error("Edit attendance error:", e);
       toast({
@@ -1187,7 +1191,6 @@ const allPlantExitHistory = useMemo(() => {
         title: "Update Failed",
         description: e?.message || "Could not save to database. Please try again."
       });
-    } finally {
       setIsUpdatingAttendanceId(null);
     }
   };

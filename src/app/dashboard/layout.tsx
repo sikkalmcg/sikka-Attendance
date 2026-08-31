@@ -34,8 +34,16 @@ import {
   Smartphone,
   Bell,
   CheckCheck,
-  Trash2
+  Trash2,
+  Globe
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -132,7 +140,7 @@ function NotificationBell() {
       const targetEmpId = String(n.employeeId || '').trim().toUpperCase();
       const targetEmpName = String(n.employeeName || '').trim().toUpperCase();
       const userFullName = String(verifiedUser?.fullName || (verifiedUser as any)?.name || '').trim().toUpperCase();
-      const notifType = String(n.type || '').toUpperCase();
+      const notifType = String(n.type || n.notificationType || n.notification_type || '').toUpperCase();
       const isEmployeeOnlyNotif = [
         'MARK_IN',
         'MARK_OUT',
@@ -141,8 +149,12 @@ function NotificationBell() {
         'DAY_IN_REMINDER',
         'DAY_OUT_REMINDER',
         'NIGHT_IN_REMINDER',
-        'NIGHT_OUT_REMINDER'
-      ].includes(notifType);
+        'NIGHT_OUT_REMINDER',
+        'DAY_MARK_IN_REMINDER',
+        'DAY_MARK_OUT_REMINDER',
+        'NIGHT_MARK_IN_REMINDER',
+        'NIGHT_MARK_OUT_REMINDER'
+      ].includes(notifType) || Boolean(n.reminderType);
 
       if (isEmployee) {
         // If notification has a specific employeeId, it MUST match one of this employee's identifiers or name
@@ -157,9 +169,6 @@ function NotificationBell() {
         // For Admin / HR / Super Admin:
         // Strictly exclude employee Mark IN / Mark OUT / Shift Reminders
         if (isEmployeeOnlyNotif) {
-          if (targetEmpId && targetEmpId !== "GLOBAL" && targetEmpId !== "ALL") {
-            return userIdentifiers.includes(targetEmpId);
-          }
           return false;
         }
 
@@ -488,6 +497,7 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
   const { updateRecord, employees } = useData();
   const [name, setName] = useState(user.fullName);
   const [avatar, setAvatar] = useState(user.avatar || "");
+  const [language, setLanguage] = useState(user.language || "en");
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -495,6 +505,7 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
   useEffect(() => {
     setName(user.fullName);
     setAvatar(user.avatar || "");
+    setLanguage(user.language || "en");
   }, [user]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -522,24 +533,38 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
     setIsProcessing(true);
     try {
       if (user.role !== 'SUPER_ADMIN' && user.role !== 'EMPLOYEE' && user.id) {
-        updateRecord('users', user.id, { fullName: name, avatar: avatar });
+        updateRecord('users', user.id, { fullName: name, avatar: avatar, language: language });
       }
 
       if (user.role === 'EMPLOYEE') {
-        const loginIdent = user.username?.replace(/\s/g, '');
+        const loginIdent = String(user.username || user.employeeId || user.id || '').replace(/\s/g, '').toUpperCase();
         const dbEmp = employees.find(e => {
-          const empAadhaar = e.aadhaar?.replace(/\s/g, '');
-          const empMobile = e.mobile?.replace(/\s/g, '');
-          return empAadhaar === loginIdent || empMobile === loginIdent;
+          const empId = String(e.employeeId || e.id || '').replace(/\s/g, '').toUpperCase();
+          const empAadhaar = String((e as any).aadhaarNumber || e.aadhaar || '').replace(/\s/g, '');
+          const empMobile = String((e as any).mobileNumber || e.mobile || '').replace(/\s/g, '');
+          return empId === loginIdent || empAadhaar === loginIdent || empMobile === loginIdent;
         });
         if (dbEmp) {
-          updateRecord('employees', dbEmp.id, { avatar: avatar });
+          updateRecord('employees', dbEmp.id, { avatar: avatar, language: language });
         }
       }
 
-      onSave({ ...user, fullName: name, avatar });
+      const updatedUser = { ...user, fullName: name, avatar, language };
+      
+      // Persist in localStorage and session cookie
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          Cookies.set('sikka_session', JSON.stringify(updatedUser), { expires: 365, path: '/' });
+        } catch {}
+      }
+
+      onSave(updatedUser);
       onOpenChange(false);
-      toast({ title: "Profile Updated", description: "Your settings have been saved successfully." });
+      toast({
+        title: language === 'hi' ? "प्रोफ़ाइल अपडेट हो गई" : "Profile Updated",
+        description: language === 'hi' ? "आपकी सेटिंग्स सफलतापूर्वक सहेजी गई हैं।" : "Your settings have been saved successfully."
+      });
     } catch (e) {
       toast({ variant: "destructive", title: "Error", description: "Failed to update profile record." });
     } finally {
@@ -555,7 +580,7 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
             <UserIcon className="w-5 h-5 text-primary" /> Profile Settings
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-8 py-6">
+        <div className="space-y-6 py-4">
           <div className="flex flex-col items-center gap-4">
             <div className="relative group">
               <Avatar className="h-24 w-24 border-4 border-white shadow-xl">
@@ -590,6 +615,30 @@ function ProfileSettingsDialog({ isOpen, onOpenChange, user, onSave }: { isOpen:
                 <p className="text-[9px] font-bold text-slate-400 uppercase">Verified via Employee Directory</p>
               )}
             </div>
+
+            {/* Language Selection Option (Section 13 & 14) */}
+            <div className="space-y-2">
+              <Label className="font-bold text-xs uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-primary" /> Language / भाषा
+              </Label>
+              <Select value={language} onValueChange={(val) => setLanguage(val)}>
+                <SelectTrigger className="h-12 bg-slate-50 border-slate-200 rounded-xl font-bold text-sm">
+                  <SelectValue placeholder="Select Language" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-slate-200 shadow-xl">
+                  <SelectItem value="en" className="font-bold text-xs py-2.5">
+                    English (Default)
+                  </SelectItem>
+                  <SelectItem value="hi" className="font-bold text-xs py-2.5">
+                    Hindi (हिन्दी)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[9px] font-semibold text-slate-400">
+                Attendance interface and reminders will use this language.
+              </p>
+            </div>
+
             <div className="space-y-2">
               <Label className="font-bold text-xs uppercase text-slate-500 tracking-wider">Username (Read-only)</Label>
               <Input value={user.username} disabled className="h-12 bg-slate-100 border-slate-200 rounded-xl font-mono text-xs italic" />

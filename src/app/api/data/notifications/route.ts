@@ -26,11 +26,27 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
-    // 2. Admin receives all notifications
+    // 2. Admin receives system/admin notifications, but strictly NEVER receives employee attendance reminders
     if (isAdmin) {
+      const EXCLUDED_ADMIN_TYPES = [
+        'DAY_MARK_IN_REMINDER',
+        'DAY_MARK_OUT_REMINDER',
+        'NIGHT_MARK_IN_REMINDER',
+        'NIGHT_MARK_OUT_REMINDER',
+        'SHIFT_REMINDER',
+        'DAY_IN_REMINDER',
+        'DAY_OUT_REMINDER',
+        'NIGHT_IN_REMINDER',
+        'NIGHT_OUT_REMINDER'
+      ];
       const allNotifs = await db
         .collection('notifications')
-        .find({})
+        .find({
+          type: { $nin: EXCLUDED_ADMIN_TYPES },
+          notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
+          notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+          reminderType: { $exists: false },
+        })
         .sort({ createdAt: -1, timestamp: -1, _id: -1 })
         .limit(200)
         .toArray();

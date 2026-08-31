@@ -60,7 +60,25 @@ export async function GET(req: Request) {
     let attendanceQuery: any = {};
     const targetIds = new Set<string>();
 
-    if (!isAdmin && sessionEmpId) {
+    if (isAdmin) {
+      const EXCLUDED_ADMIN_TYPES = [
+        'DAY_MARK_IN_REMINDER',
+        'DAY_MARK_OUT_REMINDER',
+        'NIGHT_MARK_IN_REMINDER',
+        'NIGHT_MARK_OUT_REMINDER',
+        'SHIFT_REMINDER',
+        'DAY_IN_REMINDER',
+        'DAY_OUT_REMINDER',
+        'NIGHT_IN_REMINDER',
+        'NIGHT_OUT_REMINDER'
+      ];
+      notificationQuery = {
+        type: { $nin: EXCLUDED_ADMIN_TYPES },
+        notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
+        notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+        reminderType: { $exists: false },
+      };
+    } else if (sessionEmpId) {
       targetIds.add(sessionEmpId);
       // Resolve all aliases for this employee
       const matchedEmp = await db.collection('employees').findOne({

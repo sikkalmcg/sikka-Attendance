@@ -21,14 +21,31 @@ export async function GET(req: Request) {
     const sessionRole = String(sessionUser?.role || '').toUpperCase();
     const isAdmin = ADMIN_ROLES.includes(sessionRole);
 
-    // 2. For admin roles — return ALL notifications (for Activity Page history, Section 24)
+    // 2. For admin roles — return notifications (excluding employee attendance reminders)
     if (isAdmin) {
       const db = await getDb();
       if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
 
+      const EXCLUDED_ADMIN_TYPES = [
+        'DAY_MARK_IN_REMINDER',
+        'DAY_MARK_OUT_REMINDER',
+        'NIGHT_MARK_IN_REMINDER',
+        'NIGHT_MARK_OUT_REMINDER',
+        'SHIFT_REMINDER',
+        'DAY_IN_REMINDER',
+        'DAY_OUT_REMINDER',
+        'NIGHT_IN_REMINDER',
+        'NIGHT_OUT_REMINDER'
+      ];
+
       const notifications = await db
         .collection('notifications')
-        .find({})
+        .find({
+          type: { $nin: EXCLUDED_ADMIN_TYPES },
+          notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
+          notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+          reminderType: { $exists: false },
+        })
         .sort({ createdAt: -1, timestamp: -1, _id: -1 })
         .limit(200)
         .toArray();

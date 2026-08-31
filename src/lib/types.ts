@@ -10,6 +10,7 @@ export interface User {
   plantIds?: string[]; 
   status: 'Active' | 'Inactive';
   avatar?: string;
+  language?: 'en' | 'hi' | string;
   sessionId?: string; 
 }
 
@@ -139,6 +140,7 @@ export interface Employee {
   advanceLeaveBalance?: number;
   advanceLeaveHistory?: AdvanceLeaveHistoryEntry[];
   avatar?: string;
+  language?: 'en' | 'hi' | string;
   deviceId?: string; 
   deviceName?: string; 
   deviceHistory?: DeviceHistoryEntry[];
@@ -320,8 +322,11 @@ export interface AppNotification {
   read: boolean;
   isRead?: boolean;
   dedupeKey?: string;
+  language?: 'en' | 'hi' | string;
   shift?: 'DAY' | 'NIGHT';
   shiftDate?: string;
+  workingDate?: string;
+  reminderType?: 'MARK_IN' | 'MARK_OUT' | string;
   action?: 'MARK_IN' | 'MARK_OUT';
   deepLink?: string;
   createdAt?: string | Date;

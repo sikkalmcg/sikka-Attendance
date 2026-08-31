@@ -24,9 +24,24 @@ export async function GET(req: Request) {
     const db = await getDb();
     if (!db) return NextResponse.json({ count: 0 });
 
-    // Admin: count all unread
+    // Admin: count unread notifications (strictly excluding employee attendance reminders)
     if (isAdmin) {
+      const EXCLUDED_ADMIN_TYPES = [
+        'DAY_MARK_IN_REMINDER',
+        'DAY_MARK_OUT_REMINDER',
+        'NIGHT_MARK_IN_REMINDER',
+        'NIGHT_MARK_OUT_REMINDER',
+        'SHIFT_REMINDER',
+        'DAY_IN_REMINDER',
+        'DAY_OUT_REMINDER',
+        'NIGHT_IN_REMINDER',
+        'NIGHT_OUT_REMINDER'
+      ];
       const unreadCount = await db.collection('notifications').countDocuments({
+        type: { $nin: EXCLUDED_ADMIN_TYPES },
+        notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
+        notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+        reminderType: { $exists: false },
         $or: [{ isRead: false }, { read: false }, { isRead: { $exists: false } }],
       });
       return NextResponse.json({ count: unreadCount, unreadCount });

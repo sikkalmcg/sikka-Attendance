@@ -74,6 +74,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { postNativeNotification } from "@/lib/android-bridge";
+import { getTranslation } from "@/lib/translations";
 
 const getISTTime = () => {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -94,24 +95,23 @@ const getPreciseDistance = (lat1: number, lon1: number, lat2: number, lon2: numb
 };
 
 // --- LEAVE REQUEST FORM COMPONENT (FOR EMPLOYEES) ---
-function LeaveRequestForm() {
+function LeaveRequestForm({ t }: { t?: any }) {
   const [open, setOpen] = useState(false);
-  const { addRecord, verifiedUser, leaveRequests, refreshData } = useData();
+  const { addRecord, verifiedUser, currentUser, leaveRequests, refreshData } = useData();
   const { toast } = useToast();
   const [purpose, setPurpose] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [remark, setRemark] = useState("");
 
+  const employeeLang = (verifiedUser?.language || currentUser?.language || 'en').toLowerCase().trim();
+  const activeT = t || getTranslation(employeeLang);
+
   const todayStr = format(startOfToday(), "yyyy-MM-dd");
 
-  const recommendedLeaves = [
-    "Sick Leave",
-    "Casual Leave",
-    "Earned Leave",
-    "Emergency Leave",
-    "Privilege Leave"
-  ];
+  const recommendedLeaves = employeeLang === 'hi'
+    ? ["बीमारी की छुट्टी", "आकस्मिक अवकाश", "अर्जित अवकाश", "आपातकालीन अवकाश", "विशेषाधिकार अवकाश"]
+    : ["Sick Leave", "Casual Leave", "Earned Leave", "Emergency Leave", "Privilege Leave"];
 
   const totalDays = fromDate && toDate && !isBefore(new Date(toDate), new Date(fromDate))
     ? differenceInCalendarDays(new Date(toDate), new Date(fromDate)) + 1
@@ -124,8 +124,8 @@ function LeaveRequestForm() {
     } else {
       toast({
         variant: "destructive",
-        title: "Word Limit Exceeded",
-        description: "Remark cannot exceed 20 words.",
+        title: employeeLang === 'hi' ? "शब्द सीमा समाप्त" : "Word Limit Exceeded",
+        description: employeeLang === 'hi' ? "टिप्पणी 20 शब्दों से अधिक नहीं हो सकती।" : "Remark cannot exceed 20 words.",
       });
     }
   };
@@ -135,7 +135,11 @@ function LeaveRequestForm() {
     const today = startOfToday();
 
     if (!purpose || !fromDate || !toDate) {
-      toast({ variant: "destructive", title: "Incomplete Form", description: "Please fill all required fields." });
+      toast({
+        variant: "destructive",
+        title: employeeLang === 'hi' ? "अपूर्ण फॉर्म" : "Incomplete Form",
+        description: employeeLang === 'hi' ? "कृपया सभी आवश्यक फ़ील्ड भरें।" : "Please fill all required fields."
+      });
       return;
     }
 
@@ -143,12 +147,20 @@ function LeaveRequestForm() {
     const selectedToDate = startOfDay(new Date(toDate));
 
     if (isBefore(selectedFromDate, today)) {
-      toast({ variant: "destructive", title: "Invalid Date", description: "Leave request past date se allow nahi hai. Kripya aaj ki ya bhavishya ki date chunein." });
+      toast({
+        variant: "destructive",
+        title: employeeLang === 'hi' ? "अमान्य दिनांक" : "Invalid Date",
+        description: employeeLang === 'hi' ? "पिछली तिथि के लिए अवकाश की अनुमति नहीं है। कृपया आज या भविष्य की तिथि चुनें।" : "Leave request for past dates is not allowed. Please choose today or a future date."
+      });
       return;
     }
 
     if (isBefore(selectedToDate, selectedFromDate)) {
-      toast({ variant: "destructive", title: "Invalid Date Range", description: "To Date cannot be before From Date." });
+      toast({
+        variant: "destructive",
+        title: employeeLang === 'hi' ? "अमान्य दिनांक सीमा" : "Invalid Date Range",
+        description: employeeLang === 'hi' ? "अंतिम दिनांक प्रारंभ दिनांक से पहले नहीं हो सकती।" : "To Date cannot be before From Date."
+      });
       return;
     }
 
@@ -160,7 +172,11 @@ function LeaveRequestForm() {
     );
 
     if (hasDuplicate) {
-      toast({ variant: "destructive", title: "Duplicate Request", description: "A leave request for these dates already exists." });
+      toast({
+        variant: "destructive",
+        title: employeeLang === 'hi' ? "डुप्लिकेट अनुरोध" : "Duplicate Request",
+        description: employeeLang === 'hi' ? "इन तिथियों के लिए अवकाश अनुरोध पहले से मौजूद है।" : "A leave request for these dates already exists."
+      });
       return;
     }
 
@@ -180,14 +196,21 @@ function LeaveRequestForm() {
         createdAt: new Date().toISOString()
       });
       await refreshData();
-      toast({ title: "Leave Request Submitted", description: "Your request has been sent for approval." });
+      toast({
+        title: employeeLang === 'hi' ? "अवकाश अनुरोध जमा हुआ" : "Leave Request Submitted",
+        description: employeeLang === 'hi' ? "आपका अनुरोध अनुमोदन के लिए भेज दिया गया है।" : "Your request has been sent for approval."
+      });
       setOpen(false);
       setPurpose("");
       setFromDate("");
       setToDate("");
       setRemark("");
     } catch (error) {
-      toast({ variant: "destructive", title: "Submission Failed", description: "Could not submit your leave request." });
+      toast({
+        variant: "destructive",
+        title: employeeLang === 'hi' ? "जमा करने में विफल" : "Submission Failed",
+        description: employeeLang === 'hi' ? "आपका अवकाश अनुरोध जमा नहीं हो सका।" : "Could not submit your leave request."
+      });
     }
   };
 
@@ -195,18 +218,18 @@ function LeaveRequestForm() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider rounded-xl py-2 px-4 h-9 flex items-center justify-center gap-2 shadow-sm">
-          <CalendarDays className="w-4 h-4" /> Leave Request
+          <CalendarDays className="w-4 h-4" /> {activeT.applyForLeave}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] rounded-3xl">
         <DialogHeader>
-          <DialogTitle className="text-md font-black uppercase tracking-tight text-slate-900">New Leave Request</DialogTitle>
-          <DialogDescription className="text-xs text-slate-400 uppercase font-semibold">Fill in the details below to apply for leave.</DialogDescription>
+          <DialogTitle className="text-md font-black uppercase tracking-tight text-slate-900">{activeT.newLeaveRequest}</DialogTitle>
+          <DialogDescription className="text-xs text-slate-400 uppercase font-semibold">{activeT.fillLeaveDetails}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label htmlFor="purpose" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Leave Purpose / Type</Label>
-            <Input id="purpose" placeholder="e.g. Sick Leave, Casual Leave" value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
+            <Label htmlFor="purpose" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">{activeT.leavePurpose}</Label>
+            <Input id="purpose" placeholder={employeeLang === 'hi' ? "उदा. बीमारी की छुट्टी, आकस्मिक अवकाश" : "e.g. Sick Leave, Casual Leave"} value={purpose} onChange={(e) => setPurpose(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
 
             <div className="flex flex-wrap gap-1.5 pt-0.5">
               {recommendedLeaves.map((leaveType) => (
@@ -227,25 +250,25 @@ function LeaveRequestForm() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="fromDate" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">From Date</Label>
+              <Label htmlFor="fromDate" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">{activeT.fromDate}</Label>
               <Input id="fromDate" type="date" min={todayStr} value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="toDate" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">To Date</Label>
+              <Label htmlFor="toDate" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">{activeT.toDate}</Label>
               <Input id="toDate" type="date" min={fromDate || todayStr} value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-10 border-slate-200 bg-slate-50 rounded-xl text-xs font-bold" required />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Total Leave Days</Label>
-            <Input value={totalDays > 0 ? `${totalDays} Day(s)` : ""} placeholder="0 Days" disabled readOnly className="h-10 border-slate-200 bg-slate-100 rounded-xl text-xs font-black text-primary" />
+            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">{activeT.totalLeaveDays}</Label>
+            <Input value={totalDays > 0 ? `${totalDays} ${activeT.daysUnit}` : ""} placeholder={`0 ${activeT.daysUnit}`} disabled readOnly className="h-10 border-slate-200 bg-slate-100 rounded-xl text-xs font-black text-primary" />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="remark" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Remark (Optional, Max 20 words)</Label>
-            <Textarea id="remark" placeholder="Provide any additional notes..." value={remark} onChange={handleRemarkChange} className="min-h-[70px] border-slate-200 bg-slate-50 rounded-xl font-medium text-xs" />
+            <Label htmlFor="remark" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">{activeT.remarkOptional}</Label>
+            <Textarea id="remark" placeholder={employeeLang === 'hi' ? "अतिरिक्त विवरण लिखें..." : "Provide any additional notes..."} value={remark} onChange={handleRemarkChange} className="min-h-[70px] border-slate-200 bg-slate-50 rounded-xl font-medium text-xs" />
           </div>
           <DialogFooter className="flex flex-row gap-3 pt-2">
-            <Button variant="ghost" type="button" onClick={() => setOpen(false)} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">Cancel</Button>
-            <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90 font-black text-white rounded-xl h-11 uppercase text-xs">Submit Request</Button>
+            <Button variant="ghost" type="button" onClick={() => setOpen(false)} className="flex-1 rounded-xl font-bold h-11 uppercase text-xs">{activeT.cancel}</Button>
+            <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90 font-black text-white rounded-xl h-11 uppercase text-xs">{activeT.submitRequest}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -277,6 +300,9 @@ export default function AttendancePage() {
     if (verifiedUser?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(roleStr)) return true;
     return false;
   }, [verifiedUser, currentUser]);
+
+  const employeeLang = (verifiedUser?.language || currentUser?.language || 'en').toLowerCase().trim();
+  const t = useMemo(() => getTranslation(employeeLang), [employeeLang]);
 
   const [isMutatingAttendance, setIsMutatingAttendance] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
@@ -326,7 +352,7 @@ export default function AttendancePage() {
   const checkLocationOnMount = useCallback((isManualRetry = false) => {
     if (typeof window === "undefined" || !navigator.geolocation) {
       setLocationPermissionStatus("unavailable");
-      setLocationPermissionMessage("Please allow location access to mark attendance.");
+      setLocationPermissionMessage(t.locationPermissionRequired);
       return;
     }
 
@@ -380,11 +406,11 @@ export default function AttendancePage() {
       },
       (err) => {
         setLocationPermissionStatus("denied");
-        setLocationPermissionMessage("Please allow location access to mark attendance.");
+        setLocationPermissionMessage(t.locationPermissionRequired);
       },
       { enableHighAccuracy: true, timeout: 3500, maximumAge: 15000 }
     );
-  }, [plants]);
+  }, [plants, t]);
 
   useEffect(() => {
     if (isEmployeeLogin) {
@@ -2256,7 +2282,7 @@ export default function AttendancePage() {
             <div className="flex items-center gap-3">
               <MapPin className="w-5 h-5 text-amber-600 shrink-0" />
               <span className="text-xs font-black uppercase tracking-wide">
-                Please allow location access to mark attendance.
+                {t.locationPermissionRequired}
               </span>
             </div>
             <Button
@@ -2264,7 +2290,7 @@ export default function AttendancePage() {
               className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase px-4 h-9 rounded-xl shrink-0"
               onClick={() => checkLocationOnMount(true)}
             >
-              Allow Location
+              {t.allowLocation}
             </Button>
           </div>
         )}
@@ -2274,10 +2300,10 @@ export default function AttendancePage() {
           <CardHeader className="text-center py-5 sm:py-6 relative bg-slate-50/50 border-b border-slate-100 px-4">
             <div className="space-y-1">
               <span className="text-[10px] font-black uppercase tracking-[0.25em] text-primary bg-primary/10 px-3 py-1 rounded-full">
-                Gateway Portal
+                {t.gatewayPortal}
               </span>
               <CardTitle className="text-xl font-black flex items-center justify-center gap-2 text-slate-900 uppercase tracking-tight pt-1">
-                <ShieldCheck className="text-primary w-5 h-5" /> Mark Attendance
+                <ShieldCheck className="text-primary w-5 h-5" /> {t.markAttendance}
               </CardTitle>
             </div>
           </CardHeader>
@@ -2285,13 +2311,13 @@ export default function AttendancePage() {
             {/* Employee Identification Card */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
               <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Employee Name</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{t.employeeName}</span>
                 <span className="text-xs font-black text-slate-900 uppercase">{effectiveEmployeeName} ({effectiveEmployeeId})</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Current Location</span>
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{t.currentLocation}</span>
                 <span className="text-xs font-bold text-slate-700 text-right max-w-[260px] truncate" title={detectedAddress}>
-                  {detectedAddress || "Capturing address..."}
+                  {detectedAddress || t.capturingAddress}
                 </span>
               </div>
             </div>
@@ -2314,10 +2340,10 @@ export default function AttendancePage() {
                 <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
                 <div className="text-left">
                   <p className="text-xs font-black uppercase tracking-tight text-amber-900">
-                    Daily Attendance Limit Reached
+                    {t.dailyLimitReachedTitle}
                   </p>
                   <p className="text-xs font-bold text-amber-700 mt-0.5">
-                    You have already used the maximum 2 attendance sessions allowed for today.
+                    {t.dailyLimitReachedDesc}
                   </p>
                 </div>
               </div>
@@ -2328,14 +2354,14 @@ export default function AttendancePage() {
               <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl text-blue-900 shadow-sm flex items-center justify-between gap-2 animate-in fade-in">
                 <div className="flex items-center gap-2 text-left">
                   <Badge className="bg-blue-600 text-white font-black text-[10px] uppercase px-2 py-0.5 rounded-lg">
-                    Session 2 of 2
+                    {t.session2Of2}
                   </Badge>
                   <span className="text-xs font-bold text-blue-800">
-                    Available • Requires 700m Plant Proximity (or Field/WFH)
+                    {t.session2Desc}
                   </span>
                 </div>
                 <span className="text-[11px] font-semibold text-blue-600 hidden sm:inline">
-                  Max 8h Auto OUT (4h Credit)
+                  {t.max8hAutoOut}
                 </span>
               </div>
             )}
@@ -2352,11 +2378,11 @@ export default function AttendancePage() {
                     const formatted = startDT && isValid(startDT)
                       ? format(startDT, "dd-MMM, hh:mm a")
                       : `${activeRecord.inDate || activeRecord.date || 'Today'}, ${activeRecord.inTime}`;
-                    return `ACTIVE SHIFT (SESSION ${activeRecord.sessionIndex || 1} OF 2) SINCE ${formatted}`;
+                    return t.activeShiftSince(activeRecord.sessionIndex || 1, formatted);
                   })()}
                 </p>
                 <p className="text-[11px] font-bold text-amber-700 mt-1 leading-relaxed" suppressHydrationWarning>
-                  Mark OUT will be available on {format(nextOutAvailableAt, "dd-MMM-yyyy HH:mm")} (2h Minimum Rule) • Auto OUT threshold: {activeRecord.sessionIndex === 2 ? '8h (4h Credit)' : '16h (8h Credit)'}
+                  {t.markOutAvailableAt(format(nextOutAvailableAt, "dd-MMM-yyyy HH:mm"))} • {activeRecord.sessionIndex === 2 ? t.autoOutThreshold8h : t.autoOutThreshold16h}
                 </p>
               </div>
             )}
@@ -2372,13 +2398,13 @@ export default function AttendancePage() {
                 onClick={handleMarkInClick}
               >
                 {isLoadingLocation && activeDialog === 'NONE' ? (
-                  <span className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Fetching GPS...</span>
+                  <span className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> {t.fetchingGps}</span>
                 ) : hasUsedMaxSessions ? (
-                  "2 Sessions Used"
+                  t.twoSessionsUsed
                 ) : todaySessions.length === 1 ? (
-                  "Mark IN (Session 2)"
+                  t.markInSession2
                 ) : (
-                  "Mark IN"
+                  t.markIn
                 )}
               </Button>
               <Button
@@ -2391,10 +2417,10 @@ export default function AttendancePage() {
                 disabled={isLoadingLocation || isMutatingAttendance || !activeRecord || (activeRecord ? !canMarkOut : false)}
                 onClick={handleMarkOutClick}
               >
-                {activeRecord && !canMarkOut ? "Mark OUT (Locked)" : (isLoadingLocation && activeDialog === 'NONE' ? <>
+                {activeRecord && !canMarkOut ? t.markOutLocked : (isLoadingLocation && activeDialog === 'NONE' ? <>
                   <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  Mark OUT
-                </> : "Mark OUT")}
+                  {t.markOut}
+                </> : t.markOut)}
               </Button>
             </div>
 
@@ -2402,8 +2428,8 @@ export default function AttendancePage() {
             <div className="pt-6 border-t border-slate-100 flex flex-col items-center justify-center w-full">
               {isCooldownLocked && nextInAvailableAt ? (
                 <div className="flex flex-col items-center justify-center gap-1 text-amber-700 bg-amber-50 px-5 py-3 rounded-xl w-full border border-amber-200">
-                  <span className="text-sm font-black uppercase tracking-wider">Rest Period Active (1h Cooldown)</span>
-                  <span className="text-xs font-bold text-center">Mark IN will be available at {format(nextInAvailableAt, "dd-MMM-yyyy HH:mm")}</span>
+                  <span className="text-sm font-black uppercase tracking-wider">{t.restPeriodActive}</span>
+                  <span className="text-xs font-bold text-center">{t.markInAvailableAt(format(nextInAvailableAt, "dd-MMM-yyyy HH:mm"))}</span>
                   <span className="text-lg font-black font-mono tracking-widest text-amber-800">
                     {cooldownRemaining || "00:00:00"}
                   </span>
@@ -2411,13 +2437,13 @@ export default function AttendancePage() {
               ) : hasUsedMaxSessions ? (
                 <div className="flex items-center justify-center gap-2 text-amber-700 bg-amber-50 px-5 py-3 rounded-xl w-full border border-amber-200 font-black uppercase tracking-wider text-xs">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <span>Maximum 2 Sessions Completed Today (Daily Total: {formatHoursToHHMM(todaySessions.reduce((sum, s) => sum + (s.hours || 0), 0))})</span>
+                  <span>{t.maximumSessionsCompleted(formatHoursToHHMM(todaySessions.reduce((sum, s) => sum + (s.hours || 0), 0)))}</span>
                 </div>
               ) : activeRecord ? (
                 <div className="w-full space-y-3">
                   <div className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl w-full border font-black text-sm uppercase tracking-wider text-emerald-600 bg-emerald-50 border-emerald-100">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Active Shift (Session {activeRecord.sessionIndex || 1} of 2) in Progress</span>
+                    <span>{t.activeShiftInProgress(activeRecord.sessionIndex || 1)}</span>
                   </div>
 
                   <div className="flex items-center justify-center gap-2 text-slate-600 bg-[#F8F9FA] px-5 py-2.5 rounded-xl w-full border border-slate-200 shadow-sm font-black uppercase tracking-wider text-xs">
@@ -2430,7 +2456,7 @@ export default function AttendancePage() {
                           ? parseDateTime(activeRecord.date, activeRecord.inTime)
                           : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
                         const dateFormatted = startDT && isValid(startDT) ? format(startDT, "dd-MMM-yyyy") : (activeRecord.inDate || activeRecord.date || format(getISTTime(), "dd-MMM-yyyy"));
-                        return `SHIFT STARTED: ${dateFormatted} ${activeRecord.inTime} • Max Auto OUT: ${activeRecord.sessionIndex === 2 ? '8h (4h Credit)' : '16h (8h Credit)'}`;
+                        return `${t.shiftStarted(dateFormatted, activeRecord.inTime)} • ${activeRecord.sessionIndex === 2 ? t.maxAutoOut8h : t.maxAutoOut16h}`;
                       })()}
                     </span>
                   </div>
@@ -2439,13 +2465,13 @@ export default function AttendancePage() {
                 <div className="flex items-center justify-center gap-2 text-blue-600 bg-blue-50 px-5 py-3 rounded-xl w-full border border-blue-100">
                   <CheckCircle className="w-5 h-5" />
                   <span className="text-sm font-black uppercase tracking-wider">
-                    Session 1 Completed ({formatHoursToHHMM(todayRecord?.hours || 0)}) • Session 2 of 2 Available
+                    {t.session1Completed(formatHoursToHHMM(todayRecord?.hours || 0))}
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-2 text-slate-500 bg-slate-50 px-5 py-3 rounded-xl w-full border border-slate-200">
                   <Clock className="w-5 h-5" />
-                  <span className="text-sm font-black uppercase tracking-wider">Eligible for Mark IN (Session 1 of 2)</span>
+                  <span className="text-sm font-black uppercase tracking-wider">{t.eligibleForMarkIn}</span>
                 </div>
               )}
             </div>
@@ -2460,14 +2486,14 @@ export default function AttendancePage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
             <div>
               <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
-                <History className="w-5 h-5 text-primary" /> My Attendance History
+                <History className="w-5 h-5 text-primary" /> {t.myAttendanceHistory}
               </h3>
               <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                Displaying your previous 62 days ({formatDate(dateWindow62Days.startDateStr)} to {formatDate(dateWindow62Days.todayStr)})
+                {t.displayingDays(formatDate(dateWindow62Days.startDateStr), formatDate(dateWindow62Days.todayStr))}
               </p>
             </div>
             <Badge variant="outline" className="text-[10px] font-black uppercase px-2.5 py-1 text-slate-600 border-slate-300 w-fit bg-white">
-              Rolling 62-Day Period
+              {t.rolling62Days}
             </Badge>
           </div>
 
@@ -2476,22 +2502,22 @@ export default function AttendancePage() {
               {isLoading && employeeRecords.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 space-y-3">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Syncing Attendance History...</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t.syncingHistory}</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto w-full">
                   <Table className="min-w-[550px] w-full">
                     <TableHeader className="bg-slate-50 sticky top-0 z-10">
                       <TableRow>
-                        <TableHead className="font-black uppercase text-[10px]">Date</TableHead>
-                        <TableHead className="font-black uppercase text-[10px]">Plant / Type</TableHead>
-                        <TableHead className="font-black uppercase text-[10px]">In Time</TableHead>
-                        <TableHead className="font-black uppercase text-[10px]">Out Time</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">In Address</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Out Address</TableHead>
-                        <TableHead className="font-black uppercase text-[10px]">Hours</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">Remarks</TableHead>
-                        <TableHead className="font-black uppercase text-[10px] text-right pr-4">Status</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">{t.date}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">{t.plantType}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">{t.inTime}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">{t.outTime}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">{t.inAddress}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">{t.outAddress}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px]">{t.workingHours}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] hidden lg:table-cell">{t.remarks}</TableHead>
+                        <TableHead className="font-black uppercase text-[10px] text-right pr-4">{t.status}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2504,7 +2530,7 @@ export default function AttendancePage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-xs font-bold text-slate-600">
-                            {r.inPlant && r.inPlant !== "N/A" ? r.inPlant : (r.attendanceType || "N/A")}
+                            {r.inPlant && r.inPlant !== "N/A" ? r.inPlant : (r.attendanceType === 'WFH' ? t.workFromHome : r.attendanceType === 'FIELD' ? t.fieldWork : (r.attendanceType || "N/A"))}
                           </TableCell>
                           <TableCell className="text-xs font-bold text-slate-600">{r.inTime || "--:--"}</TableCell>
                           <TableCell className="text-xs font-bold text-slate-600">{r.outTime || "--:--"}</TableCell>
@@ -2531,11 +2557,15 @@ export default function AttendancePage() {
                                       (r.status === 'Weekly Off' || r.status === 'Holiday') ? "bg-slate-100 text-slate-700 hover:bg-slate-100" :
                                         "bg-emerald-100 text-emerald-700 hover:bg-emerald-100"
                             )}>
-                              {r.status === 'Open' ? 'Active Shift' :
-                                r.status === 'Closed' ? 'Completed Shift' :
-                                  r.status === 'Auto OUT' ? 'Auto Closed Shift' :
-                                    r.status === 'Leave' ? 'Approved Leave' :
-                                      r.status}
+                              {r.status === 'Open' ? t.statusActiveShift :
+                                r.status === 'Closed' ? t.statusCompletedShift :
+                                  r.status === 'Auto OUT' ? t.statusAutoClosedShift :
+                                    r.status === 'Leave' ? t.statusApprovedLeave :
+                                      r.status === 'Weekly Off' ? t.statusWeeklyOff :
+                                        r.status === 'Holiday' ? t.statusHoliday :
+                                          r.status === 'Absent' ? t.statusAbsent :
+                                            r.status === 'Present' ? t.statusPresent :
+                                              r.status}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -2552,10 +2582,10 @@ export default function AttendancePage() {
         <div className="lg:col-span-1 space-y-4">
           <div className="pt-2">
             <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
-              <Calendar className="w-5 h-5 text-primary" /> Monthly Summary
+              <Calendar className="w-5 h-5 text-primary" /> {t.monthlySummary}
             </h3>
             <p className="text-xs font-semibold text-slate-500 mt-0.5">
-              Current & Previous 2 Months
+              {t.currentAndPreviousMonths}
             </p>
           </div>
 
@@ -2565,10 +2595,10 @@ export default function AttendancePage() {
                 <Table className="w-full">
                   <TableHeader className="bg-slate-50">
                     <TableRow>
-                      <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] text-right">Present</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] text-right pr-4">Absent</TableHead>
-                      <TableHead className="font-black uppercase text-[10px] text-right pr-4">Worked</TableHead>
+                      <TableHead className="font-black uppercase text-[10px]">{t.month}</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-right">{t.present}</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-right pr-4">{t.absent}</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] text-right pr-4">{t.worked}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2594,26 +2624,26 @@ export default function AttendancePage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 bg-white border border-slate-200 rounded-3xl shadow-sm">
           <div className="space-y-0.5">
             <h4 className="text-sm font-black uppercase text-slate-900 tracking-tight flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-primary" /> Apply for Leave
+              <CalendarDays className="w-4 h-4 text-primary" /> {t.applyForLeave}
             </h4>
             <p className="text-xs font-medium text-slate-500">
-              Submit a new leave application for managerial review.
+              {t.submitLeaveDesc}
             </p>
           </div>
-          <LeaveRequestForm />
+          <LeaveRequestForm t={t} />
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2">
           <div>
             <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 uppercase tracking-tight">
-              <History className="w-5 h-5 text-primary" /> Leave History ({currentFYInfo.label})
+              <History className="w-5 h-5 text-primary" /> {t.leaveHistory(currentFYInfo.label)}
             </h3>
             <p className="text-xs font-semibold text-slate-500 mt-0.5">
-              Month-wise approved leaves for current Financial Year ({formatDate(currentFYInfo.startDateStr)} to {formatDate(currentFYInfo.endDateStr)})
+              {t.monthWiseApprovedLeaves(formatDate(currentFYInfo.startDateStr), formatDate(currentFYInfo.endDateStr))}
             </p>
           </div>
           <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px] font-black uppercase px-2.5 py-1 border border-emerald-200 w-fit">
-            Approved Records Only
+            {t.approvedRecordsOnly}
           </Badge>
         </div>
 
@@ -2628,7 +2658,7 @@ export default function AttendancePage() {
                 <div className="mt-2 flex items-baseline justify-between">
                   <span className="text-xl font-black text-slate-900">{group.totalLeaveDays}</span>
                   <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 uppercase">
-                    {group.totalLeaveDays === 1 ? "1 Leave" : `${group.totalLeaveDays} Leave`}
+                    {group.totalLeaveDays} {t.leavesUnit}
                   </span>
                 </div>
               </div>
@@ -2641,20 +2671,20 @@ export default function AttendancePage() {
             <Table className="min-w-[550px] w-full">
               <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead className="font-black uppercase text-[10px]">Month</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Total Leave</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Leave Dates</TableHead>
-                  <TableHead className="font-black uppercase text-[10px]">Purpose / Type</TableHead>
-                  <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">Remark</TableHead>
-                  <TableHead className="font-black uppercase text-[10px] text-right">Status</TableHead>
-                  <TableHead className="font-black uppercase text-[10px] text-right pr-4">Approved By</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">{t.month}</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">{t.totalLeave}</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">{t.leaveDates}</TableHead>
+                  <TableHead className="font-black uppercase text-[10px]">{t.leavePurpose}</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] hidden md:table-cell">{t.remarks}</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] text-right">{t.status}</TableHead>
+                  <TableHead className="font-black uppercase text-[10px] text-right pr-4">{t.approvedBy}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {fyMonthWiseLeaves.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-12 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      No approved leave records found for current Financial Year ({currentFYInfo.label}).
+                      {t.noApprovedLeaves(currentFYInfo.label)}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -2671,7 +2701,7 @@ export default function AttendancePage() {
                           )}
                         </TableCell>
                         <TableCell className="text-xs font-black text-emerald-700">
-                          {rIdx === 0 ? `${group.totalLeaveDays} Leave` : `${leave.daysInThisMonth || leave.days} Day(s)`}
+                          {rIdx === 0 ? `${group.totalLeaveDays} ${t.leavesUnit}` : `${leave.daysInThisMonth || leave.days} ${t.daysUnit}`}
                         </TableCell>
                         <TableCell className="text-xs font-bold text-slate-600">
                           {formatDate(leave.fromDate)} – {formatDate(leave.toDate)}
@@ -2684,7 +2714,7 @@ export default function AttendancePage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-[9px] font-black uppercase px-2 py-0.5 whitespace-nowrap">
-                            Approved
+                            {t.statusApproved}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-[10px] font-bold text-slate-600 uppercase font-mono text-right pr-4">
@@ -2714,18 +2744,18 @@ export default function AttendancePage() {
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
           <DialogHeader className="p-7 bg-slate-900 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
-              <MapPin className="w-5 h-5 text-primary" /> Mark IN Confirmation
+              <MapPin className="w-5 h-5 text-primary" /> {t.markInConfirmation}
             </DialogTitle>
           </DialogHeader>
           <div className="p-8 space-y-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee Name</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.employeeName}</Label>
                 <p className="text-sm font-black text-slate-900 uppercase mt-0.5">{effectiveEmployeeName}</p>
               </div>
 
               <div>
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Date & Time</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.dateAndTime}</Label>
                 <p className="text-sm font-bold text-slate-700 mt-0.5">
                   {format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm:ss a")}
                 </p>
@@ -2735,13 +2765,13 @@ export default function AttendancePage() {
             {/* Current GPS Location / Address */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
               <Label className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2 mb-2">
-                <Navigation className="w-3.5 h-3.5" /> Current Location (GPS)
+                <Navigation className="w-3.5 h-3.5" /> {t.currentLocationGps}
               </Label>
               <div className="text-xs font-bold text-slate-700">
                 <span className="text-slate-800 whitespace-normal break-words leading-relaxed">
                   {detectedAddress || (
                     <span className="text-slate-400 flex items-center gap-1.5 font-medium italic">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Capturing real-time address bounds...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> {t.capturingAddressBounds}
                     </span>
                   )}
                 </span>
@@ -2752,7 +2782,7 @@ export default function AttendancePage() {
             {!detectedPlant && (
               <div className="space-y-2 pt-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                  Select Attendance Mode (Mandatory):
+                  {t.selectAttendanceMode}
                 </Label>
                 <RadioGroup value={selectedType} onValueChange={(v: any) => setSelectedType(v)} className="grid grid-cols-2 gap-3">
                   <div
@@ -2763,7 +2793,7 @@ export default function AttendancePage() {
                     onClick={() => setSelectedType('WFH')}
                   >
                     <Home className={cn("w-6 h-6", selectedType === 'WFH' ? "text-primary" : "text-slate-400")} />
-                    <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Work From Home</span>
+                    <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">{t.workFromHome}</span>
                   </div>
                   <div
                     className={cn(
@@ -2773,15 +2803,15 @@ export default function AttendancePage() {
                     onClick={() => setSelectedType('FIELD')}
                   >
                     <Briefcase className={cn("w-6 h-6", selectedType === 'FIELD' ? "text-primary" : "text-slate-400")} />
-                    <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">Field Work</span>
+                    <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">{t.fieldWork}</span>
                   </div>
                 </RadioGroup>
               </div>
             )}
 
             <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 pt-1 border-t border-slate-100">
-              <span>GPS Accuracy: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} meters` : "N/A"}</span>
-              <span>Coordinates: {currentGPS ? `${currentGPS.lat.toFixed(4)}, ${currentGPS.lng.toFixed(4)}` : "N/A"}</span>
+              <span>{t.gpsAccuracy}: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} ${t.metersUnit}` : "N/A"}</span>
+              <span>{t.coordinates}: {currentGPS ? `${currentGPS.lat.toFixed(4)}, ${currentGPS.lng.toFixed(4)}` : "N/A"}</span>
             </div>
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
@@ -2791,7 +2821,7 @@ export default function AttendancePage() {
               className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs"
               onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}
             >
-              CANCEL
+              {t.cancel}
             </Button>
             <Button
               type="button"
@@ -2801,9 +2831,9 @@ export default function AttendancePage() {
             >
               {isMutatingAttendance ? (
                 <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> PROCESSING...
+                  <Loader2 className="w-4 h-4 animate-spin" /> {t.processing}
                 </span>
-              ) : "CONFIRM & MARK IN"}
+              ) : t.confirmAndMarkIn}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2823,18 +2853,18 @@ export default function AttendancePage() {
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
           <DialogHeader className="p-7 bg-rose-600 text-white shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
-              <Navigation className="w-5 h-5" /> Mark OUT Confirmation
+              <Navigation className="w-5 h-5" /> {t.markOutConfirmation}
             </DialogTitle>
           </DialogHeader>
           <div className="p-8 space-y-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Employee Name</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.employeeName}</Label>
                 <p className="text-sm font-black text-slate-900 uppercase mt-0.5">{effectiveEmployeeName}</p>
               </div>
 
               <div>
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Date & Time</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.dateAndTime}</Label>
                 <p className="text-sm font-bold text-slate-700 mt-0.5">
                   {format(currentTime || getISTTime(), "dd-MMM-yyyy hh:mm:ss a")}
                 </p>
@@ -2852,7 +2882,7 @@ export default function AttendancePage() {
                       ? parseDateTime(activeRecord.date, activeRecord.inTime)
                       : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
                     const dateFormatted = startDT && isValid(startDT) ? format(startDT, "dd-MMM-yyyy") : (activeRecord.inDate || activeRecord.date || format(getISTTime(), "dd-MMM-yyyy"));
-                    return `SHIFT STARTED: ${dateFormatted} ${activeRecord.inTime}`;
+                    return t.shiftStarted(dateFormatted, activeRecord.inTime);
                   })()}
                 </span>
               </div>
@@ -2861,13 +2891,13 @@ export default function AttendancePage() {
             {/* Current GPS Location / Address */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
               <Label className="text-[10px] font-black uppercase text-rose-500 tracking-widest flex items-center gap-2 mb-2">
-                <MapPin className="w-3.5 h-3.5" /> Current Location (GPS)
+                <MapPin className="w-3.5 h-3.5" /> {t.currentLocationGps}
               </Label>
               <div className="text-xs font-bold text-slate-700">
                 <span className="text-slate-800 whitespace-normal break-words leading-relaxed">
                   {detectedAddress || (
                     <span className="text-slate-400 flex items-center gap-1.5 font-medium italic">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Fetching real-time address...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> {t.fetchingAddress}
                     </span>
                   )}
                 </span>
@@ -2875,8 +2905,8 @@ export default function AttendancePage() {
             </div>
 
             <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 pt-1 border-t border-slate-100">
-              <span>GPS Accuracy: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} meters` : "N/A"}</span>
-              <span>Coordinates: {currentGPS ? `${currentGPS.lat.toFixed(4)}, ${currentGPS.lng.toFixed(4)}` : "N/A"}</span>
+              <span>{t.gpsAccuracy}: {gpsAccuracy ? `${gpsAccuracy.toFixed(1)} ${t.metersUnit}` : "N/A"}</span>
+              <span>{t.coordinates}: {currentGPS ? `${currentGPS.lat.toFixed(4)}, ${currentGPS.lng.toFixed(4)}` : "N/A"}</span>
             </div>
           </div>
           <DialogFooter className="p-6 bg-slate-50 border-t flex flex-row gap-3">
@@ -2886,7 +2916,7 @@ export default function AttendancePage() {
               className="flex-1 h-12 font-black rounded-xl text-slate-700 border-slate-300 uppercase tracking-wider text-xs"
               onClick={() => { clearActiveWatch(); setActiveDialog("NONE"); setIsLoadingLocation(false); }}
             >
-              CANCEL
+              {t.cancel}
             </Button>
             <Button
               type="button"
@@ -2896,9 +2926,9 @@ export default function AttendancePage() {
             >
               {isMutatingAttendance ? (
                 <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> PROCESSING...
+                  <Loader2 className="w-4 h-4 animate-spin" /> {t.processing}
                 </span>
-              ) : "CONFIRM & MARK OUT"}
+              ) : t.confirmAndMarkOut}
             </Button>
           </DialogFooter>
         </DialogContent>
