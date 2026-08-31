@@ -32,6 +32,7 @@ interface DataContextType {
   updateRecord: (col: string, id: string, data: any, skipRefresh?: boolean) => Promise<void>;
   deleteRecord: (col: string, id: string, skipRefresh?: boolean) => Promise<void>;
   setRecord: (col: string, id: string, data: any, skipRefresh?: boolean) => Promise<void>;
+  clearAllNotifications: (empId?: string, isGlobal?: boolean) => Promise<void>;
   currentUser: any;
   verifiedUser: any;
   isLoading: boolean;
@@ -424,6 +425,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const clearAllNotifications = async (empId?: string, isGlobal = false) => {
+    // 1. Instant 0ms optimistic UI wipe
+    setNotifications([]);
+
+    // 2. Batch clear in MongoDB
+    try {
+      await fetch('/api/notifications/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: empId || currentUser?.employeeId || currentUser?.username || currentUser?.id,
+          role: currentUser?.role,
+          clearAllGlobal: isGlobal || ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(String(currentUser?.role || '').toUpperCase())
+        })
+      });
+    } catch (err) {
+      console.error('clearAllNotifications error:', err);
+    }
+  };
+
   const value = useMemo(() => ({
     employees,
     attendanceRecords,
@@ -439,6 +460,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     updateRecord,
     deleteRecord,
     setRecord,
+    clearAllNotifications,
     currentUser,
     verifiedUser,
     isLoading,

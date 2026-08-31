@@ -76,7 +76,7 @@ import { playNotificationSoundAndVibrate } from "@/lib/notification-sound";
 import { NotificationBanner, NotificationStatusControl } from "@/components/notification-banner";
 
 function NotificationBell() {
-  const { notifications = [], employees = [], updateRecord, deleteRecord, refreshData, verifiedUser } = useData();
+  const { notifications = [], employees = [], updateRecord, deleteRecord, clearAllNotifications, refreshData, verifiedUser } = useData();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -232,12 +232,15 @@ function NotificationBell() {
   const handleMarkAllAsRead = async () => {
     const unread = userNotifications.filter((n: any) => n.read !== true && n.isRead !== true);
     const nowIso = new Date().toISOString();
-    for (const notif of unread) {
+    
+    // Instant optimistic UI update
+    unread.forEach((notif: any) => {
       const notifId = notif.id || notif._id;
       if (notifId) {
-        await updateRecord('notifications', notifId, { read: true, isRead: true, readAt: nowIso }, true);
+        updateRecord('notifications', notifId, { read: true, isRead: true, readAt: nowIso }, true);
       }
-    }
+    });
+
     const empId = verifiedUser?.employeeId || verifiedUser?.username || verifiedUser?.id;
     if (empId) {
       fetch('/api/notifications/read', {
@@ -246,7 +249,6 @@ function NotificationBell() {
         body: JSON.stringify({ employeeId: empId, markAll: true }),
       }).catch(() => {});
     }
-    await refreshData();
   };
 
   const handleDeleteSingle = async (e: React.MouseEvent, notif: any) => {
@@ -258,13 +260,9 @@ function NotificationBell() {
   };
 
   const handleClearAll = async () => {
-    for (const notif of userNotifications) {
-      const notifId = notif.id || notif._id;
-      if (notifId) {
-        await deleteRecord('notifications', notifId, true);
-      }
-    }
-    await refreshData();
+    const empId = verifiedUser?.employeeId || verifiedUser?.username || verifiedUser?.id;
+    const isGlobal = !isEmployee;
+    await clearAllNotifications(empId, isGlobal);
   };
 
   return (

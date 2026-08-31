@@ -45,43 +45,46 @@ export function setCachedBootstrapData(data: any, cacheKey: string = 'default') 
  * Mutates the in-memory cache directly on database mutations.
  * This keeps the cache 100% fresh and avoids expensive 50-second MongoDB cold re-fetches!
  */
-export function updateCachedCollection(collectionName: string, action: 'INSERT' | 'UPDATE' | 'DELETE', item: any) {
+export function updateCachedCollection(collectionName: string, action: 'INSERT' | 'UPDATE' | 'DELETE' | 'DELETE_ALL', item: any) {
   const cacheMap = getCacheMap();
-  const adminCache = cacheMap.get('admin_all');
-  if (!adminCache || !adminCache.data) return;
-
-  const data = adminCache.data;
   const colKey = collectionName === 'attendance' ? 'attendance' : collectionName;
-  
-  if (Array.isArray(data[colKey])) {
-    const list = data[colKey];
-    const itemId = String(item?._id || item?.id || '');
 
-    if (action === 'INSERT' && item) {
-      const filtered = list.filter((x: any) => {
-        const xId = String(x._id || x.id || '');
-        if (itemId && xId === itemId) return false;
-        if (colKey === 'attendance' && item.employeeId && item.date && x.employeeId === item.employeeId && x.date === item.date) return false;
-        return true;
-      });
-      data[colKey] = [item, ...filtered];
-    } else if (action === 'UPDATE' && item) {
-      data[colKey] = list.map((x: any) => {
-        const xId = String(x._id || x.id || '');
-        if (itemId && xId === itemId) {
-          return { ...x, ...item };
-        }
-        if (colKey === 'attendance' && item.employeeId && item.date && x.employeeId === item.employeeId && x.date === item.date) {
-          return { ...x, ...item };
-        }
-        return x;
-      });
-    } else if (action === 'DELETE' && itemId) {
-      data[colKey] = list.filter((x: any) => String(x._id || x.id || '') !== itemId);
+  cacheMap.forEach((cacheEntry) => {
+    if (!cacheEntry || !cacheEntry.data) return;
+    const data = cacheEntry.data;
+    
+    if (Array.isArray(data[colKey])) {
+      const list = data[colKey];
+      const itemId = String(item?._id || item?.id || '');
+
+      if (action === 'INSERT' && item) {
+        const filtered = list.filter((x: any) => {
+          const xId = String(x._id || x.id || '');
+          if (itemId && xId === itemId) return false;
+          if (colKey === 'attendance' && item.employeeId && item.date && x.employeeId === item.employeeId && x.date === item.date) return false;
+          return true;
+        });
+        data[colKey] = [item, ...filtered];
+      } else if (action === 'UPDATE' && item) {
+        data[colKey] = list.map((x: any) => {
+          const xId = String(x._id || x.id || '');
+          if (itemId && xId === itemId) {
+            return { ...x, ...item };
+          }
+          if (colKey === 'attendance' && item.employeeId && item.date && x.employeeId === item.employeeId && x.date === item.date) {
+            return { ...x, ...item };
+          }
+          return x;
+        });
+      } else if (action === 'DELETE' && itemId) {
+        data[colKey] = list.filter((x: any) => String(x._id || x.id || '') !== itemId);
+      } else if (action === 'DELETE_ALL') {
+        data[colKey] = [];
+      }
+
+      cacheEntry.timestamp = Date.now();
     }
-
-    adminCache.timestamp = Date.now();
-  }
+  });
 }
 
 export function invalidateBootstrapCache() {
