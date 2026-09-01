@@ -2210,19 +2210,19 @@ interface BulkEditRow {
 
 {/* VIEW DETAILS: GEOFENCE LOCATION TRAJECTORY DIALOG */}
       <Dialog open={isExitDetailsOpen} onOpenChange={setIsExitDetailsOpen}>
-        <DialogContent className="sm:max-w-2xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl animate-in fade-in duration-200">
-          <DialogHeader className="p-8 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
-              <MapPin className="w-6 h-6 text-primary" /> Facility Exit Details
+        <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col rounded-2xl sm:rounded-3xl overflow-hidden p-0 border-none shadow-2xl animate-in fade-in duration-200">
+          <DialogHeader className="p-4 sm:p-6 bg-slate-900 text-white shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl font-black uppercase tracking-tight">
+              <MapPin className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" /> Facility Exit Details
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <DialogDescription className="text-[11px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider truncate">
               Location & duration audit for {selectedExitEvent?.employeeName} ({selectedExitEvent?.employeeId})
             </DialogDescription>
           </DialogHeader>
-          <div className="p-8 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
             {/* Summary card with all required fields */}
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-5 space-y-3">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
+            <div className="rounded-xl sm:rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 sm:p-5 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-2.5 sm:gap-y-3 text-xs">
                 <div className="space-y-0.5">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Employee Name</span>
                   <p className="font-black text-slate-900 uppercase">{selectedExitEvent?.employeeName || "--"}</p>
@@ -2255,11 +2255,11 @@ interface BulkEditRow {
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Longitude</span>
                   <p className="font-bold text-slate-600 font-mono">{selectedExitEvent?.gpsLongitude?.toFixed(6) ?? selectedExitEvent?.lng?.toFixed(6) ?? "--"}</p>
                 </div>
-                <div className="space-y-0.5 col-span-2">
+                <div className="space-y-0.5 sm:col-span-2">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Full Address</span>
-                  <p className="font-medium text-slate-700 leading-relaxed">{selectedExitEvent?.completeAddress || selectedExitEvent?.address || "Location Not Available"}</p>
+                  <p className="font-medium text-slate-700 leading-relaxed break-words">{selectedExitEvent?.completeAddress || selectedExitEvent?.address || "Location Not Available"}</p>
                 </div>
-                <div className="space-y-0.5 col-span-2">
+                <div className="space-y-0.5 sm:col-span-2">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Distance from Plant</span>
                   <p className="font-black text-rose-600 font-mono">
                     {selectedExitEvent?.distanceFromPlant != null ? `${(selectedExitEvent.distanceFromPlant / 1000).toFixed(2)} KM` : "--"}
@@ -2270,11 +2270,11 @@ interface BulkEditRow {
 
             <div>
               <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Location Trajectory History</h4>
-              <ScrollArea className="h-[240px] rounded-xl border border-slate-100 p-2 bg-slate-50/50">
-                <Table>
+              <ScrollArea className="h-[180px] sm:h-[220px] rounded-xl border border-slate-100 p-2 bg-slate-50/50">
+                <Table className="min-w-[500px]">
                   <TableHeader className="bg-slate-100 sticky top-0 z-10">
                     <TableRow>
-                      <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500 py-3">Date & Time</TableHead>
+                      <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500 py-2.5">Date & Time</TableHead>
                       <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Full Address</TableHead>
                       <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Latitude</TableHead>
                       <TableHead className="font-black uppercase text-[10px] tracking-wider text-slate-500">Longitude</TableHead>
@@ -2286,7 +2286,7 @@ interface BulkEditRow {
                       selectedExitEvent.outLocationHistory.map((loc: any, idx: number) => (
                         <TableRow key={idx} className="bg-white hover:bg-slate-50 transition-colors">
                           <TableCell className="text-xs font-bold text-slate-700 whitespace-nowrap">{loc.time}</TableCell>
-                          <TableCell className="text-xs text-slate-600 max-w-[220px] break-words font-medium leading-relaxed" title={loc.address}>{loc.address}</TableCell>
+                          <TableCell className="text-xs text-slate-600 max-w-[200px] break-words font-medium leading-relaxed" title={loc.address}>{loc.address}</TableCell>
                           <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lat?.toFixed(5) || "0.00"}</TableCell>
                           <TableCell className="text-xs font-mono text-slate-500 font-semibold">{loc.lng?.toFixed(5) || "0.00"}</TableCell>
                           <TableCell className="text-xs font-black text-rose-600 text-right pr-4 font-mono">{loc.distance !== undefined ? `${(loc.distance / 1000).toFixed(2)} KM` : "Unresolved"}</TableCell>
@@ -2294,7 +2294,7 @@ interface BulkEditRow {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-10 text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        <TableCell colSpan={5} className="text-center py-8 text-xs text-slate-400 font-bold uppercase tracking-wider">
                           No historical perimeter coordinate blocks captured.
                         </TableCell>
                       </TableRow>
@@ -2305,8 +2305,8 @@ interface BulkEditRow {
               </ScrollArea>
             </div>
           </div>
-          <DialogFooter className="p-6 bg-slate-50 border-t">
-            <Button className="w-full h-12 font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl uppercase tracking-widest text-xs shadow-md" onClick={() => setIsExitDetailsOpen(false)}>
+          <DialogFooter className="p-3.5 sm:p-5 bg-slate-50 border-t shrink-0">
+            <Button className="w-full h-10 sm:h-11 font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl uppercase tracking-widest text-xs shadow-md" onClick={() => setIsExitDetailsOpen(false)}>
               CLOSE
             </Button>
           </DialogFooter>
