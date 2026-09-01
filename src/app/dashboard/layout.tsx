@@ -771,7 +771,6 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
                   empId,
                   verifiedUser.role || 'EMPLOYEE'
                 );
-                await refreshData();
               }
             }
           }
@@ -782,9 +781,9 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     };
 
     syncMongoDBNotifications();
-    const notifInterval = setInterval(syncMongoDBNotifications, 15 * 1000);
+    const notifInterval = setInterval(syncMongoDBNotifications, 30 * 1000);
     return () => clearInterval(notifInterval);
-  }, [verifiedUser, refreshData]);
+  }, [verifiedUser]);
 
   // Real-time Service Worker push listener for foreground sound, vibration and instant red dot update
   useEffect(() => {

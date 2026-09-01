@@ -111,7 +111,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const currentUserId = currentUser?.id || currentUser?.employeeId || currentUser?.username;
   const currentUserRole = currentUser?.role ? String(currentUser.role).toUpperCase() : undefined;
 
+  const isFetchingRef = React.useRef(false);
+  const lastFetchTimeRef = React.useRef(0);
+  const debounceTimerRef = React.useRef<any>(null);
+
   const fetchData = useCallback(async (isManualRefresh = false) => {
+    // If a fetch is already in progress and this is not a force-manual call, avoid duplicate parallel stampede
+    if (isFetchingRef.current && !isManualRefresh) {
+      return;
+    }
+
+    isFetchingRef.current = true;
     try {
       // 1. Single-roundtrip bootstrap API call (fetches all MongoDB tables in parallel)
       const role = currentUser?.role ? String(currentUser.role).toUpperCase() : '';
@@ -133,20 +143,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const bundle = await res.json();
         if (bundle && typeof bundle === 'object') {
-          if (Array.isArray(bundle.employees)) setEmployees(bundle.employees);
-          if (Array.isArray(bundle.attendance)) setAttendanceRecords(bundle.attendance);
-          if (Array.isArray(bundle.plants)) setPlants(bundle.plants);
-          if (Array.isArray(bundle.holidays)) setHolidays(bundle.holidays);
-          if (Array.isArray(bundle.leaveRequests)) setLeaveRequests(bundle.leaveRequests);
-          if (Array.isArray(bundle.notifications)) setNotifications(bundle.notifications);
-          if (Array.isArray(bundle.vouchers)) setVouchers(bundle.vouchers);
-          if (Array.isArray(bundle.firms)) setFirms(bundle.firms);
-          if (Array.isArray(bundle.users)) setUsers(bundle.users);
-          if (Array.isArray(bundle.payroll)) setPayrollRecords(bundle.payroll);
+          // SAFE MERGE: Only replace collection if incoming bundle is a valid array
+          // If previous state had data and returned array is empty, retain existing state unless initial load
+          if (Array.isArray(bundle.employees)) {
+            setEmployees(prev => (bundle.employees.length > 0 || prev.length === 0 ? bundle.employees : prev));
+          }
+          if (Array.isArray(bundle.attendance)) {
+            setAttendanceRecords(prev => (bundle.attendance.length > 0 || prev.length === 0 ? bundle.attendance : prev));
+          }
+          if (Array.isArray(bundle.plants)) {
+            setPlants(prev => (bundle.plants.length > 0 || prev.length === 0 ? bundle.plants : prev));
+          }
+          if (Array.isArray(bundle.holidays)) {
+            setHolidays(prev => (bundle.holidays.length > 0 || prev.length === 0 ? bundle.holidays : prev));
+          }
+          if (Array.isArray(bundle.leaveRequests)) {
+            setLeaveRequests(prev => (bundle.leaveRequests.length > 0 || prev.length === 0 ? bundle.leaveRequests : prev));
+          }
+          if (Array.isArray(bundle.notifications)) {
+            setNotifications(bundle.notifications);
+          }
+          if (Array.isArray(bundle.vouchers)) {
+            setVouchers(prev => (bundle.vouchers.length > 0 || prev.length === 0 ? bundle.vouchers : prev));
+          }
+          if (Array.isArray(bundle.firms)) {
+            setFirms(prev => (bundle.firms.length > 0 || prev.length === 0 ? bundle.firms : prev));
+          }
+          if (Array.isArray(bundle.users)) {
+            setUsers(prev => (bundle.users.length > 0 || prev.length === 0 ? bundle.users : prev));
+          }
+          if (Array.isArray(bundle.payroll)) {
+            setPayrollRecords(prev => (bundle.payroll.length > 0 || prev.length === 0 ? bundle.payroll : prev));
+          }
           setIsLoading(false);
+          lastFetchTimeRef.current = Date.now();
 
-          // Save to local cache for instant future loads
-          if (typeof window !== 'undefined') {
+          // Save to local cache only if it has valid contents
+          if (typeof window !== 'undefined' && Array.isArray(bundle.employees) && bundle.employees.length > 0) {
             try {
               localStorage.setItem('sikka_data_bundle', JSON.stringify(bundle));
             } catch (storageErr) {
@@ -162,36 +195,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const results = await Promise.all(
         collectionsToFetch.map(col =>
           fetch(`/api/data/${col}`, { cache: 'no-store' })
-            .then(r => r.ok ? r.json() : [])
-            .catch(() => [])
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
         )
       );
 
-      const dataMap: Record<string, any[]> = {};
+      const dataMap: Record<string, any[] | null> = {};
       collectionsToFetch.forEach((col, index) => {
-        dataMap[col] = Array.isArray(results[index]) ? results[index] : (results[index]?.data || []);
+        const raw = results[index];
+        if (Array.isArray(raw)) {
+          dataMap[col] = raw;
+        } else if (raw && Array.isArray(raw.data)) {
+          dataMap[col] = raw.data;
+        } else {
+          dataMap[col] = null;
+        }
       });
 
-      if (dataMap['employees']) setEmployees(dataMap['employees']);
-      if (dataMap['attendance']) setAttendanceRecords(dataMap['attendance']);
-      if (dataMap['vouchers']) setVouchers(dataMap['vouchers']);
-      if (dataMap['payroll']) setPayrollRecords(dataMap['payroll']);
-      if (dataMap['plants']) setPlants(dataMap['plants']);
-      if (dataMap['firms']) setFirms(dataMap['firms']);
-      if (dataMap['users']) setUsers(dataMap['users']);
-      if (dataMap['holidays']) setHolidays(dataMap['holidays']);
-      if (dataMap['leaveRequests']) setLeaveRequests(dataMap['leaveRequests']);
-      if (dataMap['notifications']) setNotifications(dataMap['notifications']);
+      // SAFE FALLBACK: Only update if the endpoint actually returned non-null array
+      if (Array.isArray(dataMap['employees']) && dataMap['employees'].length > 0) setEmployees(dataMap['employees']);
+      if (Array.isArray(dataMap['attendance']) && dataMap['attendance'].length > 0) setAttendanceRecords(dataMap['attendance']);
+      if (Array.isArray(dataMap['vouchers']) && dataMap['vouchers'].length > 0) setVouchers(dataMap['vouchers']);
+      if (Array.isArray(dataMap['payroll']) && dataMap['payroll'].length > 0) setPayrollRecords(dataMap['payroll']);
+      if (Array.isArray(dataMap['plants']) && dataMap['plants'].length > 0) setPlants(dataMap['plants']);
+      if (Array.isArray(dataMap['firms']) && dataMap['firms'].length > 0) setFirms(dataMap['firms']);
+      if (Array.isArray(dataMap['users']) && dataMap['users'].length > 0) setUsers(dataMap['users']);
+      if (Array.isArray(dataMap['holidays']) && dataMap['holidays'].length > 0) setHolidays(dataMap['holidays']);
+      if (Array.isArray(dataMap['leaveRequests']) && dataMap['leaveRequests'].length > 0) setLeaveRequests(dataMap['leaveRequests']);
+      if (Array.isArray(dataMap['notifications'])) setNotifications(dataMap['notifications']);
 
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('sikka_data_bundle', JSON.stringify(dataMap));
-        } catch (e) {}
-      }
     } catch (error) {
       console.error("Failed to fetch data efficiently:", error);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   }, [currentUserId, currentUser?.role, currentUser?.employeeId, currentUser?.username, currentUser?.id]);
 
@@ -208,12 +245,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, [currentUser]);
 
-  // Real-time live synchronization via Server-Sent Events (SSE) stream + polling fallback
+  // Real-time live synchronization via Server-Sent Events (SSE) stream + debounced refresher
   useEffect(() => {
     if (!currentUserId || typeof window === 'undefined') return;
 
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
+
+    const scheduleDebouncedFetch = () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        fetchData(false);
+      }, 1200);
+    };
 
     const connectSSE = () => {
       try {
@@ -222,15 +266,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         eventSource.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data);
-            if (payload && payload.type && payload.type !== 'connected') {
-              // Dispatch event for UI components listening specifically
-              window.dispatchEvent(
-                new CustomEvent('sikka:realtime-event', { detail: payload })
-              );
+            if (!payload || !payload.type) return;
 
-              // Auto-refresh context collections
-              fetchData(true);
-            }
+            // Filter out heartbeats & device registration pings from wiping/re-fetching database state
+            const IGNORED_TYPES = ['connected', 'device_registered', 'HEARTBEAT', 'keepalive', 'ping'];
+            if (IGNORED_TYPES.includes(payload.type)) return;
+
+            // Dispatch event for UI components listening specifically
+            window.dispatchEvent(
+              new CustomEvent('sikka:realtime-event', { detail: payload })
+            );
+
+            // Debounced auto-refresh context collections
+            scheduleDebouncedFetch();
           } catch (e) {}
         };
 
@@ -239,7 +287,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             eventSource.close();
             eventSource = null;
           }
-          // Reconnect in 5 seconds
+          // Reconnect gracefully in 5 seconds
           clearTimeout(reconnectTimeout);
           reconnectTimeout = setTimeout(connectSSE, 5000);
         };
@@ -250,25 +298,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     connectSSE();
 
-    const syncNotifications = async () => {
-      try {
-        const res = await fetch('/api/data/notifications', { cache: 'no-store' });
-        if (res.ok) {
-          const json = await res.json();
-          const list = Array.isArray(json) ? json : (json?.data || []);
-          setNotifications(list);
-        }
-      } catch (err) {
-        console.debug("Notification sync error:", err);
-      }
-    };
-
+    // Throttled focus & visibility refresh (only if at least 30s have passed since last fetch)
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchData(true);
+      if (document.visibilityState === 'visible' && Date.now() - lastFetchTimeRef.current > 30000) {
+        fetchData(false);
       }
     };
-    const onFocus = () => fetchData(true);
+    const onFocus = () => {
+      if (Date.now() - lastFetchTimeRef.current > 30000) {
+        fetchData(false);
+      }
+    };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('focus', onFocus);
@@ -276,6 +316,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (eventSource) {
         eventSource.close();
+      }
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
       clearTimeout(reconnectTimeout);
       document.removeEventListener('visibilitychange', onVisibilityChange);

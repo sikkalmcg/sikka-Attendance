@@ -49,7 +49,18 @@ export function getCachedBootstrapData(cacheKey: string = 'default'): any | null
 }
 
 export function setCachedBootstrapData(data: any, cacheKey: string = 'default') {
+  if (!data || typeof data !== 'object') return;
   const cacheMap = getCacheMap();
+  const existing = cacheMap.get(cacheKey);
+  
+  // Guard: if existing cache has employees and new payload has 0 employees, do not wipe the cache
+  if (existing?.data && Array.isArray(existing.data.employees) && existing.data.employees.length > 0) {
+    if (Array.isArray(data.employees) && data.employees.length === 0) {
+      console.warn(`[DataCache] Refusing to overwrite populated cache (${existing.data.employees.length} employees) with empty data.`);
+      return;
+    }
+  }
+
   cacheMap.set(cacheKey, {
     data,
     timestamp: Date.now(),
