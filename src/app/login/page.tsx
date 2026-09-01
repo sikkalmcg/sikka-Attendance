@@ -205,12 +205,12 @@ export default function LoginPage() {
   const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#E9EDF0] p-4 font-sans">
-      <div className="w-full max-w-[800px] aspect-[4/3] bg-[#E9EDF0] border-[12px] border-[#C59D2E] rounded-xl shadow-2xl relative flex flex-col p-12">
+    <div className="min-h-screen flex items-center justify-center bg-[#E9EDF0] dark:bg-[#0d1117] p-4 font-sans transition-colors duration-300">
+      <div className="w-full max-w-[800px] aspect-[4/3] bg-[#E9EDF0] dark:bg-[#161b22] border-[12px] border-[#C59D2E] rounded-xl shadow-2xl relative flex flex-col p-12 transition-colors duration-300">
         
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
-            <div className="w-24 h-24 relative rounded-xl overflow-hidden shadow-lg border-2 border-white bg-white">
+            <div className="w-24 h-24 relative rounded-xl overflow-hidden shadow-lg border-2 border-white dark:border-[#30363d] bg-white dark:bg-[#21262d]">
               <Image 
                 src={logoUrl}
                 alt="Sikka Logo"
@@ -221,7 +221,7 @@ export default function LoginPage() {
             </div>
           </div>
           <h1 className="text-4xl font-bold text-[#C59D2E] tracking-tight">
-            Sikka Industries & Logistics
+            Sikka Industries &amp; Logistics
           </h1>
           <p className="text-[10px] font-black text-primary mt-2 uppercase tracking-[0.3em]">
             Enterprise Portal
@@ -231,7 +231,7 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col items-center">
           <form onSubmit={handleLogin} className="w-full max-w-sm space-y-4">
             {error && (
-              <Alert variant="destructive" className="mb-2 py-2 border-rose-200 bg-rose-50 text-rose-900">
+              <Alert variant="destructive" className="mb-2 py-2 border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/50 text-rose-900 dark:text-rose-300">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-xs">{error}</AlertDescription>
               </Alert>
@@ -239,17 +239,17 @@ export default function LoginPage() {
 
             {/* Debug Monitor Box (Visible only during login issues) */}
             {debugInfo && (
-              <div className="p-2 border border-blue-200 bg-blue-50 text-blue-900 rounded text-[11px] leading-relaxed break-all">
+              <div className="p-2 border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 text-blue-900 dark:text-blue-300 rounded text-[11px] leading-relaxed break-all">
                 <strong>System Debug:</strong> {debugInfo}
               </div>
             )}
 
             <div className="flex items-center gap-4">
-              <label className="w-24 text-right text-sm font-semibold text-slate-600">
+              <label className="w-24 text-right text-sm font-semibold text-slate-600 dark:text-slate-300">
                 Role <span className="text-red-500">*</span>
               </label>
               <select
-                className="flex-1 h-8 bg-white border border-slate-300 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                className="flex-1 h-8 bg-white dark:bg-[#21262d] dark:text-slate-100 border border-slate-300 dark:border-[#30363d] px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E] transition-colors"
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value as any)}
               >
@@ -260,34 +260,33 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center gap-4">
-              <label className="w-24 text-right text-sm font-semibold text-slate-600">
+              <label className="w-24 text-right text-sm font-semibold text-slate-600 dark:text-slate-300">
                 User <span className="text-red-500">*</span>
               </label>
               <input 
                 type="text"
-                className="flex-1 h-8 bg-white border border-slate-300 px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                className="flex-1 h-8 bg-white dark:bg-[#21262d] dark:text-slate-100 border border-slate-300 dark:border-[#30363d] px-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E] transition-colors"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
 
-
             <div className="flex items-center gap-4">
-              <label className="w-24 text-right text-sm font-semibold text-slate-600">
+              <label className="w-24 text-right text-sm font-semibold text-slate-600 dark:text-slate-300">
                 Password <span className="text-red-500">*</span>
               </label>
               <div className="flex-1 relative">
                 <input 
                   type={showPassword ? "text" : "password"}
-                  className="w-full h-8 bg-white border border-slate-300 px-2 pr-8 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E]"
+                  className="w-full h-8 bg-white dark:bg-[#21262d] dark:text-slate-100 border border-slate-300 dark:border-[#30363d] px-2 pr-8 text-sm focus:outline-none focus:ring-1 focus:ring-[#C59D2E] transition-colors"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
                 <button 
                   type="button"
-                  className="absolute right-2 top-1.5 text-slate-400 hover:text-[#C59D2E] transition-colors"
+                  className="absolute right-2 top-1.5 text-slate-400 dark:text-slate-500 hover:text-[#C59D2E] transition-colors"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -299,7 +298,7 @@ export default function LoginPage() {
               <button 
                 type="submit"
                 disabled={loading}
-                className="px-10 py-1 bg-[#D1D9E0] border border-black text-sm font-medium hover:bg-[#C1C9D0] active:bg-[#B1B9C0] transition-colors flex items-center gap-2"
+                className="px-10 py-1 bg-[#D1D9E0] dark:bg-[#21262d] dark:text-slate-100 dark:border-[#30363d] border border-black text-sm font-medium hover:bg-[#C1C9D0] dark:hover:bg-[#30363d] active:bg-[#B1B9C0] dark:active:bg-[#3d444d] transition-colors flex items-center gap-2"
               >
                 {loading && <Loader2 className="w-3 h-3 animate-spin" />}
                 Log On
@@ -308,19 +307,19 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <div className="mt-auto flex justify-between items-end border-t border-slate-300 pt-4">
-          <p className="text-[11px] text-slate-500 font-medium lowercase">
-            copyright@ Sikka Industries & Logistics All rights Reserved
+        <div className="mt-auto flex justify-between items-end border-t border-slate-300 dark:border-[#30363d] pt-4 transition-colors">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium lowercase">
+            copyright@ Sikka Industries &amp; Logistics All rights Reserved
           </p>
           
-          <div className="w-16 h-16 bg-[#1A1A3A] flex items-center justify-center rounded-sm overflow-hidden">
+          <div className="w-16 h-16 bg-[#1A1A3A] dark:bg-[#21262d] flex items-center justify-center rounded-sm overflow-hidden">
             <div className="w-full h-full relative">
               <Image 
                 src={logoUrl}
                 alt="Logo Small"
                 fill
                 className="object-cover"
-                />
+              />
             </div>
           </div>
         </div>
