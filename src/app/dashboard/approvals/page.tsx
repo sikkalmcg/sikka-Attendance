@@ -278,18 +278,18 @@ interface BulkEditRow {
   const authorizedPlants = useMemo(() => {
     if (!userAssignedPlantIds) return plants;
     return plants.filter(p => userAssignedPlantIds.includes(p.id) || userAssignedPlantIds.includes((p as any)._id));
-  }, [userAssignedPlantIds, plants]);
-
-  const approvedLeavesMap = useMemo(() => {
+  }, [userAssignedPlantIds, plants]);  const approvedLeavesMap = useMemo(() => {
     const map = new Map<string, any>();
     if (!leaveRequests) return map;
     leaveRequests.filter(l => {
       const statusStr = String(l.status || '').toUpperCase();
       return statusStr === 'APPROVED';
     }).forEach(l => {
+      if (!l.fromDate || !l.toDate) return;
       const start = startOfDay(parseISO(l.fromDate));
       const end = startOfDay(parseISO(l.toDate));
-      if (!isValid(start) || !isValid(end)) return;
+      if (!isValid(start) || !isValid(end) || isBefore(end, start)) return;
+      if (differenceInCalendarDays(end, start) > 180) return; // Prevent runaway loop
       eachDayOfInterval({ start, end }).forEach(d => {
         const dStr = format(d, 'yyyy-MM-dd');
         const rawId = String(l.employeeId || '').trim();
@@ -351,7 +351,11 @@ interface BulkEditRow {
       return null;
     };
     
+    const todayStr = format(now, "yyyy-MM-dd");
+
     const actual = (attendanceRecords || []).filter(rec => {
+      // Exclude future dates from approvals
+      if (rec.date && rec.date > todayStr) return false;
       const emp = getEmp(rec.employeeId, rec.employeeName);
       if (emp && !isEmployeeActiveOnDate(emp, rec.date)) return false;
       if (!userAssignedPlantIds) return true;
@@ -399,6 +403,7 @@ interface BulkEditRow {
     const handledRecordsKeySet = new Set(actual.map(r => `${String(r.employeeId).trim()}:${r.date}`));
 
     // Determine the date range to generate missing/virtual logs for (Absent, Weekly Off, Holiday, Leave)
+    // Never exceed today (now)
     let genStart = startOfMonth(now);
     let genEnd = now;
 
@@ -411,7 +416,8 @@ interface BulkEditRow {
         const startOfFilterMonth = new Date(targetYear, targetMonthIdx, 1);
         const lastDayOfFilterMonth = endOfMonth(startOfFilterMonth);
         genStart = isBefore(startOfFilterMonth, projectStartDate) ? projectStartDate : startOfFilterMonth;
-        genEnd = isBefore(lastDayOfFilterMonth, now) ? lastDayOfFilterMonth : lastDayOfFilterMonth;
+        // Strictly cap at today — never generate future dates
+        genEnd = isBefore(lastDayOfFilterMonth, now) ? lastDayOfFilterMonth : now;
       }
     } else {
       // Default: Last 45 days up to today
@@ -420,19 +426,34 @@ interface BulkEditRow {
       genEnd = now;
     }
 
-    if (selectedDateFilter) {
+    // Only apply selectedDateFilter to expansion if it is a complete valid YYYY-MM-DD date (year 2020-2030)
+    // This prevents runaway loops when the user is actively typing years (e.g. typing 2 or 20 or 0002)
+    const isCompleteDateFilter = selectedDateFilter && /^\d{4}-\d{2}-\d{2}$/.test(selectedDateFilter);
+    if (isCompleteDateFilter) {
       const dParsed = parseISO(selectedDateFilter);
-      if (isValid(dParsed)) {
-        if (isBefore(dParsed, genStart)) genStart = dParsed;
-        if (isAfter(dParsed, genEnd)) genEnd = dParsed;
+      if (isValid(dParsed) && dParsed.getFullYear() >= 2024 && dParsed.getFullYear() <= now.getFullYear()) {
+        if (isBefore(dParsed, genStart) && !isBefore(dParsed, projectStartDate)) {
+          genStart = dParsed;
+        }
+        if (isAfter(dParsed, genEnd) && !isAfter(dParsed, now)) {
+          genEnd = dParsed;
+        }
       }
     }
 
-    if (!isBefore(genEnd, genStart)) {
+    // Strict safety bounds
+    if (isBefore(genStart, projectStartDate)) {
+      genStart = projectStartDate;
+    }
+    if (isAfter(genEnd, now)) {
+      genEnd = now;
+    }
+
+    if (!isBefore(genEnd, genStart) && differenceInCalendarDays(genEnd, genStart) <= 180) {
       const intervalDates = eachDayOfInterval({ 
         start: startOfDay(genStart), 
         end: startOfDay(genEnd)
-      }).map(d => format(d, "yyyy-MM-dd"));
+      }).map(d => format(d, "yyyy-MM-dd")).filter(dStr => dStr <= todayStr);
       
       (employees || []).forEach(emp => {
         if (userAssignedPlantIds) {
@@ -444,6 +465,7 @@ interface BulkEditRow {
         const empUnit = (plants || []).find(p => p.id === emp.unitId || (p as any)._id === emp.unitId || (emp.unitIds || []).includes(p.id) || (emp.unitIds || []).includes((p as any)._id))?.name || (authorizedPlants[0]?.name || "Salt Plant");
 
         intervalDates.forEach(dStr => {
+          if (dStr > todayStr) return; // Never generate for future dates
           if (!isEmployeeActiveOnDate(emp, dStr)) return;
           const cleanEmpId = String(emp.employeeId || '').trim();
           const key = `${cleanEmpId}:${dStr}`;
@@ -483,7 +505,7 @@ interface BulkEditRow {
       });
     }
 
-    let combined = [...actual, ...missing];
+    let combined = [...actual, ...missing].filter(rec => rec.date <= todayStr);
 
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -493,7 +515,7 @@ interface BulkEditRow {
       );
     }
 
-    if (selectedDateFilter) {
+    if (isCompleteDateFilter) {
       combined = combined.filter(rec => rec.date === selectedDateFilter);
     }
 
@@ -510,15 +532,19 @@ interface BulkEditRow {
   }, [attendanceRecords, employees, isMounted, holidays, userAssignedPlantIds, selectedPlantFilter, searchTerm, selectedDateFilter, plants, approvedLeavesMap, historyMonthFilter]);
 
   const pendingAttendanceList = useMemo(() => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
     return allAttendanceList.filter(rec => {
       if (rec.approved) return false;
+      if (rec.date > todayStr) return false; // Strictly prevent future dates in pending
       const matchesStatus = selectedStatusFilter === "ALL" ? true : rec.displayStatus === selectedStatusFilter;
       return matchesStatus;
     }).sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
   }, [allAttendanceList, selectedStatusFilter]);
 
   const historyAttendanceList = useMemo(() => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
     return allAttendanceList.filter(rec => {
+      if (rec.date > todayStr) return false; // Strictly prevent future dates in history
       const matchesApproval = rec.approved || rec.isVirtual;
       if (!matchesApproval) return false;
       
@@ -1458,6 +1484,7 @@ const allPlantExitHistory = useMemo(() => {
           {(viewMode === 'attendance' || viewMode === 'exits') && <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border shadow-sm">
              <Input 
                type="date" 
+               max={format(new Date(), "yyyy-MM-dd")}
                className="h-8 border-none text-xs font-black uppercase focus:ring-0 shadow-none bg-transparent w-[130px]" 
                value={selectedDateFilter} 
                onChange={(e) => setSelectedDateFilter(e.target.value)} 

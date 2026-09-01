@@ -17,6 +17,6 @@ export async function register() {
       } catch (err) {
         console.warn('[Cache Warmer] Non-fatal pre-warm warning:', err);
       }
-    }, 2000);
+    }, 15000);
   }
 }

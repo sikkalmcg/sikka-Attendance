@@ -1,4 +1,10 @@
 import { MongoClient, type Db, type Collection, ObjectId } from 'mongodb';
+import dns from 'dns';
+
+// Prefer IPv4 addresses for DNS resolution — Atlas TLS connects in ~9s via IPv4
+// vs 45s+ via IPv6 link-local on this network. setDefaultResultOrder only changes
+// result preference, NOT the DNS server used (safe, unlike setServers).
+try { dns.setDefaultResultOrder('ipv4first'); } catch {}
 
 const uri = process.env.MONGODB_URI as string;
 const dbName = (process.env.MONGODB_DB as string) || 'sikka_database';
@@ -13,39 +19,59 @@ declare global {
   var _indexesCreated: boolean | undefined;
 }
 
-let clientPromise: Promise<MongoClient> | undefined;
+let client: MongoClient | null = null;
+let clientPromise: Promise<MongoClient> | null = null;
 
-function initMongoClient(): Promise<MongoClient> {
-  const client = new MongoClient(uri, {
-    maxPoolSize: 50,
-    minPoolSize: 0,
+function createClient(): MongoClient {
+  return new MongoClient(uri, {
+    maxPoolSize: 20,
+    minPoolSize: 1,
     maxIdleTimeMS: 60000,
-    serverSelectionTimeoutMS: 10000,
-    connectTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000,
+    socketTimeoutMS: 60000,
     retryWrites: true,
     tls: true,
-  });
-
-  return client.connect().catch((err) => {
-    global._mongoClientPromise = undefined;
-    global._mongoDb = undefined;
-    clientPromise = undefined;
-    throw err;
+    family: 4,
   });
 }
 
-if (process.env.NODE_ENV === 'development') {
-  if (!global._mongoClientPromise) {
-    global._mongoClientPromise = initMongoClient().catch(() => undefined as any);
+export async function getClient(): Promise<MongoClient> {
+  if (process.env.NODE_ENV === 'development') {
+    if (!global._mongoClientPromise) {
+      const cli = createClient();
+      global._mongoClientPromise = cli.connect().catch((err) => {
+        global._mongoClientPromise = undefined;
+        throw err;
+      });
+    }
+    const cli = await global._mongoClientPromise;
+    if (!cli) {
+      global._mongoClientPromise = undefined;
+      throw new Error('MongoClient is undefined');
+    }
+    return cli;
   }
+
+  if (!clientPromise) {
+    const cli = createClient();
+    clientPromise = cli.connect().catch((err) => {
+      clientPromise = null;
+      throw err;
+    });
+  }
+  const cli = await clientPromise;
+  if (!cli) {
+    clientPromise = null;
+    throw new Error('MongoClient is undefined');
+  }
+  return cli;
 }
 
 async function ensureIndexes(db: Db) {
   if (global._indexesCreated) return;
   global._indexesCreated = true;
   try {
-    // Background index creation to make lookups and sorts instant (< 10ms)
     db.collection('attendance').createIndex({ date: -1 }, { background: true }).catch(() => {});
     db.collection('attendance').createIndex({ employeeId: 1, date: -1 }, { background: true }).catch(() => {});
     db.collection('employees').createIndex({ employeeId: 1 }, { background: true }).catch(() => {});
@@ -56,32 +82,20 @@ async function ensureIndexes(db: Db) {
   } catch {}
 }
 
-export async function getClient(): Promise<MongoClient> {
-  if (process.env.NODE_ENV === 'development') {
-    if (!global._mongoClientPromise) {
-      global._mongoClientPromise = initMongoClient();
-    }
-    return global._mongoClientPromise;
-  }
-  if (!clientPromise) {
-    clientPromise = initMongoClient();
-  }
-  return clientPromise;
-}
-
 export async function getDb(): Promise<Db> {
   try {
     if (global._mongoDb) {
       return global._mongoDb;
     }
-    const client = await getClient();
-    const db = client.db(dbName);
+    const cli = await getClient();
+    const db = cli.db(dbName);
     global._mongoDb = db;
     ensureIndexes(db);
     return db;
   } catch (err) {
     global._mongoClientPromise = undefined;
     global._mongoDb = undefined;
+    clientPromise = null;
     throw err;
   }
 }

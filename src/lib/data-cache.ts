@@ -17,7 +17,7 @@ declare global {
   var _sikkaInFlightPromise: Promise<any> | null | undefined;
 }
 
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes TTL before background silent revalidation
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
 
 function getCacheMap(): Map<string, CacheEntry> {
   if (!global._sikkaBootstrapCache) {
@@ -30,6 +30,21 @@ export function getCachedBootstrapData(cacheKey: string = 'default'): any | null
   const cacheMap = getCacheMap();
   const entry = cacheMap.get(cacheKey);
   if (!entry) return null;
+
+  // Expire stale cache
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    cacheMap.delete(cacheKey);
+    return null;
+  }
+
+  // Don't serve empty cache — force a fresh DB fetch if all collections are empty
+  const d = entry.data;
+  if (d && Array.isArray(d.employees) && d.employees.length === 0 &&
+      Array.isArray(d.firms) && d.firms.length === 0) {
+    cacheMap.delete(cacheKey);
+    return null;
+  }
+
   return entry.data;
 }
 
