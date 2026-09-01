@@ -1,10 +1,4 @@
 import { MongoClient, type Db, type Collection, ObjectId } from 'mongodb';
-import dns from 'dns';
-
-// Ensure SRV DNS lookup resolves reliably on all network configurations
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
-} catch {}
 
 const uri = process.env.MONGODB_URI as string;
 const dbName = (process.env.MONGODB_DB as string) || 'sikka_database';
@@ -19,33 +13,32 @@ declare global {
   var _indexesCreated: boolean | undefined;
 }
 
-let clientPromise: Promise<MongoClient>;
+let clientPromise: Promise<MongoClient> | undefined;
 
 function initMongoClient(): Promise<MongoClient> {
   const client = new MongoClient(uri, {
     maxPoolSize: 50,
-    minPoolSize: 1,
-    maxIdleTimeMS: 300000,
-    serverSelectionTimeoutMS: 30000,
-    connectTimeoutMS: 30000,
-    socketTimeoutMS: 120000,
+    minPoolSize: 0,
+    maxIdleTimeMS: 60000,
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
     retryWrites: true,
+    tls: true,
   });
 
   return client.connect().catch((err) => {
     global._mongoClientPromise = undefined;
     global._mongoDb = undefined;
+    clientPromise = undefined;
     throw err;
   });
 }
 
 if (process.env.NODE_ENV === 'development') {
   if (!global._mongoClientPromise) {
-    global._mongoClientPromise = initMongoClient();
+    global._mongoClientPromise = initMongoClient().catch(() => undefined as any);
   }
-  clientPromise = global._mongoClientPromise;
-} else {
-  clientPromise = initMongoClient();
 }
 
 async function ensureIndexes(db: Db) {
@@ -69,6 +62,9 @@ export async function getClient(): Promise<MongoClient> {
       global._mongoClientPromise = initMongoClient();
     }
     return global._mongoClientPromise;
+  }
+  if (!clientPromise) {
+    clientPromise = initMongoClient();
   }
   return clientPromise;
 }

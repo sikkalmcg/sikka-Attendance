@@ -21,9 +21,12 @@ export async function POST() {
 
 async function processAutoMarkOut() {
   try {
-    const db = await getDb();
+    const db = await getDb().catch((err) => {
+      console.warn("[Auto-Out] MongoDB connection deferred:", err?.message || err);
+      return null;
+    });
     if (!db) {
-      return NextResponse.json({ success: false, message: "Database connection failed" }, { status: 500 });
+      return NextResponse.json({ success: false, message: "Database unavailable", processedCount: 0 }, { status: 503 });
     }
 
     const attendanceCol = db.collection('attendance');
@@ -155,7 +158,7 @@ async function processAutoMarkOut() {
       executedAt: now.toISOString(),
     });
   } catch (error: any) {
-    console.error("Auto Mark OUT processor error:", error);
+    console.error("Auto Mark OUT processor error:", error?.message || error);
     return NextResponse.json({ success: false, error: error?.message || "Internal server error" }, { status: 500 });
   }
 }

@@ -21,11 +21,22 @@ export async function GET(req: Request) {
     const forceRefresh = searchParams.get('refresh') === 'true';
 
     // Resolve session user for notification & query filtering
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('sikka_session')?.value;
     let sessionUser: any = null;
-    if (sessionCookie) {
-      try { sessionUser = JSON.parse(sessionCookie); } catch {}
+    try {
+      const cookieStore = await cookies();
+      const sessionCookie = cookieStore.get('sikka_session')?.value;
+      if (sessionCookie) {
+        try { sessionUser = JSON.parse(sessionCookie); } catch {}
+      }
+    } catch {
+      // cookies() throws when called outside request scope (e.g. background pre-warmer or cron)
+      try {
+        const cookieHeader = req.headers.get('cookie') || '';
+        const match = cookieHeader.match(/sikka_session=([^;]+)/);
+        if (match && match[1]) {
+          sessionUser = JSON.parse(decodeURIComponent(match[1]));
+        }
+      } catch {}
     }
 
     // Header/Query fallback if cookie is absent
@@ -50,9 +61,12 @@ export async function GET(req: Request) {
       }
     }
 
-    const db = await getDb();
+    const db = await getDb().catch((err) => {
+      console.warn('[Bootstrap] MongoDB connection deferred:', err?.message || err);
+      return null;
+    });
     if (!db) {
-      return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+      return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
     }
 
     // Build employee-specific queries if authenticated as standard employee
