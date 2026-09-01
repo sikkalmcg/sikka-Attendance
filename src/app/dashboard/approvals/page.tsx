@@ -209,7 +209,10 @@ interface BulkEditRow {
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
   const [isBulkApproving, setIsBulkApproving] = useState(false);
   const [isRejectingId, setIsRejectingId] = useState<string | null>(null);
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
+  const [attendanceToRestore, setAttendanceToRestore] = useState<AttendanceItem | null>(null);
   const [isRestoringId, setIsRestoringId] = useState<string | null>(null);
+  const [isRestoringLeaveId, setIsRestoringLeaveId] = useState<string | null>(null);
   const [isUpdatingAttendanceId, setIsUpdatingAttendanceId] = useState<string | null>(null);
   const [isApprovingLeave, setIsApprovingLeave] = useState(false);
   const [isRejectingLeave, setIsRejectingLeave] = useState(false);
@@ -622,6 +625,16 @@ const allPlantExitHistory = useMemo(() => {
   }, [pendingAttendanceList, historyAttendanceList, pendingPage, historyPage, attendanceView]);
 
   const handleOpenApproveConfirmation = (rec: AttendanceItem) => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const isTodayAbs = (rec.date === todayStr) && (rec.displayStatus === 'Absent' || rec.status === 'ABSENT' || !rec.inTime);
+    if (isTodayAbs) {
+      toast({
+        variant: "destructive",
+        title: "Approval Not Allowed",
+        description: "Current date absent record cannot be approved today. It can only be approved from tomorrow as a past date."
+      });
+      return;
+    }
     setSelectedAttendance(rec);
     setIsApproveConfirmOpen(true);
   };
@@ -630,6 +643,18 @@ const allPlantExitHistory = useMemo(() => {
     if (!selectedAttendance) return;
     
     const rec = selectedAttendance;
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const isTodayAbs = (rec.date === todayStr) && (rec.displayStatus === 'Absent' || rec.status === 'ABSENT' || !rec.inTime);
+    if (isTodayAbs) {
+      setIsApproveConfirmOpen(false);
+      setSelectedAttendance(null);
+      toast({
+        variant: "destructive",
+        title: "Approval Not Allowed",
+        description: "Current date absent record cannot be approved today. It can only be approved from tomorrow as a past date."
+      });
+      return;
+    }
     const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
 
@@ -903,11 +928,23 @@ const allPlantExitHistory = useMemo(() => {
   const handleBulkApprove = async () => {
     setIsBulkApproveConfirmOpen(false);
     const approverName = verifiedUser?.fullName || "HR_ADMIN";
+    const todayStr = format(new Date(), "yyyy-MM-dd");
     
     const recordsToApprove = pendingAttendanceList.filter(r => {
       const rId = r.id || (r as any)._id || `${r.employeeId}:${r.date}`;
+      const isTodayAbs = (r.date === todayStr) && (r.displayStatus === 'Absent' || r.status === 'ABSENT' || !r.inTime);
+      if (isTodayAbs) return false;
       return selectedRecordIds.has(rId);
     });
+
+    if (recordsToApprove.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Action Not Allowed",
+        description: "Current date absent records cannot be approved today. Please select past records or records with marked attendance."
+      });
+      return;
+    }
 
     setIsBulkApproving(true);  // Show spinner — MongoDB writes in progress
     setSelectedRecordIds(new Set());
@@ -1226,6 +1263,19 @@ const allPlantExitHistory = useMemo(() => {
     setIsAttendanceRejectOpen(false);
     const rec = selectedAttendance;
 
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const isTodayAbs = (rec.date === todayStr) && (rec.displayStatus === 'Absent' || rec.status === 'ABSENT' || !rec.inTime);
+    if (isTodayAbs) {
+      setSelectedAttendance(null);
+      setAttendanceRejectReason("");
+      toast({
+        variant: "destructive",
+        title: "Action Not Allowed",
+        description: "Current date absent record cannot be rejected/cancelled today."
+      });
+      return;
+    }
+
     const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
     const approver = verifiedUser?.fullName || "HR_ADMIN";
 
@@ -1271,30 +1321,89 @@ const allPlantExitHistory = useMemo(() => {
     }
   };
 
-  const handleRestoreAttendance = async (rec: AttendanceItem) => {
-    if (rec.isVirtual) return; 
-    const recId = rec.id || (rec as any)._id || '';
+  const handleOpenRestoreConfirmation = (rec: AttendanceItem) => {
+    setAttendanceToRestore(rec);
+    setIsRestoreConfirmOpen(true);
+  };
+
+  const handleConfirmRestoreAttendance = async () => {
+    if (!attendanceToRestore) return;
+    const rec = attendanceToRestore;
+    const recId = rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`;
 
     setIsRestoringId(recId);  // Show spinner — MongoDB write in progress
 
     try {
-      const finalDbId = rec.id || (rec as any)._id;
-      await updateRecord('attendance', finalDbId, {
-        approved: false,
-        approvedBy: null,
-        editedBy: null,
-        restoredBy: verifiedUser?.fullName || "HR_ADMIN",
-        restoredAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+      if (rec.isVirtual) {
+        await addRecord('attendance', {
+          employeeId: rec.employeeId,
+          employeeName: rec.employeeName,
+          date: rec.date,
+          inPlant: rec.inPlant || (authorizedPlants[0]?.name || "Salt Plant"),
+          inDate: rec.inDate || rec.date,
+          inTime: rec.inTime || null,
+          outDate: rec.outDate || null,
+          outTime: rec.outTime || null,
+          hours: rec.hours || 0,
+          status: rec.inTime ? (rec.outTime ? 'PRESENT' : 'Open') : 'ABSENT',
+          attendanceType: rec.attendanceType || 'ABSENT',
+          approved: false,
+          approvedBy: null,
+          editedBy: null,
+          restoredBy: verifiedUser?.fullName || "HR_ADMIN",
+          restoredAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          remark: rec.remark || "Restored to Pending Logs",
+        }, true);
+      } else {
+        const finalDbId = rec.id || (rec as any)._id;
+        await updateRecord('attendance', finalDbId, {
+          approved: false,
+          status: rec.inTime ? (rec.outTime ? 'PRESENT' : 'Open') : (rec.status === 'REJECTED' ? 'ABSENT' : (rec.status || 'ABSENT')),
+          approvedBy: null,
+          editedBy: null,
+          restoredBy: verifiedUser?.fullName || "HR_ADMIN",
+          restoredAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }, true);
+      }
+      
+      setIsRestoreConfirmOpen(false);
+      setAttendanceToRestore(null);
       // MongoDB confirmed — refresh UI, then show success toast
       await refreshData();
-      toast({ title: "Record Restored", description: "Moved back to Pending queue." });
-    } catch (e) {
+      toast({ 
+        title: "✅ Attendance entry restored successfully and moved to Pending Logs." 
+      });
+    } catch (e: any) {
       console.error("Restore error:", e);
-      toast({ variant: "destructive", title: "Restore Failed", description: "Could not restore the record. Please try again." });
+      toast({ 
+        variant: "destructive", 
+        title: "Restore Failed", 
+        description: e?.message || "Could not restore the record. Please try again." 
+      });
     } finally {
       setIsRestoringId(null);
+    }
+  };
+
+  const handleRestoreLeave = async (leave: LeaveRequestItem) => {
+    const reqId = leave.id || (leave as any)._id;
+    if (!reqId || !updateLeaveRequest) return;
+    setIsRestoringLeaveId(reqId);
+    try {
+      await updateLeaveRequest('leaveRequests', reqId, {
+        status: "UNDER_PROCESS",
+        processedByUserId: null,
+        processedAt: null,
+        updatedAt: new Date().toISOString(),
+      });
+      await refreshData();
+      toast({ title: "Leave Request Restored", description: "Moved back to Pending leave requests queue." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Restore Failed", description: error?.message || "Failed to restore leave request." });
+    } finally {
+      setIsRestoringLeaveId(null);
     }
   };
 
@@ -1689,6 +1798,7 @@ const allPlantExitHistory = useMemo(() => {
                   <TableHead>Approved Date</TableHead>
                   <TableHead>Approved By</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right pr-6">Action Matrix</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1714,11 +1824,27 @@ const allPlantExitHistory = useMemo(() => {
                         {leave.status}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg"
+                        onClick={() => handleRestoreLeave(leave)}
+                        disabled={isRestoringLeaveId === (leave.id || leave._id)}
+                      >
+                        {isRestoringLeaveId === (leave.id || leave._id) ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-3 h-3" />
+                        )}
+                        Restore
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
                  {historyLeaveRequests.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-10 text-muted-foreground">
                       No leave requests history found.
                     </TableCell>
                   </TableRow>
@@ -1765,7 +1891,9 @@ const allPlantExitHistory = useMemo(() => {
                   <TableRow><TableCell colSpan={attendanceView === 'history' ? 12 : 11} className="text-center py-20 text-muted-foreground font-bold italic">No logs matched criteria constraints bounds.</TableCell></TableRow>
                 ) : (
                   currentData.items.map((rec: any) => {
-                    const canApprove = rec.isVirtual || (rec.inTime && (rec.outTime || rec.autoCheckout));
+                    const todayStr = format(new Date(), "yyyy-MM-dd");
+                    const isTodayAbsent = (rec.date === todayStr) && (rec.displayStatus === 'Absent' || rec.status === 'ABSENT' || !rec.inTime);
+                    const canApprove = !isTodayAbsent && (rec.isVirtual || (rec.inTime && (rec.outTime || rec.autoCheckout)));
                     const isMarkOutPending = !rec.isVirtual && Boolean(rec.inTime) && !rec.outTime && !rec.autoCheckout && !rec.autoOut && rec.status !== 'Closed';
                     const inDisplay = rec.inTime ? `${formatDate(rec.inDate || rec.date)} ${rec.inTime}` : "--";
                     
@@ -1851,30 +1979,63 @@ const allPlantExitHistory = useMemo(() => {
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-50" onClick={() => { setSelectedAttendance(rec); setIsAttendanceRejectOpen(true); }} disabled={isApprovingId === (rec.id || (rec as any)._id)}><XCircle className="w-3.5 h-3.5" /></Button>
-                                <Button 
-                                  size="sm" 
-                                  className="h-8 font-black text-[10px] uppercase bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/10 rounded-lg px-4 gap-1.5" 
-                                  onClick={() => handleOpenApproveConfirmation(rec)}
-                                  disabled={!canApprove || isApprovingId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
-                                >
-                                  {isApprovingId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`) && <Loader2 className="w-3 h-3 animate-spin" />}
-                                  Approve
-                                </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className={cn(
+                                      "h-8 w-8 transition-opacity",
+                                      isTodayAbsent ? "text-slate-300 opacity-40 cursor-not-allowed hover:bg-transparent" : "text-rose-500 hover:bg-rose-50"
+                                    )} 
+                                    onClick={() => { 
+                                      if (isTodayAbsent) return;
+                                      setSelectedAttendance(rec); 
+                                      setIsAttendanceRejectOpen(true); 
+                                    }} 
+                                    disabled={isTodayAbsent || isApprovingId === (rec.id || (rec as any)._id)}
+                                    title={isTodayAbsent ? "Current date absent record cannot be rejected/cancelled today." : "Reject Attendance Entry"}
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    className={cn(
+                                      "h-8 font-black text-[10px] uppercase rounded-lg px-4 gap-1.5 transition-all",
+                                      canApprove 
+                                        ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-600/10" 
+                                        : "bg-slate-200 text-slate-400 hover:bg-slate-200 cursor-not-allowed shadow-none"
+                                    )} 
+                                    onClick={() => {
+                                      if (!canApprove) return;
+                                      handleOpenApproveConfirmation(rec);
+                                    }}
+                                    disabled={!canApprove || isApprovingId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
+                                    title={
+                                      isTodayAbsent 
+                                        ? "Current date absent record cannot be approved today. Can only be approved as a past date from tomorrow onwards."
+                                        : isMarkOutPending 
+                                          ? "Employee must Mark OUT first before record can be approved." 
+                                          : "Approve attendance entry"
+                                    }
+                                  >
+                                    {isApprovingId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`) && <Loader2 className="w-3 h-3 animate-spin" />}
+                                    Approve
+                                  </Button>
                               </>
                             ) : (
-                              !rec.isVirtual && (
-                                <Button 
-                                  variant="secondary" 
-                                  size="sm" 
-                                  className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg" 
-                                  onClick={() => handleRestoreAttendance(rec)}
-                                  disabled={isRestoringId === (rec.id || (rec as any)._id)}
-                                >
-                                  {isRestoringId === (rec.id || (rec as any)._id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                                  Restore
-                                </Button>
-                              )
+                              <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                className="h-8 gap-2 font-black text-[10px] uppercase bg-slate-900 text-white hover:bg-primary transition-all rounded-lg" 
+                                onClick={() => handleOpenRestoreConfirmation(rec)}
+                                disabled={isRestoringId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`)}
+                              >
+                                {isRestoringId === (rec.id || (rec as any)._id || `${rec.employeeId}:${rec.date}`) ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="w-3 h-3" />
+                                )}
+                                Restore
+                              </Button>
                             )}
                           </div>
                         </TableCell>
@@ -2194,6 +2355,85 @@ const allPlantExitHistory = useMemo(() => {
             <Button className="flex-1 h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-emerald-600/10 gap-2" onClick={handleConfirmApproval} disabled={isApprovingId !== null}>
               {isApprovingId !== null && <Loader2 className="w-4 h-4 animate-spin" />}
               Confirm Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* RESTORE ATTENDANCE WARNING / CONFIRMATION MODAL */}
+      <Dialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
+        <DialogContent className="sm:max-w-md rounded-3xl p-0 overflow-hidden border-none shadow-2xl animate-in fade-in duration-300">
+          <DialogHeader className="p-6 bg-slate-900 text-white flex flex-row items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <DialogTitle className="text-md font-black uppercase tracking-tight flex items-center gap-2">
+                ⚠️ Warning
+              </DialogTitle>
+              <DialogDescription className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                Attendance Restoration Confirmation
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+
+          <div className="p-6 space-y-4 bg-white text-slate-700">
+            <div className="space-y-2">
+              <p className="text-sm font-bold text-slate-800 leading-relaxed">
+                Are you sure you want to restore this attendance entry?
+              </p>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                This action will move the selected entry back to the <span className="font-bold text-slate-700">Pending Logs</span> for further processing.
+              </p>
+            </div>
+
+            {attendanceToRestore && (
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Employee:</span>
+                  <span className="font-black text-slate-800 uppercase">{attendanceToRestore.employeeName} ({attendanceToRestore.employeeId})</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Date:</span>
+                  <span className="font-bold text-slate-800">{formatDate(attendanceToRestore.date)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Current Status:</span>
+                  <Badge variant="outline" className="font-black text-[10px] uppercase">
+                    {attendanceToRestore.displayStatus || attendanceToRestore.status}
+                  </Badge>
+                </div>
+                {attendanceToRestore.inTime && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400 font-bold text-[10px] uppercase tracking-wider">Marked Time:</span>
+                    <span className="font-mono font-bold text-slate-700">
+                      IN: {attendanceToRestore.inTime} | OUT: {attendanceToRestore.outTime || "--"}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="p-4 bg-slate-50 border-t flex flex-row gap-3">
+            <Button 
+              variant="ghost" 
+              className="flex-1 h-11 font-black rounded-xl text-slate-500 uppercase text-xs" 
+              onClick={() => {
+                setIsRestoreConfirmOpen(false);
+                setAttendanceToRestore(null);
+              }}
+              disabled={Boolean(isRestoringId)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              className="flex-1 h-11 font-black bg-amber-600 hover:bg-amber-700 text-white rounded-xl uppercase text-xs shadow-lg shadow-amber-600/10 gap-2" 
+              onClick={handleConfirmRestoreAttendance}
+              disabled={Boolean(isRestoringId)}
+            >
+              {isRestoringId ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+              Confirm Restore
             </Button>
           </DialogFooter>
         </DialogContent>
