@@ -398,7 +398,7 @@ export async function GET(req: Request) {
       dates.push(`${yyyy}-${mm}-${dd}`);
     }
 
-    // Compute ledger rows server-side.
+    // Compute ledger rows server-side (ONE ROW per Employee + Date)
     const allRows: any[] = [];
 
     for (const emp of employees) {
@@ -428,20 +428,22 @@ export async function GET(req: Request) {
         // If status is absent but has leave, override to Leave
         const finalStatus = hasLeave && !hasPunch ? 'Leave' : status;
 
-        if (attendanceStatus && attendanceStatus !== 'ALL' && attendanceStatus !== 'all') {
+        if (attendanceStatus && attendanceStatus !== 'ALL' && attendanceStatus !== 'all' && attendanceStatus !== 'ALL_ATTENDANCE') {
           if (finalStatus !== attendanceStatus) continue;
         }
 
         const baseRow = {
           employeeId: emp.employeeId,
           employeeName: emp.firstName ? `${emp.firstName} ${emp.lastName || ''}`.trim() : (emp.name || ''),
+          date: dateStr,
           department: emp.department || '--',
           designation: emp.designation || '--',
           attendanceStatus: finalStatus,
         };
 
-        // Case: no completed sessions -> single absent/holiday/weekly-off/leave row (existing format).
         const completedSessions = sessions.filter((s) => !!s.inTime);
+
+        // Case: no completed sessions -> single absent/holiday/weekly-off/leave row
         if (completedSessions.length === 0) {
           const rec = sessions[0];
 
@@ -469,8 +471,7 @@ export async function GET(req: Request) {
 
           allRows.push({
             ...baseRow,
-            session: '1',
-            isDayTotal: false,
+            session: 'Session 1',
             inPlant: rec?.inPlant ? rec.inPlant : '--',
             inDateTime: '--',
             outDateTime: '--',
@@ -485,96 +486,83 @@ export async function GET(req: Request) {
           continue;
         }
 
-        // Case: sessions exist. Compute per-session working hours and sum.
-        const sessionRows: any[] = [];
-        let dayTotalMinutes = 0;
+        // Case: 1 or more sessions exist -> COMBINE all sessions into ONE single row
+        const sessionLabel = completedSessions.map((_, idx) => (idx === 0 ? 'Session 1' : `${idx + 1}`)).join(', ');
 
-        completedSessions.forEach((rec, idx) => {
-          // Compute working hours from IN/OUT times (same-day assumption).
-          let workingHHMM = '00:00';
+        const inPlant = completedSessions.map((s) => s.inPlant || '--').join(', ');
+        const inDateTime = completedSessions.map((s) => (s.inTime ? `${dateStr} ${s.inTime}` : '--')).join(', ');
+        const outDateTime = completedSessions.map((s) => (s.outTime ? `${s.outDate || dateStr} ${s.outTime}` : '--')).join(', ');
+
+        // Sum working hours of all sessions
+        let totalMinutes = 0;
+        completedSessions.forEach((rec) => {
           if (rec.inTime && rec.outTime) {
             const [inH, inM] = rec.inTime.split(':').map((x) => parseInt(x, 10));
             const [outH, outM] = rec.outTime.split(':').map((x) => parseInt(x, 10));
             const inMinutes = (inH || 0) * 60 + (inM || 0);
             const outMinutes = (outH || 0) * 60 + (outM || 0);
-            // If out is earlier than in, assume next day
             const deltaMinutes = outMinutes >= inMinutes ? outMinutes - inMinutes : outMinutes + 24 * 60 - inMinutes;
-            dayTotalMinutes += deltaMinutes;
-            const hoursFloat = deltaMinutes / 60;
-            workingHHMM = fmtHoursToHHMM(hoursFloat);
+            totalMinutes += deltaMinutes;
+          } else if (rec.hours && rec.hours > 0) {
+            totalMinutes += Math.round(rec.hours * 60);
           }
-
-          // Approval Status
-          let approvalStatus = 'Pending';
-          if (rec.approved === true || String(rec.approved) === 'true') {
-            approvalStatus = 'Approved';
-          } else if (String(rec.status || '').toUpperCase() === 'REJECTED') {
-            approvalStatus = 'Rejected';
-          }
-
-          // Approved By (Username)
-          const approvedBy = rec.approvedBy && rec.approvedBy !== '--' ? rec.approvedBy : '--';
-
-          // Compute remarks
-          const remarks = computeRemarks({
-            leaveType: approvedLeave ? approvedLeave.purpose : undefined,
-            autoCheckout: rec.autoCheckout,
-            autoOut: rec.autoOut,
-            editedBy: rec.editedBy || null,
-            inPlant: rec.inPlant || '--',
-            outPlant: rec.outPlant || null,
-            hasOutTime: !!rec.outTime,
-          });
-
-          const inDateTime = rec.inTime ? `${dateStr} ${rec.inTime}` : '--';
-          const outDateTime = rec.outTime ? `${rec.outDate || dateStr} ${rec.outTime}` : '--';
-
-          sessionRows.push({
-            ...baseRow,
-            session: String(idx + 1),
-            isDayTotal: false,
-            inPlant: rec.inPlant ? rec.inPlant : '--',
-            inDateTime,
-            outDateTime,
-            workingHours: workingHHMM,
-            inLocation: rec.inLocation,
-            outLocation: rec.outLocation,
-            outPlant: rec.outPlant ? rec.outPlant : '--',
-            approvalStatus,
-            approvedBy,
-            remarks,
-          });
         });
 
-        allRows.push(...sessionRows);
+        const totalWorkingHours = fmtHoursToHHMM(totalMinutes / 60);
 
-        // If a day has 2+ sessions, append a Day Total row (sum of completed sessions).
-        if (sessionRows.length > 1) {
-          const dayTotalHHMM = fmtHoursToHHMM(dayTotalMinutes / 60);
-          const dayTotalApproval = sessionRows.every((r) => r.approvalStatus === 'Approved')
-            ? 'Approved'
-            : sessionRows.some((r) => r.approvalStatus === 'Rejected')
-              ? 'Rejected'
-              : 'Pending';
-          const dayTotalApprovedBy = '--';
-          const dayTotalRemarks = `Day Total (${sessionRows.length} sessions)`;
+        // First session for In Location; Last session for Out Location & Out Plant
+        const firstSession = completedSessions[0];
+        const lastSession = completedSessions[completedSessions.length - 1];
 
-          allRows.push({
-            ...baseRow,
-            session: 'TOTAL',
-            isDayTotal: true,
-            inPlant: '--',
-            inDateTime: '--',
-            outDateTime: '--',
-            workingHours: dayTotalHHMM,
-            inLocation: '--',
-            outLocation: '--',
-            outPlant: '--',
-            approvalStatus: dayTotalApproval,
-            approvedBy: dayTotalApprovedBy,
-            remarks: dayTotalRemarks,
-          });
-        }
+        const inLocation = firstSession.inLocation || '--';
+        const outLocation = lastSession.outLocation || '--';
+        const outPlant = lastSession.outPlant || lastSession.inPlant || '--';
+
+        // Approval Status
+        const approvalStatus = completedSessions.every((r) => r.approved === true || String(r.approved) === 'true')
+          ? 'Approved'
+          : completedSessions.some((r) => String(r.status || '').toUpperCase() === 'REJECTED')
+            ? 'Rejected'
+            : 'Pending';
+
+        const approvedByList = Array.from(
+          new Set(completedSessions.map((r) => r.approvedBy).filter((a) => a && a !== '--'))
+        );
+        const approvedBy = approvedByList.length > 0 ? approvedByList.join(', ') : '--';
+
+        const remarksList = Array.from(
+          new Set(
+            completedSessions
+              .map((rec) =>
+                computeRemarks({
+                  leaveType: approvedLeave ? approvedLeave.purpose : undefined,
+                  autoCheckout: rec.autoCheckout,
+                  autoOut: rec.autoOut,
+                  editedBy: rec.editedBy || null,
+                  inPlant: rec.inPlant || '--',
+                  outPlant: rec.outPlant || null,
+                  hasOutTime: !!rec.outTime,
+                })
+              )
+              .filter(Boolean)
+          )
+        );
+        const remarks = remarksList.length > 0 ? remarksList.join('; ') : '';
+
+        allRows.push({
+          ...baseRow,
+          session: sessionLabel,
+          inPlant,
+          inDateTime,
+          outDateTime,
+          workingHours: totalWorkingHours,
+          inLocation,
+          outLocation,
+          outPlant,
+          approvalStatus,
+          approvedBy,
+          remarks,
+        });
       }
     }
 
@@ -599,12 +587,13 @@ export async function GET(req: Request) {
         const headers = [
           'Employee ID',
           'Employee Name',
-'Department / Designation',
-          'Session',
+          'Date',
+          'Department / Designation',
+          'Sessions',
           'In Plant',
           'In Date & Time',
           'Out Date & Time',
-          'Working Hours',
+          'Total Working Hours',
           'In Location',
           'Out Location',
           'Out Plant',
@@ -616,12 +605,13 @@ export async function GET(req: Request) {
 
         const csv = [
           headers.join(','),
-          ...rows.map(r => {
-const line = [
+          ...rows.map((r) => {
+            const line = [
               r.employeeId,
               r.employeeName,
+              r.date,
               `${r.department} / ${r.designation}`,
-              r.isDayTotal ? 'Day Total' : (r.session || '1'),
+              r.session || 'Session 1',
               r.inPlant,
               r.inDateTime,
               r.outDateTime,
@@ -633,7 +623,7 @@ const line = [
               r.approvalStatus,
               r.approvedBy,
               r.remarks,
-            ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`);
+            ].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`);
             return line.join(',');
           }),
         ].join('\n');

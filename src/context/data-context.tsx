@@ -102,6 +102,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (sessionUser) {
       setCurrentUser(sessionUser);
     }
+
+    // Instant 0ms client-side cache hydration
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('sikka_data_bundle');
+        if (raw) {
+          const cached = JSON.parse(raw);
+          if (cached && typeof cached === 'object') {
+            if (Array.isArray(cached.employees) && cached.employees.length > 0) setEmployees(cached.employees);
+            if (Array.isArray(cached.attendance) && cached.attendance.length > 0) setAttendanceRecords(cached.attendance);
+            if (Array.isArray(cached.plants) && cached.plants.length > 0) setPlants(cached.plants);
+            if (Array.isArray(cached.holidays) && cached.holidays.length > 0) setHolidays(cached.holidays);
+            if (Array.isArray(cached.leaveRequests) && cached.leaveRequests.length > 0) setLeaveRequests(cached.leaveRequests);
+            if (Array.isArray(cached.notifications)) setNotifications(cached.notifications);
+            if (Array.isArray(cached.vouchers) && cached.vouchers.length > 0) setVouchers(cached.vouchers);
+            if (Array.isArray(cached.firms) && cached.firms.length > 0) setFirms(cached.firms);
+            if (Array.isArray(cached.users) && cached.users.length > 0) setUsers(cached.users);
+            if (Array.isArray(cached.payroll) && cached.payroll.length > 0) setPayrollRecords(cached.payroll);
+            setIsLoading(false);
+          }
+        }
+      } catch {}
+    }
   }, []);
 
   const isAdminRole = useMemo(() => {

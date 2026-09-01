@@ -7,7 +7,7 @@ export async function register() {
     const { startBackgroundScheduler } = await import('@/lib/background-scheduler');
     startBackgroundScheduler();
 
-    // Silently pre-warm in-memory bootstrap cache in background for 0ms user page loads
+    // Silently pre-warm in-memory bootstrap cache immediately on startup for sub-second user loads
     setTimeout(async () => {
       try {
         const { GET: handleBootstrap } = await import('@/app/api/data/bootstrap/route');
@@ -17,6 +17,6 @@ export async function register() {
       } catch (err) {
         console.warn('[Cache Warmer] Non-fatal pre-warm warning:', err);
       }
-    }, 15000);
+    }, 200);
   }
 }

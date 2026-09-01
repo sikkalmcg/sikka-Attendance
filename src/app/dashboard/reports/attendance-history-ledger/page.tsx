@@ -228,9 +228,10 @@ export default function AttendanceHistoryLedgerPage() {
     if (search && search !== "all") params.set("search", search);
 
     if (format === "csv" || format === "excel") {
-const columnOrder = [
+      const columnOrder = [
         'employeeId',
         'employeeName',
+        'date',
         'department',
         'designation',
         'session',
@@ -332,12 +333,13 @@ const columnOrder = [
               <tr>
                 <th>Employee ID</th>
                 <th>Employee Name</th>
+                <th>Date</th>
                 <th>Department / Designation</th>
-                <th>Session</th>
+                <th>Sessions</th>
                 <th>In Plant</th>
                 <th>In Date & Time</th>
                 <th>Out Date & Time</th>
-                <th>Working Hours</th>
+                <th>Total Working Hours</th>
                 <th>In Location</th>
                 <th>Out Location</th>
                 <th>Out Plant</th>
@@ -362,8 +364,9 @@ const columnOrder = [
                     <tr>
                       <td>${r.employeeId}</td>
                       <td>${r.employeeName}</td>
+                      <td>${r.date}</td>
                       <td>${r.department} / ${r.designation}</td>
-                      <td><strong>${r.isDayTotal ? 'Day Total' : (r.session || '1')}</strong></td>
+                      <td><strong>${r.session || 'Session 1'}</strong></td>
                       <td>${r.inPlant || '--'}</td>
                       <td>${r.inDateTime}</td>
                       <td>${r.outDateTime}</td>
@@ -430,7 +433,7 @@ const columnOrder = [
         <div>
           <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">Reports → Attendance History Ledger</h1>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">
-            One record per employee per calendar day (server-side pagination)
+            Consolidated 1 row per employee per date (server-side pagination)
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -617,12 +620,13 @@ const columnOrder = [
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 cursor-pointer text-slate-500" onClick={() => onToggleSort("employeeName")}>
                     Employee Name <ArrowUpDown className="inline-block w-3 h-3 ml-2 text-slate-400" />
                   </TableHead>
-<TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Department / Designation</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Session</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Date</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Department / Designation</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Sessions</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Plant</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Date & Time</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Date & Time</TableHead>
-                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-primary">Working Hours</TableHead>
+                  <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-primary">Total Working Hours</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">In Location</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Location</TableHead>
                   <TableHead className="font-black text-[10px] uppercase tracking-widest py-4 px-4 text-slate-500">Out Plant</TableHead>
@@ -639,13 +643,13 @@ const columnOrder = [
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center py-20 text-slate-400 font-bold">
+                    <TableCell colSpan={17} className="text-center py-20 text-slate-400 font-bold">
                       Loading Report Data...
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={15} className="text-center py-20 text-slate-400 font-bold italic">
+                    <TableCell colSpan={17} className="text-center py-20 text-slate-400 font-bold italic">
                       No records found for the current selection.
                     </TableCell>
                   </TableRow>
@@ -657,9 +661,10 @@ const columnOrder = [
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{rowIndex}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.employeeId}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-700">{r.employeeName}</TableCell>
-<TableCell className="px-4 py-3 text-xs font-bold text-slate-700 max-w-[200px] truncate">{r.department} / {r.designation}</TableCell>
-                        <TableCell className={cn("px-4 py-3 text-xs font-black", r.isDayTotal ? "text-primary uppercase" : "text-slate-600")}>
-                          {r.isDayTotal ? "Day Total" : (r.session || "1")}
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 whitespace-nowrap">{r.date}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-bold text-slate-700 max-w-[200px] truncate">{r.department} / {r.designation}</TableCell>
+                        <TableCell className="px-4 py-3 text-xs font-black text-slate-700">
+                          {r.session || "Session 1"}
                         </TableCell>
                         <TableCell className="px-4 py-3 text-xs font-medium text-slate-500">{r.inPlant || "--"}</TableCell>
                         <TableCell className="px-4 py-3 text-xs font-bold text-slate-600 whitespace-nowrap">{r.inDateTime}</TableCell>

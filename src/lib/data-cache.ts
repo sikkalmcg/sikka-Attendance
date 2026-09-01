@@ -17,7 +17,7 @@ declare global {
   var _sikkaInFlightPromise: Promise<any> | null | undefined;
 }
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes TTL for ultra-fast instant responses
 
 function getCacheMap(): Map<string, CacheEntry> {
   if (!global._sikkaBootstrapCache) {
