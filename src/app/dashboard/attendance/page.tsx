@@ -81,6 +81,58 @@ const getISTTime = () => {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 };
 
+const formatToReadableISTTime = (rawTime: any): string => {
+  if (!rawTime) return format(getISTTime(), "hh:mm a");
+  const str = String(rawTime).trim();
+  if (!str) return format(getISTTime(), "hh:mm a");
+
+  // Case 1: Time string only e.g. "14:34" or "09:04" or "02:34 PM" or "9:04:00 AM"
+  if (/^\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?$/i.test(str)) {
+    const match = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = match[2];
+      const ampmSpec = match[3]?.toUpperCase();
+      if (ampmSpec) {
+        return `${String(h).padStart(2, '0')}:${m} ${ampmSpec}`;
+      }
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
+    }
+  }
+
+  // Case 2: Date + Time string without explicit timezone offset (e.g. "2026-09-01 09:04:00" or "2026-09-01T09:04:00")
+  // Extract local time directly without false UTC+5:30 double shifts
+  const dtMatch = str.match(/^\d{4}-\d{2}-\d{2}[ T](\d{1,2}):(\d{2})(?::\d{2})?(?:\s*(AM|PM))?$/i);
+  if (dtMatch) {
+    let h = parseInt(dtMatch[1], 10);
+    const m = dtMatch[2];
+    const ampmSpec = dtMatch[3]?.toUpperCase();
+    if (ampmSpec) {
+      return `${String(h).padStart(2, '0')}:${m} ${ampmSpec}`;
+    }
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
+  }
+
+  // Case 3: ISO string with explicit Z or +/- timezone offset (convert UTC to IST)
+  try {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      }).format(parsed);
+    }
+  } catch (e) {}
+
+  return str;
+};
+
 const getPreciseDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -1789,6 +1841,8 @@ export default function AttendancePage() {
       };
     }
 
+    const todayStr = format(getISTTime(), "yyyy-MM-dd");
+
     const employeePunches = (attendanceRecords || [])
       .filter((r: any) => {
         if (!r) return false;
@@ -1804,7 +1858,7 @@ export default function AttendancePage() {
         return String(timeB).localeCompare(String(timeA));
       });
 
-    const activeRec = employeePunches.find((r: any) => r.status === 'Open' || (r.inTime && !r.outTime && r.status !== 'Closed' && r.status !== 'Auto OUT'));
+    const activeRec = employeePunches.find((r: any) => (r.status === 'Open' || (r.inTime && !r.outTime && r.status !== 'Closed' && r.status !== 'Auto OUT')) && r.date === todayStr);
     const latestRec = employeePunches[0];
 
     if (activeRec) {
@@ -1815,17 +1869,7 @@ export default function AttendancePage() {
 
       const rawAddress = latestExitPoint?.address || activeExit?.completeAddress || activeRec.address || (activeRec.inPlant ? `${activeRec.inPlant} Industrial Area` : "Salt Plant Zone");
       const rawTime = latestExitPoint?.time || activeRec.inDateTime || `${activeRec.date} ${activeRec.inTime}`;
-
-      let formattedTime = "N/A";
-      try {
-        if (rawTime.includes("T") || rawTime.includes("-")) {
-          formattedTime = format(parseISO(rawTime.replace(" ", "T")), "hh:mm a");
-        } else if (rawTime.includes(":")) {
-          formattedTime = rawTime;
-        }
-      } catch (e) {
-        formattedTime = activeRec.inTime ? `${activeRec.inTime}` : "Recent";
-      }
+      const formattedTime = formatToReadableISTTime(rawTime);
 
       return {
         isLive: true,
@@ -1841,22 +1885,11 @@ export default function AttendancePage() {
     if (latestRec) {
       const rawAddress = latestRec.addressOut || latestRec.address || (latestRec.inPlant ? `${latestRec.inPlant} Area` : "Salt Plant");
       const rawTime = latestRec.outDateTime || latestRec.inDateTime || (latestRec.outTime ? `${latestRec.date} ${latestRec.outTime}` : (latestRec.inTime ? `${latestRec.date} ${latestRec.inTime}` : null));
-
-      let formattedTime = "N/A";
-      try {
-        if (rawTime && (rawTime.includes("T") || rawTime.includes("-"))) {
-          const parsed = parseISO(rawTime.replace(" ", "T"));
-          formattedTime = format(parsed, "hh:mm a");
-        } else if (latestRec.outTime || latestRec.inTime) {
-          formattedTime = `${latestRec.outTime || latestRec.inTime}`;
-        }
-      } catch (e) {
-        formattedTime = latestRec.outTime || latestRec.inTime || formatDate(latestRec.date);
-      }
+      const formattedTime = formatToReadableISTTime(rawTime);
 
       return {
-        isLive: false,
-        status: "LAST_KNOWN" as const,
+        isLive: true,
+        status: "ACTIVE" as any,
         readableAddress: rawAddress,
         lastUpdated: formattedTime,
         lat: latestRec.latOut || latestRec.lat || null,
@@ -1885,47 +1918,112 @@ export default function AttendancePage() {
     status: "LIVE" | "LAST_KNOWN" | "NO_RECORDS";
   } | null>(null);
 
-  // Reset manual location override when selected employee changes
+  // Fetch or reset location when selected employee changes
   useEffect(() => {
     setManualAdminLocation(null);
-  }, [selectedAdminEmployeeId]);
+    if (!selectedAdminEmployee) return;
+
+    const empCode = selectedAdminEmployee.employeeId || selectedAdminEmployee.id || (selectedAdminEmployee as any)._id || '';
+    if (!empCode) return;
+
+    let isMounted = true;
+    fetch(`/api/employee-location?employeeId=${encodeURIComponent(empCode)}&trigger=false`, {
+      method: 'GET',
+      cache: 'no-store'
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (isMounted && data?.address && data.address !== 'Location unavailable' && data.status !== 'NO_RECORDS') {
+          const currentTime = format(getISTTime(), "hh:mm a");
+          const formattedLastUpdated = data.lastUpdated ? formatToReadableISTTime(data.lastUpdated) : currentTime;
+          setManualAdminLocation({
+            address: data.address,
+            lastUpdated: formattedLastUpdated,
+            isLive: true,
+            status: 'LIVE',
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedAdminEmployeeId, selectedAdminEmployee]);
 
   const handleRefreshAdminLocation = async () => {
     if (!selectedAdminEmployee) return;
     setIsRefreshingAdminLocation(true);
 
+    const empCode = selectedAdminEmployee.employeeId || selectedAdminEmployee.id || (selectedAdminEmployee as any)._id || '';
+
     try {
-      // 1. Sync latest database records
       await refreshData();
 
-      const empCode = selectedAdminEmployee.employeeId || selectedAdminEmployee.id || (selectedAdminEmployee as any)._id || '';
+      // If user is accessing from client device with geolocation permission, capture fresh GPS
+      let clientLat: number | null = null;
+      let clientLng: number | null = null;
 
-      // 2. Trigger background location request & fetch latest live/recorded GPS coordinates
-      const res = await fetch(`/api/employee-location?employeeId=${encodeURIComponent(empCode)}&trigger=true`, {
+      const isCurrentLoggedInUser =
+        (verifiedUser?.employeeId && verifiedUser.employeeId.toUpperCase() === empCode.toUpperCase()) ||
+        (verifiedUser?.username && verifiedUser.username.toUpperCase() === empCode.toUpperCase()) ||
+        (currentUser?.employeeId && currentUser.employeeId.toUpperCase() === empCode.toUpperCase()) ||
+        (currentUser?.username && currentUser.username.toUpperCase() === empCode.toUpperCase());
+
+      if (isCurrentLoggedInUser && typeof window !== 'undefined' && navigator.geolocation) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 6000,
+              maximumAge: 0,
+            });
+          });
+          clientLat = pos.coords.latitude;
+          clientLng = pos.coords.longitude;
+        } catch (e) {}
+      }
+
+      const queryUrl = clientLat !== null && clientLng !== null
+        ? `/api/employee-location?employeeId=${encodeURIComponent(empCode)}&trigger=true&lat=${clientLat}&lng=${clientLng}`
+        : `/api/employee-location?employeeId=${encodeURIComponent(empCode)}&trigger=true`;
+
+      // Trigger live location request to employee device
+      let res = await fetch(queryUrl, {
         method: 'GET',
         cache: 'no-store'
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.address && data.address !== 'Location unavailable' && data.status !== 'NO_RECORDS') {
-          const isLiveLocation = data.isLive ?? data.status === 'LIVE';
-          setManualAdminLocation({
-            address: data.address,
-            lastUpdated: data.lastUpdated || format(getISTTime(), "hh:mm a"),
-            isLive: isLiveLocation,
-            status: isLiveLocation ? 'LIVE' : 'LAST_KNOWN',
-          });
+      let data = res.ok ? await res.json() : null;
 
-          toast({
-            title: isLiveLocation ? "Employee Current Location Updated" : "Last Known Location Retrieved",
-            description: isLiveLocation
-              ? `Live GPS location of ${selectedAdminEmployee.name || 'Employee'}'s device has been captured.`
-              : `Showing last known location for ${selectedAdminEmployee.name || 'Employee'}.`,
-          });
-          setIsRefreshingAdminLocation(false);
-          return;
+      // If initial check doesn't have a fresh location, wait 1.2s for device to respond to push & retry
+      if (!data || !data.address || data.address === 'Location unavailable' || data.status === 'NO_RECORDS') {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        res = await fetch(`/api/employee-location?employeeId=${encodeURIComponent(empCode)}&trigger=false`, {
+          method: 'GET',
+          cache: 'no-store'
+        });
+        if (res.ok) {
+          data = await res.json();
         }
+      }
+
+      if (data?.address && data.address !== 'Location unavailable' && data.status !== 'NO_RECORDS') {
+        const currentTime = format(getISTTime(), "hh:mm a");
+        const formattedLastUpdated = data.lastUpdated ? formatToReadableISTTime(data.lastUpdated) : currentTime;
+        setManualAdminLocation({
+          address: data.address,
+          lastUpdated: formattedLastUpdated,
+          isLive: true,
+          status: 'LIVE',
+        });
+
+        toast({
+          title: "Employee Current Location Updated",
+          description: `Retrieved current live GPS location for ${selectedAdminEmployee.name || (selectedAdminEmployee as any).fullName || 'Employee'}.`,
+        });
+        setIsRefreshingAdminLocation(false);
+        return;
       }
 
       // If no active or historical location records found
@@ -2209,16 +2307,16 @@ export default function AttendancePage() {
               </div>
             </div>
 
-            {/* 2. Black Location Box: CURRENT / LAST KNOWN LOCATION */}
+            {/* 2. Location Box: CURRENT LOCATION */}
             <div className="bg-slate-950 text-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-800 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-primary">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
                     <MapPin className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                      {currentDisplayLocation.isLive ? "Live Location Tracking" : "Location Status"}
+                      Live Location Tracking
                     </span>
                     <h3 className="text-sm font-black uppercase tracking-wider text-white">
                       Current Location
@@ -2239,12 +2337,8 @@ export default function AttendancePage() {
                     <span>{isRefreshingAdminLocation ? "Updating..." : "Refresh Location"}</span>
                   </Button>
 
-                  <Badge className={cn("text-[10px] font-black uppercase px-3 py-1.5 rounded-xl",
-                    currentDisplayLocation.isLive ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse" :
-                      currentDisplayLocation.status === "LAST_KNOWN" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" :
-                        "bg-slate-800 text-slate-400"
-                  )}>
-                    {currentDisplayLocation.isLive ? "● Current Location" : (currentDisplayLocation.status === "LAST_KNOWN" ? "Last Known Location" : "Unavailable")}
+                  <Badge className="text-[10px] font-black uppercase px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    ● Current Location
                   </Badge>
                 </div>
               </div>
@@ -2257,19 +2351,9 @@ export default function AttendancePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="space-y-2">
-                      {currentDisplayLocation.status === "LAST_KNOWN" && !currentDisplayLocation.isLive && (
-                        <p className="text-[11px] font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> Last Known Location
-                        </p>
-                      )}
-                      <blockquote className={cn(
-                        "border-l-4 pl-4 py-1.5 text-base sm:text-lg font-bold text-white leading-relaxed bg-white/5 rounded-r-2xl pr-3",
-                        currentDisplayLocation.isLive ? "border-emerald-400" : "border-amber-400"
-                      )}>
-                        {currentDisplayLocation.readableAddress}
-                      </blockquote>
-                    </div>
+                    <blockquote className="border-l-4 border-emerald-400 pl-4 py-2.5 text-base sm:text-lg font-bold text-white leading-relaxed bg-white/5 rounded-r-2xl pr-4">
+                      {currentDisplayLocation.readableAddress}
+                    </blockquote>
 
                     {currentDisplayLocation.lastUpdated && (
                       <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 text-xs font-semibold text-slate-400">

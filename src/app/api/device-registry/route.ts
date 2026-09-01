@@ -293,25 +293,27 @@ export async function GET(req: Request) {
     const inactiveCount = mergedList.filter((item) => item.deviceStatus === 'INACTIVE').length;
     const permissionDisabledCount = mergedList.filter((item) => item.deviceStatus === 'PERMISSION_DISABLED').length;
 
-    // 6. Apply Search Filtering across all fields
+    // 6. Apply Search Filtering across all fields safely
     let filteredList = mergedList;
     if (search) {
       filteredList = mergedList.filter((item) => {
-        return (
-          item.employeeName.toLowerCase().includes(search) ||
-          item.employeeId.toLowerCase().includes(search) ||
-          item.department.toLowerCase().includes(search) ||
-          item.designation.toLowerCase().includes(search) ||
-          item.role.toLowerCase().includes(search) ||
-          item.deviceName.toLowerCase().includes(search) ||
-          item.deviceId.toLowerCase().includes(search) ||
-          item.platform.toLowerCase().includes(search) ||
-          item.fcmToken.toLowerCase().includes(search) ||
-          item.rawToken.toLowerCase().includes(search) ||
-          item.deviceStatus.toLowerCase().includes(search) ||
-          item.notificationPermission.toLowerCase().includes(search) ||
-          item.backgroundStatus.toLowerCase().includes(search)
-        );
+        const fullSearchText = [
+          item.employeeName,
+          item.employeeId,
+          item.department,
+          item.designation,
+          item.role,
+          item.plantName,
+          item.deviceName,
+          item.deviceId,
+          item.platform,
+          item.fcmToken,
+          item.rawToken,
+          item.deviceStatus,
+          item.notificationPermission,
+          item.backgroundStatus,
+        ].map(v => String(v ?? '').toLowerCase()).join(' ');
+        return fullSearchText.includes(search);
       });
     }
 

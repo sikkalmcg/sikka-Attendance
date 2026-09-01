@@ -230,7 +230,7 @@ export async function POST(req: Request) {
     const recordId = result.insertedId;
     const savedRecord = { ...newAttendanceRecord, id: String(recordId), _id: String(recordId) };
 
-    // 6. Record in Notifications collection
+    // 6. Record in Notifications collection & update employee_devices live telemetry
     const notifMsg = `${empFullName} – Mark IN Recorded (Session ${sessionIndex}) | Time: ${timeStr} | ${finalPlant}`;
     await db.collection('notifications').insertOne({
       employeeId: internalEmpId,
@@ -240,6 +240,39 @@ export async function POST(req: Request) {
       type: 'MARK_IN',
       createdAt: now.toISOString(),
     }).catch(() => {});
+
+    // Live update employee_devices registry with punch location
+    if (typeof finalLat === 'number' && typeof finalLng === 'number') {
+      await db.collection('employee_devices').updateOne(
+        {
+          $or: [
+            { employeeId: internalEmpId },
+            { employeeId: cleanSessionEmpId },
+            { employeeName: empFullName },
+          ],
+        },
+        {
+          $set: {
+            employeeId: internalEmpId,
+            employeeName: empFullName,
+            gpsLatitude: finalLat,
+            gpsLongitude: finalLng,
+            completeAddress: finalAddress,
+            locationAddress: finalAddress,
+            lastActiveAt: now.toISOString(),
+            lastHeartbeatAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+            isActive: true,
+            active: true,
+            deviceStatus: 'ACTIVE',
+          },
+          $setOnInsert: {
+            createdAt: now.toISOString(),
+          },
+        },
+        { upsert: true }
+      ).catch(() => {});
+    }
 
     invalidateBootstrapCache();
 

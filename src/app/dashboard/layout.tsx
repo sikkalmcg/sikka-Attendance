@@ -811,6 +811,64 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     }
   }, [verifiedUser]);
 
+  // Continuous background GPS telemetry heartbeat for active employee devices
+  useEffect(() => {
+    if (!verifiedUser || typeof window === 'undefined' || !navigator.geolocation) return;
+
+    const empId = verifiedUser.employeeId || verifiedUser.username || verifiedUser.id || '';
+    if (!empId) return;
+
+    const sendGpsPing = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude: gpsLatitude, longitude: gpsLongitude } = pos.coords;
+          const deviceId = localStorage.getItem('sikka_device_id') || '';
+
+          fetch('/api/device-registry/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              employeeId: empId,
+              deviceId,
+              gpsLatitude,
+              gpsLongitude,
+            }),
+          }).catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
+      );
+    };
+
+    sendGpsPing();
+    const interval = setInterval(sendGpsPing, 30000); // Heartbeat ping every 30s
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: gpsLatitude, longitude: gpsLongitude } = pos.coords;
+        const deviceId = localStorage.getItem('sikka_device_id') || '';
+
+        fetch('/api/device-registry/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employeeId: empId,
+            deviceId,
+            gpsLatitude,
+            gpsLongitude,
+          }),
+        }).catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+    );
+
+    return () => {
+      clearInterval(interval);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [verifiedUser]);
+
   // Quick authorization check without blocking users
   useEffect(() => {
     if (!verifiedUser) return;

@@ -23,7 +23,7 @@ interface PushSubscriptionSyncProps {
 
 /**
  * Place this inside authenticated Dashboard layouts where `user` is available.
- * Also listens for Service Worker push messages to trigger in-app badge updates.
+ * Also listens for Service Worker push messages to trigger in-app badge updates & background location requests.
  */
 export function PushSubscriptionSync({ user }: PushSubscriptionSyncProps) {
   useEffect(() => {
@@ -48,11 +48,39 @@ export function PushSubscriptionSync({ user }: PushSubscriptionSyncProps) {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
-    // Listen for Service Worker push messages.
-    // SW sends PUSH_NOTIFICATION_RECEIVED when a push arrives in foreground.
-    // Dispatch a custom DOM event for badge hooks to pick up.
+    // Listen for Service Worker push messages & handle background location sync
     const handleSwMessage = (event: MessageEvent) => {
       if (!event.data) return;
+
+      if (
+        event.data.type === "REQUEST_BACKGROUND_LOCATION" ||
+        event.data.payload?.data?.type === "REQUEST_LOCATION" ||
+        event.data.payload?.data?.action === "SYNC_LOCATION"
+      ) {
+        if (typeof window !== "undefined" && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const { latitude: gpsLatitude, longitude: gpsLongitude } = pos.coords;
+              const deviceId = localStorage.getItem("sikka_device_id") || "";
+              const empId = user?.employeeId || user?.id || user?.username || "";
+
+              fetch("/api/device-registry/heartbeat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  employeeId: empId,
+                  deviceId,
+                  gpsLatitude,
+                  gpsLongitude,
+                }),
+              }).catch(() => {});
+            },
+            () => {},
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        }
+      }
+
       if (event.data.type === "PUSH_NOTIFICATION_RECEIVED") {
         window.dispatchEvent(
           new CustomEvent("sikka:push-received", {
@@ -66,7 +94,7 @@ export function PushSubscriptionSync({ user }: PushSubscriptionSyncProps) {
     return () => {
       navigator.serviceWorker.removeEventListener("message", handleSwMessage);
     };
-  }, []);
+  }, [user]);
 
   return null;
 }
@@ -116,9 +144,46 @@ export function PushSubscriptionBootstrap() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
-    // Relay SW push messages to DOM custom events
+    // Relay SW push messages to DOM custom events & handle background location sync
     const handleSwMessage = (event: MessageEvent) => {
       if (!event.data) return;
+
+      if (
+        event.data.type === "REQUEST_BACKGROUND_LOCATION" ||
+        event.data.payload?.data?.type === "REQUEST_LOCATION" ||
+        event.data.payload?.data?.action === "SYNC_LOCATION"
+      ) {
+        if (typeof window !== "undefined" && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const { latitude: gpsLatitude, longitude: gpsLongitude } = pos.coords;
+              const deviceId = localStorage.getItem("sikka_device_id") || "";
+              let empId = "";
+              try {
+                const userRaw = localStorage.getItem("user");
+                if (userRaw) {
+                  const u = JSON.parse(userRaw);
+                  empId = u.employeeId || u.id || u.username || "";
+                }
+              } catch {}
+
+              fetch("/api/device-registry/heartbeat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  employeeId: empId,
+                  deviceId,
+                  gpsLatitude,
+                  gpsLongitude,
+                }),
+              }).catch(() => {});
+            },
+            () => {},
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        }
+      }
+
       if (event.data.type === "PUSH_NOTIFICATION_RECEIVED") {
         window.dispatchEvent(
           new CustomEvent("sikka:push-received", {
@@ -136,4 +201,3 @@ export function PushSubscriptionBootstrap() {
 
   return null;
 }
-

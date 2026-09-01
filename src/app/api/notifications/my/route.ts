@@ -116,9 +116,9 @@ export async function GET(req: Request) {
       .limit(100)
       .toArray();
 
-    return NextResponse.json(notifications);
+    return NextResponse.json(notifications || []);
   } catch (error: any) {
     console.error('Error in /api/notifications/my:', error);
-    return NextResponse.json({ error: error?.message || 'Failed to fetch notifications' }, { status: 500 });
+    return NextResponse.json([]);
   }
 }

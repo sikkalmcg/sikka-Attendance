@@ -142,35 +142,42 @@ export async function POST(req: Request) {
     if (resolvedFcm) {
       orFilters.push({ fcmToken: resolvedFcm }, { token: resolvedFcm }, { deviceToken: resolvedFcm });
     }
+    if (cleanEmpId) {
+      orFilters.push({ employeeId: cleanEmpId });
+    }
     if (resolvedPushSub && resolvedPushSub.endpoint) {
       orFilters.push({ 'pushSubscription.endpoint': resolvedPushSub.endpoint });
       orFilters.push({ 'subscription.endpoint': resolvedPushSub.endpoint });
     }
 
-    // 3. Upsert into `employee_devices`
-    await db.collection('employee_devices').updateOne(
-      { $or: orFilters },
-      {
-        $set: deviceDoc,
-        $setOnInsert: {
-          createdAt: nowIso,
-          deviceRegisteredAt: nowIso,
-        },
-      },
-      { upsert: true }
-    );
+    // 3. Save into `employee_devices`
+    const existingDev = await db.collection('employee_devices').findOne({ $or: orFilters }).catch(() => null);
+    if (existingDev) {
+      await db.collection('employee_devices').updateOne(
+        { _id: existingDev._id },
+        { $set: deviceDoc }
+      );
+    } else {
+      await db.collection('employee_devices').insertOne({
+        ...deviceDoc,
+        createdAt: nowIso,
+        deviceRegisteredAt: nowIso,
+      });
+    }
 
     // 4. Also keep `device_tokens` synchronized
-    await db.collection('device_tokens').updateOne(
-      { $or: orFilters },
-      {
-        $set: deviceDoc,
-        $setOnInsert: {
-          createdAt: nowIso,
-        },
-      },
-      { upsert: true }
-    );
+    const existingToken = await db.collection('device_tokens').findOne({ $or: orFilters }).catch(() => null);
+    if (existingToken) {
+      await db.collection('device_tokens').updateOne(
+        { _id: existingToken._id },
+        { $set: deviceDoc }
+      ).catch(() => {});
+    } else {
+      await db.collection('device_tokens').insertOne({
+        ...deviceDoc,
+        createdAt: nowIso,
+      }).catch(() => {});
+    }
 
     // 5. Broadcast real-time event
     realtimeBroadcaster.broadcast('device_registered', {

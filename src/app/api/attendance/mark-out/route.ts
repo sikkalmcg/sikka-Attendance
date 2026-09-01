@@ -249,7 +249,7 @@ export async function POST(req: Request) {
       ? `${matchedEmp.firstName} ${matchedEmp.lastName || ''}`.trim()
       : (matchedEmp.name || matchedEmp.fullName || "Employee");
 
-    // Record in Notifications collection
+    // Record in Notifications collection & update employee_devices live telemetry
     const notifMsg = `${empFullName} – Mark OUT Recorded (Session ${sessionIdx}) | Time: ${outTimeStr} | Worked: ${finalHours} hrs`;
     await db.collection('notifications').insertOne({
       employeeId: internalEmpId,
@@ -259,6 +259,39 @@ export async function POST(req: Request) {
       type: 'MARK_OUT',
       createdAt: now.toISOString(),
     }).catch(() => {});
+
+    // Live update employee_devices registry with punch location
+    if (typeof finalLat === 'number' && typeof finalLng === 'number' && !isNaN(finalLat) && !isNaN(finalLng)) {
+      await db.collection('employee_devices').updateOne(
+        {
+          $or: [
+            { employeeId: internalEmpId },
+            { employeeId: matchedEmp.employeeId },
+            { employeeName: empFullName },
+          ],
+        },
+        {
+          $set: {
+            employeeId: internalEmpId,
+            employeeName: empFullName,
+            gpsLatitude: finalLat,
+            gpsLongitude: finalLng,
+            completeAddress: finalAddress,
+            locationAddress: finalAddress,
+            lastActiveAt: now.toISOString(),
+            lastHeartbeatAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+            isActive: true,
+            active: true,
+            deviceStatus: 'ACTIVE',
+          },
+          $setOnInsert: {
+            createdAt: now.toISOString(),
+          },
+        },
+        { upsert: true }
+      ).catch(() => {});
+    }
 
     invalidateBootstrapCache();
 

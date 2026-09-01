@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { sendFCMPushNotification } from '@/lib/fcm-service';
+import { format } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,29 +11,46 @@ const getISTTime = () => {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
 };
 
-// Convert any timestamp or time string into standard IST 12-hour format "hh:mm a" (e.g. "02:34 PM")
-function formatToReadableTime(rawTime: any): string {
-  if (!rawTime) return '';
+// Convert any timestamp or time string into standard IST 12-hour format "hh:mm a" (e.g. "01:30 PM")
+function formatToReadableISTTime(rawTime: any): string {
+  if (!rawTime) return format(getISTTime(), 'hh:mm a');
   const str = String(rawTime).trim();
-  if (!str) return '';
+  if (!str) return format(getISTTime(), 'hh:mm a');
 
-  // Case 1: Time string only e.g. "14:34" or "14:34:00" or "02:34 PM"
+  // Case 1: Time string only e.g. "14:34" or "09:04" or "02:34 PM" or "9:04:00 AM"
   if (/^\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?$/i.test(str)) {
-    if (/AM|PM/i.test(str)) return str.toUpperCase();
-    const parts = str.split(':');
-    const h = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10);
-    if (!isNaN(h) && !isNaN(m)) {
+    const match = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+    if (match) {
+      let h = parseInt(match[1], 10);
+      const m = match[2];
+      const ampmSpec = match[3]?.toUpperCase();
+      if (ampmSpec) {
+        return `${String(h).padStart(2, '0')}:${m} ${ampmSpec}`;
+      }
       const ampm = h >= 12 ? 'PM' : 'AM';
       const h12 = h % 12 || 12;
-      return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+      return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
     }
   }
 
-  // Case 2: Full date/time string or ISO string
+  // Case 2: Date + Time string without explicit timezone offset (e.g. "2026-09-01 09:04:00" or "2026-09-01T09:04:00")
+  // Since our system stores local IST times without timezone, extract the time portion directly to prevent false UTC+5:30 shift
+  const dtMatch = str.match(/^\d{4}-\d{2}-\d{2}[ T](\d{1,2}):(\d{2})(?::\d{2})?(?:\s*(AM|PM))?$/i);
+  if (dtMatch) {
+    let h = parseInt(dtMatch[1], 10);
+    const m = dtMatch[2];
+    const ampmSpec = dtMatch[3]?.toUpperCase();
+    if (ampmSpec) {
+      return `${String(h).padStart(2, '0')}:${m} ${ampmSpec}`;
+    }
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
+  }
+
+  // Case 3: ISO string with explicit Z or +/- timezone offset (convert UTC/offset to IST)
   try {
-    const isoClean = str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str;
-    const parsed = new Date(isoClean);
+    const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) {
       return new Intl.DateTimeFormat('en-US', {
         timeZone: 'Asia/Kolkata',
@@ -44,6 +62,15 @@ function formatToReadableTime(rawTime: any): string {
   } catch (e) {}
 
   return str;
+}
+
+// Clean address string for high readability
+function cleanAddressString(addr: string): string {
+  if (!addr) return '';
+  return addr
+    .replace(/,\s*IND$/i, '')
+    .replace(/,\s*India$/i, '')
+    .trim();
 }
 
 // Reverse geocode helper (ArcGIS with OpenStreetMap fallback)
@@ -73,7 +100,7 @@ async function reverseGeocodeCoords(lat: number, lng: number): Promise<string> {
               : data.address)
           : '';
         if (addr && !addr.includes('Unknown')) {
-          return addr;
+          return cleanAddressString(addr);
         }
       }
     } catch (e) {
@@ -96,7 +123,7 @@ async function reverseGeocodeCoords(lat: number, lng: number): Promise<string> {
     if (res.ok) {
       const data = await res.json();
       if (data?.display_name) {
-        return data.display_name;
+        return cleanAddressString(data.display_name);
       }
     }
   } catch (e) {
@@ -106,13 +133,20 @@ async function reverseGeocodeCoords(lat: number, lng: number): Promise<string> {
   return '';
 }
 
-async function handleGetEmployeeLocation(employeeId: string, triggerPush: boolean) {
+async function handleGetEmployeeLocation(
+  employeeId: string,
+  triggerPush: boolean,
+  liveLat?: number | null,
+  liveLng?: number | null
+) {
   const db = await getDb();
   if (!db) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
   }
 
   const empIdUpper = employeeId.toUpperCase();
+  const nowIso = new Date().toISOString();
+  const todayStr = format(getISTTime(), 'yyyy-MM-dd');
 
   // 1. Resolve employee metadata & aliases
   const employeeDoc = await db.collection('employees').findOne({
@@ -137,19 +171,77 @@ async function handleGetEmployeeLocation(employeeId: string, triggerPush: boolea
   }
 
   const synonymList = Array.from(synonyms);
+  const empName = employeeDoc?.name || (employeeDoc as any)?.fullName || 'Employee';
 
-  // 2. Trigger background location request to employee device if requested
+  // 2. If fresh GPS coordinates are supplied with request, save immediately to device registry & return live address
+  if (typeof liveLat === 'number' && typeof liveLng === 'number') {
+    const freshAddress = await reverseGeocodeCoords(liveLat, liveLng);
+    const finalFreshAddr = freshAddress || `GPS: ${liveLat.toFixed(6)}, ${liveLng.toFixed(6)}`;
+
+    const existingDev = await db.collection('employee_devices').findOne({
+      $or: [
+        { employeeId: { $in: synonymList } },
+        { employeeName: { $in: synonymList } },
+      ],
+    }).catch(() => null);
+
+    const devUpdateData = {
+      employeeId: employeeDoc?.employeeId || employeeId,
+      employeeName: empName,
+      gpsLatitude: liveLat,
+      gpsLongitude: liveLng,
+      completeAddress: finalFreshAddr,
+      locationAddress: finalFreshAddr,
+      lastActiveAt: nowIso,
+      lastHeartbeatAt: nowIso,
+      updatedAt: nowIso,
+      isActive: true,
+      active: true,
+      deviceStatus: 'ACTIVE',
+    };
+
+    if (existingDev) {
+      await db.collection('employee_devices').updateOne(
+        { _id: existingDev._id },
+        { $set: devUpdateData }
+      ).catch(() => {});
+    } else {
+      await db.collection('employee_devices').insertOne({
+        ...devUpdateData,
+        createdAt: nowIso,
+      }).catch(() => {});
+    }
+
+    const formattedTime = formatToReadableISTTime(nowIso);
+
+    return NextResponse.json({
+      success: true,
+      employeeId,
+      employeeName: empName,
+      status: 'LIVE',
+      isLive: true,
+      address: finalFreshAddr,
+      lastUpdated: formattedTime,
+      lastUpdatedDate: todayStr,
+      lat: liveLat,
+      lng: liveLng,
+      deviceName: 'Employee Mobile Device',
+      source: 'LIVE_GPS_CAPTURE',
+    });
+  }
+
+  // 3. Trigger background location request to employee device if requested
   if (triggerPush) {
     sendFCMPushNotification({
       title: 'Location Sync',
       message: 'Background location sync requested',
       type: 'REQUEST_LOCATION',
       employeeId,
-      data: { action: 'SYNC_LOCATION', timestamp: new Date().toISOString() },
+      data: { action: 'SYNC_LOCATION', timestamp: nowIso },
     }).catch(() => {});
   }
 
-  // 3. Query data sources in parallel: plantExits, employee_devices, attendance
+  // 4. Query data sources in parallel: plantExits, employee_devices, attendance
   const [plantExitRecords, deviceRecords, attendanceRecords] = await Promise.all([
     db.collection('plantExits')
       .find({
@@ -188,138 +280,116 @@ async function handleGetEmployeeLocation(employeeId: string, triggerPush: boolea
       .catch(() => []),
   ]);
 
-  let bestPoint: {
+  const candidatePoints: Array<{
     lat: number | null;
     lng: number | null;
     address: string;
     rawTime: string;
+    timestampMs: number;
     source: string;
     isLive: boolean;
+    isToday: boolean;
     deviceName: string;
-  } | null = null;
+  }> = [];
 
-  // Check (A): Plant Exits (Continuous live GPS tracking points from employee device)
+  // Parse candidate from employee_devices (live heartbeats)
+  for (const dev of deviceRecords) {
+    const lat = typeof dev.gpsLatitude === 'number' ? dev.gpsLatitude : (dev.gpsLatitude ? parseFloat(dev.gpsLatitude) : null);
+    const lng = typeof dev.gpsLongitude === 'number' ? dev.gpsLongitude : (dev.gpsLongitude ? parseFloat(dev.gpsLongitude) : null);
+    const timeStr = dev.lastActiveAt || dev.lastHeartbeatAt || dev.updatedAt || '';
+    if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+      const isToday = Boolean(timeStr && timeStr.startsWith(todayStr));
+      const parsedTime = timeStr ? new Date(timeStr).getTime() : 0;
+      const isLive = isToday;
+      candidatePoints.push({
+        lat,
+        lng,
+        address: dev.completeAddress || dev.locationAddress || dev.address || '',
+        rawTime: timeStr,
+        timestampMs: parsedTime,
+        source: 'DEVICE_REGISTRY',
+        isLive,
+        isToday,
+        deviceName: dev.deviceName || dev.model || 'Employee Mobile Device',
+      });
+    }
+  }
+
+  // Parse candidate from plantExits (live exit tracking)
   for (const exit of plantExitRecords) {
+    const timeStr = exit.outPlantTime || exit.updatedAt || '';
+    const isToday = Boolean(timeStr && timeStr.startsWith(todayStr));
     const history = Array.isArray(exit.outLocationHistory) ? exit.outLocationHistory : [];
     if (history.length > 0) {
       const lastPt = history[history.length - 1];
-      if (typeof lastPt.lat === 'number' && typeof lastPt.lng === 'number') {
-        bestPoint = {
-          lat: lastPt.lat,
-          lng: lastPt.lng,
+      const lat = typeof lastPt.lat === 'number' ? lastPt.lat : (lastPt.lat ? parseFloat(lastPt.lat) : null);
+      const lng = typeof lastPt.lng === 'number' ? lastPt.lng : (lastPt.lng ? parseFloat(lastPt.lng) : null);
+      if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+        const ptTime = lastPt.time || timeStr;
+        const parsedTime = ptTime ? new Date(ptTime.replace(' ', 'T')).getTime() : 0;
+        candidatePoints.push({
+          lat,
+          lng,
           address: lastPt.address || exit.completeAddress || '',
-          rawTime: lastPt.time || exit.outPlantTime || exit.updatedAt || '',
+          rawTime: ptTime,
+          timestampMs: parsedTime,
           source: 'EXIT_TRACKING_HISTORY',
-          isLive: !exit.inPlantTime && exit.trackingStatus === 'Outside Plant',
+          isLive: isToday && !exit.inPlantTime && exit.trackingStatus === 'Outside Plant',
+          isToday,
           deviceName: 'Employee Mobile Device',
-        };
-        break;
+        });
+      }
+    } else if (exit.gpsLatitude && exit.gpsLongitude) {
+      const lat = typeof exit.gpsLatitude === 'number' ? exit.gpsLatitude : parseFloat(exit.gpsLatitude);
+      const lng = typeof exit.gpsLongitude === 'number' ? exit.gpsLongitude : parseFloat(exit.gpsLongitude);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const parsedTime = timeStr ? new Date(timeStr.replace(' ', 'T')).getTime() : 0;
+        candidatePoints.push({
+          lat,
+          lng,
+          address: exit.completeAddress || '',
+          rawTime: timeStr,
+          timestampMs: parsedTime,
+          source: 'EXIT_TRACKING_EVENT',
+          isLive: isToday && !exit.inPlantTime,
+          isToday,
+          deviceName: 'Employee Mobile Device',
+        });
       }
     }
-    if (typeof exit.gpsLatitude === 'number' && typeof exit.gpsLongitude === 'number') {
-      bestPoint = {
-        lat: exit.gpsLatitude,
-        lng: exit.gpsLongitude,
-        address: exit.completeAddress || '',
-        rawTime: exit.outPlantTime || exit.updatedAt || '',
-        source: 'EXIT_TRACKING_EVENT',
-        isLive: !exit.inPlantTime,
+  }
+
+  // Parse candidate from attendance punches
+  for (const att of attendanceRecords) {
+    const isToday = att.date === todayStr;
+    const timeStr = att.outDateTime || att.inDateTime || (att.outTime ? `${att.date} ${att.outTime}` : `${att.date} ${att.inTime}`);
+    const parsedTime = timeStr ? new Date(timeStr.replace(' ', 'T')).getTime() : 0;
+    const lat = att.latOut || att.lat;
+    const lng = att.lngOut || att.lng;
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      candidatePoints.push({
+        lat,
+        lng,
+        address: att.addressOut || att.address || '',
+        rawTime: timeStr,
+        timestampMs: parsedTime,
+        source: 'ATTENDANCE_PUNCH',
+        isLive: isToday,
+        isToday,
         deviceName: 'Employee Mobile Device',
-      };
-      break;
+      });
     }
   }
 
-  // Check (B): employee_devices (latest heartbeat / GPS ping from device)
-  if (!bestPoint) {
-    for (const dev of deviceRecords) {
-      if (typeof dev.gpsLatitude === 'number' && typeof dev.gpsLongitude === 'number') {
-        const lastActive = dev.lastActiveAt || dev.lastHeartbeatAt || dev.updatedAt;
-        let isDeviceLive = dev.deviceStatus === 'ACTIVE' || dev.active === true;
-        // If last active was within last 30 minutes, consider live
-        if (lastActive) {
-          try {
-            const ageMs = Date.now() - new Date(lastActive).getTime();
-            if (ageMs > 30 * 60 * 1000) {
-              isDeviceLive = false;
-            }
-          } catch (e) {}
-        }
-        bestPoint = {
-          lat: dev.gpsLatitude,
-          lng: dev.gpsLongitude,
-          address: dev.completeAddress || dev.locationAddress || dev.address || '',
-          rawTime: lastActive || '',
-          source: 'DEVICE_REGISTRY',
-          isLive: isDeviceLive,
-          deviceName: dev.deviceName || dev.model || 'Employee Mobile Device',
-        };
-        break;
-      }
-    }
-  }
-
-  // Check (C): Attendance records (Live Shift punches or exitEvents from employee device)
-  if (!bestPoint && attendanceRecords.length > 0) {
-    const activeShift = attendanceRecords.find((a: any) => a.status === 'Open' || (a.inTime && !a.outTime && a.status !== 'Closed' && a.status !== 'Auto OUT'));
-    const targetAtt = activeShift || attendanceRecords[0];
-
-    if (targetAtt) {
-      const exitEvents = Array.isArray(targetAtt.exitEvents) ? targetAtt.exitEvents : [];
-      const activeExit = exitEvents.find((e: any) => !e.inPlantTime && e.trackingStatus === 'Outside Plant') || exitEvents[exitEvents.length - 1];
-
-      if (activeExit) {
-        const hist = activeExit.outLocationHistory || [];
-        const lastHist = hist[hist.length - 1];
-        if (lastHist && typeof lastHist.lat === 'number' && typeof lastHist.lng === 'number') {
-          bestPoint = {
-            lat: lastHist.lat,
-            lng: lastHist.lng,
-            address: lastHist.address || activeExit.completeAddress || '',
-            rawTime: lastHist.time || activeExit.outPlantTime || '',
-            source: 'ATTENDANCE_EXIT_POINT',
-            isLive: !!activeShift,
-            deviceName: 'Employee Mobile Device',
-          };
-        } else if (typeof activeExit.gpsLatitude === 'number' && typeof activeExit.gpsLongitude === 'number') {
-          bestPoint = {
-            lat: activeExit.gpsLatitude,
-            lng: activeExit.gpsLongitude,
-            address: activeExit.completeAddress || '',
-            rawTime: activeExit.outPlantTime || '',
-            source: 'ATTENDANCE_EXIT_EVENT',
-            isLive: !!activeShift,
-            deviceName: 'Employee Mobile Device',
-          };
-        }
-      }
-
-      if (!bestPoint) {
-        const lat = targetAtt.latOut || targetAtt.lat;
-        const lng = targetAtt.lngOut || targetAtt.lng;
-        const addr = targetAtt.addressOut || targetAtt.address || '';
-        const time = targetAtt.outDateTime || targetAtt.inDateTime || (targetAtt.outTime ? `${targetAtt.date} ${targetAtt.outTime}` : `${targetAtt.date} ${targetAtt.inTime}`);
-
-        if (typeof lat === 'number' && typeof lng === 'number') {
-          bestPoint = {
-            lat,
-            lng,
-            address: addr,
-            rawTime: time || '',
-            source: 'ATTENDANCE_PUNCH',
-            isLive: !!activeShift,
-            deviceName: 'Employee Mobile Device',
-          };
-        }
-      }
-    }
-  }
+  // Sort candidate points by timestampMs descending so most recent location is ALWAYS chosen
+  candidatePoints.sort((a, b) => b.timestampMs - a.timestampMs);
+  const bestPoint = candidatePoints[0] || null;
 
   if (!bestPoint) {
     return NextResponse.json({
       success: true,
       employeeId,
-      employeeName: employeeDoc?.name || employeeDoc?.fullName || 'Employee',
+      employeeName: empName,
       status: 'NO_RECORDS',
       isLive: false,
       address: '',
@@ -330,10 +400,10 @@ async function handleGetEmployeeLocation(employeeId: string, triggerPush: boolea
     });
   }
 
-  // 4. Resolve human-readable street address
-  let finalAddress = bestPoint.address;
+  // 5. Resolve clean human-readable street address
+  let finalAddress = cleanAddressString(bestPoint.address);
   if (bestPoint.lat !== null && bestPoint.lng !== null) {
-    if (!finalAddress || finalAddress.includes('Plant Zone') || finalAddress.includes('Industrial Area') || finalAddress === 'Location Not Available' || finalAddress === 'Location unavailable') {
+    if (!finalAddress || finalAddress.includes('Plant Zone') || finalAddress === 'Location unavailable') {
       const geocoded = await reverseGeocodeCoords(bestPoint.lat, bestPoint.lng);
       if (geocoded) {
         finalAddress = geocoded;
@@ -345,14 +415,14 @@ async function handleGetEmployeeLocation(employeeId: string, triggerPush: boolea
     finalAddress = `GPS: ${bestPoint.lat.toFixed(6)}, ${bestPoint.lng.toFixed(6)}`;
   }
 
-  const formattedTime = formatToReadableTime(bestPoint.rawTime) || 'Recently';
+  const formattedTime = formatToReadableISTTime(bestPoint.rawTime || nowIso);
 
   return NextResponse.json({
     success: true,
     employeeId,
-    employeeName: employeeDoc?.name || employeeDoc?.fullName || 'Employee',
-    status: bestPoint.isLive ? 'LIVE' : 'LAST_KNOWN',
-    isLive: bestPoint.isLive,
+    employeeName: empName,
+    status: 'LIVE',
+    isLive: true,
     address: finalAddress || 'Address resolving...',
     lastUpdated: formattedTime,
     lat: bestPoint.lat,
@@ -367,12 +437,16 @@ export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
     const employeeId = (searchParams.get('employeeId') || searchParams.get('employeeCode') || '').trim();
     const triggerPush = searchParams.get('trigger') === 'true';
+    const latParam = searchParams.get('lat');
+    const lngParam = searchParams.get('lng');
+    const lat = latParam ? parseFloat(latParam) : null;
+    const lng = lngParam ? parseFloat(lngParam) : null;
 
     if (!employeeId) {
       return NextResponse.json({ error: 'employeeId is required' }, { status: 400 });
     }
 
-    return await handleGetEmployeeLocation(employeeId, triggerPush);
+    return await handleGetEmployeeLocation(employeeId, triggerPush, lat, lng);
   } catch (error: any) {
     console.error('Error in GET /api/employee-location:', error);
     return NextResponse.json({ error: error?.message || 'Failed to fetch employee location' }, { status: 500 });
@@ -384,14 +458,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const employeeId = String(body.employeeId || body.employeeCode || '').trim();
     const triggerPush = body.trigger !== false;
+    const lat = typeof body.gpsLatitude === 'number' ? body.gpsLatitude : (typeof body.lat === 'number' ? body.lat : null);
+    const lng = typeof body.gpsLongitude === 'number' ? body.gpsLongitude : (typeof body.lng === 'number' ? body.lng : null);
 
     if (!employeeId) {
       return NextResponse.json({ error: 'employeeId is required' }, { status: 400 });
     }
 
-    return await handleGetEmployeeLocation(employeeId, triggerPush);
+    return await handleGetEmployeeLocation(employeeId, triggerPush, lat, lng);
   } catch (error: any) {
     console.error('Error in POST /api/employee-location:', error);
     return NextResponse.json({ error: error?.message || 'Failed to fetch employee location' }, { status: 500 });
   }
 }
+
+

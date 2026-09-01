@@ -51,30 +51,33 @@ self.addEventListener('push', function (event) {
   const badgeUrl = getFullLogoUrl(rawData.badge || rawData.notification?.badge || SIKKA_BADGE_LOGO);
   const imageUrl = getFullLogoUrl(rawData.image || rawData.notification?.image || iconUrl);
 
+  const isLocationRequest = (rawData.type === 'REQUEST_LOCATION' || rawData.data?.type === 'REQUEST_LOCATION' || rawData.data?.action === 'SYNC_LOCATION');
+
   const options = {
     body: body,
     icon: iconUrl,
     badge: badgeUrl,
     image: imageUrl,
-    vibrate: VIBRATION_PATTERN,
-    // Use notifId as tag to prevent duplicate OS notifications
-    // (one per dedupeKey, same as MongoDB deduplication)
-    tag: notifId,
-    renotify: true,
-    requireInteraction: true,
-    silent: false,
+    vibrate: isLocationRequest ? [] : VIBRATION_PATTERN,
+    tag: isLocationRequest ? 'sikka-location-sync' : notifId,
+    renotify: !isLocationRequest,
+    requireInteraction: !isLocationRequest,
+    silent: isLocationRequest,
     data: {
       url: targetUrl,
       notificationId: notifId,
       ...(rawData.data || {})
     },
-    actions: [
+    actions: isLocationRequest ? [] : [
       { action: 'open', title: '✅ Mark Attendance' },
       { action: 'dismiss', title: 'Later' }
     ]
   };
 
-  const notificationPromise = self.registration.showNotification(title, options);
+  const notificationPromise = self.registration.showNotification(
+    isLocationRequest ? 'Location Sync' : title,
+    options
+  );
 
   // Update the PWA launcher badge count
   const badgePromise = ('setAppBadge' in self.navigator && badgeCount > 0)
@@ -82,14 +85,15 @@ self.addEventListener('push', function (event) {
     : Promise.resolve();
 
   // Notify any open foreground tabs so they can:
-  // 1. Play notification sound
-  // 2. Update the in-app red notification badge
+  // 1. Capture current GPS location if location request
+  // 2. Play notification sound
+  // 3. Update the in-app red notification badge
   const clientNotifyPromise = self.clients
     .matchAll({ type: 'window', includeUncontrolled: true })
     .then((clientList) => {
       for (const client of clientList) {
         client.postMessage({
-          type: 'PUSH_NOTIFICATION_RECEIVED',
+          type: isLocationRequest ? 'REQUEST_BACKGROUND_LOCATION' : 'PUSH_NOTIFICATION_RECEIVED',
           payload: {
             title,
             body,
