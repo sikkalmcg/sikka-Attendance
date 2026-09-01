@@ -174,7 +174,19 @@ export async function GET(req: Request) {
           approvalActionDate: 1,
           editedBy: 1,
           createdAt: 1,
-          updatedAt: 1
+          updatedAt: 1,
+          exitEvents: 1,
+          currentGeofenceStatus: 1,
+          latitude: 1,
+          longitude: 1,
+          latitudeOut: 1,
+          longitudeOut: 1,
+          gpsLatitude: 1,
+          gpsLongitude: 1,
+          area: 1,
+          areaOut: 1,
+          accuracy: 1,
+          accuracyOut: 1
         }
       }).batchSize(5000).sort({ date: -1 }).toArray().catch((err) => { console.error('[Bootstrap] attendance error:', err); return []; }),
       db.collection('plants').find({}).toArray().catch((err) => { console.error('[Bootstrap] plants error:', err); return []; }),

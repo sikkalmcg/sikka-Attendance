@@ -204,6 +204,7 @@ interface BulkEditRow {
 
   const [selectedExitEvent, setSelectedExitEvent] = useState<any>(null);
   const [isExitDetailsOpen, setIsExitDetailsOpen] = useState(false);
+  const [dbPlantExits, setDbPlantExits] = useState<any[]>([]);
 
   // Per-handler loading states — shown as spinners on action buttons while MongoDB write is in progress
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
@@ -218,6 +219,30 @@ interface BulkEditRow {
   const [isRejectingLeave, setIsRejectingLeave] = useState(false);
 
   const { toast } = useToast();
+
+  const fetchPlantExits = useCallback(async () => {
+    try {
+      const res = await fetch('/api/approvals/plant-exits', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setDbPlantExits(data);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch plant exits:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPlantExits();
+  }, [fetchPlantExits]);
+
+  useEffect(() => {
+    if (viewMode === 'exits') {
+      fetchPlantExits();
+    }
+  }, [viewMode, fetchPlantExits]);
   
   const filterMonths = useMemo(() => {
     const options = [];
@@ -264,6 +289,7 @@ interface BulkEditRow {
         detail?.type === "data_mutation"
       ) {
         refreshData();
+        fetchPlantExits();
       }
     };
 
@@ -271,11 +297,12 @@ interface BulkEditRow {
     return () => {
       window.removeEventListener("sikka:realtime-event", handleRealtime);
     };
-  }, [refreshData]);
+  }, [refreshData, fetchPlantExits]);
 
   const userAssignedPlantIds = useMemo(() => {
-    if (!verifiedUser || verifiedUser.role === 'SUPER_ADMIN') return null;
-    return verifiedUser.plantIds || [];
+    if (!verifiedUser || ['SUPER_ADMIN', 'ADMIN', 'HR'].includes(String(verifiedUser.role || '').toUpperCase())) return null;
+    if (!Array.isArray(verifiedUser.plantIds) || verifiedUser.plantIds.length === 0) return null;
+    return verifiedUser.plantIds;
   }, [verifiedUser]);
 
   const authorizedPlants = useMemo(() => {
@@ -564,37 +591,68 @@ interface BulkEditRow {
     }).sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
   }, [allAttendanceList, historyMonthFilter]);
 
-const allPlantExitHistory = useMemo(() => {
-    const exits: any[] = [];
+  const allPlantExitHistory = useMemo(() => {
+    const exitsMap = new Map<string, any>();
     const employeeMap = new Map((employees || []).map(e => [e.employeeId, e]));
 
+    // 1. Process records from plantExits collection (primary dedicated exit log)
+    (dbPlantExits || []).forEach((event: any) => {
+      const empCode = event.employeeCode || event.employeeId;
+      const emp = employeeMap.get(empCode);
+      if (userAssignedPlantIds && userAssignedPlantIds.length > 0) {
+        const hasAccess = (emp?.unitIds || []).some((id: string) => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId || "");
+        if (!hasAccess) return;
+      }
+
+      const key = event._id ? String(event._id) : (event.id ? String(event.id) : `${empCode}_${event.outPlantTime}`);
+      const empName = event.employeeName || (emp ? `${emp.firstName || ''} ${emp.lastName || ''}`.trim() : null) || emp?.name || empCode || "Staff";
+      
+      exitsMap.set(key, {
+        ...event,
+        employeeId: empCode,
+        employeeCode: empCode,
+        employeeName: empName,
+        designation: event.designation || emp?.designation || "Staff",
+        date: event.date,
+        plant: event.plant || event.plantName || "Salt Plant",
+        plantName: event.plant || event.plantName || "Salt Plant",
+      });
+    });
+
+    // 2. Process embedded exitEvents inside attendanceRecords
     (attendanceRecords || []).forEach((record: any) => {
       const emp = employeeMap.get(record.employeeId);
-      if (userAssignedPlantIds) {
-        const hasAccess = (emp?.unitIds || []).some(id => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId || "");
+      if (userAssignedPlantIds && userAssignedPlantIds.length > 0) {
+        const hasAccess = (emp?.unitIds || []).some((id: string) => userAssignedPlantIds.includes(id)) || userAssignedPlantIds.includes(emp?.unitId || "");
         if (!hasAccess) return;
       }
 
       if (record.exitEvents && Array.isArray(record.exitEvents)) {
         record.exitEvents.forEach((event: any) => {
-          exits.push({
-            ...event,
-            employeeId: record.employeeId,
-            employeeCode: event.employeeCode || record.employeeId,
-            employeeName: event.employeeName || record.employeeName,
-            designation: event.designation || emp?.designation || "Staff",
-            date: event.date || record.date,
-            plant: event.plant || record.inPlant || "Salt Plant",
-            plantName: event.plant || record.inPlant || "Salt Plant",
-            inTime: record.inTime,
-            outTime: record.outTime,
-            attendanceId: record.id || record._id
-          });
+          const empCode = event.employeeCode || record.employeeId;
+          const key = event._id ? String(event._id) : (event.id ? String(event.id) : `${empCode}_${event.outPlantTime}`);
+          
+          if (!exitsMap.has(key)) {
+            const empName = event.employeeName || record.employeeName || (emp ? `${emp.firstName || ''} ${emp.lastName || ''}`.trim() : null) || emp?.name || empCode || "Staff";
+            exitsMap.set(key, {
+              ...event,
+              employeeId: record.employeeId,
+              employeeCode: empCode,
+              employeeName: empName,
+              designation: event.designation || emp?.designation || "Staff",
+              date: event.date || record.date,
+              plant: event.plant || record.inPlant || "Salt Plant",
+              plantName: event.plant || record.inPlant || "Salt Plant",
+              inTime: record.inTime,
+              outTime: record.outTime,
+              attendanceId: record.id || record._id
+            });
+          }
         });
       }
     });
 
-    let filteredExits = exits;
+    let filteredExits = Array.from(exitsMap.values());
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
       filteredExits = filteredExits.filter(e => 
@@ -611,7 +669,7 @@ const allPlantExitHistory = useMemo(() => {
     }
 
     return filteredExits.sort((a, b) => String(b.outPlantTime || "").localeCompare(String(a.outPlantTime || "")));
-  }, [attendanceRecords, employees, userAssignedPlantIds, searchTerm, selectedPlantFilter, selectedDateFilter]);
+  }, [dbPlantExits, attendanceRecords, employees, userAssignedPlantIds, searchTerm, selectedPlantFilter, selectedDateFilter]);
 
   const currentData = useMemo(() => {
     const list = attendanceView === 'pending' ? pendingAttendanceList : historyAttendanceList;
