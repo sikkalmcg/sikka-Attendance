@@ -23,6 +23,7 @@ import {
   CalendarDays,
   User,
   Filter,
+  RefreshCw,
 } from "lucide-react";
 import { cn, formatDate, getWorkingHoursColor, formatHoursToHHMM, parseDateTime, isEmployeeActiveOnDate } from "@/lib/utils";
 import {
@@ -1876,6 +1877,103 @@ export default function AttendancePage() {
   }, [selectedAdminEmployee, selectedAdminEmployeeIdentitySet, attendanceRecords]);
 
   const [adminResolvedAddress, setAdminResolvedAddress] = useState<string>("");
+  const [isRefreshingAdminLocation, setIsRefreshingAdminLocation] = useState(false);
+  const [manualAdminLocation, setManualAdminLocation] = useState<{
+    address: string;
+    lastUpdated: string;
+    isLive: boolean;
+    status: "LIVE" | "LAST_KNOWN" | "NO_RECORDS";
+  } | null>(null);
+
+  // Reset manual location override when selected employee changes
+  useEffect(() => {
+    setManualAdminLocation(null);
+  }, [selectedAdminEmployeeId]);
+
+  const handleRefreshAdminLocation = async () => {
+    if (!selectedAdminEmployee) return;
+    setIsRefreshingAdminLocation(true);
+
+    try {
+      // 1. Sync latest database records
+      await refreshData();
+
+      const empCode = selectedAdminEmployee.employeeId || selectedAdminEmployee.id || (selectedAdminEmployee as any)._id || '';
+
+      // 2. Trigger background location request & fetch latest live/recorded GPS coordinates
+      const res = await fetch(`/api/employee-location?employeeId=${encodeURIComponent(empCode)}&trigger=true`, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.address && data.address !== 'Location unavailable' && data.status !== 'NO_RECORDS') {
+          const isLiveLocation = data.isLive ?? data.status === 'LIVE';
+          setManualAdminLocation({
+            address: data.address,
+            lastUpdated: data.lastUpdated || format(getISTTime(), "hh:mm a"),
+            isLive: isLiveLocation,
+            status: isLiveLocation ? 'LIVE' : 'LAST_KNOWN',
+          });
+
+          toast({
+            title: isLiveLocation ? "Employee Current Location Updated" : "Last Known Location Retrieved",
+            description: isLiveLocation
+              ? `Live GPS location of ${selectedAdminEmployee.name || 'Employee'}'s device has been captured.`
+              : `Showing last known location for ${selectedAdminEmployee.name || 'Employee'}.`,
+          });
+          setIsRefreshingAdminLocation(false);
+          return;
+        }
+      }
+
+      // If no active or historical location records found
+      setManualAdminLocation({
+        address: "",
+        lastUpdated: "",
+        isLive: false,
+        status: "NO_RECORDS",
+      });
+
+      toast({
+        variant: "destructive",
+        title: "Unable to fetch location",
+        description: "Unable to fetch employee's current location. Please try again.",
+      });
+      setIsRefreshingAdminLocation(false);
+    } catch (error) {
+      setManualAdminLocation({
+        address: "",
+        lastUpdated: "",
+        isLive: false,
+        status: "NO_RECORDS",
+      });
+      toast({
+        variant: "destructive",
+        title: "Unable to fetch location",
+        description: "Unable to fetch employee's current location. Please try again.",
+      });
+      setIsRefreshingAdminLocation(false);
+    }
+  };
+
+  const currentDisplayLocation = useMemo(() => {
+    if (manualAdminLocation) {
+      return {
+        isLive: manualAdminLocation.isLive,
+        status: manualAdminLocation.status,
+        readableAddress: manualAdminLocation.address || "Location unavailable",
+        lastUpdated: manualAdminLocation.lastUpdated,
+      };
+    }
+    return {
+      isLive: selectedEmployeeLocationInfo.isLive,
+      status: selectedEmployeeLocationInfo.status,
+      readableAddress: adminResolvedAddress || selectedEmployeeLocationInfo.readableAddress || "Address resolving...",
+      lastUpdated: selectedEmployeeLocationInfo.lastUpdated,
+    };
+  }, [manualAdminLocation, selectedEmployeeLocationInfo, adminResolvedAddress]);
 
   useEffect(() => {
     if (!selectedAdminEmployee) {
@@ -2113,56 +2211,70 @@ export default function AttendancePage() {
 
             {/* 2. Black Location Box: CURRENT / LAST KNOWN LOCATION */}
             <div className="bg-slate-950 text-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-800 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-primary">
                     <MapPin className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                      {selectedEmployeeLocationInfo.isLive ? "Live Location Tracking" : "Location Status"}
+                      {currentDisplayLocation.isLive ? "Live Location Tracking" : "Location Status"}
                     </span>
                     <h3 className="text-sm font-black uppercase tracking-wider text-white">
-                      {selectedEmployeeLocationInfo.isLive ? "CURRENT LOCATION" : (selectedEmployeeLocationInfo.status === "LAST_KNOWN" ? "CURRENT LOCATION" : "LOCATION UNAVAILABLE")}
+                      Current Location
                     </h3>
                   </div>
                 </div>
 
-                <Badge className={cn("text-[10px] font-black uppercase px-3 py-1 rounded-xl",
-                  selectedEmployeeLocationInfo.isLive ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse" :
-                    selectedEmployeeLocationInfo.status === "LAST_KNOWN" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" :
-                      "bg-slate-800 text-slate-400"
-                )}>
-                  {selectedEmployeeLocationInfo.isLive ? "● Active Shift" : (selectedEmployeeLocationInfo.status === "LAST_KNOWN" ? "Last Known Location" : "Unavailable")}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRefreshAdminLocation}
+                    disabled={isRefreshingAdminLocation}
+                    className="h-8 bg-white/10 hover:bg-white/20 text-white border-white/20 text-[11px] font-black uppercase tracking-wider rounded-xl px-3 flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    <RefreshCw className={cn("w-3.5 h-3.5 text-emerald-400", isRefreshingAdminLocation && "animate-spin")} />
+                    <span>{isRefreshingAdminLocation ? "Updating..." : "Refresh Location"}</span>
+                  </Button>
+
+                  <Badge className={cn("text-[10px] font-black uppercase px-3 py-1.5 rounded-xl",
+                    currentDisplayLocation.isLive ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse" :
+                      currentDisplayLocation.status === "LAST_KNOWN" ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" :
+                        "bg-slate-800 text-slate-400"
+                  )}>
+                    {currentDisplayLocation.isLive ? "● Current Location" : (currentDisplayLocation.status === "LAST_KNOWN" ? "Last Known Location" : "Unavailable")}
+                  </Badge>
+                </div>
               </div>
 
               <div className="space-y-3 pt-1">
-                {selectedEmployeeLocationInfo.status === "NO_RECORDS" ? (
-                  <div className="space-y-1 py-2">
-                    <p className="text-sm font-bold text-slate-400">Location unavailable</p>
-                    <p className="text-xs text-slate-500 font-medium">No recorded punch or location data found for this employee.</p>
+                {(currentDisplayLocation.status === "NO_RECORDS" || !currentDisplayLocation.readableAddress || currentDisplayLocation.readableAddress === "Location unavailable") ? (
+                  <div className="space-y-1 py-3 bg-slate-900/60 rounded-2xl p-4 border border-slate-800">
+                    <p className="text-sm font-bold text-rose-300">Unable to fetch employee&apos;s current location. Please try again.</p>
+                    <p className="text-xs text-slate-400 font-medium">No live GPS broadcast or recorded punch found for this employee.</p>
                   </div>
                 ) : (
                   <>
-                    {!selectedEmployeeLocationInfo.isLive && (
-                      <div className="text-[11px] font-black uppercase text-amber-400/90 tracking-wider">
-                        Location unavailable
-                      </div>
-                    )}
-                    <div className="space-y-1">
-                      {!selectedEmployeeLocationInfo.isLive && (
-                        <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Last known location:</p>
+                    <div className="space-y-2">
+                      {currentDisplayLocation.status === "LAST_KNOWN" && !currentDisplayLocation.isLive && (
+                        <p className="text-[11px] font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> Last Known Location
+                        </p>
                       )}
-                      <p className="text-base sm:text-lg font-bold text-white leading-relaxed whitespace-pre-line">
-                        {adminResolvedAddress || selectedEmployeeLocationInfo.readableAddress || "Address resolving..."}
-                      </p>
+                      <blockquote className={cn(
+                        "border-l-4 pl-4 py-1.5 text-base sm:text-lg font-bold text-white leading-relaxed bg-white/5 rounded-r-2xl pr-3",
+                        currentDisplayLocation.isLive ? "border-emerald-400" : "border-amber-400"
+                      )}>
+                        {currentDisplayLocation.readableAddress}
+                      </blockquote>
                     </div>
 
-                    {selectedEmployeeLocationInfo.lastUpdated && (
+                    {currentDisplayLocation.lastUpdated && (
                       <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 text-xs font-semibold text-slate-400">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Last Updated: <strong className="text-slate-200 font-black">{selectedEmployeeLocationInfo.lastUpdated}</strong></span>
+                        <span>Last Updated: <strong className="text-slate-200 font-black">{currentDisplayLocation.lastUpdated}</strong></span>
                       </div>
                     )}
                   </>
@@ -2316,9 +2428,19 @@ export default function AttendancePage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{t.currentLocation}</span>
-                <span className="text-xs font-bold text-slate-700 text-right max-w-[260px] truncate" title={detectedAddress}>
-                  {detectedAddress || t.capturingAddress}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-700 text-right max-w-[240px] truncate" title={detectedAddress}>
+                    {detectedAddress || t.capturingAddress}
+                  </span>
+                  <button
+                    type="button"
+                    title="Refresh Location"
+                    onClick={() => checkLocationOnMount(true)}
+                    className="p-1 hover:bg-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
+                  >
+                    <RefreshCw className={cn("w-3.5 h-3.5", locationPermissionStatus === "checking" && "animate-spin")} />
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -14,6 +14,10 @@ export async function POST(req: Request) {
       locationPermission = '',
       batteryLevel = null,
       appVersion = '',
+      gpsLatitude = null,
+      gpsLongitude = null,
+      completeAddress = '',
+      address = '',
     } = body;
 
     const cleanEmpId = String(employeeId || '').trim();
@@ -39,6 +43,15 @@ export async function POST(req: Request) {
       deviceStatus: 'ACTIVE',
       status: 'ACTIVE',
     };
+
+    if (typeof gpsLatitude === 'number' && typeof gpsLongitude === 'number') {
+      updateFields.gpsLatitude = gpsLatitude;
+      updateFields.gpsLongitude = gpsLongitude;
+      if (completeAddress || address) {
+        updateFields.completeAddress = completeAddress || address;
+        updateFields.locationAddress = completeAddress || address;
+      }
+    }
 
     if (notificationPermission) {
       updateFields.notificationPermission = notificationPermission;
