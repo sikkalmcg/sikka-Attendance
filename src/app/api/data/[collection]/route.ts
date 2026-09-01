@@ -11,15 +11,24 @@ export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
 function validateAttendancePayload(payload: any) {
+  const statusUpper = String(payload.status || payload.attendanceType || payload.displayStatus || '').toUpperCase();
+  const isAbsentOrNonPresent = statusUpper === 'ABSENT' || statusUpper === 'WEEKLY OFF' || statusUpper === 'HOLIDAY' || statusUpper === 'LEAVE' || statusUpper === 'REJECTED';
+  const isRestoration = payload.restoredBy !== undefined || payload.restoredAt !== undefined;
+  const isStatusOrApprovalUpdate = payload.approved !== undefined || payload.exitEvents !== undefined || payload.currentGeofenceStatus !== undefined;
+
   const inDate = (payload.inDate || payload.date || "").trim();
   const inTime = (payload.inTime || "").trim();
 
-  // If this update doesn't touch attendance timestamps (e.g. only approving or status flag without modifying inTime), skip
-  if (!inDate && !inTime && (payload.approved !== undefined || payload.exitEvents !== undefined || payload.currentGeofenceStatus !== undefined)) {
+  // If this is an absent/leave/holiday/rejected entry, restoration, or status update without inTime, skip timestamp requirement
+  if (!inTime && (isAbsentOrNonPresent || isRestoration || isStatusOrApprovalUpdate)) {
     return { valid: true };
   }
 
+  // If inTime is not provided for a regular shift/present record, require IN Date and IN Time
   if (!inDate || !inTime) {
+    if (isAbsentOrNonPresent || isRestoration) {
+      return { valid: true };
+    }
     return { valid: false, error: "IN Date and IN Time are mandatory." };
   }
 
