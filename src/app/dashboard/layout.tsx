@@ -836,7 +836,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
           }).catch(() => {});
         },
         () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     };
 
@@ -860,7 +860,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
         }).catch(() => {});
       },
       () => {},
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
 
     return () => {

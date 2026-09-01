@@ -461,7 +461,7 @@ export default function AttendancePage() {
         setLocationPermissionStatus("denied");
         setLocationPermissionMessage(t.locationPermissionRequired);
       },
-      { enableHighAccuracy: true, timeout: 3500, maximumAge: 15000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, [plants, t]);
 
