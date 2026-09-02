@@ -3,9 +3,10 @@ import { getDb } from '@/lib/mongodb';
 import { getSessionUser } from '@/lib/auth/session';
 import { format, parseISO, addHours, isValid } from 'date-fns';
 import { ObjectId } from 'mongodb';
-import { invalidateBootstrapCache } from '@/lib/data-cache';
+import { invalidateBootstrapCache, updateCachedCollection } from '@/lib/data-cache';
 import { parseDateTime } from '@/lib/utils';
 import { realtimeBroadcaster } from '@/lib/realtime-events';
+import { sendFCMPushNotification } from '@/lib/fcm-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -249,20 +250,52 @@ export async function POST(req: Request) {
       ? `${matchedEmp.firstName} ${matchedEmp.lastName || ''}`.trim()
       : (matchedEmp.name || matchedEmp.fullName || "Employee");
 
-    // Record in Notifications collection & update employee_devices live telemetry
-    const notifMsg = `${empFullName} – Mark OUT Recorded (Session ${sessionIdx}) | Time: ${outTimeStr} | Worked: ${finalHours} hrs`;
-    await db.collection('notifications').insertOne({
-      employeeId: internalEmpId,
-      message: notifMsg,
-      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-      read: false,
-      type: 'MARK_OUT',
-      createdAt: now.toISOString(),
-    }).catch(() => {});
+    // Fast in-memory cache mutation
+    updateCachedCollection('attendance', 'UPDATE', savedRecord);
 
-    // Live update employee_devices registry with punch location
-    if (typeof finalLat === 'number' && typeof finalLng === 'number' && !isNaN(finalLat) && !isNaN(finalLng)) {
-      await db.collection('employee_devices').updateOne(
+    // Run non-critical telemetry, notification log & FCM push asynchronously
+    const notifTitle = `Mark OUT Successful (Session ${sessionIdx})`;
+    const notifMsg = `${empFullName} – Mark OUT Recorded (Session ${sessionIdx}) | Time: ${outTimeStr} | Worked: ${finalHours} hrs`;
+
+    Promise.allSettled([
+      db.collection('notifications').insertOne({
+        employeeId: internalEmpId,
+        employee_id: internalEmpId,
+        loginId: matchedEmp.employeeId || internalEmpId,
+        login_id: matchedEmp.employeeId || internalEmpId,
+        employeeName: empFullName,
+        title: notifTitle,
+        message: notifMsg,
+        timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+        notificationDateTime: now.toISOString(),
+        read: false,
+        isRead: false,
+        readStatus: 'UNREAD',
+        read_status: 'UNREAD',
+        type: 'MARK_OUT',
+        notificationType: 'MARK_OUT',
+        notification_type: 'MARK_OUT',
+        action: 'MARK_OUT',
+        source: 'ATTENDANCE_PUNCH',
+        createdBy: internalEmpId,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      }),
+      sendFCMPushNotification({
+        title: notifTitle,
+        message: notifMsg,
+        type: 'MARK_OUT',
+        employeeId: internalEmpId,
+        targetRole: 'EMPLOYEE',
+        data: {
+          type: 'MARK_OUT',
+          notificationType: 'MARK_OUT',
+          sessionIndex: String(sessionIdx),
+          time: outTimeStr,
+          hours: String(finalHours),
+        },
+      }),
+      (typeof finalLat === 'number' && typeof finalLng === 'number' && !isNaN(finalLat) && !isNaN(finalLng)) ? db.collection('employee_devices').updateOne(
         {
           $or: [
             { employeeId: internalEmpId },
@@ -290,13 +323,10 @@ export async function POST(req: Request) {
           },
         },
         { upsert: true }
-      ).catch(() => {});
-    }
+      ) : Promise.resolve(),
+    ]).catch(() => {});
 
-    invalidateBootstrapCache();
-
-    // Broadcast real-time event AFTER confirmed MongoDB save
-    //    This triggers SSE push to all connected clients (Mark Attendance + Approvals pages)
+    // Broadcast real-time event to active clients
     realtimeBroadcaster.broadcast('attendance_updated', {
       collection: 'attendance',
       action: 'update',

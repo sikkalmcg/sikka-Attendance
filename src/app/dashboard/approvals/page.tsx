@@ -280,6 +280,8 @@ interface BulkEditRow {
 
   // Real-time synchronization for Approvals UI (Attendance, Leave Requests, Facility Exits)
   useEffect(() => {
+    let debounceTimer: any = null;
+
     const handleRealtime = (e: any) => {
       const detail = e?.detail;
       if (
@@ -288,13 +290,17 @@ interface BulkEditRow {
         detail?.type === "facility_exit_updated" ||
         detail?.type === "data_mutation"
       ) {
-        refreshData();
-        fetchPlantExits();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          refreshData();
+          fetchPlantExits();
+        }, 1500);
       }
     };
 
     window.addEventListener("sikka:realtime-event", handleRealtime);
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener("sikka:realtime-event", handleRealtime);
     };
   }, [refreshData, fetchPlantExits]);

@@ -6,6 +6,19 @@ export const dynamic = 'force-dynamic';
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR'];
 
+const EXCLUDED_REMINDER_TYPES = [
+  'DAY_MARK_IN_REMINDER',
+  'DAY_MARK_OUT_REMINDER',
+  'NIGHT_MARK_IN_REMINDER',
+  'NIGHT_MARK_OUT_REMINDER',
+  'SHIFT_REMINDER',
+  'DAY_IN_REMINDER',
+  'DAY_OUT_REMINDER',
+  'NIGHT_IN_REMINDER',
+  'NIGHT_OUT_REMINDER',
+  'REMINDER'
+];
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -26,24 +39,12 @@ export async function GET(req: Request) {
       const db = await getDb();
       if (!db) return NextResponse.json({ error: 'Database unavailable' }, { status: 503 });
 
-      const EXCLUDED_ADMIN_TYPES = [
-        'DAY_MARK_IN_REMINDER',
-        'DAY_MARK_OUT_REMINDER',
-        'NIGHT_MARK_IN_REMINDER',
-        'NIGHT_MARK_OUT_REMINDER',
-        'SHIFT_REMINDER',
-        'DAY_IN_REMINDER',
-        'DAY_OUT_REMINDER',
-        'NIGHT_IN_REMINDER',
-        'NIGHT_OUT_REMINDER'
-      ];
-
       const notifications = await db
         .collection('notifications')
         .find({
-          type: { $nin: EXCLUDED_ADMIN_TYPES },
-          notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
-          notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+          type: { $nin: EXCLUDED_REMINDER_TYPES },
+          notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+          notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
           reminderType: { $exists: false },
         })
         .sort({ createdAt: -1, timestamp: -1, _id: -1 })
@@ -100,16 +101,25 @@ export async function GET(req: Request) {
     }
     const targetIdsArr = Array.from(targetIds).filter(Boolean);
 
-    // 5. STRICT query — only this employee's notifications
-    //    DELIBERATELY excludes: null, '', 'ALL', 'GLOBAL' — Security Rule (Section 5)
+    // 5. STRICT query — only this employee's non-reminder notifications (Mark IN / Mark OUT / alerts)
     const notifications = await db
       .collection('notifications')
       .find({
-        $or: [
-          { employeeId: { $in: targetIdsArr } },
-          { employee_id: { $in: targetIdsArr } },
-          { loginId: { $in: targetIdsArr } },
-          { login_id: { $in: targetIdsArr } },
+        $and: [
+          {
+            $or: [
+              { employeeId: { $in: targetIdsArr } },
+              { employee_id: { $in: targetIdsArr } },
+              { loginId: { $in: targetIdsArr } },
+              { login_id: { $in: targetIdsArr } },
+            ],
+          },
+          {
+            type: { $nin: EXCLUDED_REMINDER_TYPES },
+            notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+            notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
+            reminderType: { $exists: false },
+          },
         ],
       })
       .sort({ createdAt: -1, timestamp: -1, _id: -1 })

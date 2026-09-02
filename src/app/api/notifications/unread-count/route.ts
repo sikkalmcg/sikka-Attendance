@@ -6,6 +6,19 @@ export const dynamic = 'force-dynamic';
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR'];
 
+const EXCLUDED_REMINDER_TYPES = [
+  'DAY_MARK_IN_REMINDER',
+  'DAY_MARK_OUT_REMINDER',
+  'NIGHT_MARK_IN_REMINDER',
+  'NIGHT_MARK_OUT_REMINDER',
+  'SHIFT_REMINDER',
+  'DAY_IN_REMINDER',
+  'DAY_OUT_REMINDER',
+  'NIGHT_IN_REMINDER',
+  'NIGHT_OUT_REMINDER',
+  'REMINDER'
+];
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -26,28 +39,17 @@ export async function GET(req: Request) {
 
     // Admin: count unread notifications (strictly excluding employee attendance reminders)
     if (isAdmin) {
-      const EXCLUDED_ADMIN_TYPES = [
-        'DAY_MARK_IN_REMINDER',
-        'DAY_MARK_OUT_REMINDER',
-        'NIGHT_MARK_IN_REMINDER',
-        'NIGHT_MARK_OUT_REMINDER',
-        'SHIFT_REMINDER',
-        'DAY_IN_REMINDER',
-        'DAY_OUT_REMINDER',
-        'NIGHT_IN_REMINDER',
-        'NIGHT_OUT_REMINDER'
-      ];
       const unreadCount = await db.collection('notifications').countDocuments({
-        type: { $nin: EXCLUDED_ADMIN_TYPES },
-        notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
-        notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+        type: { $nin: EXCLUDED_REMINDER_TYPES },
+        notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+        notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
         reminderType: { $exists: false },
         $or: [{ isRead: false }, { read: false }, { isRead: { $exists: false } }],
       });
       return NextResponse.json({ count: unreadCount, unreadCount });
     }
 
-    // Employee: strictly only their own unread notifications
+    // Employee: strictly only their own unread non-reminder notifications
     let employeeId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || '';
     if (!employeeId) {
       employeeId = searchParams.get('employeeId') || '';
@@ -79,7 +81,7 @@ export async function GET(req: Request) {
     }
     const targetIdsArr = Array.from(targetIds).filter(Boolean);
 
-    // STRICT: no null/empty/ALL/GLOBAL (Section 5 security)
+    // STRICT: non-reminders only for this employee
     const unreadCount = await db.collection('notifications').countDocuments({
       $and: [
         {
@@ -89,6 +91,12 @@ export async function GET(req: Request) {
             { loginId: { $in: targetIdsArr } },
             { login_id: { $in: targetIdsArr } },
           ],
+        },
+        {
+          type: { $nin: EXCLUDED_REMINDER_TYPES },
+          notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+          notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
+          reminderType: { $exists: false },
         },
         { $or: [{ isRead: false }, { read: false }, { isRead: { $exists: false } }] },
       ],

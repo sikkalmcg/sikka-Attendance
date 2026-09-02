@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
 
+// Ultra-fast in-memory cache for reverse geocoding (coordinates rounded to 4 decimals ~11m)
+interface GeocodeCacheItem {
+  address: string;
+  components: any;
+  timestamp: number;
+}
+
+const geocodeCache = new Map<string, GeocodeCacheItem>();
+const GEOCODE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -10,6 +20,12 @@ export async function POST(req: Request) {
         { error: 'lat and lng are required numbers' },
         { status: 400 }
       );
+    }
+
+    const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+    const cached = geocodeCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < GEOCODE_CACHE_TTL)) {
+      return NextResponse.json({ address: cached.address, components: cached.components, fromCache: true });
     }
 
     const apiKey = process.env.ARCGIS_API_KEY;
@@ -32,6 +48,7 @@ export async function POST(req: Request) {
           headers: {
             'Accept': 'application/json',
           },
+          signal: AbortSignal.timeout(1200),
           cache: 'no-store',
         });
 
@@ -55,11 +72,11 @@ export async function POST(req: Request) {
           }
         }
       } catch (e) {
-        console.warn('ArcGIS reverse geocode error in /api/geocode/reverse:', e);
+        // Fast fallback on timeout or error
       }
     }
 
-    // Fallback to OSM Nominatim if ArcGIS was empty
+    // Fallback to OSM Nominatim if ArcGIS was empty (with 1.2s timeout)
     if (!readableAddress) {
       try {
         const osmUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
@@ -69,6 +86,7 @@ export async function POST(req: Request) {
             'User-Agent': 'SikkaAttendanceApp/1.0 (admin@sikkaenterprises.com)',
             'Accept-Language': 'en',
           },
+          signal: AbortSignal.timeout(1200),
           cache: 'no-store',
         });
 
@@ -87,7 +105,7 @@ export async function POST(req: Request) {
           }
         }
       } catch (e) {
-        console.warn('OSM reverse geocode error in /api/geocode/reverse:', e);
+        // Fast fallback
       }
     }
 
@@ -100,6 +118,13 @@ export async function POST(req: Request) {
       .replace(/,\s*IND$/i, '')
       .replace(/,\s*India$/i, '')
       .trim();
+
+    // Cache the resolved address
+    geocodeCache.set(cacheKey, {
+      address: readableAddress,
+      components,
+      timestamp: Date.now(),
+    });
 
     return NextResponse.json({ address: readableAddress, components });
   } catch (err: any) {

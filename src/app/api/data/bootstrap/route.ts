@@ -73,23 +73,24 @@ export async function GET(req: Request) {
     let notificationQuery: any = {};
     let attendanceQuery: any = {};
     const targetIds = new Set<string>();
+    const EXCLUDED_REMINDER_TYPES = [
+      'DAY_MARK_IN_REMINDER',
+      'DAY_MARK_OUT_REMINDER',
+      'NIGHT_MARK_IN_REMINDER',
+      'NIGHT_MARK_OUT_REMINDER',
+      'SHIFT_REMINDER',
+      'DAY_IN_REMINDER',
+      'DAY_OUT_REMINDER',
+      'NIGHT_IN_REMINDER',
+      'NIGHT_OUT_REMINDER',
+      'REMINDER'
+    ];
 
     if (isAdmin) {
-      const EXCLUDED_ADMIN_TYPES = [
-        'DAY_MARK_IN_REMINDER',
-        'DAY_MARK_OUT_REMINDER',
-        'NIGHT_MARK_IN_REMINDER',
-        'NIGHT_MARK_OUT_REMINDER',
-        'SHIFT_REMINDER',
-        'DAY_IN_REMINDER',
-        'DAY_OUT_REMINDER',
-        'NIGHT_IN_REMINDER',
-        'NIGHT_OUT_REMINDER'
-      ];
       notificationQuery = {
-        type: { $nin: EXCLUDED_ADMIN_TYPES },
-        notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
-        notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+        type: { $nin: EXCLUDED_REMINDER_TYPES },
+        notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+        notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
         reminderType: { $exists: false },
       };
     } else if (sessionEmpId) {
@@ -121,8 +122,14 @@ export async function GET(req: Request) {
 
       const empIds = Array.from(targetIds).filter(Boolean);
 
-      // STRICT: only this employee's notifications
-      notificationQuery = { employeeId: { $in: empIds } };
+      // STRICT: only this employee's non-reminder notifications
+      notificationQuery = {
+        employeeId: { $in: empIds },
+        type: { $nin: EXCLUDED_REMINDER_TYPES },
+        notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+        notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
+        reminderType: { $exists: false },
+      };
 
       // Build attendance query: employee gets complete personal history
       attendanceQuery = {

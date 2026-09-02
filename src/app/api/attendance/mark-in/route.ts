@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { getSessionUser, isEmployeeRole } from '@/lib/auth/session';
 import { format } from 'date-fns';
-import { invalidateBootstrapCache } from '@/lib/data-cache';
+import { invalidateBootstrapCache, updateCachedCollection } from '@/lib/data-cache';
 import { realtimeBroadcaster } from '@/lib/realtime-events';
+import { sendFCMPushNotification } from '@/lib/fcm-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -152,38 +153,38 @@ export async function POST(req: Request) {
     const finalLat = parseFloat(lat ?? latitude ?? 28.6329);
     const finalLng = parseFloat(lng ?? longitude ?? 77.4357);
 
-    // 4c. Rule 5: Second Mark IN Validation (Must be within 700m of a registered plant or valid Field/WFH)
+    // 4c. Rule: Session 2 Mark IN Validation (Session 2 is strictly restricted to plant premises only)
     if (sessionIndex === 2) {
-      const isSpecialType = selectedType === 'WFH' || selectedType === 'FIELD' || attendanceType === 'Work From Home' || attendanceType === 'Field Work';
-      if (!isSpecialType) {
-        const plants = await db.collection('plants').find({ active: { $ne: false } }).toArray().catch(() => []);
-        let isWithinAnyPlant = false;
-        const R_EARTH = 6371e3; // meters
-        for (const p of plants) {
-          if (typeof p.lat === 'number' && typeof p.lng === 'number') {
-            const phi1 = (finalLat * Math.PI) / 180;
-            const phi2 = (p.lat * Math.PI) / 180;
-            const deltaPhi = ((p.lat - finalLat) * Math.PI) / 180;
-            const deltaLambda = ((p.lng - finalLng) * Math.PI) / 180;
-            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-                      Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            const distance = R_EARTH * c;
-            if (distance <= (p.radius || 700)) {
-              isWithinAnyPlant = true;
-              break;
-            }
+      const plants = await db.collection('plants').find({ active: { $ne: false } }).toArray().catch(() => []);
+      let isWithinAnyPlant = false;
+      let matchedPlantObj: any = null;
+      const R_EARTH = 6371e3; // meters
+      for (const p of plants) {
+        if (typeof p.lat === 'number' && typeof p.lng === 'number') {
+          const phi1 = (finalLat * Math.PI) / 180;
+          const phi2 = (p.lat * Math.PI) / 180;
+          const deltaPhi = ((p.lat - finalLat) * Math.PI) / 180;
+          const deltaLambda = ((p.lng - finalLng) * Math.PI) / 180;
+          const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const distance = R_EARTH * c;
+          if (distance <= (p.radius || 700)) {
+            isWithinAnyPlant = true;
+            matchedPlantObj = p;
+            break;
           }
         }
-        if (!isWithinAnyPlant && plants.length > 0) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: "Second Mark IN requires you to be within 700 meters of a plant. Alternatively, select Field Work or WFH if applicable."
-            },
-            { status: 400 }
-          );
-        }
+      }
+
+      if (!isWithinAnyPlant) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "2nd session me Mark IN sirf plant ke andar se hi allow hai. Plant ke bahar se 2nd session Mark IN nahi ho sakta."
+          },
+          { status: 400 }
+        );
       }
     }
 
@@ -231,19 +232,52 @@ export async function POST(req: Request) {
     const savedRecord = { ...newAttendanceRecord, id: String(recordId), _id: String(recordId) };
 
     // 6. Record in Notifications collection & update employee_devices live telemetry
+    const notifTitle = `Mark IN Successful (Session ${sessionIndex})`;
     const notifMsg = `${empFullName} – Mark IN Recorded (Session ${sessionIndex}) | Time: ${timeStr} | ${finalPlant}`;
-    await db.collection('notifications').insertOne({
-      employeeId: internalEmpId,
-      message: notifMsg,
-      timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
-      read: false,
-      type: 'MARK_IN',
-      createdAt: now.toISOString(),
-    }).catch(() => {});
 
-    // Live update employee_devices registry with punch location
-    if (typeof finalLat === 'number' && typeof finalLng === 'number') {
-      await db.collection('employee_devices').updateOne(
+    // Fast in-memory cache mutation
+    updateCachedCollection('attendance', 'INSERT', savedRecord);
+
+    // Run non-critical telemetry, notification log & FCM push asynchronously
+    Promise.allSettled([
+      db.collection('notifications').insertOne({
+        employeeId: internalEmpId,
+        employee_id: internalEmpId,
+        loginId: cleanSessionEmpId || internalEmpId,
+        login_id: cleanSessionEmpId || internalEmpId,
+        employeeName: empFullName,
+        title: notifTitle,
+        message: notifMsg,
+        timestamp: format(now, "yyyy-MM-dd HH:mm:ss"),
+        notificationDateTime: now.toISOString(),
+        read: false,
+        isRead: false,
+        readStatus: 'UNREAD',
+        read_status: 'UNREAD',
+        type: 'MARK_IN',
+        notificationType: 'MARK_IN',
+        notification_type: 'MARK_IN',
+        action: 'MARK_IN',
+        source: 'ATTENDANCE_PUNCH',
+        createdBy: internalEmpId,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      }),
+      sendFCMPushNotification({
+        title: notifTitle,
+        message: notifMsg,
+        type: 'MARK_IN',
+        employeeId: internalEmpId,
+        targetRole: 'EMPLOYEE',
+        data: {
+          type: 'MARK_IN',
+          notificationType: 'MARK_IN',
+          sessionIndex: String(sessionIndex),
+          time: timeStr,
+          plant: finalPlant,
+        },
+      }),
+      (typeof finalLat === 'number' && typeof finalLng === 'number') ? db.collection('employee_devices').updateOne(
         {
           $or: [
             { employeeId: internalEmpId },
@@ -271,13 +305,10 @@ export async function POST(req: Request) {
           },
         },
         { upsert: true }
-      ).catch(() => {});
-    }
+      ) : Promise.resolve(),
+    ]).catch(() => {});
 
-    invalidateBootstrapCache();
-
-    // 7. Broadcast real-time event AFTER confirmed MongoDB save
-    //    This triggers SSE push to all connected clients (Mark Attendance + Approvals pages)
+    // Broadcast real-time event to active clients
     realtimeBroadcaster.broadcast('attendance_updated', {
       collection: 'attendance',
       action: 'insert',

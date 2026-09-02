@@ -24,12 +24,12 @@ let clientPromise: Promise<MongoClient> | null = null;
 
 function createClient(): MongoClient {
   return new MongoClient(uri, {
-    maxPoolSize: 20,
-    minPoolSize: 1,
+    maxPoolSize: 25,
+    minPoolSize: 2,
     maxIdleTimeMS: 60000,
-    serverSelectionTimeoutMS: 15000,
-    connectTimeoutMS: 15000,
-    socketTimeoutMS: 60000,
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
     retryWrites: true,
     tls: true,
     family: 4,
@@ -72,13 +72,20 @@ async function ensureIndexes(db: Db) {
   if (global._indexesCreated) return;
   global._indexesCreated = true;
   try {
-    db.collection('attendance').createIndex({ date: -1 }, { background: true }).catch(() => {});
+    db.collection('attendance').createIndex({ date: -1, employeeId: 1 }, { background: true }).catch(() => {});
     db.collection('attendance').createIndex({ employeeId: 1, date: -1 }, { background: true }).catch(() => {});
+    db.collection('attendance').createIndex({ status: 1, date: -1 }, { background: true }).catch(() => {});
+    db.collection('attendance').createIndex({ approved: 1, date: -1 }, { background: true }).catch(() => {});
+    db.collection('attendance').createIndex({ inPlant: 1, date: -1 }, { background: true }).catch(() => {});
     db.collection('employees').createIndex({ employeeId: 1 }, { background: true }).catch(() => {});
+    db.collection('employees').createIndex({ active: 1 }, { background: true }).catch(() => {});
     db.collection('employees').createIndex({ aadhaarNumber: 1 }, { background: true }).catch(() => {});
     db.collection('employees').createIndex({ mobileNumber: 1 }, { background: true }).catch(() => {});
     db.collection('leaveRequests').createIndex({ employeeId: 1, status: 1 }, { background: true }).catch(() => {});
+    db.collection('leaveRequests').createIndex({ status: 1, fromDate: -1 }, { background: true }).catch(() => {});
+    db.collection('notifications').createIndex({ employeeId: 1, createdAt: -1 }, { background: true }).catch(() => {});
     db.collection('notifications').createIndex({ createdAt: -1 }, { background: true }).catch(() => {});
+    db.collection('plants').createIndex({ active: 1 }, { background: true }).catch(() => {});
   } catch {}
 }
 

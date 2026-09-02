@@ -1616,7 +1616,7 @@ export default function AttendancePage() {
         title: "GPS Tracking Timeout",
         description: "System could not identify device coordinates in time. Please retry."
       });
-    }, 12000);
+    }, 6000);
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -1630,7 +1630,7 @@ export default function AttendancePage() {
         setLocationPermissionStatus("denied");
         setLocationPermissionMessage("Please allow location access to mark attendance.");
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
     );
   };
 
@@ -1639,7 +1639,20 @@ export default function AttendancePage() {
     e?.stopPropagation?.();
     if (isMutatingAttendance) return;
 
-    if (!detectedPlant && !selectedType) {
+    const nextSessionIndex = todaySessions.length + 1;
+
+    // Rule: Session 2 Mark IN is strictly allowed inside a registered plant only
+    if (nextSessionIndex === 2 && !detectedPlant) {
+      toast({
+        variant: "destructive",
+        title: "Plant Location Mandatory (Session 2)",
+        description: "2nd session me Mark IN sirf registered plant ke andar se hi allow hai. Plant ke bahar se 2nd session Mark IN nahi ho sakta."
+      });
+      return;
+    }
+
+    // Rule: Session 1 outside plant requires selecting WFH or Field Work
+    if (nextSessionIndex === 1 && !detectedPlant && !selectedType) {
       toast({ variant: "destructive", title: "Selection Mandatory", description: "Please select WFH or Field Work to continue outside radius bounds." });
       return;
     }
@@ -2949,9 +2962,14 @@ export default function AttendancePage() {
       >
         <DialogContent className="sm:max-w-xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
           <DialogHeader className="p-7 bg-slate-900 text-white shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
-              <MapPin className="w-5 h-5 text-primary" /> {t.markInConfirmation}
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
+                <MapPin className="w-5 h-5 text-primary" /> {t.markInConfirmation}
+              </DialogTitle>
+              <Badge className={cn("text-[10px] font-black uppercase px-2.5 py-1 rounded-lg", todaySessions.length === 1 ? "bg-amber-500 text-white" : "bg-primary/30 text-primary-foreground")}>
+                {todaySessions.length === 1 ? "Session 2 of 2 (Plant Only)" : "Session 1 of 2"}
+              </Badge>
+            </div>
           </DialogHeader>
           <div className="p-8 space-y-5">
             <div className="grid grid-cols-2 gap-4">
@@ -2984,8 +3002,23 @@ export default function AttendancePage() {
               </div>
             </div>
 
-            {/* Attendance Category Selection (if outside registered bounds) */}
-            {!detectedPlant && (
+            {/* Session 2 Plant-Only Warning (if outside plant) */}
+            {todaySessions.length === 1 && !detectedPlant && (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-900 shadow-sm flex items-start gap-3 animate-in fade-in">
+                <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="text-left space-y-1">
+                  <p className="text-xs font-black uppercase tracking-tight text-rose-900">
+                    Plant Premises Required for Session 2
+                  </p>
+                  <p className="text-[11px] font-semibold text-rose-700 leading-relaxed">
+                    2nd session me Mark IN sirf registered plant ke andar se hi allow hai. Aap kisi registered plant ke radius me nahi hain, isliye 2nd session Mark IN nahi kiya ja sakta.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Attendance Category Selection (Only for Session 1 if outside registered bounds) */}
+            {todaySessions.length === 0 && !detectedPlant && (
               <div className="space-y-2 pt-1">
                 <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
                   {t.selectAttendanceMode}
@@ -3031,15 +3064,29 @@ export default function AttendancePage() {
             </Button>
             <Button
               type="button"
-              className="flex-1 h-12 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20 uppercase tracking-wider text-xs"
+              className={cn(
+                "flex-1 h-12 font-black rounded-xl uppercase tracking-wider text-xs shadow-lg transition-all",
+                todaySessions.length === 1 && !detectedPlant
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+              )}
               onClick={handleConfirmCheckIn}
-              disabled={isMutatingAttendance || !detectedAddress || (!detectedPlant && !selectedType)}
+              disabled={
+                isMutatingAttendance ||
+                !detectedAddress ||
+                (todaySessions.length === 1 && !detectedPlant) ||
+                (todaySessions.length === 0 && !detectedPlant && !selectedType)
+              }
             >
               {isMutatingAttendance ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" /> {t.processing}
                 </span>
-              ) : t.confirmAndMarkIn}
+              ) : todaySessions.length === 1 && !detectedPlant ? (
+                "PLANT LOCATION REQUIRED"
+              ) : (
+                t.confirmAndMarkIn
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

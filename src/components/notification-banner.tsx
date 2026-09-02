@@ -100,7 +100,7 @@ export function NotificationBanner({ user }: NotificationBannerProps) {
               </span>
             </div>
             <p className="text-xs font-semibold text-slate-600 mt-0.5 leading-relaxed">
-              Get real-time Mark IN / Mark OUT shift reminders and company announcements with sound and vibration.
+              Get real-time Mark IN / Mark OUT attendance updates and company announcements with sound and vibration.
             </p>
           </div>
         </div>

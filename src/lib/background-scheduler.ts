@@ -15,30 +15,7 @@ let historicalAuditDone = false;
  * Uses MongoDB deduplication so no duplicate notifications are ever sent.
  */
 
-// Notification time windows in IST (minutes from midnight)
-const IST_TRIGGER_WINDOWS = [
-  { name: '06:00 AM Night-OUT',  minute: 6 * 60  },   // 360 min
-  { name: '10:00 AM Day-IN',     minute: 10 * 60 },   // 600 min
-  { name: '06:00 PM Day-OUT',    minute: 18 * 60 },   // 1080 min
-  { name: '08:00 PM Night-IN',   minute: 20 * 60 },   // 1200 min
-];
-const WINDOW_TOLERANCE_MINUTES = 10;
 
-function getISTMinutesFromMidnight(): number {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  return now.getHours() * 60 + now.getMinutes();
-}
-
-function isWithinScheduledWindow(): { active: boolean; windowName: string } {
-  const currentMinutes = getISTMinutesFromMidnight();
-  for (const window of IST_TRIGGER_WINDOWS) {
-    const diff = Math.abs(currentMinutes - window.minute);
-    if (diff <= WINDOW_TOLERANCE_MINUTES) {
-      return { active: true, windowName: window.name };
-    }
-  }
-  return { active: false, windowName: '' };
-}
 
 export function startBackgroundScheduler() {
   if (isSchedulerRunning) {
@@ -52,16 +29,15 @@ export function startBackgroundScheduler() {
     minute: '2-digit',
     hour12: true,
   });
-  console.log(`[Scheduler] IST-Aware Shift Reminder Scheduler started at ${istTime} IST.`);
-  console.log('[Scheduler] Active windows: 06:00 AM, 10:00 AM, 06:00 PM, 08:00 PM IST (±10 min).');
+  console.log(`[Scheduler] IST-Aware Background Scheduler started at ${istTime} IST.`);
 
   // ── Startup sequence ────────────────────────────────────────────────────
-  // Begin normal scheduler cycles (auto-out + shift reminders) after server init
+  // Begin normal scheduler cycles (auto-out) after server init
   setTimeout(() => {
     runSchedulerCycle();
   }, 5000);
 
-  // Poll every 60 seconds — auto-out + shift reminders
+  // Poll every 60 seconds — auto-out
   setInterval(() => {
     runSchedulerCycle();
   }, 60 * 1000);
@@ -78,31 +54,6 @@ async function runSchedulerCycle() {
     }
   } catch (autoErr) {
     console.warn('[Scheduler] Auto Mark OUT cycle error:', autoErr);
-  }
-
-  // 2. Shift Reminders: Evaluates during scheduled IST windows (06:00 AM, 10:00 AM, 06:00 PM, 08:00 PM)
-  const { active, windowName } = isWithinScheduledWindow();
-  if (!active) {
-    // Outside all scheduled reminder windows — skip reminder query
-    return;
-  }
-
-  const istNow = new Date().toLocaleString('en-US', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  });
-  console.log(`[Scheduler] Active window "${windowName}" at ${istNow} IST — evaluating reminders...`);
-
-  try {
-    const { GET: handleShiftReminders } = await import('@/app/api/notifications/shift-reminders/route');
-    const result = await handleShiftReminders();
-    const data = await result.json();
-    console.log(`[Scheduler] Cycle complete — ${data.newRemindersCount ?? 0} new reminder(s) sent, ${data.evaluatedEmployees ?? 0} employee(s) evaluated.`);
-  } catch (error) {
-    console.warn('[Scheduler] Shift reminders cycle error:', error);
   }
 }
 

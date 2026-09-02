@@ -6,6 +6,19 @@ export const dynamic = 'force-dynamic';
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN', 'HR'];
 
+const EXCLUDED_REMINDER_TYPES = [
+  'DAY_MARK_IN_REMINDER',
+  'DAY_MARK_OUT_REMINDER',
+  'NIGHT_MARK_IN_REMINDER',
+  'NIGHT_MARK_OUT_REMINDER',
+  'SHIFT_REMINDER',
+  'DAY_IN_REMINDER',
+  'DAY_OUT_REMINDER',
+  'NIGHT_IN_REMINDER',
+  'NIGHT_OUT_REMINDER',
+  'REMINDER'
+];
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -28,23 +41,12 @@ export async function GET(req: Request) {
 
     // 2. Admin receives system/admin notifications, but strictly NEVER receives employee attendance reminders
     if (isAdmin) {
-      const EXCLUDED_ADMIN_TYPES = [
-        'DAY_MARK_IN_REMINDER',
-        'DAY_MARK_OUT_REMINDER',
-        'NIGHT_MARK_IN_REMINDER',
-        'NIGHT_MARK_OUT_REMINDER',
-        'SHIFT_REMINDER',
-        'DAY_IN_REMINDER',
-        'DAY_OUT_REMINDER',
-        'NIGHT_IN_REMINDER',
-        'NIGHT_OUT_REMINDER'
-      ];
       const allNotifs = await db
         .collection('notifications')
         .find({
-          type: { $nin: EXCLUDED_ADMIN_TYPES },
-          notificationType: { $nin: EXCLUDED_ADMIN_TYPES },
-          notification_type: { $nin: EXCLUDED_ADMIN_TYPES },
+          type: { $nin: EXCLUDED_REMINDER_TYPES },
+          notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+          notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
           reminderType: { $exists: false },
         })
         .sort({ createdAt: -1, timestamp: -1, _id: -1 })
@@ -53,7 +55,7 @@ export async function GET(req: Request) {
       return NextResponse.json(allNotifs);
     }
 
-    // 3. Employee: strict filtering by Employee ID / aliases
+    // 3. Employee: strict filtering by Employee ID / aliases (excluding reminders)
     let employeeId = sessionUser?.employeeId || sessionUser?.username || sessionUser?.id || '';
     if (!employeeId) {
       employeeId = searchParams.get('employeeId') || '';
@@ -89,7 +91,17 @@ export async function GET(req: Request) {
 
     const notifs = await db
       .collection('notifications')
-      .find({ employeeId: { $in: Array.from(targetIds).filter(Boolean) } })
+      .find({
+        $and: [
+          { employeeId: { $in: Array.from(targetIds).filter(Boolean) } },
+          {
+            type: { $nin: EXCLUDED_REMINDER_TYPES },
+            notificationType: { $nin: EXCLUDED_REMINDER_TYPES },
+            notification_type: { $nin: EXCLUDED_REMINDER_TYPES },
+            reminderType: { $exists: false },
+          },
+        ],
+      })
       .sort({ createdAt: -1, timestamp: -1, _id: -1 })
       .limit(100)
       .toArray();

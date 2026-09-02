@@ -280,6 +280,18 @@ export default function ActivityPage() {
   const getNotificationTypeBadge = (notif: any) => {
     const rawType = String(notif.notification_type || notif.notificationType || notif.type || '').toUpperCase();
     switch (rawType) {
+      case 'MARK_IN':
+        return (
+          <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 font-bold text-[10px] uppercase px-2 py-0.5 shadow-none">
+            Mark IN
+          </Badge>
+        );
+      case 'MARK_OUT':
+        return (
+          <Badge className="bg-blue-100 text-blue-900 border-blue-300 font-bold text-[10px] uppercase px-2 py-0.5 shadow-none">
+            Mark OUT
+          </Badge>
+        );
       case 'DAY_MARK_IN_REMINDER':
       case 'DAY_IN_REMINDER':
         return (

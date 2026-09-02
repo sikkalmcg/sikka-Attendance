@@ -141,10 +141,7 @@ function NotificationBell() {
       const targetEmpName = String(n.employeeName || '').trim().toUpperCase();
       const userFullName = String(verifiedUser?.fullName || (verifiedUser as any)?.name || '').trim().toUpperCase();
       const notifType = String(n.type || n.notificationType || n.notification_type || '').toUpperCase();
-      const isEmployeeOnlyNotif = [
-        'MARK_IN',
-        'MARK_OUT',
-        'AUTO_OUT',
+      const isReminder = [
         'SHIFT_REMINDER',
         'DAY_IN_REMINDER',
         'DAY_OUT_REMINDER',
@@ -153,8 +150,20 @@ function NotificationBell() {
         'DAY_MARK_IN_REMINDER',
         'DAY_MARK_OUT_REMINDER',
         'NIGHT_MARK_IN_REMINDER',
-        'NIGHT_MARK_OUT_REMINDER'
+        'NIGHT_MARK_OUT_REMINDER',
+        'REMINDER'
       ].includes(notifType) || Boolean(n.reminderType);
+
+      // Completely exclude reminder notifications (attendance reminders are disabled)
+      if (isReminder) {
+        return false;
+      }
+
+      const isEmployeeOnlyNotif = [
+        'MARK_IN',
+        'MARK_OUT',
+        'AUTO_OUT'
+      ].includes(notifType);
 
       if (isEmployee) {
         // If notification has a specific employeeId, it MUST match one of this employee's identifiers or name
@@ -167,7 +176,7 @@ function NotificationBell() {
         return true;
       } else {
         // For Admin / HR / Super Admin:
-        // Strictly exclude employee Mark IN / Mark OUT / Shift Reminders
+        // Strictly exclude employee Mark IN / Mark OUT / Auto OUT
         if (isEmployeeOnlyNotif) {
           return false;
         }
@@ -741,49 +750,7 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
 
   const logoUrl = "https://sikkaenterprises.com/assets/images/Capture13.51191245_std.JPG";
 
-  // Periodic MongoDB real-time push notification synchronization to device status bar
-  useEffect(() => {
-    if (!verifiedUser) return;
-    const empId = verifiedUser.employeeId || verifiedUser.username || verifiedUser.id || '';
-    if (!empId) return;
 
-    const syncMongoDBNotifications = async () => {
-      try {
-        const res = await fetch(`/api/notifications/my?employeeId=${encodeURIComponent(empId)}`);
-        if (res.ok) {
-          const list = await res.json();
-          if (Array.isArray(list) && list.length > 0) {
-            const lastSeenId = typeof window !== 'undefined' ? (localStorage.getItem('sikka_last_shown_notif_id') || '') : '';
-            const unreadItems = list.filter((n: any) => n.read !== true && n.isRead !== true);
-
-            if (unreadItems.length > 0) {
-              const newest = unreadItems[0];
-              const newestId = String(newest.id || newest._id || newest.dedupeKey || '');
-
-              if (newestId && newestId !== lastSeenId) {
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('sikka_last_shown_notif_id', newestId);
-                }
-                postNativeNotification(
-                  newest.title || 'Sikka ERP - New Notification',
-                  newest.message || 'You have a new notification.',
-                  newest.type || 'CUSTOM_NOTIFICATION',
-                  empId,
-                  verifiedUser.role || 'EMPLOYEE'
-                );
-              }
-            }
-          }
-        }
-      } catch (err) {
-        // Silent background sync
-      }
-    };
-
-    syncMongoDBNotifications();
-    const notifInterval = setInterval(syncMongoDBNotifications, 30 * 1000);
-    return () => clearInterval(notifInterval);
-  }, [verifiedUser]);
 
   // Real-time Service Worker push listener for foreground sound, vibration and instant red dot update
   useEffect(() => {
