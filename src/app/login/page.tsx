@@ -37,7 +37,12 @@ export default function LoginPage() {
     if (session) {
       try {
         const parsed = JSON.parse(session);
-        if (String(parsed?.role).toUpperCase() === 'EMPLOYEE') {
+        const role = String(parsed?.role || '').toUpperCase();
+        const isEmployee = role === 'EMPLOYEE' ||
+          (Array.isArray(parsed?.role) && parsed.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
+          (!!parsed?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(role));
+
+        if (isEmployee) {
           router.push('/dashboard/attendance');
         } else {
           router.push('/dashboard');
@@ -187,7 +192,11 @@ export default function LoginPage() {
           title: data.role === 'SUPER_ADMIN' ? "Welcome back, Admin" : "Login Successful",
           description: data.role === 'SUPER_ADMIN' ? "Login successful." : `Welcome, ${data.fullName}`
         });
-        const targetPath = data.role === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard";
+        const role = String(data?.role || '').toUpperCase();
+        const isEmployee = role === 'EMPLOYEE' ||
+          (Array.isArray(data?.role) && data.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
+          (!!data?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(role));
+        const targetPath = isEmployee ? "/dashboard/attendance" : "/dashboard";
         setTimeout(() => {
           router.push(targetPath);
         }, 100);

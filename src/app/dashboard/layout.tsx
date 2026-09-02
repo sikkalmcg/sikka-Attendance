@@ -845,15 +845,13 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
       (Array.isArray(verifiedUser.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
       (!!verifiedUser.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(userRole));
 
-    // Mark Attendance is accessible by all authenticated roles (Employee, HR, Admin, Super Admin)
-    if (pathname === '/dashboard/attendance') {
-      setIsAuthorized(true);
-      return;
-    }
-
-    // Employees navigating anywhere other than /dashboard/attendance get redirected to Mark Attendance
+    // Mark Attendance & Holidays are accessible by Employee role
     if (isEmployeeRole) {
-      setIsAuthorized(false);
+      if (pathname === '/dashboard/attendance' || pathname === '/dashboard/holidays') {
+        setIsAuthorized(true);
+        return;
+      }
+      // Employees navigating anywhere other than /dashboard/attendance get seamlessly redirected to Mark Attendance
       router.replace("/dashboard/attendance");
       return;
     }
@@ -884,6 +882,11 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
       setIsAuthorized(true); 
     }
   }, [verifiedUser, pathname, router]);
+
+  const userRoleUpper = String(verifiedUser?.role || '').toUpperCase();
+  const isEmployee = userRoleUpper === 'EMPLOYEE' ||
+    (Array.isArray(verifiedUser?.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
+    (!!verifiedUser?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(userRoleUpper));
 
   // Only show minimal loader if user session has not loaded yet
   if (!isMounted || (!verifiedUser && isLoading)) {
@@ -922,7 +925,9 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isAuthorized === false) {
+  // Access Denied page is strictly for Admin/HR users attempting to access unauthorized administrative modules
+  // Employees are NEVER shown the Access Denied screen
+  if (isAuthorized === false && !isEmployee) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 p-6">
         <div className="w-20 h-20 bg-rose-50 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-rose-100">
@@ -934,18 +939,13 @@ function AuthorizedContent({ children }: { children: React.ReactNode }) {
         </p>
         <Button 
           className="bg-primary px-8 h-12 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2"
-          onClick={() => router.push(String(verifiedUser?.role).toUpperCase() === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard")}
+          onClick={() => router.push(userRoleUpper === 'EMPLOYEE' ? "/dashboard/attendance" : "/dashboard")}
         >
           <ArrowLeft className="w-4 h-4" /> Go Back Home
         </Button>
       </div>
     );
   }
-
-  const userRoleUpper = String(verifiedUser?.role || '').toUpperCase();
-  const isEmployee = userRoleUpper === 'EMPLOYEE' ||
-    (Array.isArray(verifiedUser?.role) && verifiedUser.role.map((r: any) => String(r).toUpperCase()).includes('EMPLOYEE')) ||
-    (!!verifiedUser?.employeeId && !['SUPER_ADMIN', 'ADMIN', 'HR', 'USER'].includes(userRoleUpper));
 
   if (isEmployee) {
     return (
