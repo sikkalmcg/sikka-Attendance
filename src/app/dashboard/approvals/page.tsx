@@ -294,7 +294,7 @@ interface BulkEditRow {
         debounceTimer = setTimeout(() => {
           refreshData();
           fetchPlantExits();
-        }, 1500);
+        }, 250);
       }
     };
 

@@ -279,7 +279,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
         fetchData(false);
-      }, 1200);
+      }, 250);
     };
 
     const connectSSE = () => {
@@ -300,7 +300,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               new CustomEvent('sikka:realtime-event', { detail: payload })
             );
 
-            // Debounced auto-refresh context collections
+            // Debounced auto-refresh context collections (250ms high-refresh)
             scheduleDebouncedFetch();
           } catch (e) {}
         };
@@ -310,9 +310,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             eventSource.close();
             eventSource = null;
           }
-          // Reconnect gracefully in 5 seconds
+          // Fast reconnect in 1.5s
           clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(connectSSE, 5000);
+          reconnectTimeout = setTimeout(connectSSE, 1500);
         };
       } catch (err) {
         console.warn('SSE connection attempt skipped:', err);
@@ -321,14 +321,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     connectSSE();
 
-    // Throttled focus & visibility refresh (only if at least 30s have passed since last fetch)
+    // High-frequency periodic background auto-refresh (every 10s)
+    const backgroundRefreshTimer = setInterval(() => {
+      fetchData(false);
+    }, 10000);
+
+    // Instant focus & visibility refresh (refreshes if >2s since last fetch)
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastFetchTimeRef.current > 30000) {
+      if (document.visibilityState === 'visible' && Date.now() - lastFetchTimeRef.current > 2000) {
         fetchData(false);
       }
     };
     const onFocus = () => {
-      if (Date.now() - lastFetchTimeRef.current > 30000) {
+      if (Date.now() - lastFetchTimeRef.current > 2000) {
         fetchData(false);
       }
     };
@@ -343,6 +348,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
+      clearInterval(backgroundRefreshTimer);
       clearTimeout(reconnectTimeout);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onFocus);
