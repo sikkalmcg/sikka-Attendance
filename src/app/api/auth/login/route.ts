@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
       if (!latitude && !longitude && cleanUser) {
         // Query employees by employeeId, aadhaar, mobile, id, or username
         const allEmployees = await employeesCol.find({}).toArray();
-        
+
         const matchedEmp = allEmployees.find((e: any) => {
           const empId = String(e.employeeId || e.id || e._id || '').replace(/\s/g, '');
           const empAadhaar = String(e.aadhaarNumber || e.aadhaar || e.Aadhaar || '').replace(/\s/g, '');
@@ -106,8 +107,8 @@ export async function POST(req: Request) {
           );
         }
 
-        const empFullName = matchedEmp.firstName 
-          ? `${matchedEmp.firstName} ${matchedEmp.lastName || ''}`.trim() 
+        const empFullName = matchedEmp.firstName
+          ? `${matchedEmp.firstName} ${matchedEmp.lastName || ''}`.trim()
           : (matchedEmp.name || matchedEmp.fullName || "Employee");
 
         const sessionData = {
