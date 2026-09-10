@@ -7,5 +7,9 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
+  },
+  "vars": {
+    "NODE_ENV": "production",
+    "MONGODB_DB": "sikka_database"
   }
 }
