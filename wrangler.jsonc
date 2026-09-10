@@ -10,6 +10,12 @@
   },
   "vars": {
     "NODE_ENV": "production",
-    "MONGODB_DB": "sikka_database"
+    "MONGODB_DB": "sikka_database",
+    "NODE_OPTIONS": "--dns-result-order=ipv4first",
+    "NEXT_PUBLIC_VAPID_PUBLIC_KEY": "BIZhkoYnicqfnaDuT-C5egEnM_OnnYauDQnT7_jZbAOnYp9MrxsNfU3BK0fTVw9mPYsF28ZqjSjDPH8BHyGZnmk",
+    "VAPID_PRIVATE_KEY": "EX38bR9X7vKUwe7gUMVhLA8vyDhoVUtse9_ygT0Vk0U",
+    "VAPID_SUBJECT": "mailto:admin@sikkaenterprises.com",
+    "MONGODB_URI": "mongodb://sikkapanindia_db_user:Sikkalmc2105@ac-ngps0di-shard-00-00.hfmiky2.mongodb.net:27017,ac-ngps0di-shard-00-01.hfmiky2.mongodb.net:27017,ac-ngps0di-shard-00-02.hfmiky2.mongodb.net:27017/sikka_database?authSource=admin&tls=true&replicaSet=atlas-e6062j-shard-0&retryWrites=true&w=majority",
+    "ARCGIS_API_KEY": "AAPTaN4IQB0d6SXoMhnFSjdN0Mg..nimdASZXhkDczJUOqOcQVbBRCSaf9MeBIiV-1AMo75n4jD20GWA2NjA73M5Me9SOgu1eRZeP3OjXLrpn9u1VuJtaXVggVUdmgRHHFmkw60pMZzFzeFjrBgLURZO5B7cADxBRl4GD35Le82lBFRe0yw-vYfhVtNfQgNUMIyiYRfrPAhEi_BIFfMyrPR1-9EZuDWnPuINh_hPkfWapi98YsyiGKhf0HLj6o-2Y9bqWs_kKYgIZ6JFTC6REAT1_dLaYsPlX"
   }
 }
