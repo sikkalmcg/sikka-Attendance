@@ -114,9 +114,12 @@ export default function LoginPage() {
             deviceName,
           }),
         });
-        data = await response.json();
+        data = await response.json().catch(() => null);
         isSuccess = response.ok;
-        if (!isSuccess && data?.message) errorMessage = data.message;
+        if (!isSuccess) {
+          if (data?.message) errorMessage = data.message;
+          if (data?.error) setDebugInfo(`API Error: ${data.error}`);
+        }
 
         // STRICT ROLE VERIFICATION: Ensure the API's role matches the dropdown role
         if (isSuccess && data && data.role) {
@@ -179,10 +182,13 @@ export default function LoginPage() {
               isSuccess = true;
             }
           } else {
-            setDebugInfo(`Failed to load employee fallback database. Status code: ${empRes.status}`);
+            const errJson = await empRes.json().catch(() => null);
+            const detailMsg = errJson?.details || errJson?.error || errJson?.message || `Status: ${empRes.status}`;
+            setDebugInfo(`DB Error: ${detailMsg}`);
           }
-        } catch (empErr) { 
+        } catch (empErr: any) { 
           console.error("Employee fallback check failed:", empErr); 
+          setDebugInfo(`Connection Error: ${empErr?.message || empErr}`);
         }
       }
 

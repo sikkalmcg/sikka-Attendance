@@ -6,7 +6,7 @@ try {
   dns.setDefaultResultOrder('ipv4first');
 } catch { }
 
-const dbName = process.env.MONGODB_DB || 'sikka_database';
+const dbName = (process.env.MONGODB_DB || 'sikka_database').trim().replace(/^["']|["']$/g, '');
 
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
@@ -18,22 +18,20 @@ let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
 
 function createClient(): MongoClient {
-  const uri = process.env.MONGODB_URI;
+  const rawUri = process.env.MONGODB_URI;
 
-  if (!uri) {
+  if (!rawUri) {
     throw new Error('Missing environment variable: MONGODB_URI');
   }
 
+  const uri = rawUri.trim().replace(/^["']|["']$/g, '');
+
   return new MongoClient(uri, {
-    maxPoolSize: 25,
-    minPoolSize: 2,
-    maxIdleTimeMS: 60000,
+    maxPoolSize: 10,
     serverSelectionTimeoutMS: 10000,
     connectTimeoutMS: 10000,
     socketTimeoutMS: 45000,
     retryWrites: true,
-    tls: true,
-    family: 4,
   });
 }
 
