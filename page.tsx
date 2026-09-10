@@ -15,13 +15,11 @@ import { useData } from "@/context/data-context";
 import { formatDate } from "@/lib/utils";
 
 function MarkAttendancePage() {
-  // यह आपके मौजूदा "Mark Attendance" कंपोनेंट के लिए एक प्लेसहोल्डर है।
   return (
     <Card>
       <CardHeader><CardTitle>Mark Attendance</CardTitle></CardHeader>
       <CardContent>
         <p>आपकी मौजूदा अटेंडेंस मार्किंग UI यहाँ रहेगी।</p>
-        {/* प्लेसहोल्डर बटन */}
         <Button className="mt-4">Mark In/Out</Button>
       </CardContent>
     </Card>
@@ -70,7 +68,7 @@ function LeaveRequestForm() {
       return;
     }
 
-    const hasDuplicate = (leaveRequests || []).some(req => 
+    const hasDuplicate = (leaveRequests || []).some(req =>
       req.employeeId === verifiedUser?.employeeId &&
       req.status !== 'REJECTED' &&
       (new Date(fromDate) <= new Date(req.toDate) && new Date(toDate) >= new Date(req.fromDate))
@@ -168,7 +166,7 @@ function EmployeeLeaveHistory() {
                 <TableCell>{formatDate(req.toDate)}</TableCell>
                 <TableCell>{req.days}</TableCell>
                 <TableCell>
-                  <Badge variant={ req.status === 'APPROVED' ? 'default' : req.status === 'REJECTED' ? 'destructive' : 'secondary' }>{req.status}</Badge>
+                  <Badge variant={req.status === 'APPROVED' ? 'default' : req.status === 'REJECTED' ? 'destructive' : 'secondary'}>{req.status}</Badge>
                 </TableCell>
                 <TableCell>{approverMap.get((req as any).processedByUserId || (req as any).processedByUserld) || (req as any).processedByUserId || '-'}</TableCell>
               </TableRow>

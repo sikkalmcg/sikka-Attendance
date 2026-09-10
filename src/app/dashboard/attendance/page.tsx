@@ -128,7 +128,7 @@ const formatToReadableISTTime = (rawTime: any): string => {
         hour12: true,
       }).format(parsed);
     }
-  } catch (e) {}
+  } catch (e) { }
 
   return str;
 };
@@ -748,7 +748,7 @@ export default function AttendancePage() {
         return "Present";
       }
 
-      if (approvedLeave) return "Absent on Leave";
+      if (approvedLeave) return "Absent On Leave";
       if (isSun) return "Weekly Off";
       if (customHoliday) return "Holiday";
 
@@ -791,8 +791,8 @@ export default function AttendancePage() {
               const inDT = (punchRec.inDate && punchRec.inTime)
                 ? parseDateTime(punchRec.inDate, punchRec.inTime)
                 : (punchRec.date && punchRec.inTime)
-                ? parseDateTime(punchRec.date, punchRec.inTime)
-                : (punchRec.inDateTime ? parseISO(punchRec.inDateTime) : null);
+                  ? parseDateTime(punchRec.date, punchRec.inTime)
+                  : (punchRec.inDateTime ? parseISO(punchRec.inDateTime) : null);
               if (inDT && isValid(inDT)) {
                 const diffHours = (now.getTime() - inDT.getTime()) / (1000 * 60 * 60);
                 if (diffHours >= 16) hours = 16.0;
@@ -920,8 +920,8 @@ export default function AttendancePage() {
     const inDT = (active?.inDate && active?.inTime)
       ? parseDateTime(active.inDate, active.inTime)
       : (active?.date && active?.inTime)
-      ? parseDateTime(active.date, active.inTime)
-      : (active?.inDateTime ? parseISO(active.inDateTime) : null);
+        ? parseDateTime(active.date, active.inTime)
+        : (active?.inDateTime ? parseISO(active.inDateTime) : null);
 
     let canOut = false;
     let nextOutAt: Date | null = null;
@@ -1307,8 +1307,8 @@ export default function AttendancePage() {
     const inDT = (activeRecord.inDate && activeRecord.inTime)
       ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
       : (activeRecord.date && activeRecord.inTime)
-      ? parseDateTime(activeRecord.date, activeRecord.inTime)
-      : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+        ? parseDateTime(activeRecord.date, activeRecord.inTime)
+        : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
     const outDT = parseDateTime(format(now, "yyyy-MM-dd"), format(now, "HH:mm")) || now;
 
     if (!inDT || !isValid(inDT)) {
@@ -1957,7 +1957,7 @@ export default function AttendancePage() {
           });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       isMounted = false;
@@ -1994,7 +1994,7 @@ export default function AttendancePage() {
           });
           clientLat = pos.coords.latitude;
           clientLng = pos.coords.longitude;
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const queryUrl = clientLat !== null && clientLng !== null
@@ -2592,8 +2592,8 @@ export default function AttendancePage() {
                     const startDT = (activeRecord.inDate && activeRecord.inTime)
                       ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
                       : (activeRecord.date && activeRecord.inTime)
-                      ? parseDateTime(activeRecord.date, activeRecord.inTime)
-                      : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+                        ? parseDateTime(activeRecord.date, activeRecord.inTime)
+                        : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
                     const formatted = startDT && isValid(startDT)
                       ? format(startDT, "dd-MMM, hh:mm a")
                       : `${activeRecord.inDate || activeRecord.date || 'Today'}, ${activeRecord.inTime}`;
@@ -2672,8 +2672,8 @@ export default function AttendancePage() {
                         const startDT = (activeRecord.inDate && activeRecord.inTime)
                           ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
                           : (activeRecord.date && activeRecord.inTime)
-                          ? parseDateTime(activeRecord.date, activeRecord.inTime)
-                          : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+                            ? parseDateTime(activeRecord.date, activeRecord.inTime)
+                            : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
                         const dateFormatted = startDT && isValid(startDT) ? format(startDT, "dd-MMM-yyyy") : (activeRecord.inDate || activeRecord.date || format(getISTTime(), "dd-MMM-yyyy"));
                         return `${t.shiftStarted(dateFormatted, activeRecord.inTime)} • ${activeRecord.sessionIndex === 2 ? t.maxAutoOut8h : t.maxAutoOut16h}`;
                       })()}
@@ -3132,8 +3132,8 @@ export default function AttendancePage() {
                     const startDT = (activeRecord.inDate && activeRecord.inTime)
                       ? parseDateTime(activeRecord.inDate, activeRecord.inTime)
                       : (activeRecord.date && activeRecord.inTime)
-                      ? parseDateTime(activeRecord.date, activeRecord.inTime)
-                      : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
+                        ? parseDateTime(activeRecord.date, activeRecord.inTime)
+                        : (activeRecord.inDateTime ? parseISO(activeRecord.inDateTime) : null);
                     const dateFormatted = startDT && isValid(startDT) ? format(startDT, "dd-MMM-yyyy") : (activeRecord.inDate || activeRecord.date || format(getISTTime(), "dd-MMM-yyyy"));
                     return t.shiftStarted(dateFormatted, activeRecord.inTime);
                   })()}
