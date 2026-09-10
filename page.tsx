@@ -19,7 +19,7 @@ function MarkAttendancePage() {
     <Card>
       <CardHeader><CardTitle>Mark Attendance</CardTitle></CardHeader>
       <CardContent>
-        <p>आपकी मौजूदा अटेंडेंस मार्किंग UI यहाँ रहेगी।</p>
+        <p>आपकी मौजूदा Attendance मार्किंग UI यहाँ रहेगी।</p>
         <Button className="mt-4">Mark In/Out</Button>
       </CardContent>
     </Card>
