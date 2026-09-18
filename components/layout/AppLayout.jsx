@@ -28,7 +28,7 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
             try {
               localStorage.removeItem('attendance_token');
               localStorage.removeItem('attendance_user');
-            } catch {}
+            } catch { }
           }
           window.location.href = '/login';
           return;
@@ -40,7 +40,7 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
             try {
               localStorage.removeItem('attendance_token');
               localStorage.removeItem('attendance_user');
-            } catch {}
+            } catch { }
           }
           router.push('/login');
           return;
@@ -89,7 +89,7 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
     try {
       localStorage.removeItem('attendance_token');
       localStorage.removeItem('attendance_user');
-    } catch {}
+    } catch { }
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
@@ -167,9 +167,8 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
         <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30 flex items-center justify-around py-2 shadow-lg">
           <Link
             href="/mark-attendance"
-            className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl text-xs font-semibold ${
-              pathname === '/mark-attendance' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
-            }`}
+            className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl text-xs font-semibold ${pathname === '/mark-attendance' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
+              }`}
           >
             <Fingerprint className="w-5 h-5" />
             <span>Mark Attendance</span>
@@ -179,7 +178,7 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
             className="flex flex-col items-center gap-1 py-1 px-4 rounded-xl text-xs font-semibold text-rose-500 hover:text-rose-700 cursor-pointer"
           >
             <LogOut className="w-5 h-5" />
-            <span>Logout</span>
+            <span>LogOut</span>
           </button>
         </nav>
       )}
