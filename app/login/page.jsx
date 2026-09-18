@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Building2,
@@ -20,8 +20,50 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingAutoLogin, setCheckingAutoLogin] = useState(true);
   const [error, setError] = useState('');
   const [showHelp, setShowHelp] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkAutoLogin() {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('attendance_token') : null;
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch('/api/auth/me', { headers, cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user) {
+            const target = (data.user.role === 'Employee' || data.user.userType === 'EMPLOYEE')
+              ? '/mark-attendance'
+              : '/dashboard';
+            window.location.replace(target);
+            return;
+          }
+        }
+
+        // Stale or invalid token
+        if (token) {
+          try {
+            localStorage.removeItem('attendance_token');
+            localStorage.removeItem('attendance_user');
+          } catch {}
+        }
+      } catch (err) {
+        console.error('Auto-login check error:', err);
+      } finally {
+        if (isMounted) {
+          setCheckingAutoLogin(false);
+        }
+      }
+    }
+
+    checkAutoLogin();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,7 +93,19 @@ export default function LoginPage() {
         return;
       }
 
-      // Successful login -> Full page navigation to reset memory and load new user state
+      // Store token and user details in localStorage for persistent auto-login on mobile APK
+      if (data.token) {
+        try {
+          localStorage.setItem('attendance_token', data.token);
+          if (data.user) {
+            localStorage.setItem('attendance_user', JSON.stringify(data.user));
+          }
+        } catch (storageErr) {
+          console.error('Storage error:', storageErr);
+        }
+      }
+
+      // Full page navigation to load new user state
       window.location.href = data.redirectTo || '/dashboard';
     } catch (err) {
       console.error('Login error:', err);
@@ -60,11 +114,24 @@ export default function LoginPage() {
     }
   };
 
+
   const fillQuickCredentials = (user, pass) => {
     setUsername(user);
     setPassword(pass);
     setError('');
   };
+
+  if (checkingAutoLogin) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-medium text-slate-400">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">

@@ -9,28 +9,43 @@ export default function RootPage() {
   useEffect(() => {
     async function redirectUser() {
       try {
-        const res = await fetch('/api/auth/me');
+        const token = typeof window !== 'undefined' ? localStorage.getItem('attendance_token') : null;
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch('/api/auth/me', { headers, cache: 'no-store' });
         if (!res.ok) {
-          router.replace('/login');
+          if (token) {
+            try {
+              localStorage.removeItem('attendance_token');
+              localStorage.removeItem('attendance_user');
+            } catch {}
+          }
+          window.location.replace('/login');
           return;
         }
         const data = await res.json();
         if (data.authenticated && data.user) {
           if (data.user.role === 'Employee' || data.user.userType === 'EMPLOYEE') {
-            router.replace('/mark-attendance');
+            window.location.replace('/mark-attendance');
           } else {
-            router.replace('/dashboard');
+            window.location.replace('/dashboard');
           }
         } else {
-          router.replace('/login');
+          if (token) {
+            try {
+              localStorage.removeItem('attendance_token');
+              localStorage.removeItem('attendance_user');
+            } catch {}
+          }
+          window.location.replace('/login');
         }
       } catch {
-        router.replace('/login');
+        window.location.replace('/login');
       }
     }
 
     redirectUser();
   }, [router]);
+
 
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center">

@@ -20,14 +20,28 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
   useEffect(() => {
     async function checkAuth() {
       try {
-        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        const token = typeof window !== 'undefined' ? localStorage.getItem('attendance_token') : null;
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch('/api/auth/me', { headers, cache: 'no-store' });
         if (!res.ok) {
+          if (token) {
+            try {
+              localStorage.removeItem('attendance_token');
+              localStorage.removeItem('attendance_user');
+            } catch {}
+          }
           window.location.href = '/login';
           return;
         }
 
         const data = await res.json();
         if (!data.authenticated || !data.user) {
+          if (token) {
+            try {
+              localStorage.removeItem('attendance_token');
+              localStorage.removeItem('attendance_user');
+            } catch {}
+          }
           router.push('/login');
           return;
         }
@@ -44,7 +58,6 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
           setLoading(false);
           return;
         }
-
 
         // Check Admin-only barrier
         if (adminOnly && !isAdmin) {
@@ -74,12 +87,17 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('attendance_token');
+      localStorage.removeItem('attendance_user');
+    } catch {}
+    try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
       console.error('Logout error:', e);
     }
     window.location.href = '/login';
   };
+
 
   if (loading) {
     return (

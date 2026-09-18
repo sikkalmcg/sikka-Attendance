@@ -66,8 +66,12 @@ export async function POST(request) {
 
       const token = await createSessionToken(payload);
 
+      const COOKIE_MAX_AGE = 365 * 24 * 60 * 60; // 365 days
+      const COOKIE_EXPIRES = new Date(Date.now() + COOKIE_MAX_AGE * 1000);
+
       const response = NextResponse.json({
         success: true,
+        token,
         user: {
           id: user.id,
           userId: user.userId,
@@ -81,13 +85,14 @@ export async function POST(request) {
         redirectTo: '/dashboard',
       });
 
-      // Set secure HTTP-only cookie
+      // Set secure HTTP-only persistent cookie
       response.cookies.set(COOKIE_NAME, token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 7 * 24 * 60 * 60, // 7 days
+        maxAge: COOKIE_MAX_AGE,
+        expires: COOKIE_EXPIRES,
       });
 
       return response;
@@ -164,8 +169,12 @@ export async function POST(request) {
 
       const token = await createSessionToken(payload);
 
+      const COOKIE_MAX_AGE = 365 * 24 * 60 * 60; // 365 days
+      const COOKIE_EXPIRES = new Date(Date.now() + COOKIE_MAX_AGE * 1000);
+
       const response = NextResponse.json({
         success: true,
+        token,
         user: {
           id: employee.id,
           employeeId: employee.employeeId,
@@ -183,7 +192,8 @@ export async function POST(request) {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/',
-        maxAge: 7 * 24 * 60 * 60,
+        maxAge: COOKIE_MAX_AGE,
+        expires: COOKIE_EXPIRES,
       });
 
       return response;
@@ -202,3 +212,5 @@ export async function POST(request) {
     );
   }
 }
+
+

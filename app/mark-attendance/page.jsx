@@ -109,12 +109,17 @@ export default function MarkAttendancePage() {
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('attendance_token');
+      localStorage.removeItem('attendance_user');
+    } catch {}
+    try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (e) {
       console.error(e);
     }
     window.location.href = '/login';
   };
+
 
   useEffect(() => {
     fetchShiftStatus();

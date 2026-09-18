@@ -1,4 +1,5 @@
 import './globals.css';
+import ClientAuthSync from '@/components/auth/ClientAuthSync';
 
 export const metadata = {
   title: 'Attendance Management Portal',
@@ -20,8 +21,10 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased selection:bg-blue-500 selection:text-white">
+        <ClientAuthSync />
         {children}
       </body>
     </html>
   );
 }
+

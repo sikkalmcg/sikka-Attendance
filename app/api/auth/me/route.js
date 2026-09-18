@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
+import { getSessionUser, extractTokenFromRequest, COOKIE_NAME } from '@/lib/auth';
 import connectToDatabase from '@/lib/mongodb';
 import User from '@/models/User';
 import Employee from '@/models/Employee';
@@ -14,12 +14,29 @@ const NO_CACHE_HEADERS = {
   Expires: '0',
 };
 
+const COOKIE_MAX_AGE = 365 * 24 * 60 * 60; // 365 days
+
 export async function GET(request) {
   try {
     const session = await getSessionUser(request);
     if (!session) {
       return NextResponse.json({ authenticated: false }, { status: 401, headers: NO_CACHE_HEADERS });
     }
+
+    const token = await extractTokenFromRequest(request);
+    const attachCookie = (response) => {
+      if (token) {
+        response.cookies.set(COOKIE_NAME, token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: COOKIE_MAX_AGE,
+          expires: new Date(Date.now() + COOKIE_MAX_AGE * 1000),
+        });
+      }
+      return response;
+    };
 
     await connectToDatabase();
 
@@ -41,21 +58,24 @@ export async function GET(request) {
 
       if (!rawUser) {
         // Fallback to session payload if database lookup has issue
-        return NextResponse.json(
-          {
-            authenticated: true,
-            user: {
-              id: session.sub,
-              userId: session.userId || session.sub,
-              fullName: session.fullName || session.username,
-              username: session.username,
-              role: session.role || 'User',
-              permissions: session.permissions || [],
-              plantIds: session.plantIds || [],
-              userType: 'SYSTEM_USER',
+        return attachCookie(
+          NextResponse.json(
+            {
+              authenticated: true,
+              token: token || undefined,
+              user: {
+                id: session.sub,
+                userId: session.userId || session.sub,
+                fullName: session.fullName || session.username,
+                username: session.username,
+                role: session.role || 'User',
+                permissions: session.permissions || [],
+                plantIds: session.plantIds || [],
+                userType: 'SYSTEM_USER',
+              },
             },
-          },
-          { headers: NO_CACHE_HEADERS }
+            { headers: NO_CACHE_HEADERS }
+          )
         );
       }
 
@@ -67,21 +87,24 @@ export async function GET(request) {
         );
       }
 
-      return NextResponse.json(
-        {
-          authenticated: true,
-          user: {
-            id: user.id,
-            userId: user.userId,
-            fullName: user.fullName,
-            username: user.username,
-            role: user.role,
-            permissions: user.permissions,
-            plantIds: user.plantIds || [],
-            userType: 'SYSTEM_USER',
+      return attachCookie(
+        NextResponse.json(
+          {
+            authenticated: true,
+            token: token || undefined,
+            user: {
+              id: user.id,
+              userId: user.userId,
+              fullName: user.fullName,
+              username: user.username,
+              role: user.role,
+              permissions: user.permissions,
+              plantIds: user.plantIds || [],
+              userType: 'SYSTEM_USER',
+            },
           },
-        },
-        { headers: NO_CACHE_HEADERS }
+          { headers: NO_CACHE_HEADERS }
+        )
       );
     }
 
@@ -105,20 +128,26 @@ export async function GET(request) {
         return NextResponse.json({ authenticated: false, error: 'Employee inactive' }, { status: 401 });
       }
 
-      return NextResponse.json({
-        authenticated: true,
-        user: {
-          id: employee.id,
-          employeeId: employee.employeeId,
-          fullName: employee.fullName,
-          designation: employee.designation,
-          aadhaarNumber: employee.aadhaarNumber,
-          mobileNumber: employee.mobileNumber,
-          role: 'Employee',
-          attendanceAuthorized: Boolean(employee.attendanceAuthorized),
-          userType: 'EMPLOYEE',
-        },
-      }, { headers: NO_CACHE_HEADERS });
+      return attachCookie(
+        NextResponse.json(
+          {
+            authenticated: true,
+            token: token || undefined,
+            user: {
+              id: employee.id,
+              employeeId: employee.employeeId,
+              fullName: employee.fullName,
+              designation: employee.designation,
+              aadhaarNumber: employee.aadhaarNumber,
+              mobileNumber: employee.mobileNumber,
+              role: 'Employee',
+              attendanceAuthorized: Boolean(employee.attendanceAuthorized),
+              userType: 'EMPLOYEE',
+            },
+          },
+          { headers: NO_CACHE_HEADERS }
+        )
+      );
     }
 
     return NextResponse.json({ authenticated: false }, { status: 401, headers: NO_CACHE_HEADERS });
