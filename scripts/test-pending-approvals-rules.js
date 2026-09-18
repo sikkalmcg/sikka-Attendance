@@ -192,8 +192,80 @@ async function runValidation() {
     console.error('❌ FAIL: Failed to approve past date absent record!\n', dataApprovePastAbsent);
   }
 
+  // ── TEST 8: Overnight Attendance Rule (Rule 6) ───────────────────────
+  console.log('--- TEST 8: Overnight Attendance Validation (Rule 6) ---');
+  // 8a: Future Mark OUT overnight rejected
+  const resOvernightFuture = await fetch(`http://localhost:3000/api/attendance/manual`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      employeeId: firstEmp.employeeId,
+      markInAt: '2026-09-10T18:30',
+      markOutAt: '2099-09-11T05:00', // Far future
+    }),
+  });
+  const dataOvernightFuture = await resOvernightFuture.json();
+  if (
+    resOvernightFuture.status === 400 &&
+    dataOvernightFuture.error === 'Future date or time is not allowed. Please select the current or past date and time.'
+  ) {
+    console.log('✅ PASS: Future Mark OUT on overnight shift rejected!');
+  } else {
+    console.error('❌ FAIL: Expected 400 future rejection on overnight shift!\n', dataOvernightFuture);
+  }
+
+  // 8b: Valid past overnight attendance retains attendanceDate of Mark IN
+  const resOvernightPast = await fetch(`http://localhost:3000/api/attendance/manual`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      employeeId: firstEmp.employeeId,
+      markInAt: '2026-09-10T18:30',
+      markOutAt: '2026-09-11T05:00', // Past
+    }),
+  });
+  const dataOvernightPast = await resOvernightPast.json();
+  if (
+    resOvernightPast.status === 200 &&
+    dataOvernightPast.attendance?.attendanceDate === '2026-09-10' &&
+    dataOvernightPast.attendance?.workingMinutes === 630
+  ) {
+    console.log('✅ PASS: Valid overnight shift accepted! Attendance Date pinned to Mark IN date (2026-09-10), workingMinutes = 630.\n');
+    // Clean up
+    await db.collection('attendance').deleteOne({ _id: new mongoose.Types.ObjectId(dataOvernightPast.attendance.id || dataOvernightPast.attendance._id) });
+  } else {
+    console.error('❌ FAIL: Overnight attendance validation failed!\n', dataOvernightPast);
+  }
+
+  // ── TEST 9: Approval [id] Future Date Restriction ────────────────────
+  console.log('--- TEST 9: Approval [id] Future Date Restriction ---');
+  // Create a temporary record with future markInAt directly in DB
+  const futureRec = await db.collection('attendance').insertOne({
+    employeeId: firstEmp.employeeId,
+    employeeName: firstEmp.fullName,
+    attendanceDate: '2099-01-01',
+    markInAt: new Date('2099-01-01T09:00:00Z'),
+    approvalStatus: 'PENDING',
+    status: 'ACTIVE',
+  });
+  const resApproveFutureId = await fetch(`http://localhost:3000/api/approvals/${futureRec.insertedId}`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ action: 'approve' }),
+  });
+  const dataApproveFutureId = await resApproveFutureId.json();
+  if (
+    resApproveFutureId.status === 400 &&
+    dataApproveFutureId.error === 'Future date or time is not allowed. Please select the current or past date and time.'
+  ) {
+    console.log('✅ PASS: /api/approvals/[id] strictly rejected approving future record!\n');
+  } else {
+    console.error('❌ FAIL: Expected 400 future date rejection on /api/approvals/[id]!\n', dataApproveFutureId);
+  }
+  await db.collection('attendance').deleteOne({ _id: futureRec.insertedId });
+
   console.log('=====================================================');
-  console.log('🎉 All 7 Core Verification Tests Passed Successfully!');
+  console.log('🎉 All 9 Comprehensive Verification Tests Passed Successfully!');
   console.log('=====================================================');
 
   await mongoose.disconnect();

@@ -163,6 +163,15 @@ export default function ApprovalPage() {
 
   // Helper to determine approval rule eligibility per prompt specifications
   const getApprovalEligibility = (record) => {
+    // If already approved, disable approval
+    if (record.approvalStatus === 'APPROVED' || record.approved === true) {
+      return {
+        canApprove: false,
+        actionType: 'DISABLED',
+        reason: 'This attendance record is already approved.',
+      };
+    }
+
     const recDate = record.attendanceDate || getAttendanceDateString(record) || selectedDate;
     const isCurrentDate = recDate === currentDate;
     const isAbsent = record.status === 'ABSENT' || (!record.markInAt && !record.markOutAt);
@@ -273,7 +282,7 @@ export default function ApprovalPage() {
   };
 
   // Open Manual Attendance Modal
-  const openManualModal = () => {
+  const openManualModal = (record = null) => {
     // If viewing current date, use current time; if past date, use 09:00 on selectedDate
     const defaultIn =
       selectedDate === currentDate
@@ -281,8 +290,8 @@ export default function ApprovalPage() {
         : `${selectedDate}T09:00`;
 
     setManualForm({
-      employeeId: '',
-      plantId: '',
+      employeeId: record?.employeeId || '',
+      plantId: record?.plantId || '',
       markInAt: defaultIn,
       markOutAt: '',
       calculatedHours: '0:00',
@@ -486,7 +495,7 @@ export default function ApprovalPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={openManualModal}
+              onClick={() => openManualModal()}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs text-white bg-slate-900 hover:bg-slate-800 shadow-sm transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -754,11 +763,7 @@ export default function ApprovalPage() {
                           )}
                         </td>
                         <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap">
-                          {isActive ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                              -
-                            </span>
-                          ) : record.markOutAt ? (
+                          {record.markOutAt ? (
                             <span title={formatKolkataDateTime(record.markOutAt)}>
                               {formatKolkataTime(record.markOutAt)}
                             </span>
@@ -833,6 +838,17 @@ export default function ApprovalPage() {
                                   className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-400 font-medium text-xs cursor-not-allowed border border-slate-200"
                                 >
                                   Approve
+                                </button>
+                              )}
+
+                              {/* Manual Attendance creation for Absent employees */}
+                              {!isMultipleSelected && isAbsent && (
+                                <button
+                                  onClick={() => openManualModal(record)}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-xs transition-colors cursor-pointer border border-blue-200"
+                                  title="Create manual attendance for this employee"
+                                >
+                                  + Mark
                                 </button>
                               )}
 

@@ -12,7 +12,11 @@ import {
   Building2,
   Check,
 } from 'lucide-react';
-import { formatKolkataDateTime, formatWorkingHours } from '@/lib/timezone';
+import {
+  formatKolkataDateTime,
+  formatWorkingHours,
+  getTodayDateString,
+} from '@/lib/timezone';
 
 export default function ReportPage() {
   const [records, setRecords] = useState([]);
@@ -27,8 +31,8 @@ export default function ReportPage() {
   // Section 24: Default Date Range
   // From = Previous Month's 1st Date, To = Current Date
   const getDefaultDates = () => {
+    const toStr = getTodayDateString();
     const today = new Date();
-    const toStr = today.toISOString().slice(0, 10);
 
     // 1st of previous month
     const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
@@ -249,6 +253,7 @@ export default function ReportPage() {
               <input
                 type="date"
                 value={dateFrom}
+                max={getTodayDateString()}
                 onChange={(e) => setDateFrom(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />
@@ -262,6 +267,7 @@ export default function ReportPage() {
               <input
                 type="date"
                 value={dateTo}
+                max={getTodayDateString()}
                 onChange={(e) => setDateTo(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
               />

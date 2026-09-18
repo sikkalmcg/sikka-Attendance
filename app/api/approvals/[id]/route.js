@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import { authorizeSystemUser } from '@/lib/rbac';
+import {
+  getAttendanceDateString,
+  isFutureKolkataDate,
+  isFutureKolkataDateTime,
+} from '@/lib/timezone';
 
 export async function POST(request, { params }) {
   const auth = await authorizeSystemUser(request, 'approval');
@@ -19,20 +25,32 @@ export async function POST(request, { params }) {
 
     await connectToDatabase();
 
-    let record = null;
-    try {
-      record = await Attendance.findById(id);
-    } catch (e) {}
-
-    if (!record) {
-      record = await Attendance.findOne({ $or: [{ _id: id }, { id: id }] });
-    }
+    const objId = mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
+    let record = await Attendance.findOne({
+      $or: [
+        { _id: id },
+        ...(objId ? [{ _id: objId }] : []),
+        { id: id },
+      ],
+    });
 
     if (!record) {
       return NextResponse.json({ error: 'Attendance record not found.' }, { status: 404 });
     }
 
     if (action === 'approve') {
+      const recDate = getAttendanceDateString(record);
+      if (
+        isFutureKolkataDate(recDate) ||
+        (record.markInAt && isFutureKolkataDateTime(record.markInAt)) ||
+        (record.markOutAt && isFutureKolkataDateTime(record.markOutAt))
+      ) {
+        return NextResponse.json(
+          { error: 'Future date or time is not allowed. Please select the current or past date and time.' },
+          { status: 400 }
+        );
+      }
+
       record.approvalStatus = 'APPROVED';
       record.approved = true;
       record.approvedBy = session.fullName;

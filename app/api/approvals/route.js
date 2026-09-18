@@ -42,7 +42,14 @@ export async function GET(request) {
     if (approvalStatus === 'PENDING') {
       // 1. Fetch all active employees matching plant scope
       const empQueryParts = [
-        { $or: [{ status: 'Active' }, { active: true }, { active: { $exists: false }, status: { $exists: false } }] },
+        {
+          $or: [
+            { status: { $regex: /^active$/i } },
+            { status: 'Active' },
+            { active: true },
+            { active: { $exists: false }, status: { $exists: false } },
+          ],
+        },
       ];
       if (!plantScope.isAllPlants) {
         empQueryParts.push({
