@@ -14,17 +14,21 @@ import { normalizeEmployee } from '@/lib/normalize';
  * (string _id or employeeId-based lookup).
  */
 async function findEmployeeById(id) {
-  // Build OR conditions — always include string _id and employeeId matches
-  // This handles legacy records where _id is a custom string (not an ObjectId)
+  if (!id) return null;
+  const decodedId = decodeURIComponent(String(id).trim());
+
   const conditions = [
-    { _id: id },        // direct string _id match (handles custom string _id)
-    { id: id },         // legacy 'id' field
-    { employeeId: id }, // business key lookup
+    { _id: decodedId },        // direct string _id match (handles custom string _id)
+    { id: decodedId },         // legacy 'id' field
+    { employeeId: decodedId }, // business key lookup
+    { employeeId: { $regex: new RegExp(`^${decodedId}$`, 'i') } },
   ];
 
   // Additionally try ObjectId cast if id looks like a valid ObjectId hex
-  if (mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === id) {
-    conditions.unshift({ _id: new mongoose.Types.ObjectId(id) });
+  if (mongoose.Types.ObjectId.isValid(decodedId)) {
+    try {
+      conditions.unshift({ _id: new mongoose.Types.ObjectId(decodedId) });
+    } catch {}
   }
 
   return Employee.findOne({ $or: conditions });
