@@ -126,41 +126,7 @@ export async function GET(request) {
         });
       }
 
-      // If no specific dateParam is requested, query all pending records from MongoDB
-      if (!dateParam) {
-        const rawAttendances = await Attendance.find({ $and: attQueryParts })
-          .select(ATTENDANCE_PROJECTION)
-          .lean()
-          .sort({ markInAt: -1, createdAt: -1 })
-          .limit(300);
-
-        const attendances = rawAttendances
-          .map(normalizeAttendance)
-          .filter((a) => a.approvalStatus !== 'APPROVED' && a.approved !== true);
-
-        let finalList = attendances;
-        if (status) {
-          if (status === 'ACTIVE') {
-            finalList = attendances.filter((a) => a.status === 'ACTIVE' && !a.markOutAt);
-          } else if (status === 'ABSENT') {
-            finalList = attendances.filter((a) => a.status === 'ABSENT');
-          } else if (status === 'COMPLETED') {
-            finalList = attendances.filter((a) => a.status === 'COMPLETED' || a.status === 'AUTO_COMPLETED');
-          }
-        }
-
-        await enrichWithEmployeeDesignation(finalList);
-
-        return NextResponse.json({
-          success: true,
-          attendances: finalList,
-          serverDate: todayDate,
-          serverTime: new Date().toISOString(),
-        });
-      }
-
-      // If dateParam is explicitly provided (e.g. historical date lookup or automated tests)
-      const selectedDate = dateParam;
+      // Active employees query for the plant scope
       const empQueryParts = [
         {
           $or: [
@@ -185,86 +151,125 @@ export async function GET(request) {
         .lean()
         .sort({ fullName: 1, employeeId: 1 });
 
-      const istStart = parseKolkataDateTime(`${selectedDate}T00:00:00`);
-      const istEnd = new Date(istStart.getTime() + 24 * 60 * 60 * 1000);
-
-      const dateFilter = {
-        $or: [
-          { attendanceDate: selectedDate },
-          { inDate: selectedDate },
-          { date: selectedDate },
-          {
-            markInAt: {
-              $gte: istStart,
-              $lt: istEnd,
+      // Build attendance query depending on whether dateParam is passed
+      const scopedAttQueryParts = [...attQueryParts];
+      if (dateParam) {
+        const istStart = parseKolkataDateTime(`${dateParam}T00:00:00`);
+        const istEnd = new Date(istStart.getTime() + 24 * 60 * 60 * 1000);
+        scopedAttQueryParts.push({
+          $or: [
+            { attendanceDate: dateParam },
+            { inDate: dateParam },
+            { date: dateParam },
+            {
+              markInAt: {
+                $gte: istStart,
+                $lt: istEnd,
+              },
             },
-          },
-        ],
-      };
+          ],
+        });
+      }
 
-      const scopedAttQueryParts = [...attQueryParts, dateFilter];
       const rawAttendances = await Attendance.find({ $and: scopedAttQueryParts })
         .select(ATTENDANCE_PROJECTION)
         .lean()
-        .sort({
-          markInAt: -1,
-          createdAt: -1,
-        });
-      const attendances = rawAttendances.map(normalizeAttendance);
+        .sort({ markInAt: -1, createdAt: -1 })
+        .limit(500);
 
-      // Index attendances by employeeId & aadhaarNumber
-      const attendanceByEmp = new Map();
-      for (const att of attendances) {
-        const empIdKey = (att.employeeId || '').toUpperCase();
-        if (empIdKey && !attendanceByEmp.has(empIdKey)) {
-          attendanceByEmp.set(empIdKey, att);
-        }
-        if (att.aadhaarNumber && !attendanceByEmp.has(att.aadhaarNumber)) {
-          attendanceByEmp.set(att.aadhaarNumber, att);
-        }
-      }
+      const dbAttendances = rawAttendances
+        .map(normalizeAttendance)
+        .filter((a) => a.approvalStatus !== 'APPROVED' && a.approved !== true);
 
-      // Check if any employee is already approved for this date in DB to avoid duplicate absent entries
-      const approvedOnDate = await Attendance.find({
-        $and: [
-          dateFilter,
-          { $or: [{ approvalStatus: 'APPROVED' }, { approved: true }] },
-        ],
-      }).select('employeeId aadhaarNumber').lean();
-      const approvedEmpSet = new Set();
-      for (const appDoc of approvedOnDate) {
-        if (appDoc.employeeId) approvedEmpSet.add(appDoc.employeeId.toUpperCase());
-        if (appDoc.aadhaarNumber) approvedEmpSet.add(appDoc.aadhaarNumber);
-      }
-
-      const combinedList = [];
-      const seenEmpIds = new Set();
-
-      for (const rawEmp of activeEmployees) {
-        const emp = normalizeEmployee(rawEmp);
-        const empIdKey = (emp.employeeId || '').toUpperCase();
-        seenEmpIds.add(empIdKey);
-        if (emp.aadhaarNumber) seenEmpIds.add(emp.aadhaarNumber);
-
-        // If employee is already approved for this date, do NOT display in Pending Approvals
-        if (approvedEmpSet.has(empIdKey) || (emp.aadhaarNumber && approvedEmpSet.has(emp.aadhaarNumber))) {
-          continue;
-        }
-
-        const existing = attendanceByEmp.get(empIdKey) || (emp.aadhaarNumber ? attendanceByEmp.get(emp.aadhaarNumber) : null);
-
-        if (existing) {
-          if (existing.approvalStatus !== 'APPROVED' && existing.approved !== true) {
-            combinedList.push({
-              ...existing,
-              designation: emp.designation || existing.designation || 'Staff',
-              attendanceDate: existing.attendanceDate || selectedDate,
-            });
+      // Determine eligible dates for absent record generation
+      const eligibleDatesSet = new Set();
+      if (dateParam) {
+        eligibleDatesSet.add(dateParam);
+      } else {
+        // All dates mode: collect dates with pending records plus today
+        for (const att of dbAttendances) {
+          const d = att.attendanceDate || att.inDate;
+          if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+            eligibleDatesSet.add(d);
           }
-        } else {
+        }
+        eligibleDatesSet.add(todayDate);
+      }
+      const eligibleDates = Array.from(eligibleDatesSet).sort().reverse();
+
+      // Find any employees already approved on these eligible dates to prevent duplicate absent entries
+      const approvedOnDates = await Attendance.find({
+        $and: [
+          {
+            $or: [
+              { attendanceDate: { $in: eligibleDates } },
+              { inDate: { $in: eligibleDates } },
+              { date: { $in: eligibleDates } },
+            ],
+          },
+          {
+            $or: [
+              { approvalStatus: { $in: ['APPROVED', 'approved', 'Approved'] } },
+              { approved: true },
+              { approved: 'true' },
+            ],
+          },
+        ],
+      })
+        .select('employeeId aadhaarNumber attendanceDate inDate date')
+        .lean();
+
+      const approvedKeySet = new Set();
+      for (const appDoc of approvedOnDates) {
+        const d = appDoc.attendanceDate || appDoc.inDate || appDoc.date;
+        if (d) {
+          if (appDoc.employeeId) approvedKeySet.add(`${appDoc.employeeId.toUpperCase()}_${d}`);
+          if (appDoc.aadhaarNumber) approvedKeySet.add(`${appDoc.aadhaarNumber}_${d}`);
+        }
+      }
+
+      // Track existing pending attendance records by (empId + '_' + date) and (aadhaar + '_' + date)
+      const pendingKeySet = new Set();
+      const combinedList = [];
+      const seenRecordKeys = new Set();
+
+      for (const att of dbAttendances) {
+        const d = att.attendanceDate || att.inDate || todayDate;
+        const empIdKey = (att.employeeId || '').toUpperCase();
+        const recordKey = `${empIdKey}_${d}`;
+
+        if (!seenRecordKeys.has(recordKey)) {
+          seenRecordKeys.add(recordKey);
+          if (empIdKey) pendingKeySet.add(`${empIdKey}_${d}`);
+          if (att.aadhaarNumber) pendingKeySet.add(`${att.aadhaarNumber}_${d}`);
+          combinedList.push(att);
+        }
+      }
+
+      // Generate Absent attendance records for employees with no attendance on each eligible date
+      for (const date of eligibleDates) {
+        for (const rawEmp of activeEmployees) {
+          const emp = normalizeEmployee(rawEmp);
+          const empIdKey = (emp.employeeId || '').toUpperCase();
+          const empDateKey = `${empIdKey}_${date}`;
+          const aadhaarDateKey = emp.aadhaarNumber ? `${emp.aadhaarNumber}_${date}` : null;
+
+          // Skip if employee already has a pending or approved record on this date
+          if (
+            pendingKeySet.has(empDateKey) ||
+            (aadhaarDateKey && pendingKeySet.has(aadhaarDateKey)) ||
+            approvedKeySet.has(empDateKey) ||
+            (aadhaarDateKey && approvedKeySet.has(aadhaarDateKey)) ||
+            seenRecordKeys.has(empDateKey)
+          ) {
+            continue;
+          }
+
+          seenRecordKeys.add(empDateKey);
+
           combinedList.push({
-            id: `absent_${emp.employeeId}_${selectedDate}`,
-            _id: `absent_${emp.employeeId}_${selectedDate}`,
+            id: `absent_${emp.employeeId}_${date}`,
+            _id: `absent_${emp.employeeId}_${date}`,
             isSyntheticAbsent: true,
             employeeId: emp.employeeId,
             employeeName: emp.fullName,
@@ -281,18 +286,10 @@ export async function GET(request) {
             attendanceType: 'Absent',
             approvalStatus: 'PENDING',
             approved: false,
-            attendanceDate: selectedDate,
+            attendanceDate: date,
             markOutType: '-',
             markOutPlantName: '-',
           });
-        }
-      }
-
-      for (const att of attendances) {
-        const empIdKey = (att.employeeId || '').toUpperCase();
-        if (!seenEmpIds.has(empIdKey) && att.approvalStatus !== 'APPROVED' && att.approved !== true) {
-          combinedList.push(att);
-          seenEmpIds.add(empIdKey);
         }
       }
 
@@ -312,7 +309,7 @@ export async function GET(request) {
       return NextResponse.json({
         success: true,
         attendances: finalList,
-        selectedDate,
+        ...(dateParam ? { selectedDate: dateParam } : {}),
         serverDate: todayDate,
         serverTime: new Date().toISOString(),
       });

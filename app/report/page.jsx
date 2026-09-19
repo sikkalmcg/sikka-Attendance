@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
+import SortHeader from '@/components/common/SortHeader';
 import {
   FileSpreadsheet,
   Download,
@@ -12,9 +13,11 @@ import {
   Building2,
   Check,
   Database,
+  X,
 } from 'lucide-react';
 import {
   formatKolkataDateTime,
+  formatAttendanceDateWithWeek,
   formatWorkingHours,
   getTodayDateString,
 } from '@/lib/timezone';
@@ -50,6 +53,179 @@ export default function ReportPage() {
   const [selectedStatus, setSelectedStatus] = useState('ALL'); // 'ALL' | 'Present' | 'Absent'
   const [allTime, setAllTime] = useState(false); // Fetch all data from database mode
   const [exporting, setExporting] = useState(false);
+
+  // Search filter
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Default sorting date-wise (Requirement 7)
+  const [sortField, setSortField] = useState('attendanceDate');
+  const [sortDirection, setSortDirection] = useState('desc');
+
+  const handleSort = (field, direction) => {
+    setSortField(field);
+    setSortDirection(direction);
+  };
+
+  // Pagination state
+  const [pageSize, setPageSize] = useState(25);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Format plant name helper
+  const formatPlantName = (val) => {
+    if (!val || typeof val !== 'string') return '-';
+    const t = val.trim();
+    return (t === 'Manufacturing Plant' || t === '-' || t.toLowerCase() === 'n/a') ? '-' : t;
+  };
+
+  // Search and Sort records
+  const sortedRecords = React.useMemo(() => {
+    let list = [...records];
+
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      list = list.filter((r) => {
+        const empId = String(r.employeeId || '').toLowerCase();
+        const empName = String(r.employeeName || '').toLowerCase();
+        const desig = String(r.designation || '').toLowerCase();
+        const rawDate = String(r.attendanceDate || '').toLowerCase();
+        const formattedDate = formatAttendanceDateWithWeek(r.attendanceDate || r.inDate || r.date || r.markInAt).toLowerCase();
+        const inPlant = String(r.markInPlantName || r.plantName || '').toLowerCase();
+        const outPlant = String(r.markOutPlantName || r.plantName || '').toLowerCase();
+        const inTime = r.markInAt ? formatKolkataDateTime(r.markInAt).toLowerCase() : '';
+        const outTime = r.markOutAt ? formatKolkataDateTime(r.markOutAt).toLowerCase() : '';
+        const status = (r.status === 'ABSENT' || String(r.status).toLowerCase() === 'absent') ? 'absent' : 'present';
+        const outType = String(r.markOutType || '').toLowerCase();
+        const manualBy = String(r.markInManualBy || r.markOutManualBy || r.manualAttendanceBy || '').toLowerCase();
+        const approvedBy = String(r.approvedBy || '').toLowerCase();
+        const remarks = String(r.remarks || r.remark || '').toLowerCase();
+        const workingHrs = r.workingMinutes > 0 ? formatWorkingHours(r.workingMinutes).toLowerCase() : '0:00';
+
+        return (
+          empId.includes(q) ||
+          empName.includes(q) ||
+          desig.includes(q) ||
+          rawDate.includes(q) ||
+          formattedDate.includes(q) ||
+          inPlant.includes(q) ||
+          outPlant.includes(q) ||
+          inTime.includes(q) ||
+          outTime.includes(q) ||
+          status.includes(q) ||
+          outType.includes(q) ||
+          manualBy.includes(q) ||
+          approvedBy.includes(q) ||
+          remarks.includes(q) ||
+          workingHrs.includes(q)
+        );
+      });
+    }
+
+    if (sortField) {
+      list.sort((a, b) => {
+        let valA = '';
+        let valB = '';
+
+        if (sortField === 'attendanceDate') {
+          valA = a.attendanceDate || a.inDate || a.date || (a.markInAt ? a.markInAt.split('T')[0] : '') || '';
+          valB = b.attendanceDate || b.inDate || b.date || (b.markInAt ? b.markInAt.split('T')[0] : '') || '';
+          return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+
+        if (sortField === 'employeeId') {
+          valA = a.employeeId || '';
+          valB = b.employeeId || '';
+          return sortDirection === 'asc'
+            ? String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' })
+            : String(valB).localeCompare(String(valA), undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        if (sortField === 'employeeName') {
+          valA = a.employeeName || '';
+          valB = b.employeeName || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'designation') {
+          valA = a.designation || '';
+          valB = b.designation || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'markInPlant') {
+          valA = a.markInPlantName || a.plantName || '';
+          valB = b.markInPlantName || b.plantName || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'markInAt') {
+          valA = a.markInAt ? new Date(a.markInAt).getTime() : 0;
+          valB = b.markInAt ? new Date(b.markInAt).getTime() : 0;
+          return sortDirection === 'asc' ? valA - valB : valB - valA;
+        }
+
+        if (sortField === 'markOutAt') {
+          valA = a.markOutAt ? new Date(a.markOutAt).getTime() : 0;
+          valB = b.markOutAt ? new Date(b.markOutAt).getTime() : 0;
+          return sortDirection === 'asc' ? valA - valB : valB - valA;
+        }
+
+        if (sortField === 'workingMinutes') {
+          valA = Number(a.workingMinutes || 0);
+          valB = Number(b.workingMinutes || 0);
+          return sortDirection === 'asc' ? valA - valB : valB - valA;
+        }
+
+        if (sortField === 'status') {
+          valA = (a.status === 'ABSENT' || String(a.status).toLowerCase() === 'absent') ? 'Absent' : 'Present';
+          valB = (b.status === 'ABSENT' || String(b.status).toLowerCase() === 'absent') ? 'Absent' : 'Present';
+          return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+
+        if (sortField === 'markOutType') {
+          valA = a.markOutType || '';
+          valB = b.markOutType || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'markOutPlant') {
+          valA = a.markOutPlantName || a.plantName || '';
+          valB = b.markOutPlantName || b.plantName || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'manualAttendanceBy') {
+          valA = a.markInManualBy || a.markOutManualBy || a.manualAttendanceBy || '';
+          valB = b.markInManualBy || b.markOutManualBy || b.manualAttendanceBy || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'approvedBy') {
+          valA = a.approvedBy || '';
+          valB = b.approvedBy || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'remark') {
+          valA = a.remarks || a.remark || '';
+          valB = b.remarks || b.remark || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        return 0;
+      });
+    }
+
+    return list;
+  }, [records, searchTerm, sortField, sortDirection]);
+
+  const totalRecords = sortedRecords.length;
+  const totalPages = Math.ceil(totalRecords / pageSize) || 1;
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const paginatedRecords = React.useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return sortedRecords.slice(start, start + pageSize);
+  }, [sortedRecords, safeCurrentPage, pageSize]);
 
   const safeParseJson = async (res) => {
     if (!res) return null;
@@ -247,11 +423,46 @@ export default function ReportPage() {
           </div>
         </div>
 
-        {/* Section 23 & 24: Filter Bar */}
+        {/* Section 23 & 24: Filter & Search Bar */}
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider">
-            <Filter className="w-3.5 h-3.5 text-blue-600" />
-            <span>Report Filters</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider">
+              <Filter className="w-3.5 h-3.5 text-blue-600" />
+              <span>Report Filters &amp; Global Search</span>
+            </div>
+            {searchTerm && (
+              <span className="text-xs text-blue-600 font-semibold">
+                Found {sortedRecords.length} matching record{sortedRecords.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {/* Search Column / Input */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search across Employee ID, Name, Designation, Date, Plant, Status, Working Hours, Manual By, Approved By, Remarks..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setCurrentPage(1);
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -350,9 +561,10 @@ export default function ReportPage() {
 
         {/* Section 25: Report Table */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500">
             <span>
-              Showing <strong>{records.length}</strong> record(s) matching criteria
+              Showing <strong>{sortedRecords.length}</strong> of <strong>{records.length}</strong> record(s)
+              {searchTerm && <span className="ml-1 text-blue-600 font-semibold">(matching &ldquo;{searchTerm}&rdquo;)</span>}
             </span>
             <span className="text-[11px] font-mono">
               {allTime ? 'Mode: All Time (Full Database Records)' : `Date Range: ${dateFrom} to ${dateTo}`}
@@ -360,23 +572,23 @@ export default function ReportPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 min-w-[1250px]">
+            <table className="w-full text-left text-xs text-slate-600 min-w-[1400px]">
               <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-100">
                 <tr>
-                  <th className="py-3 px-4">Employee ID</th>
-                  <th className="py-3 px-4">Employee Name</th>
-                  <th className="py-3 px-4">Designation</th>
-                  <th className="py-3 px-4">Attendance Date</th>
-                  <th className="py-3 px-4">Mark In Plant</th>
-                  <th className="py-3 px-4">Mark IN Date Time</th>
-                  <th className="py-3 px-4">Mark Out Date Time</th>
-                  <th className="py-3 px-4">Working Hour</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Mark Out Type</th>
-                  <th className="py-3 px-4">Mark Out Plant</th>
-                  <th className="py-3 px-4">Manual Attendance By</th>
-                  <th className="py-3 px-4">Approved By</th>
-                  <th className="py-3 px-4">Remark</th>
+                  <SortHeader label="Employee ID" field="employeeId" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Employee Name" field="employeeName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Designation" field="designation" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Attendance Date" field="attendanceDate" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark In Plant" field="markInPlant" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark IN Date Time" field="markInAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark Out Date Time" field="markOutAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Working Hour" field="workingMinutes" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Status" field="status" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark Out Type" field="markOutType" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark Out Plant" field="markOutPlant" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Manual Attendance By" field="manualAttendanceBy" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Approved By" field="approvedBy" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Remark" field="remark" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -387,14 +599,23 @@ export default function ReportPage() {
                       Loading report data...
                     </td>
                   </tr>
-                ) : records.length === 0 ? (
+                ) : sortedRecords.length === 0 ? (
                   <tr>
                     <td colSpan={14} className="py-12 text-center text-slate-400 font-medium">
-                      No approved attendance records found for the selected period and plants.
+                      {searchTerm ? (
+                        <div className="space-y-1">
+                          <p className="text-slate-600 font-semibold text-sm">No Record Found</p>
+                          <p className="text-xs text-slate-400">
+                            No attendance records match your search &ldquo;{searchTerm}&rdquo;.
+                          </p>
+                        </div>
+                      ) : (
+                        'No approved attendance records found for the selected period and plants.'
+                      )}
                     </td>
                   </tr>
                 ) : (
-                  records.map((r) => {
+                  paginatedRecords.map((r) => {
                     const isAbsent = r.status === 'ABSENT' || String(r.status).toLowerCase() === 'absent';
                     const isActive = !isAbsent && r.status === 'ACTIVE' && !r.markOutAt;
 
@@ -449,12 +670,6 @@ export default function ReportPage() {
 
                     const remarkDisplay = remarkParts.length > 0 ? remarkParts.join('; ') : '—';
 
-                    const formatPlantName = (val) => {
-                      if (!val || typeof val !== 'string') return '-';
-                      const t = val.trim();
-                      return (t === 'Manufacturing Plant' || t === '-' || t.toLowerCase() === 'n/a') ? '-' : t;
-                    };
-
                     return (
                       <tr key={r.id || r._id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3.5 px-4 font-mono font-bold text-blue-600 whitespace-nowrap">
@@ -467,7 +682,7 @@ export default function ReportPage() {
                           {r.designation || 'Staff'}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-semibold text-slate-700 whitespace-nowrap">
-                          {r.attendanceDate || '-'}
+                          {formatAttendanceDateWithWeek(r.attendanceDate || r.inDate || r.date || r.markInAt)}
                         </td>
                         <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap">
                           {isAbsent ? '-' : formatPlantName(r.markInPlantName || r.plantName)}
@@ -542,6 +757,100 @@ export default function ReportPage() {
               </tbody>
             </table>
           </div>
+
+          {/* ── Pagination Footer ── */}
+          {!loading && totalRecords > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 sm:px-5 py-3.5 border-t border-slate-100 bg-slate-50/60">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 text-xs text-slate-500">
+                <span>
+                  Showing{' '}
+                  <span className="font-semibold text-slate-700">
+                    {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, totalRecords)}
+                  </span>{' '}
+                  of{' '}
+                  <span className="font-semibold text-slate-700">{totalRecords}</span> records
+                  {searchTerm && (
+                    <span className="ml-1 text-blue-600 font-semibold">
+                      (matching &ldquo;{searchTerm}&rdquo;)
+                    </span>
+                  )}
+                </span>
+                <span className="text-slate-300 hidden sm:inline">|</span>
+                <div className="flex items-center gap-1.5">
+                  <span>Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 bg-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  >
+                    <option value={15}>15</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-1 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  ← Prev
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => {
+                    return (
+                      p === 1 ||
+                      p === totalPages ||
+                      Math.abs(p - safeCurrentPage) <= 1
+                    );
+                  })
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) {
+                      acc.push('...');
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    item === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="px-2 text-xs text-slate-400">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setCurrentPage(item)}
+                        className={`min-w-[32px] px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                          item === safeCurrentPage
+                            ? 'bg-blue-600 text-white shadow-xs shadow-blue-600/30'
+                            : 'border border-slate-200 text-slate-600 bg-white hover:bg-slate-100'
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    )
+                  )}
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </AppLayout>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import Modal from '@/components/common/Modal';
 import Toast from '@/components/common/Toast';
+import SortHeader from '@/components/common/SortHeader';
 import {
   CheckCircle,
   Clock,
@@ -24,6 +25,7 @@ import {
   formatKolkataDate,
   formatKolkataTime,
   formatKolkataDateTime,
+  formatAttendanceDateWithWeek,
   formatWorkingHours,
   getAttendanceDateString,
   getTodayDateString,
@@ -86,6 +88,20 @@ export default function ApprovalPage() {
     calculatedHours: '0:00',
     remarks: '',
   });
+
+  // Searchable Employee Select in Create Manual Attendance Modal
+  const [empSearchText, setEmpSearchText] = useState('');
+  const [empDropdownOpen, setEmpDropdownOpen] = useState(false);
+  const [selectedEmp, setSelectedEmp] = useState(null);
+
+  // Sorting State for table headers (Accent / Decent)
+  const [sortField, setSortField] = useState('attendanceDate');
+  const [sortDirection, setSortDirection] = useState('desc');
+
+  const handleSort = (field, direction) => {
+    setSortField(field);
+    setSortDirection(direction);
+  };
 
   const [processing, setProcessing] = useState(false);
 
@@ -218,7 +234,7 @@ export default function ApprovalPage() {
     };
   };
 
-  // Client-side search and status filtering with strict tab isolation
+  // Global case-insensitive search across text, digits, IDs, Names, Dates, Plants, Statuses, etc.
   const filteredAttendances = attendances.filter((record) => {
     // Strict separation: Pending Approvals shows only unapproved; Approved History shows only approved
     if (activeTab === 'PENDING') {
@@ -234,23 +250,134 @@ export default function ApprovalPage() {
 
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase().trim();
-    const name = (record.employeeName || '').toLowerCase();
-    const id = (record.employeeId || '').toLowerCase();
-    const desig = (record.designation || '').toLowerCase();
-    const plant = (record.markInPlantName || record.plantName || '').toLowerCase();
-    return name.includes(q) || id.includes(q) || desig.includes(q) || plant.includes(q);
+
+    const formattedDate = formatAttendanceDateWithWeek(record.attendanceDate || record.markInAt || record.inDate);
+    const searchableValues = [
+      record.employeeId,
+      record.employeeName,
+      record.designation,
+      record.attendanceDate,
+      record.inDate,
+      record.date,
+      formattedDate,
+      record.markInPlantName,
+      record.markOutPlantName,
+      record.plantName,
+      record.status,
+      record.approvalStatus,
+      record.markOutType,
+      record.mobileNumber,
+      record.aadhaarNumber,
+      record.workingMinutes != null ? String(record.workingMinutes) : '',
+      record.hours != null ? String(record.hours) : '',
+      record.remarks,
+      record.approvedBy,
+    ];
+
+    return searchableValues.some((val) => val && String(val).toLowerCase().includes(q));
   });
 
+  // Sort attendances based on active sort header (Accent / Decent)
+  const sortedAttendances = React.useMemo(() => {
+    if (!sortField) return filteredAttendances;
+    return [...filteredAttendances].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+
+      if (sortField === 'employeeId') {
+        valA = a.employeeId || '';
+        valB = b.employeeId || '';
+      } else if (sortField === 'employeeName') {
+        valA = a.employeeName || '';
+        valB = b.employeeName || '';
+      } else if (sortField === 'designation') {
+        valA = a.designation || '';
+        valB = b.designation || '';
+      } else if (sortField === 'attendanceDate') {
+        valA = a.attendanceDate || a.inDate || '';
+        valB = b.attendanceDate || b.inDate || '';
+      } else if (sortField === 'markInPlantName') {
+        valA = a.markInPlantName || a.plantName || '';
+        valB = b.markInPlantName || b.plantName || '';
+      } else if (sortField === 'markInAt') {
+        valA = a.markInAt || a.inDateTime || '';
+        valB = b.markInAt || b.inDateTime || '';
+      } else if (sortField === 'markOutAt') {
+        valA = a.markOutAt || a.outDateTime || '';
+        valB = b.markOutAt || b.outDateTime || '';
+      } else if (sortField === 'workingMinutes') {
+        const numA = Number(a.workingMinutes) || 0;
+        const numB = Number(b.workingMinutes) || 0;
+        return sortDirection === 'asc' ? numA - numB : numB - numA;
+      } else if (sortField === 'status') {
+        valA = a.status || '';
+        valB = b.status || '';
+      } else if (sortField === 'approvalStatus') {
+        valA = a.approvalStatus || (a.approved ? 'Approved' : 'Pending');
+        valB = b.approvalStatus || (b.approved ? 'Approved' : 'Pending');
+      } else if (sortField === 'markOutType') {
+        valA = a.markOutType || '';
+        valB = b.markOutType || '';
+      } else if (sortField === 'markOutPlantName') {
+        valA = a.markOutPlantName || '';
+        valB = b.markOutPlantName || '';
+      } else if (sortField === 'approvedBy') {
+        valA = a.approvedBy || '';
+        valB = b.approvedBy || '';
+      } else {
+        valA = String(a[sortField] || '');
+        valB = String(b[sortField] || '');
+      }
+
+      const cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredAttendances, sortField, sortDirection]);
+
+  // Plant name formatting helper per Requirement 5
+  // If plant then plant Name, if not Plant then Outside from Plant
+  const getDisplayPlantName = (plantName, locationType, isAbsent, fallbackPlant = '') => {
+    if (isAbsent) return fallbackPlant || plantName || '-';
+    const loc = String(locationType || '').toUpperCase();
+    const name = String(plantName || '').trim();
+    if (
+      loc === 'OUTSIDE_PLANT' ||
+      loc === 'WORK_FROM_HOME' ||
+      loc === 'FIELD_WORK' ||
+      name.toLowerCase().includes('outside')
+    ) {
+      return 'Outside from Plant';
+    }
+    if (!name || name === '-' || name.toLowerCase() === 'n/a' || name === 'Manufacturing Plant') {
+      return 'Outside from Plant';
+    }
+    return name;
+  };
+
+  // Searchable employee list for Create Manual Attendance modal
+  const filteredEmployeesList = React.useMemo(() => {
+    if (!empSearchText.trim()) return employeesList;
+    const q = empSearchText.toLowerCase().trim();
+    return employeesList.filter((emp) => {
+      const name = String(emp.fullName || emp.name || '').toLowerCase();
+      const id = String(emp.employeeId || emp.id || '').toLowerCase();
+      const desig = String(emp.designation || '').toLowerCase();
+      const phone = String(emp.mobileNumber || emp.mobile || '').toLowerCase();
+      const aadhaar = String(emp.aadhaarNumber || emp.aadhaar || '').toLowerCase();
+      return name.includes(q) || id.includes(q) || desig.includes(q) || phone.includes(q) || aadhaar.includes(q);
+    });
+  }, [employeesList, empSearchText]);
+
   // --- Pagination computations ---
-  const totalRecords = filteredAttendances.length;
+  const totalRecords = sortedAttendances.length;
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedRecords = filteredAttendances.slice(
+  const paginatedRecords = sortedAttendances.slice(
     (safeCurrentPage - 1) * pageSize,
     safeCurrentPage * pageSize
   );
 
-  const eligibleAttendances = filteredAttendances.filter((a) => getApprovalEligibility(a).canApprove);
+  const eligibleAttendances = sortedAttendances.filter((a) => getApprovalEligibility(a).canApprove);
   const eligibleIds = eligibleAttendances.map((a) => a.id || a._id);
 
   // Current page eligible records (for page-level select all)
@@ -328,9 +455,24 @@ export default function ApprovalPage() {
     }
     const defaultIn = toKolkataDateTimeLocal(new Date());
 
+    let targetEmp = null;
+    if (record?.employeeId) {
+      targetEmp = employeesList.find((e) => (e.employeeId || e.id) === record.employeeId) || {
+        employeeId: record.employeeId,
+        fullName: record.employeeName,
+        designation: record.designation,
+        plantName: record.plantName,
+        plantId: record.plantId,
+      };
+    }
+
+    setSelectedEmp(targetEmp);
+    setEmpSearchText('');
+    setEmpDropdownOpen(false);
+
     setManualForm({
-      employeeId: record?.employeeId || '',
-      plantId: record?.plantId || '',
+      employeeId: targetEmp?.employeeId || record?.employeeId || '',
+      plantId: record?.plantId || targetEmp?.plantId || '',
       markInAt: defaultIn,
       markOutAt: '',
       calculatedHours: '0:00',
@@ -507,7 +649,7 @@ export default function ApprovalPage() {
   const handleSaveManualAttendance = async (e) => {
     e.preventDefault();
     if (!manualForm.employeeId) {
-      setToast({ type: 'error', message: 'Please select an employee.' });
+      setToast({ type: 'error', message: 'Employee selection is mandatory. Please select an employee.' });
       return;
     }
 
@@ -585,7 +727,7 @@ export default function ApprovalPage() {
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs text-white bg-slate-900 hover:bg-slate-800 shadow-sm transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Manual Attendance</span>
+              <span>Create Manual Attendance</span>
             </button>
             <button
               onClick={fetchAttendances}
@@ -659,14 +801,14 @@ export default function ApprovalPage() {
               )}
             </div>
 
-            {/* Employee Search Input */}
-            <div className="relative flex-1 sm:flex-initial min-w-[200px] sm:min-w-[260px] w-full sm:w-auto">
+            {/* Global Search Input */}
+            <div className="relative flex-1 sm:flex-initial min-w-[200px] sm:min-w-[280px] w-full sm:w-auto">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search employee (Name, ID, Desig)..."
+                placeholder="Search text, digits, ID, Name, Date, Plant..."
                 className="w-full pl-9.5 pr-8 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-2xl shadow-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden transition-all placeholder:text-slate-400"
               />
               {searchTerm && (
@@ -735,7 +877,7 @@ export default function ApprovalPage() {
         {/* Attendance Records Table */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 min-w-[950px]">
+            <table className="w-full text-left text-xs text-slate-600 min-w-[1100px]">
               <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-100">
                 <tr>
                   {activeTab === 'PENDING' && (
@@ -755,24 +897,27 @@ export default function ApprovalPage() {
                             ? isAllCurrentPageSelected
                               ? `Deselect all ${currentPageEligibleIds.length} on this page`
                               : `Select all ${currentPageEligibleIds.length} on this page`
-                            : "No records on this page eligible for approval"
+                            : 'No records on this page eligible for approval'
                         }
                         className="w-4 h-4 rounded text-blue-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                     </th>
                   )}
-                  <th className="py-3 px-4">Employee ID</th>
-                  <th className="py-3 px-4">Employee Name</th>
-                  <th className="py-3 px-4">Designation</th>
-                  <th className="py-3 px-4">Attendance Date</th>
-                  <th className="py-3 px-4">Mark In Plant</th>
-                  <th className="py-3 px-4">Mark In</th>
-                  <th className="py-3 px-4">Mark Out</th>
-                  <th className="py-3 px-4">Working Hour</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Mark Out Type</th>
-                  <th className="py-3 px-4">Mark Out Plant</th>
-                  {activeTab === 'APPROVED' && <th className="py-3 px-4">Approved By</th>}
+                  <SortHeader label="Employee ID" field="employeeId" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Employee Name" field="employeeName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Designation" field="designation" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Attendance Date" field="attendanceDate" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark In Plant Name" field="markInPlantName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark In Date & Time" field="markInAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark Out Date & Time" field="markOutAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Working Hours" field="workingMinutes" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Attendance Status" field="status" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Approval Status" field="approvalStatus" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark Out Type" field="markOutType" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark Out Plant Name" field="markOutPlantName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  {activeTab === 'APPROVED' && (
+                    <SortHeader label="Approved By" field="approvedBy" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  )}
                   <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
@@ -780,35 +925,40 @@ export default function ApprovalPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={activeTab === 'PENDING' ? 13 : 13}
+                      colSpan={activeTab === 'PENDING' ? 14 : 14}
                       className="py-12 text-center text-slate-400 font-medium"
                     >
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                       Loading attendance records...
                     </td>
                   </tr>
-                ) : filteredAttendances.length === 0 ? (
+                ) : sortedAttendances.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={activeTab === 'PENDING' ? 13 : 13}
+                      colSpan={activeTab === 'PENDING' ? 14 : 14}
                       className="py-12 text-center text-slate-400 font-medium"
                     >
                       {searchTerm || selectedDate ? (
-                        <div className="flex flex-col items-center justify-center space-y-2">
-                          <p className="text-slate-600 text-sm">
-                            No attendance records found
-                            {selectedDate && (
-                              <>
-                                {' '}for date <span className="text-slate-900 font-bold">{formatKolkataDate(selectedDate)}</span>
-                              </>
-                            )}
+                        <div className="flex flex-col items-center justify-center space-y-2 py-4">
+                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-1">
+                            <Search className="w-5 h-5" />
+                          </div>
+                          <p className="text-slate-800 font-bold text-sm">No Record Found</p>
+                          <p className="text-slate-500 text-xs max-w-sm text-center">
+                            No attendance records match{' '}
                             {searchTerm && (
-                              <>
-                                {' '}matching &ldquo;<span className="text-slate-900 font-bold">{searchTerm}</span>&rdquo;
-                              </>
+                              <span>
+                                &ldquo;<strong className="text-slate-800">{searchTerm}</strong>&rdquo;
+                              </span>
+                            )}
+                            {selectedDate && (
+                              <span>
+                                {searchTerm ? ' on ' : 'for date '}
+                                <strong className="text-slate-800">{formatKolkataDate(selectedDate)}</strong>
+                              </span>
                             )}
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 pt-1">
                             {selectedDate && (
                               <button
                                 type="button"
@@ -824,15 +974,21 @@ export default function ApprovalPage() {
                                 onClick={() => setSearchTerm('')}
                                 className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer underline"
                               >
-                                Clear search filter
+                                Clear search
                               </button>
                             )}
                           </div>
                         </div>
                       ) : activeTab === 'PENDING' ? (
-                        'No pending attendance approvals found.'
+                        <div className="py-4 text-center">
+                          <p className="font-semibold text-slate-700 text-sm">No Record Found</p>
+                          <p className="text-xs text-slate-400 mt-1">No pending attendance approvals found.</p>
+                        </div>
                       ) : (
-                        'No approved attendance records found in Approved History.'
+                        <div className="py-4 text-center">
+                          <p className="font-semibold text-slate-700 text-sm">No Record Found</p>
+                          <p className="text-xs text-slate-400 mt-1">No approved attendance records found in Approved History.</p>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -840,18 +996,28 @@ export default function ApprovalPage() {
                   paginatedRecords.map((record) => {
                     const recId = record.id || record._id;
                     const isSelected = selectedIds.includes(recId);
-                    const isActive = record.status === 'ACTIVE' && !record.markOutAt;
                     const isAbsent = record.status === 'ABSENT' || (!record.markInAt && !record.markOutAt);
+                    const isActive = !isAbsent && record.status === 'ACTIVE' && !record.markOutAt;
                     const eligibility = getApprovalEligibility(record);
 
-                    // Compute clean display status
-                    const displayStatus = isAbsent
-                      ? 'Absent'
-                      : record.approvalStatus === 'APPROVED'
-                      ? 'Approved'
-                      : record.markInAt && !record.markOutAt
-                      ? 'Pending'
-                      : 'Pending Approval';
+                    const markInPlantDisplay = isAbsent
+                      ? record.plantName || '-'
+                      : getDisplayPlantName(record.markInPlantName || record.plantName, record.markInLocationType, false);
+
+                    const markOutPlantDisplay = isAbsent
+                      ? '-'
+                      : getDisplayPlantName(record.markOutPlantName || record.plantName, null, false);
+
+                    const markOutTypeDisplay = isAbsent
+                      ? '-'
+                      : record.markOutType === 'Auto' || record.autoMarkOut
+                      ? 'Auto'
+                      : record.markOutType || (record.markOutAt ? 'Self' : '-');
+
+                    const displayApprovalStatus =
+                      record.approvalStatus === 'APPROVED' || record.approved === true
+                        ? 'Approved'
+                        : 'Pending Approval';
 
                     return (
                       <tr
@@ -878,19 +1044,19 @@ export default function ApprovalPage() {
                           {record.employeeId || '-'}
                         </td>
                         <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                          {record.employeeName}
+                          {record.employeeName || '-'}
                         </td>
                         <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
-                          {record.designation || '-'}
+                          {record.designation || 'Staff'}
                         </td>
                         <td className="py-3 px-4 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                          {formatKolkataDate(record.attendanceDate || record.markInAt || record.inDate)}
+                          {formatAttendanceDateWithWeek(record.attendanceDate || record.markInAt || record.inDate)}
                         </td>
                         <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
-                          {record.markInPlantName || record.plantName || (isAbsent ? '-' : 'Plant')}
+                          {markInPlantDisplay}
                         </td>
                         <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap">
-                          {record.markInAt ? (
+                          {!isAbsent && record.markInAt ? (
                             <span title={formatKolkataDateTime(record.markInAt)}>
                               {formatKolkataDateTime(record.markInAt)}
                             </span>
@@ -899,7 +1065,7 @@ export default function ApprovalPage() {
                           )}
                         </td>
                         <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap">
-                          {record.markOutAt ? (
+                          {!isAbsent && record.markOutAt ? (
                             <span title={formatKolkataDateTime(record.markOutAt)}>
                               {formatKolkataDateTime(record.markOutAt)}
                             </span>
@@ -919,29 +1085,32 @@ export default function ApprovalPage() {
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              displayStatus === 'Absent'
+                              isAbsent
                                 ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                : displayStatus === 'Pending'
+                                : isActive
                                 ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                : displayStatus === 'Approved'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            }`}
+                          >
+                            {isAbsent ? 'Absent' : isActive ? 'Active' : 'Present'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              displayApprovalStatus === 'Approved'
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                 : 'bg-blue-100 text-blue-800 border border-blue-200'
                             }`}
                           >
-                            {displayStatus}
+                            {displayApprovalStatus}
                           </span>
                         </td>
                         <td className="py-3 px-4 font-medium text-slate-700 whitespace-nowrap">
-                          {isAbsent
-                            ? '-'
-                            : record.markOutType === 'Auto' || record.autoMarkOut
-                            ? 'Auto'
-                            : record.markOutType || (record.markOutAt ? 'Self' : '-')}
+                          {markOutTypeDisplay}
                         </td>
                         <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
-                          {isAbsent
-                            ? '-'
-                            : record.markOutPlantName || record.plantName || '-'}
+                          {markOutPlantDisplay}
                         </td>
                         {activeTab === 'APPROVED' && (
                           <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
@@ -1028,6 +1197,11 @@ export default function ApprovalPage() {
                   </span>{' '}
                   of{' '}
                   <span className="font-semibold text-slate-700">{totalRecords}</span> records
+                  {searchTerm && (
+                    <span className="ml-1 text-blue-600 font-semibold">
+                      (matching &ldquo;{searchTerm}&rdquo;)
+                    </span>
+                  )}
                 </span>
                 <span className="text-slate-300 hidden sm:inline">|</span>
                 <div className="flex items-center gap-1.5">
@@ -1383,19 +1557,98 @@ export default function ApprovalPage() {
             <label className="block text-xs font-semibold text-slate-700 mb-1">
               Select Employee *
             </label>
-            <select
-              value={manualForm.employeeId}
-              onChange={(e) => setManualForm({ ...manualForm, employeeId: e.target.value })}
-              required
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-            >
-              <option value="">-- Choose Employee --</option>
-              {employeesList.map((emp) => (
-                <option key={emp.id || emp._id} value={emp.employeeId || emp.id}>
-                  {emp.fullName} ({emp.employeeId}) - {emp.designation}
-                </option>
-              ))}
-            </select>
+            {selectedEmp ? (
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50 border border-blue-200">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                    {(selectedEmp.fullName || selectedEmp.name || 'E').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {selectedEmp.fullName || selectedEmp.name}{' '}
+                      <span className="font-mono text-blue-600">({selectedEmp.employeeId || selectedEmp.id})</span>
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {selectedEmp.designation || 'Staff'} {selectedEmp.plantName ? `• ${selectedEmp.plantName}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedEmp(null);
+                    setManualForm((prev) => ({ ...prev, employeeId: '' }));
+                    setEmpSearchText('');
+                    setEmpDropdownOpen(true);
+                  }}
+                  className="ml-2 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={empSearchText}
+                    onChange={(e) => {
+                      setEmpSearchText(e.target.value);
+                      setEmpDropdownOpen(true);
+                    }}
+                    onFocus={() => setEmpDropdownOpen(true)}
+                    placeholder="Search by Employee Name, ID, or phone digits..."
+                    className="w-full pl-9 pr-8 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  />
+                  {empSearchText && (
+                    <button
+                      type="button"
+                      onClick={() => setEmpSearchText('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {empDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto p-1 text-xs divide-y divide-slate-100">
+                    {filteredEmployeesList.length === 0 ? (
+                      <div className="p-3 text-center text-slate-400 font-medium">
+                        No matching employees found in database.
+                      </div>
+                    ) : (
+                      filteredEmployeesList.map((emp) => (
+                        <div
+                          key={emp.id || emp._id || emp.employeeId}
+                          onClick={() => {
+                            setSelectedEmp(emp);
+                            setManualForm((prev) => ({
+                              ...prev,
+                              employeeId: emp.employeeId || emp.id,
+                              plantId: prev.plantId || emp.plantId || '',
+                            }));
+                            setEmpDropdownOpen(false);
+                            setEmpSearchText('');
+                          }}
+                          className="p-2 hover:bg-blue-50/80 rounded-lg cursor-pointer flex items-center justify-between transition-colors"
+                        >
+                          <div>
+                            <span className="font-bold text-slate-800">{emp.fullName || emp.name}</span>{' '}
+                            <span className="font-mono text-[11px] font-semibold text-blue-600">({emp.employeeId})</span>
+                            <p className="text-[10px] text-slate-500">
+                              {emp.designation || 'Staff'} {emp.plantName ? `• ${emp.plantName}` : ''}
+                            </p>
+                          </div>
+                          <span className="text-[10px] font-semibold text-blue-600">Select</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
