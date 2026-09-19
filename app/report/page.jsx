@@ -446,6 +446,8 @@ export default function ReportPage() {
                       remarkParts.push('Approved Absent');
                     }
 
+                    const remarkDisplay = remarkParts.length > 0 ? remarkParts.join('; ') : '—';
+
                     const formatPlantName = (val) => {
                       if (!val || typeof val !== 'string') return '-';
                       const t = val.trim();
