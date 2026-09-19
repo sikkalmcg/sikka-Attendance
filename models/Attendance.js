@@ -69,6 +69,10 @@ const AttendanceSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    // Plant-radius result captured at the exact Mark IN action time.
+    markInWithinPlantRadius: { type: Boolean, default: null },
+    markInDistanceMeters: { type: Number, default: null },
+    markInAllowedRadiusMeters: { type: Number, default: null },
 
     // Mark Out Details (supports both new markOutAt and existing outDateTime)
     markOutAt: {
@@ -87,6 +91,10 @@ const AttendanceSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    // Plant-radius result captured at the exact Mark OUT action time.
+    markOutWithinPlantRadius: { type: Boolean, default: null },
+    markOutDistanceMeters: { type: Number, default: null },
+    markOutAllowedRadiusMeters: { type: Number, default: null },
     markOutPlantId: {
       type: String,
       default: null,

@@ -5,6 +5,40 @@ import User from '@/models/User';
 import { authorizeSystemUser } from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
+export async function GET(request, { params }) {
+  const auth = await authorizeSystemUser(request, 'user-management');
+  if (!auth.authorized) return auth.response;
+
+  try {
+    const { id } = await params;
+    await connectToDatabase();
+
+    const queryList = [{ _id: id }, { id: id }, { userId: id }];
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      queryList.unshift({ _id: new mongoose.Types.ObjectId(id) });
+    }
+
+    const user = await User.findOne({ $or: queryList }).select('-passwordHash').lean();
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404, headers: NO_CACHE_HEADERS });
+    }
+
+    return NextResponse.json({ success: true, user }, { headers: NO_CACHE_HEADERS });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500, headers: NO_CACHE_HEADERS });
+  }
+}
+
 export async function PUT(request, { params }) {
   const auth = await authorizeSystemUser(request, 'user-management');
   if (!auth.authorized) return auth.response;
@@ -20,7 +54,7 @@ export async function PUT(request, { params }) {
     }
     const existing = await User.findOne({ $or: queryList }).lean();
     if (!existing) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404, headers: NO_CACHE_HEADERS });
     }
 
     // Build $set payload — never touch userId or passwordHash unless explicitly changing password
@@ -36,7 +70,7 @@ export async function PUT(request, { params }) {
           _id: { $ne: existing._id },
         });
         if (dup) {
-          return NextResponse.json({ error: 'Username already in use by another user.' }, { status: 400 });
+          return NextResponse.json({ error: 'Username already in use by another user.' }, { status: 400, headers: NO_CACHE_HEADERS });
         }
         updateFields.username = cleanUsername;
       }
@@ -53,13 +87,11 @@ export async function PUT(request, { params }) {
       if (data.permissions.some((p) => String(p).toLowerCase() === 'mark-attendance')) {
         return NextResponse.json(
           { error: 'Mark Attendance is strictly an Employee-only function and cannot be assigned to Admin or System Users.' },
-          { status: 400 }
+          { status: 400, headers: NO_CACHE_HEADERS }
         );
       }
-      const resolvedRole = data.role === 'Admin' ? 'Admin' : (existing.role || 'User');
-      updateFields.permissions = resolvedRole === 'Admin'
-        ? ['dashboard', 'plant', 'approval', 'report', 'employee', 'user-management']
-        : data.permissions.filter((p) => p !== 'mark-attendance');
+      // Save exact permissions chosen by Admin/User Management user
+      updateFields.permissions = data.permissions.filter((p) => p !== 'mark-attendance');
     }
 
     // Password reset if provided
@@ -74,16 +106,16 @@ export async function PUT(request, { params }) {
     ).lean();
 
     if (!updatedUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404, headers: NO_CACHE_HEADERS });
     }
 
     const safeUser = { ...updatedUser };
     delete safeUser.passwordHash;
 
-    return NextResponse.json({ success: true, user: safeUser });
+    return NextResponse.json({ success: true, user: safeUser }, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error('Error updating user:', error);
-    return NextResponse.json({ error: error.message || 'Failed to update user' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to update user' }, { status: 500, headers: NO_CACHE_HEADERS });
   }
 }
 
@@ -102,18 +134,18 @@ export async function DELETE(request, { params }) {
 
     const user = await User.findOne({ $or: queryList });
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404, headers: NO_CACHE_HEADERS });
     }
 
     if (user.username === 'ajaysomra') {
-      return NextResponse.json({ error: 'The primary administrator account cannot be deleted.' }, { status: 400 });
+      return NextResponse.json({ error: 'The primary administrator account cannot be deleted.' }, { status: 400, headers: NO_CACHE_HEADERS });
     }
 
     await User.deleteOne({ _id: user._id });
 
-    return NextResponse.json({ success: true, message: 'User deleted successfully' });
+    return NextResponse.json({ success: true, message: 'User deleted successfully' }, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error('Error deleting user:', error);
-    return NextResponse.json({ error: error.message || 'Failed to delete user' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to delete user' }, { status: 500, headers: NO_CACHE_HEADERS });
   }
 }

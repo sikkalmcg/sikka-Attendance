@@ -28,6 +28,20 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'user-management', label: 'User Management' },
 ];
 
+const PERMISSION_LABEL_MAP = {
+  dashboard: 'Dashboard',
+  plant: 'Plant',
+  plants: 'Plant',
+  approval: 'Approval',
+  approvals: 'Approval',
+  report: 'Report',
+  reports: 'Report',
+  employee: 'Employee',
+  employees: 'Employee',
+  'user-management': 'User Management',
+  users: 'User Management',
+};
+
 export default function UserManagementPage() {
   const [users, setUsers] = useState([]);
   const [plantsList, setPlantsList] = useState([]);
@@ -77,7 +91,10 @@ export default function UserManagementPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/users');
+      const res = await fetch(`/api/users?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
       if (res.ok) {
         const data = await safeParseJson(res);
         if (data) setUsers(data.users || []);
@@ -123,9 +140,12 @@ export default function UserManagementPage() {
     setModalOpen(true);
   };
 
-  const openEditModal = (u) => {
+  const openEditModal = async (u) => {
+    const targetId = u._id || u.id || u.userId;
     setEditingUser(u);
     const userPlantIds = Array.isArray(u.plantIds) && u.plantIds.length > 0 ? u.plantIds : ['*'];
+    
+    // Initial populate from row data
     setFormData({
       userId: u.userId,
       fullName: u.fullName || '',
@@ -134,11 +154,40 @@ export default function UserManagementPage() {
       confirmPassword: '',
       role: u.role || 'User',
       status: u.status || 'Active',
-      permissions: Array.isArray(u.permissions) && u.permissions.length > 0 ? u.permissions : ['dashboard'],
+      permissions: Array.isArray(u.permissions) ? [...u.permissions] : [],
       plantIds: userPlantIds,
     });
     setShowPassword(false);
     setModalOpen(true);
+
+    // Direct database load: fetch user's actual current permissions from the database
+    try {
+      const res = await fetch(`/api/users/${targetId}?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      if (res.ok) {
+        const data = await safeParseJson(res);
+        if (data && data.user) {
+          const dbUser = data.user;
+          setEditingUser(dbUser);
+          setFormData((prev) => ({
+            ...prev,
+            fullName: dbUser.fullName || prev.fullName,
+            username: dbUser.username || prev.username,
+            role: dbUser.role || prev.role,
+            status: dbUser.status || prev.status,
+            // Source of truth: exact current permissions directly from DB
+            permissions: Array.isArray(dbUser.permissions) ? dbUser.permissions : [],
+            plantIds: Array.isArray(dbUser.plantIds) && dbUser.plantIds.length > 0
+              ? dbUser.plantIds
+              : prev.plantIds,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load fresh user from database:', err);
+    }
   };
 
   const handleTogglePermission = (permId) => {
@@ -226,10 +275,7 @@ export default function UserManagementPage() {
       }
     }
 
-    if (formData.permissions.length === 0) {
-      setToast({ type: 'error', message: 'Please select at least one page in Access Pages.' });
-      return;
-    }
+
 
     if (formData.plantIds.length === 0) {
       setToast({ type: 'error', message: 'Please select at least one plant in Access Plant (or All Plants).' });
@@ -458,21 +504,21 @@ export default function UserManagementPage() {
                           @{u.username}
                         </td>
                         <td className="px-5 py-3.5">
-                          {u.role === 'Admin' ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[11px] font-bold">
-                              All Pages (Admin)
-                            </span>
-                          ) : (
+                          {Array.isArray(u.permissions) && u.permissions.length > 0 ? (
                             <div className="flex flex-wrap gap-1 max-w-xs">
-                              {u.permissions?.map((p, pIdx) => (
+                              {u.permissions.map((p, pIdx) => (
                                 <span
                                   key={`${u._id || idx}-perm-${p}-${pIdx}`}
-                                  className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold capitalize whitespace-nowrap"
+                                  className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold whitespace-nowrap"
                                 >
-                                  {p}
+                                  {PERMISSION_LABEL_MAP[String(p).toLowerCase()] || p}
                                 </span>
                               ))}
                             </div>
+                          ) : (
+                            <span className="text-[11px] text-rose-500 font-semibold italic">
+                              No Page Access
+                            </span>
                           )}
                         </td>
                         <td className="px-5 py-3.5">

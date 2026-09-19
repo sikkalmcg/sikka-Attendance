@@ -2,8 +2,14 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Plant from '@/models/Plant';
+import Employee from '@/models/Employee';
 import { authorizeEmployee } from '@/lib/rbac';
-import { matchPlantForLocation } from '@/lib/geolocation';
+import {
+  OUTSIDE_PLANT_LABEL,
+  evaluateAssignedPlantLocation,
+  getAssignedPlantQuery,
+  getAssignedPlantReferences,
+} from '@/lib/attendanceLocation';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { normalizePlant, normalizeAttendance } from '@/lib/normalize';
 import { getTodayDateString, getAttendanceDateString } from '@/lib/timezone';
@@ -81,44 +87,53 @@ export async function POST(request) {
       );
     }
 
-    // Geolocation server-side evaluation
+    // Evaluate this Mark IN only against the employee's assigned plant configuration.
+    const employee = await Employee.findOne({
+      $or: [
+        { employeeId: session.employeeId },
+        { _id: session.sub },
+        ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
+      ],
+    }).select('plantId plantName unitIds').lean();
+    const assignedPlantReferences = getAssignedPlantReferences(employee, session);
+    if (assignedPlantReferences.length === 0) {
+      return NextResponse.json({ error: 'No plant is assigned to this employee.' }, { status: 400 });
+    }
+
     const rawPlants = await Plant.find({
-      $or: [{ status: 'Active' }, { active: true }],
-    });
-    const activePlants = rawPlants.map(normalizePlant);
-    const matchResult = matchPlantForLocation(lat, lng, activePlants);
+      $and: [
+        { $or: [{ status: 'Active' }, { active: true }] },
+        getAssignedPlantQuery(assignedPlantReferences),
+      ],
+    }).lean();
+    const assignedPlants = rawPlants.map(normalizePlant);
+    if (assignedPlants.length === 0) {
+      return NextResponse.json({ error: 'No active assigned plant is configured for this employee.' }, { status: 400 });
+    }
 
+    const locationResult = evaluateAssignedPlantLocation(lat, lng, assignedPlants);
     let markInLocationType = 'PLANT';
-    let plantId = null;
-    let plantName = 'Outside Plant';
-    let markInPlantName = 'Outside Plant';
+    let plantId = locationResult.plantId;
+    let plantName = locationResult.plantName;
+    let markInPlantName = locationResult.plantName;
 
-    if (matchResult.matched) {
-      markInLocationType = 'PLANT';
-      plantId = matchResult.plant.plantId;
-      plantName = matchResult.plant.plantName;
-      markInPlantName = matchResult.plant.plantName;
-    } else {
-      // Outside plant: employee must provide valid locationType
+    if (!locationResult.withinPlantRadius) {
+      // Outside the assigned plant: employee must provide a valid work type.
       if (!locationType || !['WORK_FROM_HOME', 'FIELD_WORK'].includes(locationType)) {
         return NextResponse.json(
           {
-            error: 'You are outside all authorized plant locations. Please select Work From Home or Field Work.',
+            error: 'You are outside your assigned plant location. Please select Work From Home or Field Work.',
             outside: true,
-            distance: matchResult.distance,
-            nearestPlant: matchResult.nearestPlant ? matchResult.nearestPlant.plantName : 'Authorized Plant',
-            allowedRadius: matchResult.radiusMeters,
+            distance: locationResult.distanceMeters,
+            nearestPlant: assignedPlants[0]?.plantName || 'Assigned Plant',
+            allowedRadius: locationResult.allowedRadiusMeters,
           },
           { status: 400 }
         );
       }
 
       markInLocationType = locationType;
-      plantId = null;
-      plantName = 'Outside Plant';
-      markInPlantName = 'Outside Plant';
     }
-
     // Server-authoritative timestamp
     const markInAt = new Date();
 
@@ -137,6 +152,9 @@ export async function POST(request) {
       markInLatitude: lat,
       markInLongitude: lng,
       markInAccuracy: accuracy ? Number(accuracy) : null,
+      markInWithinPlantRadius: locationResult.withinPlantRadius,
+      markInDistanceMeters: locationResult.distanceMeters,
+      markInAllowedRadiusMeters: locationResult.allowedRadiusMeters,
       attendanceDate: formatInTimeZone(markInAt, 'Asia/Kolkata', 'yyyy-MM-dd'),
       status: 'ACTIVE',
       autoMarkOut: false,

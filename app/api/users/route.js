@@ -4,6 +4,15 @@ import User from '@/models/User';
 import { authorizeSystemUser } from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
 export async function GET(request) {
   const auth = await authorizeSystemUser(request, 'user-management');
   if (!auth.authorized) return auth.response;
@@ -11,10 +20,10 @@ export async function GET(request) {
   try {
     await connectToDatabase();
     const users = await User.find({}).select('-passwordHash').sort({ createdAt: -1 });
-    return NextResponse.json({ success: true, users });
+    return NextResponse.json({ success: true, users }, { headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error('Error fetching users:', error);
-    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500, headers: NO_CACHE_HEADERS });
   }
 }
 
@@ -29,7 +38,7 @@ export async function POST(request) {
     if (!fullName || !username || !password) {
       return NextResponse.json(
         { error: 'Full Name, Username, and Password are required.' },
-        { status: 400 }
+        { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -39,7 +48,10 @@ export async function POST(request) {
 
     const existingUser = await User.findOne({ username: cleanUsername });
     if (existingUser) {
-      return NextResponse.json({ error: 'Username already in use. Please choose another username.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Username already in use. Please choose another username.' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
     let finalUserId = reqUserId ? String(reqUserId).trim() : '';
@@ -59,11 +71,11 @@ export async function POST(request) {
     if (Array.isArray(permissions) && permissions.some((p) => String(p).toLowerCase() === 'mark-attendance')) {
       return NextResponse.json(
         { error: 'Mark Attendance is strictly an Employee-only function and cannot be assigned to Admin or System Users.' },
-        { status: 400 }
+        { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
 
-    const cleanPermissions = Array.isArray(permissions) && permissions.length > 0
+    const cleanPermissions = Array.isArray(permissions)
       ? permissions.filter((p) => p !== 'mark-attendance')
       : ['dashboard'];
 
@@ -76,16 +88,16 @@ export async function POST(request) {
       passwordHash,
       role: role === 'Admin' ? 'Admin' : 'User',
       status: status || 'Active',
-      permissions: role === 'Admin' ? ['dashboard', 'plant', 'approval', 'report', 'employee', 'user-management'] : cleanPermissions,
+      permissions: cleanPermissions,
       plantIds: role === 'Admin' && cleanPlantIds.length === 0 ? ['*'] : cleanPlantIds,
     });
 
     const safeUser = user.toObject();
     delete safeUser.passwordHash;
 
-    return NextResponse.json({ success: true, user: safeUser }, { status: 201 });
+    return NextResponse.json({ success: true, user: safeUser }, { status: 201, headers: NO_CACHE_HEADERS });
   } catch (error) {
     console.error('Error creating user:', error);
-    return NextResponse.json({ error: error.message || 'Failed to create user' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to create user' }, { status: 500, headers: NO_CACHE_HEADERS });
   }
 }

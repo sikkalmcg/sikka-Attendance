@@ -312,7 +312,7 @@ export default function MarkAttendancePage() {
             isOpen: true,
             type: 'OUT',
             isInsidePlant: false,
-            plantName: 'Outside from Plant',
+            plantName: 'Outside Plant',
             locationType: 'OUTSIDE_PLANT',
             distance: checkData.distance,
             allowedRadius: checkData.allowedRadius,
@@ -517,7 +517,7 @@ export default function MarkAttendancePage() {
                 )}
               </button>
             ) : (
-              // Show MARK IN button (disabled — same-day block)
+              // Show MARK IN button (disabled â€” same-day block)
               <div className="space-y-2">
                 <button
                   disabled
@@ -542,7 +542,7 @@ export default function MarkAttendancePage() {
             )}
 
             <p className="text-[11px] text-slate-400 font-medium">
-              ⚡ Location is requested only upon clicking Mark IN or Mark OUT.
+              âš¡ Location is requested only upon clicking Mark IN or Mark OUT.
             </p>
           </div>
         </div>
@@ -559,7 +559,7 @@ export default function MarkAttendancePage() {
                   : liveGpsStatus?.error
                   ? liveGpsStatus.error
                   : liveGpsStatus?.inside
-                  ? `Inside Plant — ${liveGpsStatus.plantName}`
+                  ? `Inside Plant â€” ${liveGpsStatus.plantName}`
                   : liveGpsStatus
                   ? 'Outside Plant'
                   : 'Not checked yet'}
@@ -601,7 +601,7 @@ export default function MarkAttendancePage() {
           </div>
         </div>
 
-        {/* Section 4 & 5: Attendance History – 60 Calendar Days */}
+        {/* Section 4 & 5: Attendance History â€“ 60 Calendar Days */}
         <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-slate-100 gap-2">
             <div>
@@ -907,7 +907,7 @@ export default function MarkAttendancePage() {
                   You are currently outside the plant location.
                 </p>
                 <p className="text-xs text-amber-700 mt-0.5">
-                  Mark Out From: <strong>Outside from Plant</strong>
+                  Mark Out From: <strong>Outside Plant</strong>
                 </p>
               </div>
             )

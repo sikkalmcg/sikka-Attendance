@@ -208,7 +208,7 @@ export default function ApprovalPage() {
       };
     }
 
-    // Rule 3: Past Date – No Mark IN and No Mark OUT -> Absent
+    // Rule 3: Past Date â€“ No Mark IN and No Mark OUT -> Absent
     if (isAbsent || (!hasMarkIn && !hasMarkOut)) {
       return {
         canApprove: true,
@@ -217,7 +217,7 @@ export default function ApprovalPage() {
       };
     }
 
-    // Rule 2: Past Date – Mark IN Complete but Mark OUT Incomplete
+    // Rule 2: Past Date â€“ Mark IN Complete but Mark OUT Incomplete
     if (hasMarkIn && !hasMarkOut) {
       return {
         canApprove: false,
@@ -226,7 +226,7 @@ export default function ApprovalPage() {
       };
     }
 
-    // Rule 4 & 5: Past Date – Mark IN and Mark OUT Complete
+    // Rule 4 & 5: Past Date â€“ Mark IN and Mark OUT Complete
     return {
       canApprove: true,
       actionType: 'APPROVE',
@@ -1125,7 +1125,7 @@ export default function ApprovalPage() {
                                 <button
                                   onClick={() => setAbsentApproveRecord(record)}
                                   className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs border border-amber-300 transition-colors cursor-pointer shadow-xs flex items-center gap-1"
-                                  title="Rule 3: Past date with no Mark IN/OUT – Click to Approve Absent"
+                                  title="Rule 3: Past date with no Mark IN/OUT â€“ Click to Approve Absent"
                                 >
                                   <span>Approve Absent</span>
                                 </button>
@@ -1186,14 +1186,14 @@ export default function ApprovalPage() {
             </table>
           </div>
 
-          {/* ── Pagination Footer ── */}
+          {/* â”€â”€ Pagination Footer â”€â”€ */}
           {!loading && totalRecords > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 sm:px-5 py-3.5 border-t border-slate-100 bg-slate-50/60">
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 text-xs text-slate-500">
                 <span>
                   Showing{' '}
                   <span className="font-semibold text-slate-700">
-                    {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, totalRecords)}
+                    {(safeCurrentPage - 1) * pageSize + 1}â€“{Math.min(safeCurrentPage * pageSize, totalRecords)}
                   </span>{' '}
                   of{' '}
                   <span className="font-semibold text-slate-700">{totalRecords}</span> records
@@ -1224,7 +1224,7 @@ export default function ApprovalPage() {
                   disabled={safeCurrentPage === 1}
                   className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
-                  ← Prev
+                  â† Prev
                 </button>
 
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -1245,7 +1245,7 @@ export default function ApprovalPage() {
                   .map((item, idx) =>
                     item === '...' ? (
                       <span key={`ellipsis-${idx}`} className="px-2 text-xs text-slate-400">
-                        …
+                        â€¦
                       </span>
                     ) : (
                       <button
@@ -1267,7 +1267,7 @@ export default function ApprovalPage() {
                   disabled={safeCurrentPage === totalPages}
                   className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
-                  Next →
+                  Next â†’
                 </button>
               </div>
             </div>

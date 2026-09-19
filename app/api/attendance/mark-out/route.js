@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Plant from '@/models/Plant';
+import Employee from '@/models/Employee';
 import { authorizeEmployee } from '@/lib/rbac';
-import { matchPlantForLocation } from '@/lib/geolocation';
+import {
+  evaluateAssignedPlantLocation,
+  getAssignedPlantQuery,
+  getAssignedPlantReferences,
+} from '@/lib/attendanceLocation';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { normalizePlant, normalizeAttendance } from '@/lib/normalize';
 
@@ -51,21 +56,33 @@ export async function POST(request) {
       );
     }
 
-    // Geolocation server-side evaluation
-    const rawPlants = await Plant.find({
-      $or: [{ status: 'Active' }, { active: true }],
-    });
-    const activePlants = rawPlants.map(normalizePlant);
-    const matchResult = matchPlantForLocation(lat, lng, activePlants);
-
-    let markOutPlantName = 'Outside from Plant';
-    let markOutPlantId = null;
-
-    if (matchResult.matched) {
-      markOutPlantName = matchResult.plant.plantName;
-      markOutPlantId = matchResult.plant.plantId;
+    // Evaluate this Mark OUT only against the employee's assigned plant configuration.
+    const employee = await Employee.findOne({
+      $or: [
+        { employeeId: session.employeeId },
+        { _id: session.sub },
+        ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
+      ],
+    }).select('plantId plantName unitIds').lean();
+    const assignedPlantReferences = getAssignedPlantReferences(employee, session);
+    if (assignedPlantReferences.length === 0) {
+      return NextResponse.json({ error: 'No plant is assigned to this employee.' }, { status: 400 });
     }
 
+    const rawPlants = await Plant.find({
+      $and: [
+        { $or: [{ status: 'Active' }, { active: true }] },
+        getAssignedPlantQuery(assignedPlantReferences),
+      ],
+    }).lean();
+    const assignedPlants = rawPlants.map(normalizePlant);
+    if (assignedPlants.length === 0) {
+      return NextResponse.json({ error: 'No active assigned plant is configured for this employee.' }, { status: 400 });
+    }
+
+    const locationResult = evaluateAssignedPlantLocation(lat, lng, assignedPlants);
+    const markOutPlantName = locationResult.plantName;
+    const markOutPlantId = locationResult.plantId;
     // Authoritative server timestamp
     const markOutAt = new Date();
     const markInTime = activeSession.markInAt ? new Date(activeSession.markInAt).getTime() : markOutAt.getTime();
@@ -82,6 +99,9 @@ export async function POST(request) {
           markOutLatitude: lat,
           markOutLongitude: lng,
           markOutAccuracy: accuracy ? Number(accuracy) : null,
+          markOutWithinPlantRadius: locationResult.withinPlantRadius,
+          markOutDistanceMeters: locationResult.distanceMeters,
+          markOutAllowedRadiusMeters: locationResult.allowedRadiusMeters,
           markOutPlantId,
           markOutPlantName,
           markOutType: 'Self',

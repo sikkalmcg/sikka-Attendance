@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Plant from '@/models/Plant';
+import Employee from '@/models/Employee';
 import { authorizeEmployee } from '@/lib/rbac';
 import { matchPlantForLocation } from '@/lib/geolocation';
+import { getAssignedPlantQuery, getAssignedPlantReferences } from '@/lib/attendanceLocation';
 import { normalizePlant } from '@/lib/normalize';
 
 export async function POST(request) {
@@ -25,14 +27,26 @@ export async function POST(request) {
 
     await connectToDatabase();
 
-    const rawPlants = await Plant.find({
-      $or: [{ status: 'Active' }, { active: true }],
+    const { session } = auth;
+    const employee = await Employee.findOne({
+      $or: [
+        { employeeId: session.employeeId },
+        { _id: session.sub },
+        ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
+      ],
+    }).select('plantId plantName unitIds').lean();
+    const assignedPlantReferences = getAssignedPlantReferences(employee, session);
+    const rawPlants = assignedPlantReferences.length === 0 ? [] : await Plant.find({
+      $and: [
+        { $or: [{ status: 'Active' }, { active: true }] },
+        getAssignedPlantQuery(assignedPlantReferences),
+      ],
     });
     if (rawPlants.length === 0) {
       return NextResponse.json({
         matched: false,
-        reason: 'NO_ACTIVE_PLANTS',
-        message: 'No active plants are currently configured in the system.',
+        reason: 'NO_ASSIGNED_ACTIVE_PLANT',
+        message: 'No active plant is assigned to this employee.',
       });
     }
 
