@@ -470,7 +470,11 @@ export default function ApprovalPage() {
       const res = await fetch('/api/attendance/restore', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: restoringRecord.id || restoringRecord._id }),
+        body: JSON.stringify({
+          id: restoringRecord.id || restoringRecord._id,
+          employeeId: restoringRecord.employeeId,
+          attendanceDate: restoringRecord.attendanceDate || restoringRecord.inDate,
+        }),
       });
 
       const parsed = await safeParseJson(res);

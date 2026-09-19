@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
@@ -11,21 +12,47 @@ export async function POST(request) {
   const { session } = auth;
 
   try {
-    const { id } = await request.json();
+    const { id, employeeId, attendanceDate } = await request.json();
 
-    if (!id) {
+    if (!id && (!employeeId || !attendanceDate)) {
       return NextResponse.json({ error: 'Attendance record ID is required.' }, { status: 400 });
     }
 
     await connectToDatabase();
 
     let record = null;
-    try {
-      record = await Attendance.findById(id);
-    } catch (e) {}
 
-    if (!record) {
-      record = await Attendance.findOne({ $or: [{ _id: id }, { id: id }] });
+    if (id) {
+      const cleanId = String(id).trim();
+      const queryIds = [{ _id: cleanId }, { id: cleanId }];
+      if (mongoose.Types.ObjectId.isValid(cleanId)) {
+        queryIds.push({ _id: new mongoose.Types.ObjectId(cleanId) });
+      }
+
+      record = await Attendance.findOne({ $or: queryIds });
+
+      // Handle synthetic absent ID: absent_${empId}_${date}
+      if (!record && cleanId.startsWith('absent_')) {
+        const parts = cleanId.replace(/^absent_/, '').split('_');
+        const date = parts.pop();
+        const empId = parts.join('_');
+        record = await Attendance.findOne({
+          $and: [
+            { $or: [{ employeeId: empId }, { employeeId: empId.toUpperCase() }] },
+            { $or: [{ attendanceDate: date }, { inDate: date }, { date: date }] },
+          ],
+        });
+      }
+    }
+
+    // Secondary fallback: lookup by employeeId and attendanceDate
+    if (!record && employeeId && attendanceDate) {
+      record = await Attendance.findOne({
+        $and: [
+          { $or: [{ employeeId: String(employeeId).trim() }, { employeeId: String(employeeId).trim().toUpperCase() }] },
+          { $or: [{ attendanceDate: attendanceDate }, { inDate: attendanceDate }, { date: attendanceDate }] },
+        ],
+      });
     }
 
     if (!record) {
