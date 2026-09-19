@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
+import Employee from '@/models/Employee';
 import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { formatKolkataDateTime, formatWorkingHours } from '@/lib/timezone';
@@ -161,7 +162,39 @@ export async function GET(request) {
       .sort({ _id: -1 })
       .limit(fetchLimit);
 
-    const records = rawRecords.map(normalizeAttendance);
+    // Map actual designations from Employee collection
+    const empIds = [...new Set(rawRecords.map((r) => r.employeeId).filter(Boolean))];
+    const employeeDocs = empIds.length > 0 ? await Employee.find({
+      $or: [
+        { employeeId: { $in: empIds } },
+        { id: { $in: empIds } },
+        { _id: { $in: empIds } },
+      ],
+    }).select('employeeId id designation fullName name').lean() : [];
+
+    const designationMap = new Map();
+    for (const emp of employeeDocs) {
+      const desig = emp.designation;
+      if (desig) {
+        if (emp.employeeId) designationMap.set(String(emp.employeeId).toUpperCase().trim(), desig);
+        if (emp.id) designationMap.set(String(emp.id).trim(), desig);
+        if (emp._id) designationMap.set(String(emp._id).trim(), desig);
+        if (emp.fullName) designationMap.set(String(emp.fullName).toLowerCase().trim(), desig);
+        if (emp.name) designationMap.set(String(emp.name).toLowerCase().trim(), desig);
+      }
+    }
+
+    const records = rawRecords.map((raw) => {
+      const rec = normalizeAttendance(raw);
+      const idKey = String(rec.employeeId || '').toUpperCase().trim();
+      const nameKey = String(rec.employeeName || '').toLowerCase().trim();
+      if (designationMap.has(idKey)) {
+        rec.designation = designationMap.get(idKey);
+      } else if (designationMap.has(nameKey)) {
+        rec.designation = designationMap.get(nameKey);
+      }
+      return rec;
+    });
 
     // Handle CSV or Excel Export
     if (exportFormat === 'csv' || exportFormat === 'xlsx') {
