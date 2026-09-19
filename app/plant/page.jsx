@@ -168,14 +168,14 @@ export default function PlantPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Plant Management</h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Plant Management</h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Configure authorized manufacturing plants, GPS coordinates, and geofence radii
             </p>
           </div>
           <button
             onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm shadow-md shadow-blue-600/20 transition-all cursor-pointer w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Add New Plant</span>
@@ -183,8 +183,8 @@ export default function PlantPage() {
         </div>
 
         {/* Search */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center gap-3">
-          <Search className="w-5 h-5 text-slate-400" />
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs flex items-center gap-3">
+          <Search className="w-5 h-5 text-slate-400 shrink-0" />
           <input
             type="text"
             value={search}
@@ -197,7 +197,7 @@ export default function PlantPage() {
         {/* Plants List / Table */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
+            <table className="w-full text-left text-sm text-slate-600 min-w-[700px]">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200/70">
                 <tr>
                   <th className="px-6 py-4">Plant ID</th>

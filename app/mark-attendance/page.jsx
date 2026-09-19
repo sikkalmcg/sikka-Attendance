@@ -602,7 +602,7 @@ export default function MarkAttendancePage() {
         </div>
 
         {/* Section 4 & 5: Attendance History – 60 Calendar Days */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-4 border-b border-slate-100 gap-2">
             <div>
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
@@ -623,7 +623,7 @@ export default function MarkAttendancePage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
+            <table className="w-full text-left text-xs text-slate-600 min-w-[760px]">
               <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-y border-slate-100">
                 <tr>
                   <th className="py-2.5 px-3">Employee Details</th>

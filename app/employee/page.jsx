@@ -368,16 +368,16 @@ export default function EmployeePage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Employee Management</h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Employee Management</h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1">
               Manage workforce profiles, credentials, Aadhaar security, and attendance authorization
             </p>
           </div>
-          <div className="flex items-center flex-wrap gap-2.5">
+          <div className="flex items-center flex-wrap gap-2 sm:gap-2.5 w-full sm:w-auto">
             <a
               href="/api/employees/template"
               download
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-xs transition-colors cursor-pointer flex-1 sm:flex-none justify-center"
               title="Download Excel template for bulk import"
             >
               <Download className="w-4 h-4 text-slate-500" />
@@ -385,21 +385,21 @@ export default function EmployeePage() {
             </a>
             <button
               onClick={() => { setUploadSummary(null); setUploadFile(null); setBulkModalOpen(true); }}
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-xs transition-colors cursor-pointer flex-1 sm:flex-none justify-center"
             >
               <UploadCloud className="w-4 h-4 text-blue-600" />
               <span>Bulk Upload</span>
             </button>
             <button
               onClick={handleExportExcel}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 text-xs font-bold shadow-xs transition-colors cursor-pointer flex-1 sm:flex-none justify-center"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span>Export Excel</span>
             </button>
             <button
               onClick={openCreateModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer w-full sm:w-auto justify-center"
             >
               <UserPlus className="w-4 h-4" />
               <span>Add Employee</span>
@@ -408,9 +408,9 @@ export default function EmployeePage() {
         </div>
 
         {/* Search & Filters */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center gap-3">
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center gap-3">
           <form onSubmit={handleSearchSubmit} className="flex-1 w-full flex items-center gap-2">
-            <Search className="w-5 h-5 text-slate-400" />
+            <Search className="w-5 h-5 text-slate-400 shrink-0" />
             <input
               type="text"
               value={search}
@@ -419,11 +419,11 @@ export default function EmployeePage() {
               className="w-full text-sm bg-transparent border-none outline-hidden text-slate-800 placeholder-slate-400"
             />
           </form>
-          <div className="flex items-center gap-2.5 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full md:w-auto">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white"
+              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white cursor-pointer"
             >
               <option value="">All Statuses</option>
               <option value="Active">Active Only</option>
@@ -432,7 +432,7 @@ export default function EmployeePage() {
             <select
               value={authFilter}
               onChange={(e) => setAuthFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white"
+              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white cursor-pointer"
             >
               <option value="">All Authorizations</option>
               <option value="Authorized">Authorized Only</option>
@@ -440,8 +440,9 @@ export default function EmployeePage() {
             </select>
             <button
               onClick={fetchEmployees}
-              className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer"
+              className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer shrink-0"
               title="Refresh"
+              aria-label="Refresh"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -451,7 +452,7 @@ export default function EmployeePage() {
         {/* Employee Table */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
+            <table className="w-full text-left text-sm text-slate-600 min-w-[860px]">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200/70">
                 <tr>
                   <th className="px-6 py-4">Employee ID</th>

@@ -154,17 +154,17 @@ export default function AppLayout({ children, requiredPermission, employeeOnly =
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pb-16 md:pb-0">
+      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pb-16 md:pb-0 overflow-x-hidden">
         <AppNavbar user={user} onLogout={handleLogout} setMobileOpen={setMobileOpen} />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto animate-in fade-in duration-150">
+        <main className="flex-1 p-3.5 sm:p-5 lg:p-8 max-w-7xl w-full mx-auto animate-in fade-in duration-150">
           {children}
         </main>
       </div>
 
       {/* Mobile Bottom Navigation for Employees: Only Mark Attendance and Logout (Requirement 3) */}
       {isEmployee && (
-        <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30 flex items-center justify-around py-2 shadow-lg">
+        <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-30 flex items-center justify-around py-2 shadow-lg">
           <Link
             href="/mark-attendance"
             className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl text-xs font-semibold ${pathname === '/mark-attendance' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'

@@ -35,11 +35,11 @@ function DetailModal({ open, onClose, title, color, loading, data }) {
       />
 
       {/* Panel */}
-      <div className="relative w-full max-w-2xl max-h-[80vh] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-2xl max-h-[88vh] bg-white rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 mx-2 sm:mx-0 my-auto">
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-${color}-50`}>
+        <div className={`flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-${color}-50 shrink-0`}>
           <div>
-            <h2 className={`text-base font-bold text-${color}-700`}>{title}</h2>
+            <h2 className={`text-sm sm:text-base font-bold text-${color}-700`}>{title}</h2>
             {!loading && data && (
               <p className="text-xs text-slate-500 mt-0.5">
                 {data.count} {data.count === 1 ? 'record' : 'records'}
@@ -49,6 +49,7 @@ function DetailModal({ open, onClose, title, color, loading, data }) {
           <button
             onClick={onClose}
             className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            aria-label="Close modal"
           >
             <X className="w-5 h-5" />
           </button>
@@ -66,138 +67,148 @@ function DetailModal({ open, onClose, title, color, loading, data }) {
               <span className="text-sm">No records found.</span>
             </div>
           ) : data.type === 'totalEmployees' ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
-                <tr>
-                  <th className="px-5 py-3">Emp ID</th>
-                  <th className="px-5 py-3">Name</th>
-                  <th className="px-5 py-3">Designation</th>
-                  <th className="px-5 py-3">Authorized</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.list.map((e, i) => (
-                  <tr key={e.employeeId || i} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 font-mono font-bold text-xs text-blue-600">{e.employeeId}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-800">{e.name}</td>
-                    <td className="px-5 py-3 text-slate-600">{e.designation}</td>
-                    <td className="px-5 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${e.authorized ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {e.authorized ? 'Yes' : 'No'}
-                      </span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left min-w-[480px]">
+                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-5 py-3">Emp ID</th>
+                    <th className="px-5 py-3">Name</th>
+                    <th className="px-5 py-3">Designation</th>
+                    <th className="px-5 py-3">Authorized</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.list.map((e, i) => (
+                    <tr key={e.employeeId || i} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3 font-mono font-bold text-xs text-blue-600">{e.employeeId}</td>
+                      <td className="px-5 py-3 font-semibold text-slate-800">{e.name}</td>
+                      <td className="px-5 py-3 text-slate-600">{e.designation}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${e.authorized ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {e.authorized ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : data.type === 'present' ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
-                <tr>
-                  <th className="px-5 py-3">Emp ID</th>
-                  <th className="px-5 py-3">Name</th>
-                  <th className="px-5 py-3">Designation</th>
-                  <th className="px-5 py-3">Plant</th>
-                  <th className="px-5 py-3">Mark In</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.list.map((e, i) => (
-                  <tr key={e.employeeId || i} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 font-mono font-bold text-xs text-blue-600">{e.employeeId}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-800">{e.name}</td>
-                    <td className="px-5 py-3 text-slate-600">{e.designation}</td>
-                    <td className="px-5 py-3 text-slate-600">{e.plantName}</td>
-                    <td className="px-5 py-3 font-mono text-xs text-slate-600">{e.markInAt ? formatKolkataDateTime(e.markInAt) : '—'}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left min-w-[500px]">
+                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-5 py-3">Emp ID</th>
+                    <th className="px-5 py-3">Name</th>
+                    <th className="px-5 py-3">Designation</th>
+                    <th className="px-5 py-3">Plant</th>
+                    <th className="px-5 py-3">Mark In</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.list.map((e, i) => (
+                    <tr key={e.employeeId || i} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3 font-mono font-bold text-xs text-blue-600">{e.employeeId}</td>
+                      <td className="px-5 py-3 font-semibold text-slate-800">{e.name}</td>
+                      <td className="px-5 py-3 text-slate-600">{e.designation}</td>
+                      <td className="px-5 py-3 text-slate-600">{e.plantName}</td>
+                      <td className="px-5 py-3 font-mono text-xs text-slate-600">{e.markInAt ? formatKolkataDateTime(e.markInAt) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : data.type === 'absent' ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
-                <tr>
-                  <th className="px-5 py-3">Emp ID</th>
-                  <th className="px-5 py-3">Name</th>
-                  <th className="px-5 py-3">Designation</th>
-                  <th className="px-5 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.list.map((e, i) => (
-                  <tr key={`absent-${i}`} className="hover:bg-rose-50/40 transition-colors">
-                    <td className="px-5 py-3 font-mono font-bold text-xs text-rose-600">{e.employeeId}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-800">{e.name}</td>
-                    <td className="px-5 py-3 text-slate-600">{e.designation}</td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700">
-                        Absent
-                      </span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left min-w-[480px]">
+                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-5 py-3">Emp ID</th>
+                    <th className="px-5 py-3">Name</th>
+                    <th className="px-5 py-3">Designation</th>
+                    <th className="px-5 py-3">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.list.map((e, i) => (
+                    <tr key={`absent-${i}`} className="hover:bg-rose-50/40 transition-colors">
+                      <td className="px-5 py-3 font-mono font-bold text-xs text-rose-600">{e.employeeId}</td>
+                      <td className="px-5 py-3 font-semibold text-slate-800">{e.name}</td>
+                      <td className="px-5 py-3 text-slate-600">{e.designation}</td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700">
+                          Absent
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : data.type === 'plants' ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
-                <tr>
-                  <th className="px-5 py-3">Plant ID</th>
-                  <th className="px-5 py-3">Plant Name</th>
-                  <th className="px-5 py-3">Location</th>
-                  <th className="px-5 py-3">Radius</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.list.map((p, i) => (
-                  <tr key={`plant-${i}`} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 font-mono font-bold text-xs text-indigo-600">{p.plantId}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-800">{p.plantName}</td>
-                    <td className="px-5 py-3 text-slate-600 flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      {p.location}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">
-                        <Compass className="w-3 h-3" />
-                        {p.radiusMeters}m
-                      </span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left min-w-[480px]">
+                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-5 py-3">Plant ID</th>
+                    <th className="px-5 py-3">Plant Name</th>
+                    <th className="px-5 py-3">Location</th>
+                    <th className="px-5 py-3">Radius</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.list.map((p, i) => (
+                    <tr key={`plant-${i}`} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3 font-mono font-bold text-xs text-indigo-600">{p.plantId}</td>
+                      <td className="px-5 py-3 font-semibold text-slate-800">{p.plantName}</td>
+                      <td className="px-5 py-3 text-slate-600 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        {p.location}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">
+                          <Compass className="w-3 h-3" />
+                          {p.radiusMeters}m
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : data.type === 'pendingApprovals' ? (
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
-                <tr>
-                  <th className="px-5 py-3">Emp ID</th>
-                  <th className="px-5 py-3">Name</th>
-                  <th className="px-5 py-3">Plant</th>
-                  <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.list.map((r, i) => (
-                  <tr key={`pending-${i}`} className="hover:bg-amber-50/40 transition-colors">
-                    <td className="px-5 py-3 font-mono font-bold text-xs text-amber-600">{r.employeeId}</td>
-                    <td className="px-5 py-3 font-semibold text-slate-800">{r.name}</td>
-                    <td className="px-5 py-3 text-slate-600">{r.plantName}</td>
-                    <td className="px-5 py-3 font-mono text-xs text-slate-600">{r.attendanceDate}</td>
-                    <td className="px-5 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        r.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700' :
-                        r.status === 'ACTIVE' ? 'bg-blue-50 text-blue-700' :
-                        'bg-slate-100 text-slate-600'
-                      }`}>
-                        {r.status}
-                      </span>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left min-w-[500px]">
+                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500 sticky top-0">
+                  <tr>
+                    <th className="px-5 py-3">Emp ID</th>
+                    <th className="px-5 py-3">Name</th>
+                    <th className="px-5 py-3">Plant</th>
+                    <th className="px-5 py-3">Date</th>
+                    <th className="px-5 py-3">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.list.map((r, i) => (
+                    <tr key={`pending-${i}`} className="hover:bg-amber-50/40 transition-colors">
+                      <td className="px-5 py-3 font-mono font-bold text-xs text-amber-600">{r.employeeId}</td>
+                      <td className="px-5 py-3 font-semibold text-slate-800">{r.name}</td>
+                      <td className="px-5 py-3 text-slate-600">{r.plantName}</td>
+                      <td className="px-5 py-3 font-mono text-xs text-slate-600">{r.attendanceDate}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          r.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700' :
+                          r.status === 'ACTIVE' ? 'bg-blue-50 text-blue-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>
+                          {r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : null}
         </div>
       </div>
@@ -393,7 +404,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Primary 3 KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
           {/* Card 1: Total Employees */}
           <button
             onClick={() => openDetail('totalEmployees', 'Total Active Employees', 'blue')}
@@ -463,7 +474,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Secondary Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
           {/* Currently on Shift — NOT clickable */}
           <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-md flex items-center justify-between">
             <div>
@@ -508,16 +519,16 @@ export default function DashboardPage() {
 
         {/* Recent Activity Table */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-blue-600" />
-              <h2 className="text-base font-bold text-slate-900">Today's Attendance Stream</h2>
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">Today's Attendance Stream</h2>
             </div>
             <span className="text-xs font-medium text-slate-500">Live feed</span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
+            <table className="w-full text-left text-sm text-slate-600 min-w-[720px]">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200/70">
                 <tr>
                   <SortHeader

@@ -600,10 +600,10 @@ export default function ApprovalPage() {
         {/* Navigation Tabs and Employee Search Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           {/* Tabs: Pending Approvals | Approved History */}
-          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-200/60 w-fit shrink-0">
+          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-200/60 w-full sm:w-fit shrink-0">
             <button
               onClick={() => setActiveTab('PENDING')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                 activeTab === 'PENDING'
                   ? 'bg-white text-blue-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -613,7 +613,7 @@ export default function ApprovalPage() {
             </button>
             <button
               onClick={() => setActiveTab('APPROVED')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                 activeTab === 'APPROVED'
                   ? 'bg-white text-emerald-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -623,7 +623,7 @@ export default function ApprovalPage() {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             {/* Date Filter Input */}
             <div className="relative flex items-center">
               <div className="relative">
@@ -660,7 +660,7 @@ export default function ApprovalPage() {
             </div>
 
             {/* Employee Search Input */}
-            <div className="relative min-w-[220px] sm:min-w-[280px]">
+            <div className="relative flex-1 sm:flex-initial min-w-[200px] sm:min-w-[260px] w-full sm:w-auto">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
@@ -685,7 +685,7 @@ export default function ApprovalPage() {
 
         {/* Multi-Selection Action Bar */}
         {activeTab === 'PENDING' && selectedIds.length > 0 && (
-          <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-150">
+          <div className="p-3 sm:p-4 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-in fade-in duration-150">
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-blue-900">
               <CheckCheck className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
@@ -718,13 +718,13 @@ export default function ApprovalPage() {
               <button
                 type="button"
                 onClick={() => setSelectedIds([])}
-                className="px-3 py-2 rounded-xl border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-semibold transition-colors cursor-pointer"
+                className="flex-1 sm:flex-none px-3 py-2 rounded-xl border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-semibold transition-colors cursor-pointer text-center"
               >
                 Clear
               </button>
               <button
                 onClick={() => setMultiApproveModalOpen(true)}
-                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                className="flex-1 sm:flex-none px-4 sm:px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer text-center"
               >
                 Approve Selected ({selectedIds.length})
               </button>
@@ -735,7 +735,7 @@ export default function ApprovalPage() {
         {/* Attendance Records Table */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
+            <table className="w-full text-left text-xs text-slate-600 min-w-[950px]">
               <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-100">
                 <tr>
                   {activeTab === 'PENDING' && (
@@ -1019,8 +1019,8 @@ export default function ApprovalPage() {
 
           {/* ── Pagination Footer ── */}
           {!loading && totalRecords > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-slate-100 bg-slate-50/60">
-              <div className="flex items-center gap-3 text-xs text-slate-500">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-3 sm:px-5 py-3.5 border-t border-slate-100 bg-slate-50/60">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 text-xs text-slate-500">
                 <span>
                   Showing{' '}
                   <span className="font-semibold text-slate-700">
@@ -1029,7 +1029,7 @@ export default function ApprovalPage() {
                   of{' '}
                   <span className="font-semibold text-slate-700">{totalRecords}</span> records
                 </span>
-                <span className="text-slate-300">|</span>
+                <span className="text-slate-300 hidden sm:inline">|</span>
                 <div className="flex items-center gap-1.5">
                   <span>Rows per page:</span>
                   <select
@@ -1044,7 +1044,7 @@ export default function ApprovalPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center justify-center gap-1 w-full sm:w-auto">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={safeCurrentPage === 1}

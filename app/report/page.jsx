@@ -211,26 +211,26 @@ export default function ReportPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
             {/* Fetch All Data from DB Toggle Button */}
             <button
               onClick={() => setAllTime(!allTime)}
               disabled={loading}
-              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs ${
+              className={`inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs flex-1 sm:flex-none ${
                 allTime
                   ? 'bg-blue-600 text-white shadow-blue-600/20 ring-2 ring-blue-500'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
               <Database className={`w-4 h-4 ${allTime ? 'text-white' : 'text-blue-600'}`} />
-              <span>{allTime ? 'Showing All Data (DB)' : 'Fetch All Data from DB'}</span>
+              <span>{allTime ? 'All Data (DB)' : 'Fetch All from DB'}</span>
             </button>
 
             {/* Section 26: Export Excel Button */}
             <button
               onClick={handleExportExcel}
               disabled={exporting || loading}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60 shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex-1 sm:flex-none"
             >
               <Download className={`w-4 h-4 ${exporting ? 'animate-bounce' : ''}`} />
               <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
@@ -238,8 +238,9 @@ export default function ReportPage() {
 
             <button
               onClick={fetchReports}
-              className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="p-2 sm:p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
               title="Refresh Report"
+              aria-label="Refresh Report"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -247,13 +248,13 @@ export default function ReportPage() {
         </div>
 
         {/* Section 23 & 24: Filter Bar */}
-        <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-xs space-y-4">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider">
             <Filter className="w-3.5 h-3.5 text-blue-600" />
             <span>Report Filters</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {/* Section 23: Plant Multi-Select Dropdown */}
             <div className="relative">
               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -359,7 +360,7 @@ export default function ReportPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
+            <table className="w-full text-left text-xs text-slate-600 min-w-[1250px]">
               <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-100">
                 <tr>
                   <th className="py-3 px-4">Employee ID</th>
