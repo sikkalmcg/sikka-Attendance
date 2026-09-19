@@ -28,7 +28,7 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'user-management', label: 'User Management' },
 ];
 
-const PERMISSION_LABEL_MAP = {
+const VALID_PAGE_MAP = {
   dashboard: 'Dashboard',
   plant: 'Plant',
   plants: 'Plant',
@@ -39,8 +39,67 @@ const PERMISSION_LABEL_MAP = {
   employee: 'Employee',
   employees: 'Employee',
   'user-management': 'User Management',
+  'user management': 'User Management',
   users: 'User Management',
 };
+
+const CANONICAL_PAGE_ORDER = [
+  'Dashboard',
+  'Plant',
+  'Approval',
+  'Report',
+  'Employee',
+  'User Management',
+];
+
+const PERMISSION_ID_MAP = {
+  dashboard: 'dashboard',
+  plant: 'plant',
+  plants: 'plant',
+  approval: 'approval',
+  approvals: 'approval',
+  report: 'report',
+  reports: 'report',
+  employee: 'employee',
+  employees: 'employee',
+  'user-management': 'user-management',
+  'user management': 'user-management',
+  users: 'user-management',
+};
+
+const VALID_PERMISSION_IDS = ['dashboard', 'plant', 'approval', 'report', 'employee', 'user-management'];
+
+/**
+ * Filters out non-existent page tags (holidays, vouchers, leave approvals, payroll, settings, attendance, etc.)
+ * and deduplicates per user, returning valid pages in canonical order.
+ */
+function getValidAccessPages(rawPermissions) {
+  if (!Array.isArray(rawPermissions)) return [];
+  const matchedPages = new Set();
+  for (const raw of rawPermissions) {
+    if (!raw) continue;
+    const clean = String(raw).trim().toLowerCase();
+    const mappedLabel = VALID_PAGE_MAP[clean];
+    if (mappedLabel) {
+      matchedPages.add(mappedLabel);
+    }
+  }
+  return CANONICAL_PAGE_ORDER.filter((page) => matchedPages.has(page));
+}
+
+function getCleanPermissionIds(rawPermissions) {
+  if (!Array.isArray(rawPermissions)) return [];
+  const matched = new Set();
+  for (const raw of rawPermissions) {
+    if (!raw) continue;
+    const clean = String(raw).trim().toLowerCase();
+    const validId = PERMISSION_ID_MAP[clean];
+    if (validId) {
+      matched.add(validId);
+    }
+  }
+  return VALID_PERMISSION_IDS.filter((id) => matched.has(id));
+}
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState([]);
@@ -123,6 +182,35 @@ export default function UserManagementPage() {
     fetchPlants();
   }, []);
 
+  // Fast plant ID to Name lookup map
+  const plantNameMap = React.useMemo(() => {
+    const map = new Map();
+    for (const p of plantsList) {
+      const name = p.plantName || p.name;
+      if (name) {
+        if (p._id) map.set(String(p._id).trim(), name);
+        if (p.id) map.set(String(p.id).trim(), name);
+        if (p.plantId) map.set(String(p.plantId).trim(), name);
+        map.set(String(name).trim().toLowerCase(), name);
+      }
+    }
+    return map;
+  }, [plantsList]);
+
+  const resolvePlantName = (plantIdOrName) => {
+    if (!plantIdOrName) return '';
+    const clean = String(plantIdOrName).trim();
+    if (
+      clean === '*' ||
+      clean === 'ALL' ||
+      clean === 'all' ||
+      clean === 'All Plants'
+    ) {
+      return 'All Plants';
+    }
+    return plantNameMap.get(clean) || plantNameMap.get(clean.toLowerCase()) || clean;
+  };
+
   const openCreateModal = () => {
     setEditingUser(null);
     setFormData({
@@ -154,7 +242,7 @@ export default function UserManagementPage() {
       confirmPassword: '',
       role: u.role || 'User',
       status: u.status || 'Active',
-      permissions: Array.isArray(u.permissions) ? [...u.permissions] : [],
+      permissions: getCleanPermissionIds(u.permissions),
       plantIds: userPlantIds,
     });
     setShowPassword(false);
@@ -177,8 +265,8 @@ export default function UserManagementPage() {
             username: dbUser.username || prev.username,
             role: dbUser.role || prev.role,
             status: dbUser.status || prev.status,
-            // Source of truth: exact current permissions directly from DB
-            permissions: Array.isArray(dbUser.permissions) ? dbUser.permissions : [],
+            // Source of truth: exact current permissions directly from DB cleaned of legacy tags
+            permissions: getCleanPermissionIds(dbUser.permissions),
             plantIds: Array.isArray(dbUser.plantIds) && dbUser.plantIds.length > 0
               ? dbUser.plantIds
               : prev.plantIds,
@@ -406,11 +494,25 @@ export default function UserManagementPage() {
   };
 
   const filteredUsers = users.filter((u) => {
-    const q = search.toLowerCase();
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+
+    const validPages = getValidAccessPages(u.permissions);
+    const plantNames = (u.plantIds || []).map((p) => resolvePlantName(p).toLowerCase());
+    const isAll =
+      u.role === 'Admin' ||
+      u.plantIds?.includes('*') ||
+      u.plantIds?.includes('ALL') ||
+      u.plantIds?.includes('all') ||
+      u.plantIds?.includes('All Plants');
+    if (isAll) plantNames.push('all plants');
+
     return (
       u.fullName?.toLowerCase().includes(q) ||
       u.username?.toLowerCase().includes(q) ||
-      u.userId?.toLowerCase().includes(q)
+      u.userId?.toLowerCase().includes(q) ||
+      validPages.some((p) => p.toLowerCase().includes(q)) ||
+      plantNames.some((p) => p.includes(q))
     );
   });
 
@@ -504,22 +606,28 @@ export default function UserManagementPage() {
                           @{u.username}
                         </td>
                         <td className="px-5 py-3.5">
-                          {Array.isArray(u.permissions) && u.permissions.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 max-w-xs">
-                              {u.permissions.map((p, pIdx) => (
-                                <span
-                                  key={`${u._id || idx}-perm-${p}-${pIdx}`}
-                                  className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold whitespace-nowrap"
-                                >
-                                  {PERMISSION_LABEL_MAP[String(p).toLowerCase()] || p}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-rose-500 font-semibold italic">
-                              No Page Access
-                            </span>
-                          )}
+                          {(() => {
+                            const validPages = getValidAccessPages(u.permissions);
+                            if (validPages.length > 0) {
+                              return (
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {validPages.map((pageName, pIdx) => (
+                                    <span
+                                      key={`${u._id || idx}-perm-${pageName}-${pIdx}`}
+                                      className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-semibold whitespace-nowrap"
+                                    >
+                                      {pageName}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return (
+                              <span className="text-[11px] text-rose-500 font-semibold italic">
+                                No Page Access
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-5 py-3.5">
                           {isAll ? (
@@ -527,21 +635,38 @@ export default function UserManagementPage() {
                               <Building2 className="w-3 h-3" />
                               <span>All Plants</span>
                             </span>
-                          ) : u.plantIds && u.plantIds.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 max-w-xs">
-                              {u.plantIds.map((pName, pIdx) => (
-                                <span
-                                  key={`${u._id || idx}-plant-${pName}-${pIdx}`}
-                                  className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-semibold whitespace-nowrap"
-                                >
-                                  {pName}
-                                </span>
-                              ))}
-                            </div>
                           ) : (
-                            <span className="text-[11px] text-rose-500 font-semibold italic">
-                              No Plant Access
-                            </span>
+                            (() => {
+                              const rawPlants = Array.isArray(u.plantIds) ? u.plantIds : [];
+                              const mappedPlants = Array.from(
+                                new Set(
+                                  rawPlants
+                                    .map(resolvePlantName)
+                                    .filter((name) => Boolean(name) && name !== 'All Plants')
+                                )
+                              );
+
+                              if (mappedPlants.length === 0) {
+                                return (
+                                  <span className="text-[11px] text-rose-500 font-semibold italic">
+                                    No Plant Access
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {mappedPlants.map((plantDisplayName, pIdx) => (
+                                    <span
+                                      key={`${u._id || idx}-plant-${plantDisplayName}-${pIdx}`}
+                                      className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-semibold whitespace-nowrap"
+                                    >
+                                      {plantDisplayName}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()
                           )}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">

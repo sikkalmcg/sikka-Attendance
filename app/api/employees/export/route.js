@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Employee from '@/models/Employee';
-import { authorizeSystemUser } from '@/lib/rbac';
+import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { normalizeEmployee } from '@/lib/normalize';
 import { maskAadhaar } from '@/lib/timezone';
 import * as XLSX from 'xlsx';
@@ -15,8 +15,24 @@ export async function GET(request) {
 
   try {
     await connectToDatabase();
+    const plantScope = await getScopedPlantContext(session);
 
-    const rawEmployees = await Employee.find().sort({ createdAt: -1 });
+    let query = {};
+    if (!plantScope.isAllPlants) {
+      const plantRegexes = (plantScope.plantNames || []).map(
+        (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+      );
+      query = {
+        $or: [
+          { unitIds: { $in: plantScope.plantIds } },
+          { plantId: { $in: plantScope.plantIds } },
+          { plantName: { $in: plantScope.plantNames } },
+          { plantName: { $in: plantRegexes } },
+        ],
+      };
+    }
+
+    const rawEmployees = await Employee.find(query).sort({ createdAt: -1 });
     const employees = rawEmployees.map(normalizeEmployee);
 
     const formattedRows = employees.map((emp) => {

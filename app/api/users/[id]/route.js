@@ -90,8 +90,29 @@ export async function PUT(request, { params }) {
           { status: 400, headers: NO_CACHE_HEADERS }
         );
       }
-      // Save exact permissions chosen by Admin/User Management user
-      updateFields.permissions = data.permissions.filter((p) => p !== 'mark-attendance');
+      const VALID_PERMISSION_IDS = ['dashboard', 'plant', 'approval', 'report', 'employee', 'user-management'];
+      const PERMISSION_ID_MAP = {
+        dashboard: 'dashboard',
+        plant: 'plant',
+        plants: 'plant',
+        approval: 'approval',
+        approvals: 'approval',
+        report: 'report',
+        reports: 'report',
+        employee: 'employee',
+        employees: 'employee',
+        'user-management': 'user-management',
+        'user management': 'user-management',
+        users: 'user-management',
+      };
+
+      // Save exact valid permissions chosen by Admin/User Management user
+      updateFields.permissions = Array.from(new Set(
+        data.permissions
+          .map((p) => String(p).trim().toLowerCase())
+          .map((p) => PERMISSION_ID_MAP[p] || p)
+          .filter((p) => VALID_PERMISSION_IDS.includes(p))
+      ));
     }
 
     // Password reset if provided

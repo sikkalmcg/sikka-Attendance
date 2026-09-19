@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Employee from '@/models/Employee';
 import Plant from '@/models/Plant';
-import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
+import { authorizeSystemUser, getScopedPlantContext, hasPlantAccess } from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
 import { normalizeEmployee } from '@/lib/normalize';
 
 export async function GET(request) {
-  const auth = await authorizeSystemUser(request, 'employee');
+  // Allow users with 'employee' or 'approval' permission to fetch scoped employees
+  let auth = await authorizeSystemUser(request, 'employee');
+  if (!auth.authorized) {
+    auth = await authorizeSystemUser(request, 'approval');
+  }
   if (!auth.authorized) return auth.response;
 
   try {
@@ -49,11 +53,15 @@ export async function GET(request) {
     }
 
     if (!plantScope.isAllPlants) {
+      const plantRegexes = (plantScope.plantNames || []).map(
+        (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+      );
       queryParts.push({
         $or: [
           { unitIds: { $in: plantScope.plantIds } },
           { plantId: { $in: plantScope.plantIds } },
           { plantName: { $in: plantScope.plantNames } },
+          { plantName: { $in: plantRegexes } },
         ],
       });
     }
@@ -134,6 +142,42 @@ export async function POST(request) {
 
     await connectToDatabase();
 
+    // Plant-Wise User Access Control (Requirements 1, 8, 10)
+    const plantScope = await getScopedPlantContext(auth.session);
+    let resolvedPlantId = plantId ? String(plantId).trim() : '';
+    let resolvedPlantName = plantName ? String(plantName).trim() : '';
+
+    if (resolvedPlantId || resolvedPlantName) {
+      const matchPlant = await Plant.findOne({
+        $or: [
+          ...(resolvedPlantId ? [{ _id: resolvedPlantId }, { id: resolvedPlantId }, { plantId: resolvedPlantId }] : []),
+          ...(resolvedPlantName ? [{ plantName: resolvedPlantName }, { name: resolvedPlantName }] : []),
+        ],
+      }).lean();
+
+      if (matchPlant) {
+        resolvedPlantId = matchPlant.plantId || (matchPlant._id ? String(matchPlant._id) : resolvedPlantId);
+        resolvedPlantName = matchPlant.plantName || matchPlant.name || resolvedPlantName;
+      }
+    }
+
+    if (!plantScope.isAllPlants) {
+      if (!resolvedPlantId && !resolvedPlantName) {
+        return NextResponse.json(
+          { error: 'Plant selection is required. Please select a plant assigned to your account.' },
+          { status: 400 }
+        );
+      }
+
+      const hasAccess = hasPlantAccess(plantScope, { plantId: resolvedPlantId, plantName: resolvedPlantName });
+      if (!hasAccess) {
+        return NextResponse.json(
+          { error: `Access denied: You do not have permission to add employees to plant "${resolvedPlantName || resolvedPlantId}".` },
+          { status: 403 }
+        );
+      }
+    }
+
     // Check duplicates
     const duplicateEmpId = await Employee.findOne({ employeeId: cleanEmployeeId });
     if (duplicateEmpId) {
@@ -154,8 +198,9 @@ export async function POST(request) {
       designation: String(designation).trim(),
       aadhaarNumber: cleanAadhaar,
       mobileNumber: cleanMobile,
-      plantId: plantId ? String(plantId).trim() : '',
-      plantName: plantName ? String(plantName).trim() : '',
+      plantId: resolvedPlantId,
+      plantName: resolvedPlantName,
+      unitIds: resolvedPlantId ? [resolvedPlantId] : [],
       passwordHash,
       attendanceAuthorized: attendanceAuthorized !== undefined ? Boolean(attendanceAuthorized) : true,
       status: status || 'Active',

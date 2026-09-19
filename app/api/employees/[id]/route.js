@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Employee from '@/models/Employee';
 import mongoose from 'mongoose';
-import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
+import {
+  authorizeSystemUser,
+  getScopedPlantContext,
+  hasPlantAccess,
+  hasEmployeePlantAccess,
+} from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
 import { normalizeEmployee } from '@/lib/normalize';
+import Plant from '@/models/Plant';
 
 /**
  * Safely find an employee by the given id string.
@@ -34,6 +40,38 @@ async function findEmployeeById(id) {
   return Employee.findOne({ $or: conditions });
 }
 
+export async function GET(request, { params }) {
+  let auth = await authorizeSystemUser(request, 'employee');
+  if (!auth.authorized) {
+    auth = await authorizeSystemUser(request, 'approval');
+  }
+  if (!auth.authorized) return auth.response;
+
+  try {
+    const { id } = await params;
+    await connectToDatabase();
+
+    const employee = await findEmployeeById(id);
+    if (!employee) {
+      return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+    }
+
+    const plantScope = await getScopedPlantContext(auth.session);
+    if (!plantScope.isAllPlants && !hasEmployeePlantAccess(plantScope, employee)) {
+      return NextResponse.json(
+        { error: 'Access denied: You do not have permission to view employees for this plant.' },
+        { status: 403 }
+      );
+    }
+
+    const safeEmployee = normalizeEmployee(employee);
+    delete safeEmployee.passwordHash;
+    return NextResponse.json({ success: true, employee: safeEmployee });
+  } catch (error) {
+    console.error('Error fetching employee:', error);
+    return NextResponse.json({ error: error.message || 'Failed to fetch employee' }, { status: 500 });
+  }
+}
 
 export async function PUT(request, { params }) {
   const auth = await authorizeSystemUser(request, 'employee');
@@ -49,20 +87,44 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
     }
 
-    // Plant-Level Data Security: verify logged in user has access to employee's plant
+    // Plant-Level Data Security: verify logged in user has access to existing employee's plant
     const plantScope = await getScopedPlantContext(auth.session);
-    if (!plantScope.isAllPlants) {
-      const empPlantId = employee.plantId;
-      const empPlantName = employee.plantName;
-      const hasPlantAccess =
-        (empPlantId && plantScope.plantIds.includes(String(empPlantId))) ||
-        (empPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(empPlantName).toLowerCase()));
-      if (!hasPlantAccess) {
+    if (!plantScope.isAllPlants && !hasEmployeePlantAccess(plantScope, employee)) {
+      return NextResponse.json(
+        { error: 'Access denied: You do not have permission to manage employees for this plant.' },
+        { status: 403 }
+      );
+    }
+
+    // Plant-Level Data Security: verify user has access to new target plant (Rule 1 & 10)
+    if (data.plantId !== undefined || data.plantName !== undefined) {
+      let targetPlantId = data.plantId !== undefined ? String(data.plantId).trim() : employee.plantId;
+      let targetPlantName = data.plantName !== undefined ? String(data.plantName).trim() : employee.plantName;
+
+      if (targetPlantId || targetPlantName) {
+        const matchPlant = await Plant.findOne({
+          $or: [
+            ...(targetPlantId ? [{ _id: targetPlantId }, { id: targetPlantId }, { plantId: targetPlantId }] : []),
+            ...(targetPlantName ? [{ plantName: targetPlantName }, { name: targetPlantName }] : []),
+          ],
+        }).lean();
+
+        if (matchPlant) {
+          targetPlantId = matchPlant.plantId || (matchPlant._id ? String(matchPlant._id) : targetPlantId);
+          targetPlantName = matchPlant.plantName || matchPlant.name || targetPlantName;
+        }
+      }
+
+      if (!plantScope.isAllPlants && !hasPlantAccess(plantScope, { plantId: targetPlantId, plantName: targetPlantName })) {
         return NextResponse.json(
-          { error: 'Access denied: You do not have permission to manage employees for this plant.' },
+          { error: `Access denied: You do not have permission to transfer or assign an employee to plant "${targetPlantName || targetPlantId}".` },
           { status: 403 }
         );
       }
+
+      employee.plantId = targetPlantId;
+      employee.plantName = targetPlantName;
+      employee.unitIds = targetPlantId ? [targetPlantId] : [];
     }
 
     if (data.fullName !== undefined) {
@@ -70,11 +132,6 @@ export async function PUT(request, { params }) {
       employee.name = employee.fullName;
     }
     if (data.designation !== undefined) employee.designation = String(data.designation).trim();
-    if (data.plantId !== undefined) {
-      employee.plantId = String(data.plantId).trim();
-      if (employee.plantId) employee.unitIds = [employee.plantId];
-    }
-    if (data.plantName !== undefined) employee.plantName = String(data.plantName).trim();
     if (data.attendanceAuthorized !== undefined) employee.attendanceAuthorized = Boolean(data.attendanceAuthorized);
     if (data.status !== undefined) {
       employee.status = data.status;
@@ -148,18 +205,11 @@ export async function DELETE(request, { params }) {
 
     // Plant-Level Data Security: verify logged in user has access to employee's plant
     const plantScope = await getScopedPlantContext(auth.session);
-    if (!plantScope.isAllPlants) {
-      const empPlantId = employee.plantId;
-      const empPlantName = employee.plantName;
-      const hasPlantAccess =
-        (empPlantId && plantScope.plantIds.includes(String(empPlantId))) ||
-        (empPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(empPlantName).toLowerCase()));
-      if (!hasPlantAccess) {
-        return NextResponse.json(
-          { error: 'Access denied: You do not have permission to remove employees for this plant.' },
-          { status: 403 }
-        );
-      }
+    if (!plantScope.isAllPlants && !hasEmployeePlantAccess(plantScope, employee)) {
+      return NextResponse.json(
+        { error: 'Access denied: You do not have permission to remove employees for this plant.' },
+        { status: 403 }
+      );
     }
 
     // ── Soft-deactivate (NEVER hard-delete — attendance history must be preserved) ──

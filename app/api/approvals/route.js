@@ -15,7 +15,7 @@ import {
 } from '@/lib/timezone';
 
 const ATTENDANCE_PROJECTION =
-  'employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt markInLatitude markInLongitude lat lng latitude longitude markInWithinPlantRadius markInDistanceMeters markInAllowedRadiusMeters inDate inTime inDateTime markOutAt markOutLatitude markOutLongitude latOut lngOut markOutPlantId markOutWithinPlantRadius markOutDistanceMeters markOutAllowedRadiusMeters outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy';
+  'employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt markInLatitude markInLongitude lat lng latitude longitude markInWithinPlantRadius markInDistanceMeters markInAllowedRadiusMeters inDate inTime inDateTime markOutAt markOutLatitude markOutLongitude latOut lngOut markOutPlantId markOutWithinPlantRadius markOutDistanceMeters markOutAllowedRadiusMeters outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy';
 
 function hasPlantLabel(value) {
   if (typeof value !== 'string') return false;
@@ -140,6 +140,70 @@ async function enrichWithEmployeeDesignation(records) {
   return records;
 }
 
+async function enrichWithManualUserFullName(records) {
+  if (!records || records.length === 0) return records;
+
+  const userIdentifiers = new Set();
+  for (const r of records) {
+    if (r.markOutByUserId) userIdentifiers.add(String(r.markOutByUserId).trim());
+    if (r.markOutByUserName) userIdentifiers.add(String(r.markOutByUserName).trim());
+    if (r.markOutManualBy) userIdentifiers.add(String(r.markOutManualBy).trim());
+    if (r.manualAttendanceBy) userIdentifiers.add(String(r.manualAttendanceBy).trim());
+  }
+
+  if (userIdentifiers.size === 0) return records;
+
+  try {
+    const mongoose = (await import('mongoose')).default;
+    const User = (await import('@/models/User')).default;
+
+    const list = [...userIdentifiers];
+    const objectIds = list
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const users = await User.find({
+      $or: [
+        { username: { $in: list.map((u) => u.toLowerCase()) } },
+        { userId: { $in: list } },
+        { _id: { $in: [...list, ...objectIds] } },
+        { fullName: { $in: list } },
+      ],
+    }).select('fullName username userId _id').lean();
+
+    const nameMap = new Map();
+    for (const u of users) {
+      if (u.fullName) {
+        if (u.username) nameMap.set(u.username.toLowerCase(), u.fullName);
+        if (u.userId) nameMap.set(String(u.userId), u.fullName);
+        if (u._id) nameMap.set(String(u._id), u.fullName);
+        nameMap.set(u.fullName.toLowerCase(), u.fullName);
+      }
+    }
+
+    for (const r of records) {
+      const candidates = [
+        r.markOutByUserName,
+        r.markOutManualBy,
+        r.markOutByUserId,
+        r.manualAttendanceBy,
+      ].filter(Boolean);
+
+      for (const cand of candidates) {
+        const key = String(cand).trim().toLowerCase();
+        if (nameMap.has(key)) {
+          r.markOutByUserName = nameMap.get(key);
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error enriching manual user full name:', e);
+  }
+
+  return records;
+}
+
 export async function GET(request) {
   const auth = await authorizeSystemUser(request, 'approval');
   if (!auth.authorized) return auth.response;
@@ -174,13 +238,22 @@ export async function GET(request) {
       ];
 
       if (!plantScope.isAllPlants) {
+        const plantRegexes = (plantScope.plantNames || []).map(
+          (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+        );
         attQueryParts.push({
           $or: [
             { plantId: { $in: plantScope.plantIds } },
             { markInPlantId: { $in: plantScope.plantIds } },
+            { markOutPlantId: { $in: plantScope.plantIds } },
             { inPlant: { $in: plantScope.plantNames } },
             { plantName: { $in: plantScope.plantNames } },
             { markInPlantName: { $in: plantScope.plantNames } },
+            { markOutPlantName: { $in: plantScope.plantNames } },
+            { plantName: { $in: plantRegexes } },
+            { markInPlantName: { $in: plantRegexes } },
+            { markOutPlantName: { $in: plantRegexes } },
+            { inPlant: { $in: plantRegexes } },
           ],
         });
       }
@@ -197,11 +270,15 @@ export async function GET(request) {
         },
       ];
       if (!plantScope.isAllPlants) {
+        const plantRegexes = (plantScope.plantNames || []).map(
+          (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+        );
         empQueryParts.push({
           $or: [
             { unitIds: { $in: plantScope.plantIds } },
             { plantId: { $in: plantScope.plantIds } },
             { plantName: { $in: plantScope.plantNames } },
+            { plantName: { $in: plantRegexes } },
           ],
         });
       }
@@ -364,6 +441,7 @@ export async function GET(request) {
       }
 
       await enrichWithEmployeeDesignation(finalList);
+      await enrichWithManualUserFullName(finalList);
 
       return NextResponse.json({
         success: true,
@@ -408,13 +486,22 @@ export async function GET(request) {
     }
 
     if (!plantScope.isAllPlants) {
+      const plantRegexes = (plantScope.plantNames || []).map(
+        (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+      );
       queryParts.push({
         $or: [
           { plantId: { $in: plantScope.plantIds } },
           { markInPlantId: { $in: plantScope.plantIds } },
+          { markOutPlantId: { $in: plantScope.plantIds } },
           { inPlant: { $in: plantScope.plantNames } },
           { plantName: { $in: plantScope.plantNames } },
           { markInPlantName: { $in: plantScope.plantNames } },
+          { markOutPlantName: { $in: plantScope.plantNames } },
+          { plantName: { $in: plantRegexes } },
+          { markInPlantName: { $in: plantRegexes } },
+          { markOutPlantName: { $in: plantRegexes } },
+          { inPlant: { $in: plantRegexes } },
         ],
       });
     }
@@ -432,6 +519,7 @@ export async function GET(request) {
       .filter((a) => a.approvalStatus === 'APPROVED' || a.approved === true));
 
     await enrichWithEmployeeDesignation(attendances);
+    await enrichWithManualUserFullName(attendances);
 
     return NextResponse.json({
       success: true,

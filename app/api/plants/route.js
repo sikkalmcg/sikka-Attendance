@@ -15,14 +15,10 @@ export async function GET(request) {
 
   try {
     await connectToDatabase();
-    const { searchParams } = new URL(request.url);
-    const getAll = searchParams.get('all') === 'true';
-    const isUserAdmin = session.role === 'Admin' || checkPermission(session, 'user-management');
-
     const plantScope = await getScopedPlantContext(session);
 
     let query = {};
-    if (!plantScope.isAllPlants && !(getAll && isUserAdmin)) {
+    if (!plantScope.isAllPlants) {
       query = {
         $or: [
           { _id: { $in: plantScope.plantIds } },

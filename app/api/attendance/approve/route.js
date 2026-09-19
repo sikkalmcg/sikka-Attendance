@@ -3,7 +3,12 @@ import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Employee from '@/models/Employee';
-import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
+import {
+  authorizeSystemUser,
+  getScopedPlantContext,
+  hasAttendancePlantAccess,
+  hasEmployeePlantAccess,
+} from '@/lib/rbac';
 import { normalizeAttendance, normalizeEmployee } from '@/lib/normalize';
 import {
   getAttendanceDateString,
@@ -82,18 +87,40 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Selected attendance record(s) not found.' }, { status: 404 });
     }
 
-    // Plant-Level Data Security: Verify caller has plant permissions for all target records
+    // Plant-Level Data Security: Verify caller has plant permissions for all target records and synthetic absent items
     const plantScope = await getScopedPlantContext(session);
     if (!plantScope.isAllPlants) {
-      for (const rec of records) {
-        const recPlantId = rec.plantId || rec.markInPlantId;
-        const recPlantName = rec.plantName || rec.markInPlantName || rec.inPlant;
-        const hasPlantAccess =
-          (recPlantId && plantScope.plantIds.includes(String(recPlantId))) ||
-          (recPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(recPlantName).toLowerCase()));
-        if (!hasPlantAccess) {
+      // 1. Verify synthetic absent items
+      for (const syn of syntheticApprovals) {
+        const rawEmp = await Employee.findOne({
+          $or: [
+            { employeeId: syn.empId },
+            { id: syn.empId },
+            { _id: syn.empId },
+          ],
+        }).lean();
+
+        if (!hasEmployeePlantAccess(plantScope, rawEmp)) {
           return NextResponse.json(
-            { error: `Access denied: You do not have permission to approve records for plant "${recPlantName || recPlantId}".` },
+            { error: `Access denied: You do not have permission to approve absent records for employee "${syn.empId}".` },
+            { status: 403 }
+          );
+        }
+      }
+
+      // 2. Verify existing database attendance records
+      for (const rec of records) {
+        const rawEmp = await Employee.findOne({
+          $or: [
+            { employeeId: rec.employeeId },
+            { id: rec.employeeId },
+            { _id: rec.employeeId },
+          ],
+        }).lean();
+
+        if (!hasAttendancePlantAccess(plantScope, rec, rawEmp)) {
+          return NextResponse.json(
+            { error: `Access denied: You do not have permission to approve records for employee "${rec.employeeName || rec.employeeId}".` },
             { status: 403 }
           );
         }

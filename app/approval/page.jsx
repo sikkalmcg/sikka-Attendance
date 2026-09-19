@@ -118,6 +118,13 @@ export default function ApprovalPage() {
     }
   };
 
+  const getAuthHeaders = () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('attendance_token') : null;
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    } catch { return {}; }
+  };
+
   const fetchAttendances = async (dateOverride) => {
     try {
       setLoading(true);
@@ -129,7 +136,7 @@ export default function ApprovalPage() {
         params.set('date', dateToUse);
       }
 
-      const res = await fetch(`/api/approvals?${params.toString()}`);
+      const res = await fetch(`/api/approvals?${params.toString()}`, { headers: getAuthHeaders() });
       const parsed = await safeParseJson(res);
       if (parsed.ok && parsed.data) {
         setAttendances(parsed.data.attendances || []);
@@ -147,8 +154,8 @@ export default function ApprovalPage() {
   const fetchDropdownData = async () => {
     try {
       const [empRes, plantRes] = await Promise.all([
-        fetch('/api/employees?limit=200'),
-        fetch('/api/plants'),
+        fetch('/api/employees?limit=200', { headers: getAuthHeaders() }),
+        fetch('/api/plants', { headers: getAuthHeaders() }),
       ]);
       if (empRes.ok) {
         const empParsed = await safeParseJson(empRes);
@@ -234,6 +241,45 @@ export default function ApprovalPage() {
     };
   };
 
+  // Helper to determine Mark Out Type display string exactly per requirements:
+  // 1. Self -> "Self"
+  // 2. System Auto Mark Out -> "Auto-Out"
+  // 3. User/Admin manual Mark Out -> "Manual - [User Full Name]"
+  const getMarkOutTypeDisplay = (record) => {
+    const isAbsent = record.status === 'ABSENT' || (!record.markInAt && !record.markOutAt);
+    if (isAbsent || !record.markOutAt) {
+      return '-';
+    }
+
+    const rawType = String(record.markOutType || '').toUpperCase().trim();
+    const isAuto =
+      rawType === 'AUTO_OUT' ||
+      rawType === 'AUTO' ||
+      Boolean(record.autoMarkOut) ||
+      record.status === 'AUTO_COMPLETED';
+
+    if (isAuto) {
+      return 'Auto-Out';
+    }
+
+    const isManual =
+      rawType === 'MANUAL' ||
+      Boolean(record.markOutByUserName) ||
+      Boolean(record.markOutManualBy);
+
+    if (isManual) {
+      const userFullName =
+        record.markOutByUserName ||
+        record.markOutManualBy ||
+        record.manualAttendanceBy ||
+        record.editedBy ||
+        'Admin';
+      return `Manual - ${userFullName}`;
+    }
+
+    return 'Self';
+  };
+
   // Global case-insensitive search across text, digits, IDs, Names, Dates, Plants, Statuses, etc.
   const filteredAttendances = attendances.filter((record) => {
     // Strict separation: Pending Approvals shows only unapproved; Approved History shows only approved
@@ -265,7 +311,10 @@ export default function ApprovalPage() {
       record.plantName,
       record.status,
       record.approvalStatus,
+      getMarkOutTypeDisplay(record),
       record.markOutType,
+      record.markOutByUserName,
+      record.markOutManualBy,
       record.mobileNumber,
       record.aadhaarNumber,
       record.workingMinutes != null ? String(record.workingMinutes) : '',
@@ -316,8 +365,8 @@ export default function ApprovalPage() {
         valA = a.approvalStatus || (a.approved ? 'Approved' : 'Pending');
         valB = b.approvalStatus || (b.approved ? 'Approved' : 'Pending');
       } else if (sortField === 'markOutType') {
-        valA = a.markOutType || '';
-        valB = b.markOutType || '';
+        valA = getMarkOutTypeDisplay(a);
+        valB = getMarkOutTypeDisplay(b);
       } else if (sortField === 'markOutPlantName') {
         valA = a.markOutPlantName || '';
         valB = b.markOutPlantName || '';
@@ -470,9 +519,12 @@ export default function ApprovalPage() {
     setEmpSearchText('');
     setEmpDropdownOpen(false);
 
+    const defaultPlant = plantsList.length === 1 ? plantsList[0] : null;
+    const defaultPlantId = defaultPlant ? (defaultPlant.plantId || defaultPlant._id || defaultPlant.id) : '';
+
     setManualForm({
       employeeId: targetEmp?.employeeId || record?.employeeId || '',
-      plantId: record?.plantId || targetEmp?.plantId || '',
+      plantId: record?.plantId || targetEmp?.plantId || defaultPlantId || '',
       markInAt: defaultIn,
       markOutAt: '',
       calculatedHours: '0:00',
@@ -487,7 +539,7 @@ export default function ApprovalPage() {
     try {
       const res = await fetch('/api/attendance/approve', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ ids: idsToApprove }),
       });
 
@@ -559,7 +611,7 @@ export default function ApprovalPage() {
     try {
       const res = await fetch('/api/attendance/edit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           id: editingRecord.id || editingRecord._id,
           markInAt: editForm.markInAt,
@@ -611,7 +663,7 @@ export default function ApprovalPage() {
     try {
       const res = await fetch('/api/attendance/restore', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           id: restoringRecord.id || restoringRecord._id,
           employeeId: restoringRecord.employeeId,
@@ -673,7 +725,7 @@ export default function ApprovalPage() {
     try {
       const res = await fetch('/api/attendance/manual', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(manualForm),
       });
 
@@ -910,10 +962,10 @@ export default function ApprovalPage() {
                   <SortHeader label="Mark In Plant Name" field="markInPlantName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark In Date & Time" field="markInAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark Out Date & Time" field="markOutAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Mark Out Type" field="markOutType" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Working Hours" field="workingMinutes" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Attendance Status" field="status" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Approval Status" field="approvalStatus" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortHeader label="Mark Out Type" field="markOutType" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark Out Plant Name" field="markOutPlantName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   {activeTab === 'APPROVED' && (
                     <SortHeader label="Approved By" field="approvedBy" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
@@ -1008,11 +1060,7 @@ export default function ApprovalPage() {
                       ? '-'
                       : getDisplayPlantName(record.markOutPlantName || record.plantName, null, false);
 
-                    const markOutTypeDisplay = isAbsent
-                      ? '-'
-                      : record.markOutType === 'Auto' || record.autoMarkOut
-                      ? 'Auto'
-                      : record.markOutType || (record.markOutAt ? 'Self' : '-');
+                    const markOutTypeDisplay = getMarkOutTypeDisplay(record);
 
                     const displayApprovalStatus =
                       record.approvalStatus === 'APPROVED' || record.approved === true
@@ -1073,6 +1121,23 @@ export default function ApprovalPage() {
                             <span className="text-slate-400 font-bold">-</span>
                           )}
                         </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {markOutTypeDisplay === 'Auto-Out' ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              Auto-Out
+                            </span>
+                          ) : markOutTypeDisplay.startsWith('Manual - ') ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200" title={markOutTypeDisplay}>
+                              {markOutTypeDisplay}
+                            </span>
+                          ) : markOutTypeDisplay === 'Self' ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Self
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-bold">-</span>
+                          )}
+                        </td>
                         <td className="py-3 px-4 font-mono font-semibold text-slate-800 whitespace-nowrap">
                           {isAbsent
                             ? '-'
@@ -1105,9 +1170,6 @@ export default function ApprovalPage() {
                           >
                             {displayApprovalStatus}
                           </span>
-                        </td>
-                        <td className="py-3 px-4 font-medium text-slate-700 whitespace-nowrap">
-                          {markOutTypeDisplay}
                         </td>
                         <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
                           {markOutPlantDisplay}

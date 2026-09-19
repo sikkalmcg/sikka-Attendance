@@ -4,10 +4,17 @@ import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Employee from '@/models/Employee';
 import Plant from '@/models/Plant';
-import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
+import {
+  authorizeSystemUser,
+  getScopedPlantContext,
+  hasPlantAccess,
+  hasEmployeePlantAccess,
+  hasAttendancePlantAccess,
+} from '@/lib/rbac';
 import { normalizeEmployee, normalizeAttendance, normalizePlant } from '@/lib/normalize';
 import { formatInTimeZone } from 'date-fns-tz';
 import { parseKolkataDateTime, isFutureKolkataDateTime } from '@/lib/timezone';
+import { getAuthoritativeUser } from '@/lib/auth';
 
 const IST = 'Asia/Kolkata';
 
@@ -48,16 +55,19 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Existing attendance record not found.' }, { status: 404 });
       }
 
-      // Plant-Level Data Security: verify logged in user has access to this plant
+      // Plant-Level Data Security: verify logged in user has access to this plant and employee
       const plantScope = await getScopedPlantContext(session);
       if (!plantScope.isAllPlants) {
-        const recPlantId = existingRecord.plantId || existingRecord.markInPlantId;
-        const recPlantName = existingRecord.plantName || existingRecord.markInPlantName || existingRecord.inPlant;
-        const hasPlantAccess =
-          (recPlantId && plantScope.plantIds.includes(String(recPlantId))) ||
-          (recPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(recPlantName).toLowerCase()));
-        if (!hasPlantAccess) {
-          return NextResponse.json({ error: 'Access denied: You do not have permission to modify records for this plant.' }, { status: 403 });
+        const empDoc = await Employee.findOne({
+          $or: [
+            { employeeId: existingRecord.employeeId },
+            { id: existingRecord.employeeId },
+            { _id: existingRecord.employeeId },
+          ],
+        }).lean();
+
+        if (!hasAttendancePlantAccess(plantScope, existingRecord, empDoc)) {
+          return NextResponse.json({ error: 'Access denied: You do not have permission to modify records for this plant or employee.' }, { status: 403 });
         }
       }
 
@@ -86,20 +96,23 @@ export async function POST(request) {
       const diffMs = inDate ? outDate.getTime() - inDate.getTime() : 0;
       const workingMinutes = diffMs > 0 ? Math.max(1, Math.round(diffMs / 60000)) : 0;
 
+      // Resolve user's authoritative Full Name and userId from database record
+      const { userFullName, authUserId } = await getAuthoritativeUser(session);
+
       // Logged-in user who performed the manual action
-      const loggedInUsername = session.username || session.fullName || 'Admin';
-      const markOutManualBy = loggedInUsername;
+      const loggedInUsername = userFullName;
+      const markOutManualBy = userFullName;
       const existingInBy = existingRecord.markInManualBy;
-      let finalManualBy = loggedInUsername;
-      if (existingInBy && existingInBy === loggedInUsername) {
-        finalManualBy = loggedInUsername;
+      let finalManualBy = userFullName;
+      if (existingInBy && existingInBy === userFullName) {
+        finalManualBy = userFullName;
       } else if (existingInBy) {
         finalManualBy = existingInBy;
       }
 
       const defaultRemark = existingInBy
-        ? (existingInBy === loggedInUsername ? `Mark In & Mark Out Manual by ${loggedInUsername}` : `Mark In Manual by ${existingInBy}; Mark Out Manual by ${loggedInUsername}`)
-        : `Mark Out Manual by ${loggedInUsername}`;
+        ? (existingInBy === userFullName ? `Mark In & Mark Out Manual by ${userFullName}` : `Mark In Manual by ${existingInBy}; Mark Out Manual by ${userFullName}`)
+        : `Mark Out Manual by ${userFullName}`;
 
       // Use $set to update fields with separate markOutManualBy tracking
       const updated = await Attendance.findByIdAndUpdate(
@@ -109,6 +122,9 @@ export async function POST(request) {
             markOutAt: outDate,
             workingMinutes,
             status: 'COMPLETED',
+            markOutType: 'MANUAL',
+            markOutByUserId: authUserId,
+            markOutByUserName: userFullName,
             markOutManualBy,
             manualAttendanceBy: existingRecord.manualAttendanceBy || finalManualBy,
             editedBy: loggedInUsername,
@@ -164,24 +180,15 @@ export async function POST(request) {
 
     const emp = normalizeEmployee(rawEmp);
 
-    // Block Manual Mark IN if employee already has an active session
-    const existingActive = await Attendance.findOne({
-      $and: [
-        {
-          $or: [
-            { employeeId: emp.employeeId },
-            { aadhaarNumber: emp.aadhaarNumber },
-          ],
-        },
-        { $or: [{ status: 'ACTIVE' }, { status: 'Open' }, { status: 'OPEN' }] },
-      ],
-    });
-
-    if (existingActive && !markOutAt) {
-      return NextResponse.json(
-        { error: `${emp.fullName} already has an active attendance session. Please close it first or add a Mark OUT time.` },
-        { status: 409 }
-      );
+    // Plant-Level Data Security: verify logged in user has access to employee's assigned plant and target plant
+    const plantScope = await getScopedPlantContext(session);
+    if (!plantScope.isAllPlants) {
+      if (!hasEmployeePlantAccess(plantScope, rawEmp)) {
+        return NextResponse.json(
+          { error: `Access denied: Selected employee "${emp.fullName}" belongs to plant "${emp.plantName || 'unassigned'}", which is not accessible to your account.` },
+          { status: 403 }
+        );
+      }
     }
 
     // Lookup plant details if provided
@@ -203,15 +210,33 @@ export async function POST(request) {
       plantName = 'Authorized Plant';
     }
 
-    // Plant-Level Data Security: verify logged in user has access to this plant
-    const plantScope = await getScopedPlantContext(session);
     if (!plantScope.isAllPlants) {
-      const hasPlantAccess =
-        (resolvedPlantId && plantScope.plantIds.includes(String(resolvedPlantId))) ||
-        (plantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(plantName).toLowerCase()));
-      if (!hasPlantAccess) {
-        return NextResponse.json({ error: `Access denied: You do not have permission to create attendance for plant "${plantName}".` }, { status: 403 });
+      if (!hasPlantAccess(plantScope, { plantId: resolvedPlantId, plantName })) {
+        return NextResponse.json(
+          { error: `Access denied: You do not have permission to create attendance for plant "${plantName}".` },
+          { status: 403 }
+        );
       }
+    }
+
+    // Block Manual Mark IN if employee already has an active session
+    const existingActive = await Attendance.findOne({
+      $and: [
+        {
+          $or: [
+            { employeeId: emp.employeeId },
+            { aadhaarNumber: emp.aadhaarNumber },
+          ],
+        },
+        { $or: [{ status: 'ACTIVE' }, { status: 'Open' }, { status: 'OPEN' }] },
+      ],
+    });
+
+    if (existingActive && !markOutAt) {
+      return NextResponse.json(
+        { error: `${emp.fullName} already has an active attendance session. Please close it first or add a Mark OUT time.` },
+        { status: 409 }
+      );
     }
 
     // Attendance date = IST date of Mark IN (not Mark OUT)
@@ -241,15 +266,18 @@ export async function POST(request) {
       status = 'COMPLETED';
     }
 
+    // Resolve user's authoritative Full Name and userId from database record
+    const { userFullName, authUserId } = await getAuthoritativeUser(session);
+
     // Who performed the manual attendance
-    const loggedInUsername = session.username || session.fullName || 'Admin';
-    const markInManualBy = loggedInUsername;
-    const markOutManualBy = outDate ? loggedInUsername : null;
-    const manualAttendanceBy = loggedInUsername;
+    const loggedInUsername = userFullName;
+    const markInManualBy = userFullName;
+    const markOutManualBy = outDate ? userFullName : null;
+    const manualAttendanceBy = userFullName;
 
     const defaultRemark = outDate
-      ? `Mark In & Mark Out Manual by ${loggedInUsername}`
-      : `Mark In Manual by ${loggedInUsername}`;
+      ? `Mark In & Mark Out Manual by ${userFullName}`
+      : `Mark In Manual by ${userFullName}`;
 
     const newRecord = await Attendance.create({
       employeeId: emp.employeeId,
@@ -269,7 +297,9 @@ export async function POST(request) {
       markOutLatitude: outDate ? 0 : null,
       markOutLongitude: outDate ? 0 : null,
       markOutPlantName: outDate ? plantName : '',
-      markOutType: 'Manual',
+      markOutType: outDate ? 'MANUAL' : 'SELF',
+      markOutByUserId: outDate ? authUserId : null,
+      markOutByUserName: outDate ? userFullName : null,
       workingMinutes,
       status,
       autoMarkOut: false,

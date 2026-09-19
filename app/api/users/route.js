@@ -75,8 +75,29 @@ export async function POST(request) {
       );
     }
 
+    const VALID_PERMISSION_IDS = ['dashboard', 'plant', 'approval', 'report', 'employee', 'user-management'];
+    const PERMISSION_ID_MAP = {
+      dashboard: 'dashboard',
+      plant: 'plant',
+      plants: 'plant',
+      approval: 'approval',
+      approvals: 'approval',
+      report: 'report',
+      reports: 'report',
+      employee: 'employee',
+      employees: 'employee',
+      'user-management': 'user-management',
+      'user management': 'user-management',
+      users: 'user-management',
+    };
+
     const cleanPermissions = Array.isArray(permissions)
-      ? permissions.filter((p) => p !== 'mark-attendance')
+      ? Array.from(new Set(
+          permissions
+            .map((p) => String(p).trim().toLowerCase())
+            .map((p) => PERMISSION_ID_MAP[p] || p)
+            .filter((p) => VALID_PERMISSION_IDS.includes(p))
+        ))
       : ['dashboard'];
 
     const cleanPlantIds = Array.isArray(plantIds) ? plantIds.filter(Boolean) : [];

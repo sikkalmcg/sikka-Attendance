@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
-import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
+import Employee from '@/models/Employee';
+import { authorizeSystemUser, getScopedPlantContext, hasAttendancePlantAccess } from '@/lib/rbac';
 import { normalizeAttendance } from '@/lib/normalize';
 
 export async function POST(request) {
@@ -59,16 +60,22 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Attendance record not found.' }, { status: 404 });
     }
 
-    // Plant-Level Data Security: verify logged in user has access to this plant
+    // Plant-Level Data Security: verify logged in user has access to this plant and employee
     const plantScope = await getScopedPlantContext(session);
     if (!plantScope.isAllPlants) {
-      const recPlantId = record.plantId || record.markInPlantId;
-      const recPlantName = record.plantName || record.markInPlantName || record.inPlant;
-      const hasPlantAccess =
-        (recPlantId && plantScope.plantIds.includes(String(recPlantId))) ||
-        (recPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(recPlantName).toLowerCase()));
-      if (!hasPlantAccess) {
-        return NextResponse.json({ error: 'Access denied: You do not have permission to restore records for this plant.' }, { status: 403 });
+      const empDoc = await Employee.findOne({
+        $or: [
+          { employeeId: record.employeeId },
+          { id: record.employeeId },
+          { _id: record.employeeId },
+        ],
+      }).lean();
+
+      if (!hasAttendancePlantAccess(plantScope, record, empDoc)) {
+        return NextResponse.json(
+          { error: 'Access denied: You do not have permission to restore records for this plant or employee.' },
+          { status: 403 }
+        );
       }
     }
 

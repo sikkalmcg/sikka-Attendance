@@ -138,14 +138,15 @@ export default function EmployeePage() {
   const openCreateModal = () => {
     setEditingEmployee(null);
     setFormErrors({});
+    const defaultPlant = plants.length === 1 ? plants[0] : null;
     setFormData({
       employeeId: `EMP${String(employees.length + 1).padStart(3, '0')}`,
       fullName: '',
       designation: '',
       aadhaarNumber: '',
       mobileNumber: '',
-      plantId: '',
-      plantName: '',
+      plantId: defaultPlant ? (defaultPlant.plantId || defaultPlant._id) : '',
+      plantName: defaultPlant ? (defaultPlant.plantName || defaultPlant.name) : '',
       attendanceAuthorized: true,
       status: 'Active',
     });
