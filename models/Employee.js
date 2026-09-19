@@ -9,32 +9,45 @@ const EmployeeSchema = new mongoose.Schema(
     employeeId: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       uppercase: true,
     },
     fullName: {
       type: String,
-      required: true,
+      trim: true,
+    },
+    name: {
+      type: String,
+      trim: true,
+    },
+    firstName: {
+      type: String,
+      trim: true,
+    },
+    lastName: {
+      type: String,
       trim: true,
     },
     designation: {
       type: String,
-      required: true,
       trim: true,
+      default: 'Staff',
     },
     aadhaarNumber: {
       type: String,
-      required: true,
-      unique: true,
       trim: true,
-      match: [/^\d{12}$/, 'Aadhaar must be a 12-digit number'],
+    },
+    aadhaar: {
+      type: String,
+      trim: true,
     },
     mobileNumber: {
       type: String,
-      required: true,
       trim: true,
-      match: [/^\d{10}$/, 'Mobile must be a 10-digit number'],
+    },
+    mobile: {
+      type: String,
+      trim: true,
     },
     plantId: {
       type: String,
@@ -46,9 +59,13 @@ const EmployeeSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    unitIds: {
+      type: [String],
+      default: [],
+    },
     passwordHash: {
       type: String,
-      required: true,
+      default: '',
     },
     attendanceAuthorized: {
       type: Boolean,

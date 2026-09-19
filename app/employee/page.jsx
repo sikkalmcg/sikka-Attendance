@@ -76,17 +76,38 @@ export default function EmployeePage() {
     } catch { return {}; }
   };
 
+  const safeParseJson = async (res) => {
+    if (!res) return null;
+    try {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   const fetchCurrentUser = async () => {
     try {
       const res = await fetch('/api/auth/me', { headers: getAuthHeaders() });
-      if (res.ok) { const data = await res.json(); setCurrentUser(data.user || data); }
+      if (res.ok) {
+        const data = await safeParseJson(res);
+        if (data) setCurrentUser(data.user || data);
+      }
     } catch {}
   };
 
   const fetchPlants = async () => {
     try {
       const res = await fetch('/api/plants', { headers: getAuthHeaders() });
-      if (res.ok) { const data = await res.json(); setPlants(data.plants || []); }
+      if (res.ok) {
+        const data = await safeParseJson(res);
+        if (data) setPlants(data.plants || []);
+      }
     } catch {}
   };
 
@@ -98,9 +119,15 @@ export default function EmployeePage() {
       if (statusFilter) params.set('status', statusFilter);
       if (authFilter) params.set('authorization', authFilter);
       const res = await fetch(`/api/employees?${params.toString()}`, { headers: getAuthHeaders() });
-      if (res.ok) { const data = await res.json(); setEmployees(data.employees || []); }
-    } catch (err) { console.error('Failed to fetch employees:', err); }
-    finally { setLoading(false); }
+      const data = await safeParseJson(res);
+      if (res.ok && data) {
+        setEmployees(data.employees || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch employees:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchCurrentUser(); fetchPlants(); }, []);
@@ -125,29 +152,73 @@ export default function EmployeePage() {
     setEmployeeModalOpen(true);
   };
 
+  const getPlantDisplayName = (emp) => {
+    if (!emp) return '—';
+    // If plantName is already a valid name and not an ID
+    if (emp.plantName && !/^[0-9a-zA-Z]{15,30}$/.test(emp.plantName.trim())) {
+      return emp.plantName;
+    }
+    // Check if plantId or unitIds or plantName matches a plant in the loaded plants list
+    const candidateId = emp.plantId || emp.plantName || (Array.isArray(emp.unitIds) ? emp.unitIds[0] : '');
+    if (candidateId && plants.length > 0) {
+      const match = plants.find(
+        (p) =>
+          String(p._id) === String(candidateId) ||
+          String(p.plantId) === String(candidateId) ||
+          String(p.id) === String(candidateId) ||
+          p.plantName === candidateId ||
+          p.name === candidateId
+      );
+      if (match) return match.plantName || match.name;
+    }
+    if (emp.plantName) return emp.plantName;
+    return '—';
+  };
+
   const openEditModal = (emp) => {
     setEditingEmployee(emp);
     setFormErrors({});
+
+    let targetPlantId = emp.plantId || (Array.isArray(emp.unitIds) ? emp.unitIds[0] : '');
+    let targetPlantName = emp.plantName || '';
+
+    if (plants.length > 0) {
+      const match = plants.find(
+        (p) =>
+          (targetPlantId && (String(p._id) === String(targetPlantId) || String(p.plantId) === String(targetPlantId))) ||
+          (targetPlantName && (p.plantName === targetPlantName || p.name === targetPlantName))
+      );
+      if (match) {
+        targetPlantId = match.plantId || match._id;
+        targetPlantName = match.plantName || match.name;
+      }
+    }
+
     setFormData({
-      employeeId: emp.employeeId || '',
-      fullName: emp.fullName || '',
+      employeeId: emp.employeeId || emp.id || emp._id || '',
+      fullName: emp.fullName || emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || '',
       designation: emp.designation || '',
-      aadhaarNumber: emp.aadhaarNumber || '',
-      mobileNumber: emp.mobileNumber || '',
-      plantId: emp.plantId || '',
-      plantName: emp.plantName || '',
+      aadhaarNumber: emp.aadhaarNumber || emp.aadhaar || '',
+      mobileNumber: emp.mobileNumber || emp.mobile || '',
+      plantId: targetPlantId,
+      plantName: targetPlantName,
       attendanceAuthorized: emp.attendanceAuthorized !== undefined ? emp.attendanceAuthorized : true,
-      status: emp.status || 'Active',
+      status: emp.status || (emp.active === false ? 'Inactive' : 'Active'),
     });
     setEmployeeModalOpen(true);
   };
 
   const handlePlantChange = (plantId) => {
-    const selected = plants.find((p) => p.plantId === plantId || p._id === plantId);
+    const selected = plants.find(
+      (p) =>
+        String(p.plantId) === String(plantId) ||
+        String(p._id) === String(plantId) ||
+        String(p.id) === String(plantId)
+    );
     setFormData((prev) => ({
       ...prev,
       plantId: selected ? (selected.plantId || selected._id) : '',
-      plantName: selected ? selected.plantName : '',
+      plantName: selected ? (selected.plantName || selected.name) : '',
     }));
     if (formErrors.plantId) setFormErrors((e) => ({ ...e, plantId: '' }));
   };
@@ -179,9 +250,9 @@ export default function EmployeePage() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(formData),
       });
-      const data = await res.json();
+      const data = (await safeParseJson(res)) || {};
       if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Failed to save employee.' });
+        setToast({ type: 'error', message: data.error || `Failed to save employee (${res.status}).` });
         setSaving(false);
         return;
       }
@@ -211,9 +282,9 @@ export default function EmployeePage() {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
-      const data = await res.json();
+      const data = (await safeParseJson(res)) || {};
       if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Failed to remove employee.' });
+        setToast({ type: 'error', message: data.error || `Failed to remove employee (${res.status}).` });
       } else {
         setToast({
           type: 'success',
@@ -243,16 +314,16 @@ export default function EmployeePage() {
         headers: { ...getAuthHeaders() },
         body: form,
       });
-      const data = await res.json();
+      const data = (await safeParseJson(res)) || {};
       if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Bulk upload failed.' });
+        setToast({ type: 'error', message: data.error || `Bulk upload failed (${res.status}).` });
         setUploading(false);
         return;
       }
       setUploadSummary(data);
       setToast({
-        type: data.summary.failedRecords > 0 ? 'warning' : 'success',
-        message: `Import completed: ${data.summary.successfullyImported} added, ${data.summary.failedRecords} issues.`,
+        type: (data.summary && data.summary.failedRecords > 0) ? 'warning' : 'success',
+        message: `Import completed: ${data.summary?.successfullyImported || 0} added, ${data.summary?.failedRecords || 0} issues.`,
       });
       fetchEmployees();
     } catch (err) {
@@ -419,10 +490,10 @@ export default function EmployeePage() {
                       <td className="px-6 py-4 font-semibold text-slate-900">{emp.fullName}</td>
                       <td className="px-6 py-4 text-slate-600">{emp.designation}</td>
                       <td className="px-6 py-4">
-                        {emp.plantName || emp.plantId ? (
-                          <span className="inline-flex items-center gap-1 text-slate-700 text-xs font-medium">
-                            <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                            {emp.plantName || emp.plantId}
+                        {getPlantDisplayName(emp) !== '—' ? (
+                          <span className="inline-flex items-center gap-1.5 text-slate-700 text-xs font-semibold bg-slate-100/80 px-2.5 py-1 rounded-lg">
+                            <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                            {getPlantDisplayName(emp)}
                           </span>
                         ) : (
                           <span className="text-slate-400 text-xs">—</span>

@@ -51,12 +51,27 @@ export default function ReportPage() {
   const [allTime, setAllTime] = useState(false); // Fetch all data from database mode
   const [exporting, setExporting] = useState(false);
 
+  const safeParseJson = async (res) => {
+    if (!res) return null;
+    try {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   const fetchPlants = async () => {
     try {
       const res = await fetch('/api/plants');
       if (res.ok) {
-        const data = await res.json();
-        setPlants(data.plants || []);
+        const data = await safeParseJson(res);
+        if (data) setPlants(data.plants || []);
       }
     } catch (e) {
       console.error('Error fetching plants:', e);
@@ -85,8 +100,8 @@ export default function ReportPage() {
 
       const res = await fetch(`/api/reports/attendance?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
-        setRecords(data.records || []);
+        const data = await safeParseJson(res);
+        if (data) setRecords(data.records || []);
       }
     } catch (err) {
       console.error('Failed to fetch reports:', err);

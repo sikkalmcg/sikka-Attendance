@@ -69,11 +69,27 @@ export default function MarkAttendancePage() {
   const [blockReason, setBlockReason] = useState(null);
   const [nextMarkInAfter, setNextMarkInAfter] = useState(null);
 
+  const safeParseJson = async (res) => {
+    if (!res) return null;
+    try {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   const fetchShiftStatus = async () => {
     try {
       const res = await fetch('/api/attendance/active-session');
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeParseJson(res);
+        if (!data) return;
         setActiveShift(data.activeSession);
         setTodaySession(data.todaySession);
         if (data.employee) {
@@ -100,7 +116,8 @@ export default function MarkAttendancePage() {
       setHistoryLoading(true);
       const res = await fetch(`/api/attendance/history?page=${pageToFetch}&limit=10`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeParseJson(res);
+        if (!data) return;
         setHistory(data.history || []);
         if (data.pagination) {
           setPagination(data.pagination);
@@ -169,7 +186,7 @@ export default function MarkAttendancePage() {
         body: JSON.stringify({ latitude, longitude }),
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await safeParseJson(res)) || {};
         setLiveGpsStatus({
           inside: !!data.matched,
           plantName: data.matched ? (data.plant?.name || 'Authorized Plant') : null,
@@ -250,7 +267,7 @@ export default function MarkAttendancePage() {
         }),
       });
 
-      const checkData = await checkRes.json();
+      const checkData = (await safeParseJson(checkRes)) || {};
 
       if (type === 'IN') {
         if (checkData.matched) {
@@ -359,10 +376,10 @@ export default function MarkAttendancePage() {
         }),
       });
 
-      const data = await res.json();
+      const data = (await safeParseJson(res)) || {};
 
       if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Attendance submission failed.' });
+        setToast({ type: 'error', message: data.error || `Attendance submission failed (${res.status}).` });
         setConfirmModal({ ...confirmModal, isOpen: false });
         return;
       }

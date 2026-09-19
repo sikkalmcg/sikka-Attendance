@@ -24,6 +24,21 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showHelp, setShowHelp] = useState(false);
 
+  const safeParseJson = async (res) => {
+    if (!res) return null;
+    try {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -33,8 +48,8 @@ export default function LoginPage() {
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch('/api/auth/me', { headers, cache: 'no-store' });
         if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated && data.user) {
+          const data = await safeParseJson(res);
+          if (data && data.authenticated && data.user) {
             const target = (data.user.role === 'Employee' || data.user.userType === 'EMPLOYEE')
               ? '/mark-attendance'
               : '/dashboard';
@@ -85,10 +100,10 @@ export default function LoginPage() {
         }),
       });
 
-      const data = await res.json();
+      const data = (await safeParseJson(res)) || {};
 
       if (!res.ok) {
-        setError(data.error || 'Authentication failed. Please check your credentials.');
+        setError(data.error || `Authentication failed (${res.status}). Please check your credentials.`);
         setLoading(false);
         return;
       }

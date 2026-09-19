@@ -59,13 +59,28 @@ export default function UserManagementPage() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
 
+  const safeParseJson = async (res) => {
+    if (!res) return null;
+    try {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/users');
       if (res.ok) {
-        const data = await res.json();
-        setUsers(data.users || []);
+        const data = await safeParseJson(res);
+        if (data) setUsers(data.users || []);
       }
     } catch (err) {
       console.error('Failed to fetch users:', err);
@@ -78,8 +93,8 @@ export default function UserManagementPage() {
     try {
       const res = await fetch('/api/plants?all=true');
       if (res.ok) {
-        const data = await res.json();
-        setPlantsList(data.plants || []);
+        const data = await safeParseJson(res);
+        if (data) setPlantsList(data.plants || []);
       }
     } catch (err) {
       console.error('Failed to fetch plants:', err);
@@ -250,10 +265,10 @@ export default function UserManagementPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = (await safeParseJson(res)) || {};
 
       if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Failed to save user.' });
+        setToast({ type: 'error', message: data.error || `Failed to save user (${res.status}).` });
         setSaving(false);
         return;
       }
@@ -312,8 +327,8 @@ export default function UserManagementPage() {
         setToast({ type: 'success', message: `Password for @${targetUser.username} has been changed.` });
         setResetModalOpen(false);
       } else {
-        const data = await res.json();
-        setToast({ type: 'error', message: data.error || 'Failed to change password.' });
+        const data = (await safeParseJson(res)) || {};
+        setToast({ type: 'error', message: data.error || `Failed to change password (${res.status}).` });
       }
     } catch {
       setToast({ type: 'error', message: 'Error updating password.' });
@@ -336,8 +351,8 @@ export default function UserManagementPage() {
         setUsers((prev) => prev.filter((item) => (item._id || item.id || item.userId) !== id && item.username !== username));
         await fetchUsers();
       } else {
-        const data = await res.json();
-        setToast({ type: 'error', message: data.error || 'Delete failed.' });
+        const data = (await safeParseJson(res)) || {};
+        setToast({ type: 'error', message: data.error || `Delete failed (${res.status}).` });
       }
     } catch {
       setToast({ type: 'error', message: 'Failed to delete user.' });

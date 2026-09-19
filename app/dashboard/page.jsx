@@ -307,13 +307,28 @@ export default function DashboardPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState(null);
 
+  const safeParseJson = async (res) => {
+    if (!res) return null;
+    try {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   const fetchStats = async () => {
     try {
       setRefreshing(true);
       const res = await fetch('/api/dashboard');
       if (res.ok) {
-        const data = await res.json();
-        setStats(data.data);
+        const data = await safeParseJson(res);
+        if (data && data.data) setStats(data.data);
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
@@ -338,8 +353,8 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`/api/dashboard/detail?type=${type}`);
       if (res.ok) {
-        const data = await res.json();
-        setDetailData(data);
+        const data = await safeParseJson(res);
+        if (data) setDetailData(data);
       }
     } catch (err) {
       console.error('Failed to fetch detail:', err);

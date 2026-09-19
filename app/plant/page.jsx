@@ -36,13 +36,28 @@ export default function PlantPage() {
   });
   const [saving, setSaving] = useState(false);
 
+  const safeParseJson = async (res) => {
+    if (!res) return null;
+    try {
+      const text = await res.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   const fetchPlants = async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/plants');
       if (res.ok) {
-        const data = await res.json();
-        setPlants(data.plants || []);
+        const data = await safeParseJson(res);
+        if (data) setPlants(data.plants || []);
       }
     } catch (err) {
       console.error('Failed to fetch plants:', err);
@@ -97,10 +112,10 @@ export default function PlantPage() {
         body: JSON.stringify(formData),
       });
 
-      const data = await res.json();
+      const data = (await safeParseJson(res)) || {};
 
       if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Failed to save plant.' });
+        setToast({ type: 'error', message: data.error || `Failed to save plant (${res.status}).` });
         setSaving(false);
         return;
       }
@@ -128,8 +143,8 @@ export default function PlantPage() {
         setToast({ type: 'success', message: 'Plant removed successfully.' });
         fetchPlants();
       } else {
-        const data = await res.json();
-        setToast({ type: 'error', message: data.error || 'Failed to delete plant.' });
+        const data = (await safeParseJson(res)) || {};
+        setToast({ type: 'error', message: data.error || `Failed to delete plant (${res.status}).` });
       }
     } catch {
       setToast({ type: 'error', message: 'Network error deleting plant.' });

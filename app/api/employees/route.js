@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Employee from '@/models/Employee';
+import Plant from '@/models/Plant';
 import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
 import { normalizeEmployee } from '@/lib/normalize';
@@ -64,7 +65,27 @@ export async function GET(request) {
       .lean()
       .sort({ _id: -1 });
 
-    const employees = rawEmployees.map(normalizeEmployee);
+    const rawPlants = await Plant.find().select('plantId plantName name').lean();
+    const plantMap = new Map();
+    for (const p of rawPlants) {
+      const name = p.plantName || p.name || 'Plant';
+      if (p._id) plantMap.set(String(p._id), name);
+      if (p.plantId) plantMap.set(String(p.plantId), name);
+      if (p.id) plantMap.set(String(p.id), name);
+    }
+
+    const employees = rawEmployees.map((raw) => {
+      const emp = normalizeEmployee(raw);
+      if (!emp.plantName || plantMap.has(emp.plantName) || /^[0-9a-zA-Z]{15,30}$/.test(emp.plantName)) {
+        const lookup = emp.plantId || (Array.isArray(raw.unitIds) ? raw.unitIds[0] : '');
+        if (lookup && plantMap.has(String(lookup))) {
+          emp.plantName = plantMap.get(String(lookup));
+        } else if (emp.plantName && plantMap.has(String(emp.plantName))) {
+          emp.plantName = plantMap.get(String(emp.plantName));
+        }
+      }
+      return emp;
+    });
 
     return NextResponse.json({ success: true, employees });
   } catch (error) {

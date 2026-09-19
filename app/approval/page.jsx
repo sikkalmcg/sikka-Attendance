@@ -89,6 +89,19 @@ export default function ApprovalPage() {
 
   const [processing, setProcessing] = useState(false);
 
+  const safeParseJson = async (res) => {
+    try {
+      const text = await res.text();
+      if (!text || text.trim().startsWith('<')) {
+        return { ok: false, data: null, error: 'Server returned an invalid response. Please try again.' };
+      }
+      const json = JSON.parse(text);
+      return { ok: res.ok, data: json, error: json?.error || null };
+    } catch {
+      return { ok: false, data: null, error: 'Failed to parse response.' };
+    }
+  };
+
   const fetchAttendances = async (dateOverride) => {
     try {
       setLoading(true);
@@ -101,11 +114,11 @@ export default function ApprovalPage() {
       }
 
       const res = await fetch(`/api/approvals?${params.toString()}`);
-      const data = await res.json();
-      if (res.ok) {
-        setAttendances(data.attendances || []);
+      const parsed = await safeParseJson(res);
+      if (parsed.ok && parsed.data) {
+        setAttendances(parsed.data.attendances || []);
       } else {
-        setToast({ type: 'error', message: data.error || 'Failed to load attendance records.' });
+        setToast({ type: 'error', message: parsed.error || 'Failed to load attendance records.' });
       }
     } catch (err) {
       console.error('Failed to fetch approvals:', err);
@@ -122,12 +135,12 @@ export default function ApprovalPage() {
         fetch('/api/plants'),
       ]);
       if (empRes.ok) {
-        const empData = await empRes.json();
-        setEmployeesList(empData.employees || []);
+        const empParsed = await safeParseJson(empRes);
+        if (empParsed.data) setEmployeesList(empParsed.data.employees || []);
       }
       if (plantRes.ok) {
-        const plantData = await plantRes.json();
-        setPlantsList(plantData.plants || []);
+        const plantParsed = await safeParseJson(plantRes);
+        if (plantParsed.data) setPlantsList(plantParsed.data.plants || []);
       }
     } catch (e) {
       console.error('Error fetching dropdowns:', e);
@@ -336,11 +349,12 @@ export default function ApprovalPage() {
         body: JSON.stringify({ ids: idsToApprove }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Approval failed.' });
+      const parsed = await safeParseJson(res);
+      if (!parsed.ok || !parsed.data) {
+        setToast({ type: 'error', message: parsed.error || 'Approval failed.' });
         return;
       }
+      const data = parsed.data;
 
       setToast({ type: 'success', message: data.message || 'Approved successfully.' });
       setMultiApproveModalOpen(false);
@@ -412,11 +426,12 @@ export default function ApprovalPage() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Failed to update attendance.' });
+      const parsed = await safeParseJson(res);
+      if (!parsed.ok || !parsed.data) {
+        setToast({ type: 'error', message: parsed.error || 'Failed to update attendance.' });
         return;
       }
+      const data = parsed.data;
 
       setToast({ type: 'success', message: 'Attendance record updated successfully.' });
       setEditModalOpen(false);
@@ -458,11 +473,12 @@ export default function ApprovalPage() {
         body: JSON.stringify({ id: restoringRecord.id || restoringRecord._id }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Failed to restore record.' });
+      const parsed = await safeParseJson(res);
+      if (!parsed.ok || !parsed.data) {
+        setToast({ type: 'error', message: parsed.error || 'Failed to restore record.' });
         return;
       }
+      const data = parsed.data;
 
       setToast({ type: 'success', message: data.message || 'Restored back to Pending Approval.' });
       const restoredId = restoringRecord.id || restoringRecord._id;
@@ -515,11 +531,12 @@ export default function ApprovalPage() {
         body: JSON.stringify(manualForm),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setToast({ type: 'error', message: data.error || 'Failed to create attendance.' });
+      const parsed = await safeParseJson(res);
+      if (!parsed.ok || !parsed.data) {
+        setToast({ type: 'error', message: parsed.error || 'Failed to create attendance.' });
         return;
       }
+      const data = parsed.data;
 
       setToast({ type: 'success', message: data.message || 'Attendance created successfully.' });
       setManualModalOpen(false);

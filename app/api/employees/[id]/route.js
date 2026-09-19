@@ -4,6 +4,7 @@ import Employee from '@/models/Employee';
 import mongoose from 'mongoose';
 import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
+import { normalizeEmployee } from '@/lib/normalize';
 
 /**
  * Safely find an employee by the given id string.
@@ -65,7 +66,10 @@ export async function PUT(request, { params }) {
       employee.name = employee.fullName;
     }
     if (data.designation !== undefined) employee.designation = String(data.designation).trim();
-    if (data.plantId !== undefined) employee.plantId = String(data.plantId).trim();
+    if (data.plantId !== undefined) {
+      employee.plantId = String(data.plantId).trim();
+      if (employee.plantId) employee.unitIds = [employee.plantId];
+    }
     if (data.plantName !== undefined) employee.plantName = String(data.plantName).trim();
     if (data.attendanceAuthorized !== undefined) employee.attendanceAuthorized = Boolean(data.attendanceAuthorized);
     if (data.status !== undefined) {
@@ -73,20 +77,41 @@ export async function PUT(request, { params }) {
       employee.active = data.status === 'Active';
     }
 
-    // If mobile number changed, update password hash accordingly
-    if (data.mobileNumber && data.mobileNumber !== employee.mobileNumber) {
-      const cleanMobile = String(data.mobileNumber).trim();
-      if (!/^\d{10}$/.test(cleanMobile)) {
-        return NextResponse.json({ error: 'Mobile Number must be 10 digits.' }, { status: 400 });
+    // Aadhaar handling (sync both aadhaarNumber and aadhaar)
+    const incomingAadhaar = data.aadhaarNumber || data.aadhaar;
+    if (incomingAadhaar) {
+      const cleanAadhaar = String(incomingAadhaar).trim().replace(/\D/g, '');
+      employee.aadhaarNumber = cleanAadhaar;
+      employee.aadhaar = cleanAadhaar;
+    } else if (!employee.aadhaarNumber && employee.aadhaar) {
+      employee.aadhaarNumber = String(employee.aadhaar).trim();
+    }
+
+    // Mobile & Password handling (sync both mobileNumber and mobile)
+    const incomingMobile = data.mobileNumber || data.mobile;
+    if (incomingMobile) {
+      const cleanMobile = String(incomingMobile).trim().replace(/\D/g, '');
+      if (cleanMobile.length === 10) {
+        const mobileChanged = employee.mobileNumber !== cleanMobile && employee.mobile !== cleanMobile;
+        employee.mobileNumber = cleanMobile;
+        employee.mobile = cleanMobile;
+        if (mobileChanged || !employee.passwordHash) {
+          employee.passwordHash = await hashPassword(cleanMobile);
+        }
       }
-      employee.mobileNumber = cleanMobile;
-      employee.mobile = cleanMobile;
-      employee.passwordHash = await hashPassword(cleanMobile);
+    } else if (!employee.mobileNumber && employee.mobile) {
+      employee.mobileNumber = String(employee.mobile).trim();
+    }
+
+    // Ensure passwordHash is present
+    if (!employee.passwordHash) {
+      const fallbackMobile = employee.mobileNumber || employee.mobile || '1234567890';
+      employee.passwordHash = await hashPassword(fallbackMobile);
     }
 
     await employee.save();
 
-    const safeEmployee = employee.toObject();
+    const safeEmployee = normalizeEmployee(employee);
     delete safeEmployee.passwordHash;
 
     return NextResponse.json({ success: true, employee: safeEmployee });

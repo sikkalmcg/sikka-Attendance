@@ -21,8 +21,14 @@ export default function RootPage() {
           }
           window.location.replace('/login');
           return;
+        const text = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          window.location.replace('/login');
+          return;
         }
-        const data = await res.json();
         if (data.authenticated && data.user) {
           if (data.user.role === 'Employee' || data.user.userType === 'EMPLOYEE') {
             window.location.replace('/mark-attendance');
