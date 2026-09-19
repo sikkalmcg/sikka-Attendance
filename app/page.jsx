@@ -21,6 +21,7 @@ export default function RootPage() {
           }
           window.location.replace('/login');
           return;
+        }
         const text = await res.text();
         let data = {};
         try {
