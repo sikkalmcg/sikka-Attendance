@@ -96,6 +96,7 @@ export default function MarkAttendancePage() {
           setEmployeeInfo({
             employeeId: data.employee.employeeId || '',
             fullName: data.employee.fullName || '',
+            plantName: data.employee.plantName || '',
           });
         }
         // Next Mark IN eligibility from backend
@@ -152,8 +153,9 @@ export default function MarkAttendancePage() {
         const u = JSON.parse(stored);
         const empId = u.employeeId || u.empId || u.id || u.username || '';
         const name = u.fullName || u.name || (u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : u.username || '');
+        const pName = u.plantName || '';
         if (empId || name) {
-          setEmployeeInfo({ employeeId: empId, fullName: name });
+          setEmployeeInfo({ employeeId: empId, fullName: name, plantName: pName });
         }
       }
     } catch {}
@@ -454,7 +456,11 @@ export default function MarkAttendancePage() {
             <div className="mt-4 p-4 rounded-2xl bg-blue-50/60 border border-blue-100 text-left space-y-2 text-xs">
               <div className="flex justify-between items-center text-blue-900 font-semibold">
                 <span>Location / Plant:</span>
-                <span className="font-bold">{activeShift.plantName || activeShift.markInPlantName}</span>
+                <span className="font-bold">
+                  {(!activeShift.plantName || activeShift.plantName === 'Manufacturing Plant' || activeShift.plantName === '-')
+                    ? (employeeInfo?.plantName || activeShift.markInPlantName || 'Authorized Plant')
+                    : (activeShift.plantName || activeShift.markInPlantName)}
+                </span>
               </div>
               <div className="flex justify-between items-center text-slate-600">
                 <span>Mark In Time:</span>
@@ -688,10 +694,14 @@ export default function MarkAttendancePage() {
                           </span>
                         </td>
                         <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
-                          {record.markInPlant || '-'}
+                          {(!record.markInPlant || record.markInPlant === 'Manufacturing Plant' || record.markInPlant === '-')
+                            ? (isAbsent ? '-' : (employeeInfo?.plantName || '-'))
+                            : record.markInPlant}
                         </td>
                         <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
-                          {record.markOutPlant || '-'}
+                          {(!record.markOutPlant || record.markOutPlant === 'Manufacturing Plant' || record.markOutPlant === '-')
+                            ? (isAbsent || !record.markOutDateTime || record.markOutDateTime === '-' ? '-' : (employeeInfo?.plantName || '-'))
+                            : record.markOutPlant}
                         </td>
                       </tr>
                     );

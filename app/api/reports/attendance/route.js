@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Employee from '@/models/Employee';
+import Plant from '@/models/Plant';
 import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { formatKolkataDateTime, formatWorkingHours } from '@/lib/timezone';
@@ -157,12 +158,24 @@ export async function GET(request) {
     const isExport = exportFormat === 'csv' || exportFormat === 'xlsx';
     const fetchLimit = isExport ? 10000 : 500;
     const rawRecords = await Attendance.find(finalQuery)
-      .select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy')
+      .select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy')
       .lean()
       .sort({ _id: -1 })
       .limit(fetchLimit);
 
-    // Map actual designations from Employee collection
+    // Map plant IDs to plant names from Plant collection
+    const plantDocs = await Plant.find({}).select('_id id plantId plantName name').lean();
+    const plantIdMap = new Map();
+    for (const p of plantDocs) {
+      const pName = p.plantName || p.name;
+      if (pName) {
+        if (p._id) plantIdMap.set(String(p._id), pName);
+        if (p.id) plantIdMap.set(String(p.id), pName);
+        if (p.plantId) plantIdMap.set(String(p.plantId), pName);
+      }
+    }
+
+    // Map actual designations and assigned plants from Employee collection
     const empIds = [...new Set(rawRecords.map((r) => r.employeeId).filter(Boolean))];
     const employeeDocs = empIds.length > 0 ? await Employee.find({
       $or: [
@@ -170,9 +183,10 @@ export async function GET(request) {
         { id: { $in: empIds } },
         { _id: { $in: empIds } },
       ],
-    }).select('employeeId id designation fullName name').lean() : [];
+    }).select('employeeId id designation fullName name plantName plantId unitIds').lean() : [];
 
     const designationMap = new Map();
+    const empPlantMap = new Map();
     for (const emp of employeeDocs) {
       const desig = emp.designation;
       if (desig) {
@@ -182,7 +196,27 @@ export async function GET(request) {
         if (emp.fullName) designationMap.set(String(emp.fullName).toLowerCase().trim(), desig);
         if (emp.name) designationMap.set(String(emp.name).toLowerCase().trim(), desig);
       }
+
+      const assignedPlant =
+        emp.plantName ||
+        (emp.plantId && plantIdMap.get(String(emp.plantId))) ||
+        (Array.isArray(emp.unitIds) && emp.unitIds[0] && plantIdMap.get(String(emp.unitIds[0]))) ||
+        '';
+
+      if (assignedPlant) {
+        if (emp.employeeId) empPlantMap.set(String(emp.employeeId).toUpperCase().trim(), assignedPlant);
+        if (emp.id) empPlantMap.set(String(emp.id).trim(), assignedPlant);
+        if (emp._id) empPlantMap.set(String(emp._id).trim(), assignedPlant);
+        if (emp.fullName) empPlantMap.set(String(emp.fullName).toLowerCase().trim(), assignedPlant);
+        if (emp.name) empPlantMap.set(String(emp.name).toLowerCase().trim(), assignedPlant);
+      }
     }
+
+    const cleanPlant = (val) => {
+      if (!val || typeof val !== 'string') return '';
+      const t = val.trim();
+      return (t === 'Manufacturing Plant' || t === '-' || t.toLowerCase() === 'n/a') ? '' : t;
+    };
 
     const records = rawRecords.map((raw) => {
       const rec = normalizeAttendance(raw);
@@ -193,6 +227,35 @@ export async function GET(request) {
       } else if (designationMap.has(nameKey)) {
         rec.designation = designationMap.get(nameKey);
       }
+
+      const isAbsent = rec.status === 'ABSENT' || String(rec.status).toLowerCase() === 'absent';
+      if (!isAbsent) {
+        const assignedPlant = empPlantMap.get(idKey) || empPlantMap.get(nameKey) || '';
+        const resolvedPlant =
+          cleanPlant(raw.inPlant) ||
+          cleanPlant(raw.markInPlantName) ||
+          cleanPlant(raw.plantName) ||
+          cleanPlant(raw.outPlant) ||
+          cleanPlant(raw.street) ||
+          cleanPlant(raw.plantId ? plantIdMap.get(String(raw.plantId)) : '') ||
+          cleanPlant(raw.markInPlantId ? plantIdMap.get(String(raw.markInPlantId)) : '') ||
+          assignedPlant ||
+          'Authorized Plant';
+
+        rec.markInPlantName = resolvedPlant;
+        rec.plantName = resolvedPlant;
+
+        const resolvedOutPlant =
+          cleanPlant(raw.outPlant) ||
+          cleanPlant(raw.markOutPlantName) ||
+          resolvedPlant;
+        rec.markOutPlantName = resolvedOutPlant;
+      } else {
+        rec.markInPlantName = '-';
+        rec.plantName = '-';
+        rec.markOutPlantName = '-';
+      }
+
       return rec;
     });
 

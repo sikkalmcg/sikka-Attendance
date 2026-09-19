@@ -65,8 +65,43 @@ export async function GET(request) {
       ],
     }).sort({ markInAt: -1, inDateTime: -1, createdAt: -1 });
 
+    const Employee = (await import('@/models/Employee')).default;
+    const empDoc = await Employee.findOne(employeeQuery).select('plantName plantId unitIds designation fullName').lean();
+    const assignedPlant = empDoc?.plantName || session.plantName || '';
+
+    const cleanPlant = (val) => {
+      if (!val || typeof val !== 'string') return '';
+      const t = val.trim();
+      return (t === 'Manufacturing Plant' || t === '-' || t.toLowerCase() === 'n/a') ? '' : t;
+    };
+
     const activeSession = activeSessionRaw ? normalizeAttendance(activeSessionRaw) : null;
+    if (activeSession) {
+      const rawObj = activeSessionRaw.toObject ? activeSessionRaw.toObject() : activeSessionRaw;
+      const realPlant =
+        cleanPlant(activeSession.plantName) ||
+        cleanPlant(activeSession.markInPlantName) ||
+        cleanPlant(rawObj.inPlant) ||
+        cleanPlant(rawObj.plantName) ||
+        assignedPlant ||
+        'Authorized Plant';
+      activeSession.plantName = realPlant;
+      activeSession.markInPlantName = realPlant;
+    }
+
     const todaySession = latestTodayRaw ? normalizeAttendance(latestTodayRaw) : null;
+    if (todaySession) {
+      const rawObj = latestTodayRaw.toObject ? latestTodayRaw.toObject() : latestTodayRaw;
+      const realPlant =
+        cleanPlant(todaySession.plantName) ||
+        cleanPlant(todaySession.markInPlantName) ||
+        cleanPlant(rawObj.inPlant) ||
+        cleanPlant(rawObj.plantName) ||
+        assignedPlant ||
+        'Authorized Plant';
+      todaySession.plantName = realPlant;
+      todaySession.markInPlantName = realPlant;
+    }
 
     // ── 4. Next Mark IN eligibility ──────────────────────────────────────────
     /**
@@ -127,8 +162,10 @@ export async function GET(request) {
       todaySession,
       employee: {
         employeeId: session.employeeId || session.sub || '',
-        fullName: session.fullName || 'Employee',
-        designation: session.designation || 'Staff',
+        fullName: session.fullName || empDoc?.fullName || 'Employee',
+        designation: session.designation || empDoc?.designation || 'Staff',
+        plantId: empDoc?.plantId || session.plantId || '',
+        plantName: assignedPlant,
       },
       canMarkIn,
       canMarkOut,

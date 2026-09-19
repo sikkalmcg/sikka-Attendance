@@ -140,6 +140,8 @@ export async function GET(request) {
               designation: employee.designation,
               aadhaarNumber: employee.aadhaarNumber,
               mobileNumber: employee.mobileNumber,
+              plantId: employee.plantId || '',
+              plantName: employee.plantName || '',
               role: 'Employee',
               attendanceAuthorized: Boolean(employee.attendanceAuthorized),
               userType: 'EMPLOYEE',

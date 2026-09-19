@@ -446,7 +446,11 @@ export default function ReportPage() {
                       remarkParts.push('Approved Absent');
                     }
 
-                    const remarkDisplay = remarkParts.length > 0 ? remarkParts.join('; ') : '—';
+                    const formatPlantName = (val) => {
+                      if (!val || typeof val !== 'string') return '-';
+                      const t = val.trim();
+                      return (t === 'Manufacturing Plant' || t === '-' || t.toLowerCase() === 'n/a') ? '-' : t;
+                    };
 
                     return (
                       <tr key={r.id || r._id} className="hover:bg-slate-50/70 transition-colors">
@@ -463,7 +467,7 @@ export default function ReportPage() {
                           {r.attendanceDate || '-'}
                         </td>
                         <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap">
-                          {isAbsent ? '-' : (r.markInPlantName || r.plantName || '-')}
+                          {isAbsent ? '-' : formatPlantName(r.markInPlantName || r.plantName)}
                         </td>
                         <td className="py-3.5 px-4 font-mono text-slate-600 whitespace-nowrap">
                           {!isAbsent && r.markInAt ? formatKolkataDateTime(r.markInAt) : '-'}
@@ -505,7 +509,7 @@ export default function ReportPage() {
                           {isAbsent ? '-' : (r.markOutType || 'Self')}
                         </td>
                         <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap">
-                          {isAbsent ? '-' : (r.markOutPlantName || r.plantName || '-')}
+                          {isAbsent ? '-' : formatPlantName(r.markOutPlantName || r.plantName)}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
                           {manualDisplay !== '—' ? (

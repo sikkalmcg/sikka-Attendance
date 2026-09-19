@@ -77,9 +77,22 @@ export async function GET(request) {
           ],
         },
       ],
-    }).select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy')
+    }).select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy')
       .lean()
       .sort({ markInAt: -1, inDate: -1, inTime: -1, inDateTime: -1, createdAt: -1 });
+
+    const Employee = (await import('@/models/Employee')).default;
+    const empDoc = await Employee.findOne({
+      $or: [
+        { employeeId: session.employeeId },
+        { employeeId: session.sub },
+        { id: session.sub },
+        { _id: session.sub },
+        ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
+      ],
+    }).select('plantName plantId unitIds designation fullName').lean();
+
+    const employeeAssignedPlant = empDoc?.plantName || session.plantName || '';
 
     // Match attendance records against every calendar date
     const recordByDate = new Map();
@@ -92,7 +105,7 @@ export async function GET(request) {
       }
     }
 
-    const employeeName = session.fullName || 'Employee';
+    const employeeName = session.fullName || empDoc?.fullName || 'Employee';
 
     // Section 5: Show every calendar date (newest first)
     const fullHistory = calendarDates.map(({ isoDate, formattedDate }) => {
@@ -160,26 +173,34 @@ export async function GET(request) {
 
         const status = isAbsent ? 'Absent' : 'Present';
 
+        const cleanPlant = (val) => {
+          if (!val || typeof val !== 'string') return '';
+          const t = val.trim();
+          return (t === 'Manufacturing Plant' || t === '-' || t.toLowerCase() === 'n/a') ? '' : t;
+        };
+
         let markInPlant = '-';
         let markOutPlant = '-';
 
         if (!isAbsent) {
-          markInPlant =
-            existing.markInPlantName ||
-            existing.plantName ||
-            raw.markInPlant ||
-            raw.inPlant ||
-            raw.plantName ||
-            '-';
+          const resolvedMarkIn =
+            cleanPlant(raw.inPlant) ||
+            cleanPlant(existing.markInPlantName) ||
+            cleanPlant(existing.plantName) ||
+            cleanPlant(raw.markInPlant) ||
+            cleanPlant(raw.plantName) ||
+            cleanPlant(raw.street) ||
+            employeeAssignedPlant ||
+            'Authorized Plant';
+
+          markInPlant = resolvedMarkIn;
 
           if (existing.markOutAt) {
             markOutPlant =
-              existing.markOutPlantName ||
-              raw.markOutPlant ||
-              raw.outPlant ||
-              existing.markInPlantName ||
-              existing.plantName ||
-              '-';
+              cleanPlant(raw.outPlant) ||
+              cleanPlant(existing.markOutPlantName) ||
+              cleanPlant(raw.markOutPlant) ||
+              resolvedMarkIn;
           } else {
             markOutPlant = '-';
           }

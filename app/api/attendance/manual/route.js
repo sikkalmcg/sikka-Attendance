@@ -185,18 +185,22 @@ export async function POST(request) {
     }
 
     // Lookup plant details if provided
-    let plantName = emp.plantName || 'Manufacturing Plant';
+    let plantName = emp.plantName || '';
     let resolvedPlantId = plantId || emp.plantId || null;
 
-    if (plantId) {
+    if (plantId || (!plantName && resolvedPlantId)) {
+      const searchId = plantId || resolvedPlantId;
       const rawPlant = await Plant.findOne({
-        $or: [{ _id: plantId }, { id: plantId }, { plantId: plantId }],
+        $or: [{ _id: searchId }, { id: searchId }, { plantId: searchId }],
       });
       if (rawPlant) {
         const p = normalizePlant(rawPlant);
         plantName = p.plantName;
         resolvedPlantId = p.plantId;
       }
+    }
+    if (!plantName) {
+      plantName = 'Authorized Plant';
     }
 
     // Plant-Level Data Security: verify logged in user has access to this plant
