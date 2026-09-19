@@ -90,11 +90,19 @@ export async function GET(request) {
     let blockReason = null;
     let nextMarkInAfter = null; // ISO string: earliest time employee can next Mark IN
 
+    const nowIST = formatInTimeZone(new Date(), IST, 'yyyy-MM-dd');
+
     if (activeSession) {
       // A: Active session exists
       canMarkIn = false;
       canMarkOut = true;
       blockReason = 'You have an active attendance session. Please Mark OUT first.';
+    } else if (latestTodayRaw && (latestTodayRaw.markOutAt || ['COMPLETED', 'Closed', 'AUTO_COMPLETED'].includes(latestTodayRaw.status))) {
+      // B: A session for today was already recorded and completed
+      canMarkIn = false;
+      canMarkOut = false;
+      blockReason = 'Mark In already completed for this date.';
+      nextMarkInAfter = getISTMidnightAfterDate(todayISTStr).toISOString();
     } else if (latestCompletedRaw) {
       // Get the attendance date of the latest completed session
       const completedAttDate =
@@ -103,18 +111,12 @@ export async function GET(request) {
           ? formatInTimeZone(new Date(latestCompletedRaw.markInAt), IST, 'yyyy-MM-dd')
           : null);
 
-      if (completedAttDate) {
-        const nowIST = formatInTimeZone(new Date(), IST, 'yyyy-MM-dd');
-
-        if (completedAttDate === nowIST) {
-          // B: Completed session is from today — block Mark IN until midnight tonight IST
-          canMarkIn = false;
-          canMarkOut = false;
-          blockReason = 'Attendance already marked for today. Next Mark IN available from tomorrow.';
-          nextMarkInAfter = getISTMidnightAfterDate(completedAttDate).toISOString();
-        }
-        // C & D: completedAttDate is yesterday or older → Mark IN is open
-        // (overnight rule: after completing an overnight session, next calendar day is open)
+      if (completedAttDate && completedAttDate === nowIST) {
+        // Completed session is from today — block Mark IN until midnight tonight IST
+        canMarkIn = false;
+        canMarkOut = false;
+        blockReason = 'Mark In already completed for this date.';
+        nextMarkInAfter = getISTMidnightAfterDate(completedAttDate).toISOString();
       }
     }
 
@@ -123,6 +125,11 @@ export async function GET(request) {
       hasActiveSession: !!activeSession,
       activeSession,
       todaySession,
+      employee: {
+        employeeId: session.employeeId || session.sub || '',
+        fullName: session.fullName || 'Employee',
+        designation: session.designation || 'Staff',
+      },
       canMarkIn,
       canMarkOut,
       blockReason,

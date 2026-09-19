@@ -22,13 +22,40 @@ export async function GET(request) {
     const dateTo = searchParams.get('dateTo');
     const employeeId = searchParams.get('employeeId');
     const plantId = searchParams.get('plantId');
+    const statusParam = searchParams.get('status'); // 'Present' | 'Absent' | 'ALL'
     const attendanceType = searchParams.get('attendanceType'); // 'all', 'regular', 'auto'
     const exportFormat = searchParams.get('export'); // 'csv' | 'xlsx'
+    const allData = searchParams.get('all') === 'true' || searchParams.get('allData') === 'true';
 
-    // Report ONLY shows Approved records (§11)
     const query = {
-      $and: [{ approvalStatus: 'APPROVED' }],
+      $and: [],
     };
+
+    // By default, match approved records (both approvalStatus === 'APPROVED' and legacy approved === true)
+    // If allData is requested, fetch all records from database without restriction
+    if (!allData) {
+      query.$and.push({
+        $or: [
+          { approvalStatus: 'APPROVED' },
+          { approved: true },
+        ],
+      });
+    }
+
+    // Status filter: Present or Absent only
+    if (statusParam === 'Present') {
+      query.$and.push({
+        status: { $nin: ['ABSENT', 'Absent'] },
+        attendanceType: { $ne: 'Absent' },
+      });
+    } else if (statusParam === 'Absent') {
+      query.$and.push({
+        $or: [
+          { status: { $in: ['ABSENT', 'Absent'] } },
+          { attendanceType: 'Absent' },
+        ],
+      });
+    }
 
     // Date range filter
     if (dateFrom || dateTo) {
@@ -42,23 +69,29 @@ export async function GET(request) {
         dateConditions.push(
           { markInAt: { $gte: from, $lte: to } },
           { inDateTime: { $gte: from, $lte: to } },
-          { inDate: { $gte: dateFrom, $lte: dateTo } }
+          { inDate: { $gte: dateFrom, $lte: dateTo } },
+          { date: { $gte: dateFrom, $lte: dateTo } },
+          { attendanceDate: { $gte: dateFrom, $lte: dateTo } }
         );
       } else if (from) {
         dateConditions.push(
           { markInAt: { $gte: from } },
           { inDateTime: { $gte: from } },
-          { inDate: { $gte: dateFrom } }
+          { inDate: { $gte: dateFrom } },
+          { date: { $gte: dateFrom } },
+          { attendanceDate: { $gte: dateFrom } }
         );
       } else if (to) {
         dateConditions.push(
           { markInAt: { $lte: to } },
           { inDateTime: { $lte: to } },
-          { inDate: { $lte: dateTo } }
+          { inDate: { $lte: dateTo } },
+          { date: { $lte: dateTo } },
+          { attendanceDate: { $lte: dateTo } }
         );
       }
       if (dateConditions.length > 0) {
-        query.$or = dateConditions;
+        query.$and.push({ $or: dateConditions });
       }
     }
 
@@ -69,6 +102,20 @@ export async function GET(request) {
           { employeeId: employeeId },
           { employeeId: employeeId.toUpperCase() },
           { aadhaarNumber: employeeId },
+        ],
+      });
+    }
+
+    // Plant Level Data Security: Enforce allowed plant scope unconditionally for non-admin users
+    if (!plantScope.isAllPlants) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { plantId: { $in: plantScope.plantIds } },
+          { markInPlantId: { $in: plantScope.plantIds } },
+          { plantName: { $in: plantScope.plantNames } },
+          { markInPlantName: { $in: plantScope.plantNames } },
+          { inPlant: { $in: plantScope.plantNames } },
         ],
       });
     }
@@ -88,17 +135,6 @@ export async function GET(request) {
           ],
         });
       }
-    } else if (!plantScope.isAllPlants) {
-      query.$and = query.$and || [];
-      query.$and.push({
-        $or: [
-          { plantId: { $in: plantScope.plantIds } },
-          { markInPlantId: { $in: plantScope.plantIds } },
-          { plantName: { $in: plantScope.plantNames } },
-          { markInPlantName: { $in: plantScope.plantNames } },
-          { inPlant: { $in: plantScope.plantNames } },
-        ],
-      });
     }
 
     // NOTE: status filter is intentionally removed — report only shows APPROVED records
@@ -116,28 +152,94 @@ export async function GET(request) {
       });
     }
 
-    const rawRecords = await Attendance.find(query)
+    const finalQuery = query.$and && query.$and.length > 0 ? query : {};
+    const isExport = exportFormat === 'csv' || exportFormat === 'xlsx';
+    const fetchLimit = isExport ? 10000 : 500;
+    const rawRecords = await Attendance.find(finalQuery)
+      .select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy')
+      .lean()
       .sort({ _id: -1 })
-      .limit(2000);
+      .limit(fetchLimit);
 
     const records = rawRecords.map(normalizeAttendance);
 
-    // Handle CSV or Excel Export (Section 26 Columns)
+    // Handle CSV or Excel Export
     if (exportFormat === 'csv' || exportFormat === 'xlsx') {
-      const formattedRows = records.map((r) => ({
-        'Employee ID': r.employeeId || '-',
-        'Employee Name': r.employeeName || '-',
-        'Designation': r.designation || 'Staff',
-        'Mark In Plant': r.markInPlantName || r.plantName || '-',
-        'Mark IN Date Time': r.markInAt ? formatKolkataDateTime(r.markInAt) : '-',
-        'Mark Out Date Time': r.markOutAt ? formatKolkataDateTime(r.markOutAt) : '-',
-        'Working Hour': r.workingMinutes > 0 ? formatWorkingHours(r.workingMinutes) : '0:00',
-        'Status': r.status,
-        'Mark Out Type': r.markOutType || 'Self',
-        'Mark Out Plant': r.markOutPlantName || r.plantName || '-',
-        'Manual Attendance By': r.manualAttendanceBy || '-',
-        'Approved By': r.approvedBy || '-',
-      }));
+      const getManualAttendanceDisplay = (r) => {
+        const inBy = r.markInManualBy;
+        const outBy = r.markOutManualBy;
+        const legacyBy = r.manualAttendanceBy;
+
+        if (inBy && outBy) {
+          if (inBy === outBy) {
+            return inBy;
+          }
+          return `Mark In Manual by ${inBy}, Mark Out Manual by ${outBy}`;
+        }
+        if (inBy) {
+          return `Mark In Manual by ${inBy}`;
+        }
+        if (outBy) {
+          return `Mark Out Manual by ${outBy}`;
+        }
+        if (legacyBy) {
+          return legacyBy;
+        }
+        return '-';
+      };
+
+      const getRemarkDisplay = (r) => {
+        const inBy = r.markInManualBy;
+        const outBy = r.markOutManualBy;
+        const rawRemarks = (r.remarks || '').trim();
+        const isAbsent = r.status === 'ABSENT' || String(r.status).toLowerCase() === 'absent';
+
+        const parts = [];
+        if (inBy && outBy) {
+          if (inBy === outBy) {
+            parts.push(`Mark In Manual by ${inBy}`, `Mark Out Manual by ${inBy}`);
+          } else {
+            parts.push(`Mark In Manual by ${inBy}`, `Mark Out Manual by ${outBy}`);
+          }
+        } else if (inBy) {
+          parts.push(`Mark In Manual by ${inBy}`);
+        } else if (outBy) {
+          parts.push(`Mark Out Manual by ${outBy}`);
+        } else if (r.manualAttendanceBy) {
+          parts.push(`Manual by ${r.manualAttendanceBy}`);
+        }
+
+        if (rawRemarks) {
+          const isRedundant = parts.some((p) => rawRemarks.toLowerCase().includes(p.toLowerCase()));
+          if (!isRedundant) {
+            parts.push(rawRemarks);
+          }
+        } else if (isAbsent && parts.length === 0) {
+          parts.push('Absent');
+        }
+
+        return parts.length > 0 ? parts.join('; ') : '-';
+      };
+
+      const formattedRows = records.map((r) => {
+        const isAbsent = r.status === 'ABSENT' || String(r.status).toLowerCase() === 'absent';
+        return {
+          'Employee ID': r.employeeId || '-',
+          'Employee Name': r.employeeName || '-',
+          'Designation': r.designation || 'Staff',
+          'Attendance Date': r.attendanceDate || '-',
+          'Mark In Plant': isAbsent ? '-' : (r.markInPlantName || r.plantName || '-'),
+          'Mark IN Date Time': !isAbsent && r.markInAt ? formatKolkataDateTime(r.markInAt) : '-',
+          'Mark Out Date Time': !isAbsent && r.markOutAt ? formatKolkataDateTime(r.markOutAt) : '-',
+          'Working Hour': !isAbsent && r.workingMinutes > 0 ? formatWorkingHours(r.workingMinutes) : '0:00',
+          'Mark Out Type': isAbsent ? '-' : (r.markOutType || 'Self'),
+          'Mark Out Plant': isAbsent ? '-' : (r.markOutPlantName || r.plantName || '-'),
+          'Status': isAbsent ? 'Absent' : 'Present',
+          'Manual Attendance By': getManualAttendanceDisplay(r),
+          'Approved By': r.approvedBy || '-',
+          'Remark': getRemarkDisplay(r),
+        };
+      });
 
       const worksheet = XLSX.utils.json_to_sheet(formattedRows);
 

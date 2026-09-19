@@ -115,7 +115,13 @@ export async function POST(request) {
     if (rawEmployee) {
       const employee = normalizeEmployee(rawEmployee);
 
-      if (employee.status !== 'Active') {
+      // Block inactive employees — check both status and the new soft-delete flags
+      const rawEmpDoc = rawEmployee.toObject ? rawEmployee.toObject() : rawEmployee;
+      if (
+        employee.status !== 'Active' ||
+        rawEmpDoc.isActive === false ||
+        rawEmpDoc.loginEnabled === false
+      ) {
         return NextResponse.json(
           { error: 'Employee profile is inactive. Please contact the administrator.' },
           { status: 403 }

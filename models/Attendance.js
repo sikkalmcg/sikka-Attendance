@@ -139,6 +139,14 @@ const AttendanceSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    markInManualBy: {
+      type: String,
+      default: null,
+    },
+    markOutManualBy: {
+      type: String,
+      default: null,
+    },
 
     // Attendance Date (IST yyyy-MM-dd, derived from Mark IN time, not Mark OUT)
     attendanceDate: {
@@ -184,11 +192,14 @@ const AttendanceSchema = new mongoose.Schema(
 );
 
 // Indexes
+AttendanceSchema.index({ employeeId: 1, attendanceDate: 1 });
 AttendanceSchema.index({ employeeId: 1, attendanceDate: -1 });
 AttendanceSchema.index({ employeeId: 1, inDate: -1 });
 AttendanceSchema.index({ employeeId: 1, markInAt: -1 });
 AttendanceSchema.index({ plantId: 1, markInAt: -1 });
 AttendanceSchema.index({ status: 1, markInAt: -1 });
+AttendanceSchema.index({ approvalStatus: 1, markInAt: -1 });
+AttendanceSchema.index({ approved: 1, markInAt: -1 });
 
 export default mongoose.models.Attendance || mongoose.model('Attendance', AttendanceSchema, 'attendance');
 

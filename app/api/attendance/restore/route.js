@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
-import { authorizeSystemUser } from '@/lib/rbac';
+import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { normalizeAttendance } from '@/lib/normalize';
 
 export async function POST(request) {
@@ -30,6 +30,19 @@ export async function POST(request) {
 
     if (!record) {
       return NextResponse.json({ error: 'Attendance record not found.' }, { status: 404 });
+    }
+
+    // Plant-Level Data Security: verify logged in user has access to this plant
+    const plantScope = await getScopedPlantContext(session);
+    if (!plantScope.isAllPlants) {
+      const recPlantId = record.plantId || record.markInPlantId;
+      const recPlantName = record.plantName || record.markInPlantName || record.inPlant;
+      const hasPlantAccess =
+        (recPlantId && plantScope.plantIds.includes(String(recPlantId))) ||
+        (recPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(recPlantName).toLowerCase()));
+      if (!hasPlantAccess) {
+        return NextResponse.json({ error: 'Access denied: You do not have permission to restore records for this plant.' }, { status: 403 });
+      }
     }
 
     const now = new Date();

@@ -9,6 +9,7 @@ import { normalizeAttendance } from '@/lib/normalize';
 import {
   formatKolkataDate,
   formatKolkataTime,
+  formatKolkataDateTime,
   formatHoursHHMM,
   getAttendanceDateString,
 } from '@/lib/timezone';
@@ -76,15 +77,18 @@ export async function GET(request) {
           ],
         },
       ],
-    }).sort({ markInAt: -1, inDateTime: -1, createdAt: -1 });
+    }).select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy')
+      .lean()
+      .sort({ markInAt: -1, inDate: -1, inTime: -1, inDateTime: -1, createdAt: -1 });
 
     // Match attendance records against every calendar date
     const recordByDate = new Map();
     for (const raw of rawRecords) {
-      const norm = normalizeAttendance(raw);
-      const dateKey = norm.attendanceDate || getAttendanceDateString(raw);
+      const rawObj = typeof raw.toObject === 'function' ? raw.toObject() : raw;
+      const norm = normalizeAttendance(rawObj);
+      const dateKey = norm.attendanceDate || getAttendanceDateString(rawObj);
       if (dateKey && !recordByDate.has(dateKey)) {
-        recordByDate.set(dateKey, norm);
+        recordByDate.set(dateKey, { ...norm, _raw: rawObj });
       }
     }
 
@@ -96,53 +100,131 @@ export async function GET(request) {
 
       if (existing) {
         const isAbsent = existing.status === 'ABSENT';
-        const markInTime = isAbsent
-          ? '-'
-          : existing.markInAt
-          ? formatKolkataTime(existing.markInAt)
-          : '-';
+        const raw = existing._raw || {};
+        const isHistoricalRange = isoDate >= '2026-06-01' && isoDate <= '2026-09-17';
 
-        const markOutTime = isAbsent
-          ? '-'
-          : existing.status === 'ACTIVE' && !existing.markOutAt
-          ? 'Active'
-          : existing.markOutAt
-          ? formatKolkataTime(existing.markOutAt)
-          : '-';
+        const empId = session.employeeId || existing.employeeId || raw.employeeId || raw.empId || 'EMP';
+        const empName = session.fullName || existing.employeeName || raw.employeeName || raw.name || employeeName;
+        const employeeDetails = `${empId} / ${empName}`;
 
-        const workingHour = isAbsent
-          ? '-'
-          : existing.workingMinutes > 0
-          ? formatHoursHHMM(existing.workingMinutes)
-          : '00:00';
+        let markInDateTime = '-';
+        let markOutDateTime = '-';
+
+        if (!isAbsent) {
+          // Historical records (01-Jun-2026 to 17-Sep-2026): extract original values from MongoDB without recalculation
+          if (isHistoricalRange && (raw.inTime || existing.inTime)) {
+            const rawInDate = raw.inDate || raw.date || existing.attendanceDate || isoDate;
+            markInDateTime = `${formatKolkataDate(rawInDate)}, ${raw.inTime || existing.inTime}`;
+          } else if (existing.markInAt) {
+            markInDateTime = formatKolkataDateTime(existing.markInAt);
+          } else if (raw.inTime || existing.inTime) {
+            const rawInDate = raw.inDate || raw.date || existing.attendanceDate || isoDate;
+            markInDateTime = `${formatKolkataDate(rawInDate)}, ${raw.inTime || existing.inTime}`;
+          }
+
+          if (isHistoricalRange && (raw.outTime || existing.outTime)) {
+            const rawOutDate = raw.outDate || raw.inDate || raw.date || existing.attendanceDate || isoDate;
+            markOutDateTime = `${formatKolkataDate(rawOutDate)}, ${raw.outTime || existing.outTime}`;
+          } else if (existing.status === 'ACTIVE' && !existing.markOutAt) {
+            markOutDateTime = 'Active';
+          } else if (existing.markOutAt) {
+            markOutDateTime = formatKolkataDateTime(existing.markOutAt);
+          } else if (raw.outTime || existing.outTime) {
+            const rawOutDate = raw.outDate || raw.inDate || raw.date || existing.attendanceDate || isoDate;
+            markOutDateTime = `${formatKolkataDate(rawOutDate)}, ${raw.outTime || existing.outTime}`;
+          }
+        }
+
+        // Working hours calculation: (Mark Out Date & Time - Mark In Date & Time)
+        let workingHour = '-';
+        if (!isAbsent) {
+          if (existing.markInAt && existing.markOutAt) {
+            const inMs = new Date(existing.markInAt).getTime();
+            const outMs = new Date(existing.markOutAt).getTime();
+            if (!isNaN(inMs) && !isNaN(outMs) && outMs >= inMs) {
+              const diffMinutes = Math.round((outMs - inMs) / 60000);
+              workingHour = formatHoursHHMM(diffMinutes);
+            } else {
+              workingHour = '00:00';
+            }
+          } else if (existing.status === 'ACTIVE' || !existing.markOutAt) {
+            workingHour = '-';
+          } else if (existing.workingMinutes > 0) {
+            workingHour = formatHoursHHMM(existing.workingMinutes);
+          } else if (raw.hours) {
+            workingHour = formatHoursHHMM(Math.round(Number(raw.hours) * 60));
+          } else {
+            workingHour = '00:00';
+          }
+        }
 
         const status = isAbsent ? 'Absent' : 'Present';
 
+        let markInPlant = '-';
+        let markOutPlant = '-';
+
+        if (!isAbsent) {
+          markInPlant =
+            existing.markInPlantName ||
+            existing.plantName ||
+            raw.markInPlant ||
+            raw.inPlant ||
+            raw.plantName ||
+            '-';
+
+          if (existing.markOutAt) {
+            markOutPlant =
+              existing.markOutPlantName ||
+              raw.markOutPlant ||
+              raw.outPlant ||
+              existing.markInPlantName ||
+              existing.plantName ||
+              '-';
+          } else {
+            markOutPlant = '-';
+          }
+        }
+
         return {
           id: existing.id || `att-${isoDate}`,
-          employeeName,
+          employeeDetails,
+          employeeName: empName,
+          attendanceDate: formattedDate,
           date: formattedDate,
           isoDate,
-          markInTime,
-          markOutTime,
+          markInDateTime,
+          markOutDateTime,
+          markInTime: markInDateTime,
+          markOutTime: markOutDateTime,
           workingHour,
+          workingHours: workingHour,
           status,
+          markInPlant,
+          markOutPlant,
           isAbsent,
           hasRecord: true,
           rawRecord: existing,
         };
       }
 
-      // If attendance does NOT exist: Display Employee Name, Date, -, -, -, Absent
+      // If attendance does NOT exist: Display Absent
+      const absentDetails = `${session.employeeId || 'EMP'} / ${session.fullName || employeeName}`;
       return {
         id: `absent-${isoDate}`,
+        employeeDetails: absentDetails,
         employeeName,
+        attendanceDate: formattedDate,
         date: formattedDate,
         isoDate,
+        markInDateTime: '-',
+        markOutDateTime: '-',
         markInTime: '-',
         markOutTime: '-',
         workingHour: '-',
+        workingHours: '-',
         status: 'Absent',
+        markInPlant: '-',
+        markOutPlant: '-',
         isAbsent: true,
         hasRecord: false,
       };

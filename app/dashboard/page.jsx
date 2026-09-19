@@ -17,6 +17,8 @@ import {
   X,
   MapPin,
   Compass,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { formatKolkataDateTime, formatWorkingHours } from '@/lib/timezone';
 
@@ -203,11 +205,100 @@ function DetailModal({ open, onClose, title, color, loading, data }) {
   );
 }
 
+// ─── Header Sort Control Component ──────────────────────────────────────────
+function SortHeader({ label, field, currentField, currentDirection, onSort }) {
+  const isAscActive = currentField === field && currentDirection === 'asc';
+  const isDescActive = currentField === field && currentDirection === 'desc';
+
+  return (
+    <th className="px-6 py-3.5 select-none whitespace-nowrap">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold uppercase tracking-wider text-slate-500 text-xs">
+          {label}
+        </span>
+        <div className="inline-flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => onSort(field, 'asc')}
+            title={`Sort ${label} Ascending`}
+            aria-label={`Sort ${label} Ascending`}
+            className={`p-1 rounded-md transition-all cursor-pointer ${
+              isAscActive
+                ? 'bg-blue-100 text-blue-700 shadow-2xs font-bold'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200/70'
+            }`}
+          >
+            <ArrowUp className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onSort(field, 'desc')}
+            title={`Sort ${label} Descending`}
+            aria-label={`Sort ${label} Descending`}
+            className={`p-1 rounded-md transition-all cursor-pointer ${
+              isDescActive
+                ? 'bg-blue-100 text-blue-700 shadow-2xs font-bold'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200/70'
+            }`}
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </th>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Sorting state for Today's Attendance Stream
+  const [sortField, setSortField] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' | 'desc'
+
+  const handleSort = (field, direction) => {
+    setSortField(field);
+    setSortDirection(direction);
+  };
+
+  const sortedRecentActivity = React.useMemo(() => {
+    const list = stats?.recentActivity ? [...stats.recentActivity] : [];
+    if (!sortField) return list;
+
+    return list.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'employee') {
+        const valA = (a.employeeName || a.employeeId || '').toLowerCase();
+        const valB = (b.employeeName || b.employeeId || '').toLowerCase();
+        comparison = valA.localeCompare(valB);
+      } else if (sortField === 'plant') {
+        const valA = (a.plantName || '').toLowerCase();
+        const valB = (b.plantName || '').toLowerCase();
+        comparison = valA.localeCompare(valB);
+      } else if (sortField === 'markInAt') {
+        const timeA = a.markInAt ? new Date(a.markInAt).getTime() : 0;
+        const timeB = b.markInAt ? new Date(b.markInAt).getTime() : 0;
+        comparison = timeA - timeB;
+      } else if (sortField === 'markOutAt') {
+        const timeA = a.markOutAt ? new Date(a.markOutAt).getTime() : 0;
+        const timeB = b.markOutAt ? new Date(b.markOutAt).getTime() : 0;
+        comparison = timeA - timeB;
+      } else if (sortField === 'status') {
+        const valA = (a.status || '').toLowerCase();
+        const valB = (b.status || '').toLowerCase();
+        comparison = valA.localeCompare(valB);
+      } else if (sortField === 'approval') {
+        const valA = (a.approvalStatus || '').toLowerCase();
+        const valB = (b.approvalStatus || '').toLowerCase();
+        comparison = valA.localeCompare(valB);
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [stats?.recentActivity, sortField, sortDirection]);
 
   // Detail popup state
   const [detailOpen, setDetailOpen] = useState(false);
@@ -414,12 +505,48 @@ export default function DashboardPage() {
             <table className="w-full text-left text-sm text-slate-600">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200/70">
                 <tr>
-                  <th className="px-6 py-3.5">Employee</th>
-                  <th className="px-6 py-3.5">Plant</th>
-                  <th className="px-6 py-3.5">Mark In Time</th>
-                  <th className="px-6 py-3.5">Mark Out Time</th>
-                  <th className="px-6 py-3.5">Status</th>
-                  <th className="px-6 py-3.5">Approval</th>
+                  <SortHeader
+                    label="Employee"
+                    field="employee"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="Plant"
+                    field="plant"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="Mark In Time"
+                    field="markInAt"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="Mark Out Time"
+                    field="markOutAt"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="Status"
+                    field="status"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="Approval"
+                    field="approval"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={handleSort}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -429,14 +556,14 @@ export default function DashboardPage() {
                       Loading attendance data...
                     </td>
                   </tr>
-                ) : !stats?.recentActivity || stats.recentActivity.length === 0 ? (
+                ) : !sortedRecentActivity || sortedRecentActivity.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
                       No attendance records marked yet today.
                     </td>
                   </tr>
                 ) : (
-                  stats.recentActivity.map((record, idx) => (
+                  sortedRecentActivity.map((record, idx) => (
                     <tr key={record._id || `act-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="px-6 py-4 font-semibold text-slate-800">
                         {record.employeeName}

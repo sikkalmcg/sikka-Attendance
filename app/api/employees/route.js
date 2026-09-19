@@ -60,8 +60,9 @@ export async function GET(request) {
     const query = queryParts.length > 0 ? { $and: queryParts } : {};
 
     const rawEmployees = await Employee.find(query)
-      .select('-passwordHash')
-      .sort({ createdAt: -1 });
+      .select('-passwordHash -avatar -photo -image -profileImage')
+      .lean()
+      .sort({ _id: -1 });
 
     const employees = rawEmployees.map(normalizeEmployee);
 

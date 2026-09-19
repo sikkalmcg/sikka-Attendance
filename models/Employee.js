@@ -59,6 +59,23 @@ const EmployeeSchema = new mongoose.Schema(
       enum: ['Active', 'Inactive'],
       default: 'Active',
     },
+    // Soft-delete / deactivation fields (never physically delete the document)
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    loginEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    deactivatedAt: {
+      type: Date,
+      default: null,
+    },
+    deactivatedBy: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,

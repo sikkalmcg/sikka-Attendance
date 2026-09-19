@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
-import { authorizeSystemUser } from '@/lib/rbac';
+import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { normalizeAttendance } from '@/lib/normalize';
 import { formatInTimeZone } from 'date-fns-tz';
 import { parseKolkataDateTime, isFutureKolkataDateTime } from '@/lib/timezone';
@@ -69,11 +70,28 @@ export async function POST(request) {
     } catch (e) {}
 
     if (!record) {
-      record = await Attendance.findOne({ $or: [{ _id: id }, { id: id }] });
+      const queryIds = [{ _id: id }, { id }];
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        queryIds.push({ _id: new mongoose.Types.ObjectId(id) });
+      }
+      record = await Attendance.findOne({ $or: queryIds });
     }
 
     if (!record) {
       return NextResponse.json({ error: 'Attendance record not found.' }, { status: 404 });
+    }
+
+    // Plant-Level Data Security: verify logged in user has access to this plant
+    const plantScope = await getScopedPlantContext(session);
+    if (!plantScope.isAllPlants) {
+      const recPlantId = record.plantId || record.markInPlantId;
+      const recPlantName = record.plantName || record.markInPlantName || record.inPlant;
+      const hasPlantAccess =
+        (recPlantId && plantScope.plantIds.includes(String(recPlantId))) ||
+        (recPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(recPlantName).toLowerCase()));
+      if (!hasPlantAccess) {
+        return NextResponse.json({ error: 'Access denied: You do not have permission to edit records for this plant.' }, { status: 403 });
+      }
     }
 
     // Preserve previous values for audit trail
@@ -84,9 +102,18 @@ export async function POST(request) {
     // Recalculate attendanceDate based on updated markInAt (IST date of Mark IN, not Mark OUT)
     const attendanceDate = formatInTimeZone(inDate, IST, 'yyyy-MM-dd');
 
+    const loggedInUsername = session.username || session.fullName || 'Admin';
+
+    // Check if Mark In or Mark Out was changed/entered
+    const isMarkInEdited = !previousMarkIn || inDate.getTime() !== previousMarkIn.getTime();
+    const isMarkOutEdited =
+      (!previousMarkOut && outDate) ||
+      (previousMarkOut && !outDate) ||
+      (previousMarkOut && outDate && outDate.getTime() !== previousMarkOut.getTime());
+
     // Build audit entry
     const auditEntry = {
-      editedBy: session.fullName || session.username,
+      editedBy: loggedInUsername,
       editedAt: now,
       previousMarkIn,
       previousMarkOut,
@@ -97,22 +124,50 @@ export async function POST(request) {
 
     const auditHistory = Array.isArray(record.auditHistory) ? [...record.auditHistory, auditEntry] : [auditEntry];
 
-    // Use $set to only update changed fields — manualAttendanceBy is never overwritten
+    const updateFields = {
+      markInAt: inDate,
+      markOutAt: outDate,
+      workingMinutes,
+      status: outDate ? 'COMPLETED' : 'ACTIVE',
+      editedBy: loggedInUsername,
+      editedAt: now,
+      attendanceDate,
+      auditHistory,
+    };
+
+    if (isMarkInEdited) {
+      updateFields.markInManualBy = loggedInUsername;
+    }
+    if (isMarkOutEdited) {
+      updateFields.markOutManualBy = loggedInUsername;
+    }
+
+    const finalInManual = updateFields.markInManualBy || record.markInManualBy || null;
+    const finalOutManual = updateFields.markOutManualBy || record.markOutManualBy || null;
+
+    if (finalInManual && finalOutManual) {
+      updateFields.manualAttendanceBy = (finalInManual === finalOutManual) ? finalInManual : finalInManual;
+    } else if (finalInManual || finalOutManual) {
+      updateFields.manualAttendanceBy = finalInManual || finalOutManual;
+    } else if (!record.manualAttendanceBy) {
+      updateFields.manualAttendanceBy = loggedInUsername;
+    }
+
+    if (remarks) {
+      updateFields.remarks = remarks;
+    } else if (!record.remarks) {
+      if (isMarkInEdited && isMarkOutEdited) {
+        updateFields.remarks = `Mark In & Mark Out Manual by ${loggedInUsername}`;
+      } else if (isMarkInEdited) {
+        updateFields.remarks = `Mark In Manual by ${loggedInUsername}`;
+      } else if (isMarkOutEdited) {
+        updateFields.remarks = `Mark Out Manual by ${loggedInUsername}`;
+      }
+    }
+
     const updated = await Attendance.findByIdAndUpdate(
       record._id,
-      {
-        $set: {
-          markInAt: inDate,
-          markOutAt: outDate,
-          workingMinutes,
-          status: outDate ? 'COMPLETED' : 'ACTIVE',
-          editedBy: session.fullName || session.username,
-          editedAt: now,
-          attendanceDate,
-          auditHistory,
-          ...(remarks ? { remarks } : {}),
-        },
-      },
+      { $set: updateFields },
       { new: true, runValidators: false }
     );
 

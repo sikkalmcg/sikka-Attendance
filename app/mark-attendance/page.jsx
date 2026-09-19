@@ -23,6 +23,7 @@ import { formatKolkataDate, formatKolkataTime, formatKolkataDateTime, formatWork
 export default function MarkAttendancePage() {
   const [activeShift, setActiveShift] = useState(null);
   const [todaySession, setTodaySession] = useState(null);
+  const [employeeInfo, setEmployeeInfo] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyPage, setHistoryPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -75,6 +76,12 @@ export default function MarkAttendancePage() {
         const data = await res.json();
         setActiveShift(data.activeSession);
         setTodaySession(data.todaySession);
+        if (data.employee) {
+          setEmployeeInfo({
+            employeeId: data.employee.employeeId || '',
+            fullName: data.employee.fullName || '',
+          });
+        }
         // Next Mark IN eligibility from backend
         setCanMarkIn(data.canMarkIn !== false);
         setCanMarkOut(data.canMarkOut === true);
@@ -122,6 +129,17 @@ export default function MarkAttendancePage() {
 
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem('attendance_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        const empId = u.employeeId || u.empId || u.id || u.username || '';
+        const name = u.fullName || u.name || (u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : u.username || '');
+        if (empId || name) {
+          setEmployeeInfo({ employeeId: empId, fullName: name });
+        }
+      }
+    } catch {}
     fetchShiftStatus();
     fetchHistory(1);
     checkLiveLocation();
@@ -390,8 +408,20 @@ export default function MarkAttendancePage() {
             Tap below to record your official work shift
           </p>
 
+          {/* Employee Details Header & Info */}
+          <div className="mt-5 mb-2 p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl max-w-sm mx-auto text-center shadow-2xs">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+              Employee Details
+            </span>
+            <span className="text-sm sm:text-base font-extrabold text-slate-900 font-mono tracking-tight">
+              {employeeInfo?.employeeId && employeeInfo?.fullName
+                ? `${employeeInfo.employeeId} / ${employeeInfo.fullName}`
+                : employeeInfo?.fullName || employeeInfo?.employeeId || '---'}
+            </span>
+          </div>
+
           {/* Current Shift Status Badge */}
-          <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-50 border border-slate-200/70 shadow-2xs">
+          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-50 border border-slate-200/70 shadow-2xs">
             <span
               className={`w-3 h-3 rounded-full ${
                 activeShift ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
@@ -573,53 +603,61 @@ export default function MarkAttendancePage() {
             <table className="w-full text-left text-xs text-slate-600">
               <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-y border-slate-100">
                 <tr>
-                  <th className="py-2.5 px-3">Date</th>
-                  <th className="py-2.5 px-3">Employee Name</th>
-                  <th className="py-2.5 px-3">Mark IN Time</th>
-                  <th className="py-2.5 px-3">Mark Out Time</th>
-                  <th className="py-2.5 px-3">Working Hour</th>
+                  <th className="py-2.5 px-3">Employee Details</th>
+                  <th className="py-2.5 px-3">Attendance Date</th>
+                  <th className="py-2.5 px-3">Mark In Date & Time</th>
+                  <th className="py-2.5 px-3">Mark Out Date & Time</th>
+                  <th className="py-2.5 px-3">Working Hours</th>
                   <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Mark In Plant</th>
+                  <th className="py-2.5 px-3">Mark Out Plant</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {historyLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                       <RefreshCw className="w-4 h-4 animate-spin mx-auto mb-2 text-blue-600" />
                       Loading 60-day attendance history...
                     </td>
                   </tr>
                 ) : history.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                    <td colSpan={8} className="py-8 text-center text-slate-400">
                       No attendance history found.
                     </td>
                   </tr>
                 ) : (
                   history.map((record) => {
                     const isAbsent = record.status === 'Absent';
+                    const markInDisplay = record.markInDateTime || record.markInTime || '-';
+                    const markOutDisplay = record.markOutDateTime || record.markOutTime || '-';
+                    const employeeDetailsDisplay =
+                      record.employeeDetails ||
+                      (record.employeeName ? `EMP / ${record.employeeName}` : '-');
+
                     return (
                       <tr key={record.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
-                          {record.date}
+                        <td className="py-3 px-3 font-semibold text-slate-800 whitespace-nowrap">
+                          {employeeDetailsDisplay}
                         </td>
-                        <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
-                          {record.employeeName}
+                        <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                          {record.attendanceDate || record.date}
                         </td>
                         <td className="py-3 px-3 font-mono text-slate-700 whitespace-nowrap">
-                          {record.markInTime || '-'}
+                          {markInDisplay}
                         </td>
                         <td className="py-3 px-3 font-mono whitespace-nowrap">
-                          {record.markOutTime === 'Active' ? (
+                          {markOutDisplay === 'Active' ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 animate-pulse">
                               Active
                             </span>
                           ) : (
-                            <span className="text-slate-700">{record.markOutTime || '-'}</span>
+                            <span className="text-slate-700">{markOutDisplay}</span>
                           )}
                         </td>
                         <td className="py-3 px-3 font-mono font-medium text-slate-800 whitespace-nowrap">
-                          {record.workingHour || '-'}
+                          {record.workingHours || record.workingHour || '-'}
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <span
@@ -631,6 +669,12 @@ export default function MarkAttendancePage() {
                           >
                             {record.status}
                           </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
+                          {record.markInPlant || '-'}
+                        </td>
+                        <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
+                          {record.markOutPlant || '-'}
                         </td>
                       </tr>
                     );

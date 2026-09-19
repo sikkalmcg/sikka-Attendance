@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Building2,
   Check,
+  Database,
 } from 'lucide-react';
 import {
   formatKolkataDateTime,
@@ -46,6 +47,8 @@ export default function ReportPage() {
   const { fromStr: defaultFrom, toStr: defaultTo } = getDefaultDates();
   const [dateFrom, setDateFrom] = useState(defaultFrom);
   const [dateTo, setDateTo] = useState(defaultTo);
+  const [selectedStatus, setSelectedStatus] = useState('ALL'); // 'ALL' | 'Present' | 'Absent'
+  const [allTime, setAllTime] = useState(false); // Fetch all data from database mode
   const [exporting, setExporting] = useState(false);
 
   const fetchPlants = async () => {
@@ -64,11 +67,20 @@ export default function ReportPage() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (dateFrom) params.set('dateFrom', dateFrom);
-      if (dateTo) params.set('dateTo', dateTo);
+
+      if (allTime) {
+        params.set('allData', 'true');
+      } else {
+        if (dateFrom) params.set('dateFrom', dateFrom);
+        if (dateTo) params.set('dateTo', dateTo);
+      }
 
       if (!selectedPlants.includes('ALL') && selectedPlants.length > 0) {
         params.set('plants', selectedPlants.join(','));
+      }
+
+      if (selectedStatus && selectedStatus !== 'ALL') {
+        params.set('status', selectedStatus);
       }
 
       const res = await fetch(`/api/reports/attendance?${params.toString()}`);
@@ -89,7 +101,7 @@ export default function ReportPage() {
 
   useEffect(() => {
     fetchReports();
-  }, [dateFrom, dateTo, selectedPlants]);
+  }, [dateFrom, dateTo, selectedPlants, selectedStatus, allTime]);
 
   // Handle Plant Multi-select toggle
   const handleTogglePlant = (pName) => {
@@ -117,10 +129,19 @@ export default function ReportPage() {
     try {
       setExporting(true);
       const params = new URLSearchParams();
-      if (dateFrom) params.set('dateFrom', dateFrom);
-      if (dateTo) params.set('dateTo', dateTo);
+
+      if (allTime) {
+        params.set('allData', 'true');
+      } else {
+        if (dateFrom) params.set('dateFrom', dateFrom);
+        if (dateTo) params.set('dateTo', dateTo);
+      }
+
       if (!selectedPlants.includes('ALL') && selectedPlants.length > 0) {
         params.set('plants', selectedPlants.join(','));
+      }
+      if (selectedStatus && selectedStatus !== 'ALL') {
+        params.set('status', selectedStatus);
       }
       params.set('export', 'xlsx');
 
@@ -131,7 +152,9 @@ export default function ReportPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `attendance_report_${dateFrom}_to_${dateTo}.xlsx`;
+      a.download = allTime
+        ? `attendance_report_ALL_DATABASE_RECORDS.xlsx`
+        : `attendance_report_${dateFrom}_to_${dateTo}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -165,11 +188,29 @@ export default function ReportPage() {
               Attendance Report
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              Showing only <strong className="text-emerald-600">Approved</strong> attendance records
+              {allTime ? (
+                <span>Fetching <strong className="text-blue-600 font-bold">ALL database records</strong> across the entire attendance collection</span>
+              ) : (
+                <span>Showing <strong className="text-emerald-600">Approved</strong> attendance records</span>
+              )}
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Fetch All Data from DB Toggle Button */}
+            <button
+              onClick={() => setAllTime(!allTime)}
+              disabled={loading}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs ${
+                allTime
+                  ? 'bg-blue-600 text-white shadow-blue-600/20 ring-2 ring-blue-500'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Database className={`w-4 h-4 ${allTime ? 'text-white' : 'text-blue-600'}`} />
+              <span>{allTime ? 'Showing All Data (DB)' : 'Fetch All Data from DB'}</span>
+            </button>
+
             {/* Section 26: Export Excel Button */}
             <button
               onClick={handleExportExcel}
@@ -197,7 +238,7 @@ export default function ReportPage() {
             <span>Report Filters</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Section 23: Plant Multi-Select Dropdown */}
             <div className="relative">
               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -245,6 +286,22 @@ export default function ReportPage() {
               )}
             </div>
 
+            {/* Requirement 1: Status Filter Dropdown (Present / Absent only) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Attendance Status
+              </label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="Present">Present</option>
+                <option value="Absent">Absent</option>
+              </select>
+            </div>
+
             {/* Section 24: Period From Date */}
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -282,7 +339,7 @@ export default function ReportPage() {
               Showing <strong>{records.length}</strong> record(s) matching criteria
             </span>
             <span className="text-[11px] font-mono">
-              Date Range: {dateFrom} to {dateTo}
+              {allTime ? 'Mode: All Time (Full Database Records)' : `Date Range: ${dateFrom} to ${dateTo}`}
             </span>
           </div>
 
@@ -293,6 +350,7 @@ export default function ReportPage() {
                   <th className="py-3 px-4">Employee ID</th>
                   <th className="py-3 px-4">Employee Name</th>
                   <th className="py-3 px-4">Designation</th>
+                  <th className="py-3 px-4">Attendance Date</th>
                   <th className="py-3 px-4">Mark In Plant</th>
                   <th className="py-3 px-4">Mark IN Date Time</th>
                   <th className="py-3 px-4">Mark Out Date Time</th>
@@ -302,25 +360,79 @@ export default function ReportPage() {
                   <th className="py-3 px-4">Mark Out Plant</th>
                   <th className="py-3 px-4">Manual Attendance By</th>
                   <th className="py-3 px-4">Approved By</th>
+                  <th className="py-3 px-4">Remark</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={14} className="py-12 text-center text-slate-400 font-medium">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
                       Loading report data...
                     </td>
                   </tr>
                 ) : records.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-400 font-medium">
+                    <td colSpan={14} className="py-12 text-center text-slate-400 font-medium">
                       No approved attendance records found for the selected period and plants.
                     </td>
                   </tr>
                 ) : (
                   records.map((r) => {
-                    const isActive = r.status === 'ACTIVE' && !r.markOutAt;
+                    const isAbsent = r.status === 'ABSENT' || String(r.status).toLowerCase() === 'absent';
+                    const isActive = !isAbsent && r.status === 'ACTIVE' && !r.markOutAt;
+
+                    // Manual Attendance By formatting (Requirements 4, 5, 6, 7, 8)
+                    const inBy = r.markInManualBy;
+                    const outBy = r.markOutManualBy;
+                    const legacyBy = r.manualAttendanceBy;
+
+                    let manualDisplay = '—';
+                    if (inBy && outBy) {
+                      if (inBy === outBy) {
+                        // Case 3: Same user for both
+                        manualDisplay = inBy;
+                      } else {
+                        manualDisplay = `Mark In: ${inBy}, Mark Out: ${outBy}`;
+                      }
+                    } else if (inBy) {
+                      // Case 1
+                      manualDisplay = `Mark In Manual by ${inBy}`;
+                    } else if (outBy) {
+                      // Case 2
+                      manualDisplay = `Mark Out Manual by ${outBy}`;
+                    } else if (legacyBy) {
+                      manualDisplay = legacyBy;
+                    }
+
+                    // Remark formatting (Requirement 3, 5, 9)
+                    const rawRemarks = (r.remarks || r.remark || '').trim();
+                    const remarkParts = [];
+                    if (inBy && outBy) {
+                      if (inBy === outBy) {
+                        remarkParts.push(`Mark In Manual by ${inBy}`, `Mark Out Manual by ${inBy}`);
+                      } else {
+                        remarkParts.push(`Mark In Manual by ${inBy}`, `Mark Out Manual by ${outBy}`);
+                      }
+                    } else if (inBy) {
+                      remarkParts.push(`Mark In Manual by ${inBy}`);
+                    } else if (outBy) {
+                      remarkParts.push(`Mark Out Manual by ${outBy}`);
+                    } else if (legacyBy) {
+                      remarkParts.push(`Manual by ${legacyBy}`);
+                    }
+
+                    if (rawRemarks) {
+                      const isRedundant = remarkParts.some((p) => rawRemarks.toLowerCase().includes(p.toLowerCase()));
+                      if (!isRedundant) {
+                        remarkParts.push(rawRemarks);
+                      }
+                    } else if (isAbsent && remarkParts.length === 0) {
+                      remarkParts.push('Approved Absent');
+                    }
+
+                    const remarkDisplay = remarkParts.length > 0 ? remarkParts.join('; ') : '—';
+
                     return (
                       <tr key={r.id || r._id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3.5 px-4 font-mono font-bold text-blue-600 whitespace-nowrap">
@@ -332,14 +444,19 @@ export default function ReportPage() {
                         <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
                           {r.designation || 'Staff'}
                         </td>
+                        <td className="py-3.5 px-4 font-mono font-semibold text-slate-700 whitespace-nowrap">
+                          {r.attendanceDate || '-'}
+                        </td>
                         <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap">
-                          {r.markInPlantName || r.plantName || '-'}
+                          {isAbsent ? '-' : (r.markInPlantName || r.plantName || '-')}
                         </td>
                         <td className="py-3.5 px-4 font-mono text-slate-600 whitespace-nowrap">
-                          {r.markInAt ? formatKolkataDateTime(r.markInAt) : '-'}
+                          {!isAbsent && r.markInAt ? formatKolkataDateTime(r.markInAt) : '-'}
                         </td>
                         <td className="py-3.5 px-4 font-mono text-slate-600 whitespace-nowrap">
-                          {isActive ? (
+                          {isAbsent ? (
+                            '-'
+                          ) : isActive ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                               Active
                             </span>
@@ -350,7 +467,9 @@ export default function ReportPage() {
                           )}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-bold text-slate-800 whitespace-nowrap">
-                          {isActive
+                          {isAbsent
+                            ? '0:00'
+                            : isActive
                             ? 'Running'
                             : r.workingMinutes > 0
                             ? formatWorkingHours(r.workingMinutes)
@@ -359,26 +478,24 @@ export default function ReportPage() {
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              r.status === 'COMPLETED'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : r.status === 'AUTO_COMPLETED'
-                                ? 'bg-indigo-100 text-indigo-800'
-                                : 'bg-amber-100 text-amber-800'
+                              isAbsent
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             }`}
                           >
-                            {r.status}
+                            {isAbsent ? 'Absent' : 'Present'}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 font-medium text-slate-700 whitespace-nowrap">
-                          {r.markOutType || 'Self'}
+                          {isAbsent ? '-' : (r.markOutType || 'Self')}
                         </td>
                         <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap">
-                          {r.markOutPlantName || r.plantName || '-'}
+                          {isAbsent ? '-' : (r.markOutPlantName || r.plantName || '-')}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
-                          {r.manualAttendanceBy ? (
+                          {manualDisplay !== '—' ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                              {r.manualAttendanceBy}
+                              {manualDisplay}
                             </span>
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -386,6 +503,15 @@ export default function ReportPage() {
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
                           {r.approvedBy || '-'}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
+                          {remarkDisplay !== '—' ? (
+                            <span className="text-slate-700 font-medium text-xs">
+                              {remarkDisplay}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
                       </tr>
                     );

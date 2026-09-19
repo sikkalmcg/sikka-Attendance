@@ -1,29 +1,40 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Plant from '@/models/Plant';
-import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
+import { authorizeRequest, checkPermission, authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { normalizePlant } from '@/lib/normalize';
 
 export async function GET(request) {
-  const auth = await authorizeSystemUser(request, 'plant');
+  const auth = await authorizeRequest(request);
   if (!auth.authorized) return auth.response;
+
+  const { session } = auth;
+  if (session.userType !== 'SYSTEM_USER') {
+    return NextResponse.json({ error: 'Access restricted to system users.' }, { status: 403 });
+  }
 
   try {
     await connectToDatabase();
-    const plantScope = await getScopedPlantContext(auth.session);
+    const { searchParams } = new URL(request.url);
+    const getAll = searchParams.get('all') === 'true';
+    const isUserAdmin = session.role === 'Admin' || checkPermission(session, 'user-management');
+
+    const plantScope = await getScopedPlantContext(session);
 
     let query = {};
-    if (!plantScope.isAllPlants) {
+    if (!plantScope.isAllPlants && !(getAll && isUserAdmin)) {
       query = {
         $or: [
           { _id: { $in: plantScope.plantIds } },
           { id: { $in: plantScope.plantIds } },
           { plantId: { $in: plantScope.plantIds } },
+          { plantName: { $in: plantScope.plantNames } },
+          { name: { $in: plantScope.plantNames } },
         ],
       };
     }
 
-    const rawPlants = await Plant.find(query).sort({ createdAt: -1 });
+    const rawPlants = await Plant.find(query).lean().sort({ plantName: 1 });
     const plants = rawPlants.map(normalizePlant);
     return NextResponse.json({ success: true, plants });
   } catch (error) {

@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Employee from '@/models/Employee';
-import { authorizeSystemUser } from '@/lib/rbac';
+import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { normalizeAttendance, normalizeEmployee } from '@/lib/normalize';
 import {
   getAttendanceDateString,
@@ -80,6 +80,24 @@ export async function POST(request) {
 
     if (dbIds.length > 0 && (!records || records.length === 0) && syntheticAbsentIds.length === 0) {
       return NextResponse.json({ error: 'Selected attendance record(s) not found.' }, { status: 404 });
+    }
+
+    // Plant-Level Data Security: Verify caller has plant permissions for all target records
+    const plantScope = await getScopedPlantContext(session);
+    if (!plantScope.isAllPlants) {
+      for (const rec of records) {
+        const recPlantId = rec.plantId || rec.markInPlantId;
+        const recPlantName = rec.plantName || rec.markInPlantName || rec.inPlant;
+        const hasPlantAccess =
+          (recPlantId && plantScope.plantIds.includes(String(recPlantId))) ||
+          (recPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(recPlantName).toLowerCase()));
+        if (!hasPlantAccess) {
+          return NextResponse.json(
+            { error: `Access denied: You do not have permission to approve records for plant "${recPlantName || recPlantId}".` },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     for (const rec of records) {

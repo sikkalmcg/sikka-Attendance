@@ -16,9 +16,9 @@ import {
   Filter,
   UserCheck,
   Building2,
-  Calendar,
   Search,
   X,
+  Calendar,
 } from 'lucide-react';
 import {
   formatKolkataDate,
@@ -27,15 +27,13 @@ import {
   formatWorkingHours,
   getAttendanceDateString,
   getTodayDateString,
-  getYesterdayDateString,
-  isFutureKolkataDate,
   isFutureKolkataDateTime,
   toKolkataDateTimeLocal,
   parseKolkataDateTime,
 } from '@/lib/timezone';
 
 export default function ApprovalPage() {
-  const [activeTab, setActiveTab] = useState('PENDING'); // 'PENDING' (Pending Approvals – Me) | 'APPROVED'
+  const [activeTab, setActiveTab] = useState('PENDING'); // 'PENDING' (Pending Approvals) | 'APPROVED' (Approved History)
   const [attendances, setAttendances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -43,9 +41,8 @@ export default function ApprovalPage() {
   // Employee search filter
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Mark Date selection: Current date or any past date (never future date)
-  const currentDate = getTodayDateString();
-  const [selectedDate, setSelectedDate] = useState(getTodayDateString());
+  // Date filter (empty string = all dates)
+  const [selectedDate, setSelectedDate] = useState('');
 
   // Pagination
   const [pageSize, setPageSize] = useState(25);
@@ -92,26 +89,16 @@ export default function ApprovalPage() {
 
   const [processing, setProcessing] = useState(false);
 
-  // Mark Date Selector change handler
-  const handleDateChange = (newDate) => {
-    if (!newDate) return;
-    if (isFutureKolkataDate(newDate)) {
-      setToast({
-        type: 'error',
-        message: 'Future date or time is not allowed. Please select the current or past date and time.',
-      });
-      return;
-    }
-    setSelectedDate(newDate);
-  };
-
-  const fetchAttendances = async () => {
+  const fetchAttendances = async (dateOverride) => {
     try {
       setLoading(true);
       setSelectedIds([]);
       const params = new URLSearchParams();
       params.set('approvalStatus', activeTab);
-      params.set('date', selectedDate);
+      const dateToUse = dateOverride !== undefined ? dateOverride : selectedDate;
+      if (dateToUse) {
+        params.set('date', dateToUse);
+      }
 
       const res = await fetch(`/api/approvals?${params.toString()}`);
       const data = await res.json();
@@ -152,13 +139,17 @@ export default function ApprovalPage() {
     setCurrentPage(1);
   }, [activeTab, selectedDate]);
 
-  // Reset to page 1 whenever page size or search term changes
+  // Reset to page 1 whenever page size, search term or selected date changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [pageSize, searchTerm]);
+  }, [pageSize, searchTerm, selectedDate]);
 
+  // Lazy dropdown load on demand (when user opens manual modal or after initial render)
   useEffect(() => {
-    fetchDropdownData();
+    const timer = setTimeout(() => {
+      fetchDropdownData();
+    }, 1500);
+    return () => clearTimeout(timer);
   }, []);
 
   // Helper to determine approval rule eligibility per prompt specifications
@@ -172,7 +163,8 @@ export default function ApprovalPage() {
       };
     }
 
-    const recDate = record.attendanceDate || getAttendanceDateString(record) || selectedDate;
+    const currentDate = getTodayDateString();
+    const recDate = record.attendanceDate || getAttendanceDateString(record) || currentDate;
     const isCurrentDate = recDate === currentDate;
     const isAbsent = record.status === 'ABSENT' || (!record.markInAt && !record.markOutAt);
     const hasMarkIn = Boolean(record.markInAt);
@@ -213,8 +205,20 @@ export default function ApprovalPage() {
     };
   };
 
-  // Client-side search filtering by employee name, employee ID, designation, and plant name
+  // Client-side search and status filtering with strict tab isolation
   const filteredAttendances = attendances.filter((record) => {
+    // Strict separation: Pending Approvals shows only unapproved; Approved History shows only approved
+    if (activeTab === 'PENDING') {
+      if (record.approvalStatus === 'APPROVED' || record.approved === true) return false;
+    } else if (activeTab === 'APPROVED') {
+      if (record.approvalStatus !== 'APPROVED' && record.approved !== true) return false;
+    }
+
+    if (selectedDate) {
+      const recDate = record.attendanceDate || getAttendanceDateString(record);
+      if (recDate && recDate !== selectedDate) return false;
+    }
+
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase().trim();
     const name = (record.employeeName || '').toLowerCase();
@@ -224,15 +228,38 @@ export default function ApprovalPage() {
     return name.includes(q) || id.includes(q) || desig.includes(q) || plant.includes(q);
   });
 
+  // --- Pagination computations ---
+  const totalRecords = filteredAttendances.length;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedRecords = filteredAttendances.slice(
+    (safeCurrentPage - 1) * pageSize,
+    safeCurrentPage * pageSize
+  );
+
   const eligibleAttendances = filteredAttendances.filter((a) => getApprovalEligibility(a).canApprove);
   const eligibleIds = eligibleAttendances.map((a) => a.id || a._id);
 
-  // Multi-select helpers: only selects records eligible for approval
+  // Current page eligible records (for page-level select all)
+  const currentPageEligible = paginatedRecords.filter((a) => getApprovalEligibility(a).canApprove);
+  const currentPageEligibleIds = currentPageEligible.map((a) => a.id || a._id);
+
+  const isAllCurrentPageSelected =
+    currentPageEligibleIds.length > 0 &&
+    currentPageEligibleIds.every((id) => selectedIds.includes(id));
+
+  const isSomeCurrentPageSelected =
+    currentPageEligibleIds.some((id) => selectedIds.includes(id));
+
+  // Multi-select: toggle selection of all eligible records ON THE CURRENT PAGE (e.g. 25 per page)
   const handleToggleSelectAll = () => {
-    if (selectedIds.length > 0 && selectedIds.length === eligibleIds.length) {
-      setSelectedIds([]);
+    if (isAllCurrentPageSelected) {
+      // Uncheck all eligible records on current page
+      setSelectedIds(selectedIds.filter((id) => !currentPageEligibleIds.includes(id)));
     } else {
-      setSelectedIds(eligibleIds);
+      // Check all eligible records on current page
+      const combined = Array.from(new Set([...selectedIds, ...currentPageEligibleIds]));
+      setSelectedIds(combined);
     }
   };
 
@@ -283,11 +310,10 @@ export default function ApprovalPage() {
 
   // Open Manual Attendance Modal
   const openManualModal = (record = null) => {
-    // If viewing current date, use current time; if past date, use 09:00 on selectedDate
-    const defaultIn =
-      selectedDate === currentDate
-        ? toKolkataDateTimeLocal(new Date())
-        : `${selectedDate}T09:00`;
+    if (employeesList.length === 0 || plantsList.length === 0) {
+      fetchDropdownData();
+    }
+    const defaultIn = toKolkataDateTimeLocal(new Date());
 
     setManualForm({
       employeeId: record?.employeeId || '',
@@ -320,6 +346,14 @@ export default function ApprovalPage() {
       setMultiApproveModalOpen(false);
       setSingleApproveRecord(null);
       setAbsentApproveRecord(null);
+
+      // Optimistically remove approved records from Pending Approvals immediately
+      if (activeTab === 'PENDING') {
+        const idSet = new Set(idsToApprove.map(String));
+        setAttendances((prev) => prev.filter((item) => !idSet.has(String(item.id || item._id))));
+        setSelectedIds([]);
+      }
+
       await fetchAttendances();
     } catch (err) {
       console.error('Approve error:', err);
@@ -333,6 +367,11 @@ export default function ApprovalPage() {
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editingRecord) return;
+
+    if (!editForm.markInAt) {
+      setToast({ type: 'error', message: 'Mark IN Date & Time is required.' });
+      return;
+    }
 
     // Strict Future Date/Time check
     if (isFutureKolkataDateTime(editForm.markInAt)) {
@@ -348,6 +387,16 @@ export default function ApprovalPage() {
         message: 'Future date or time is not allowed. Please select the current or past date and time.',
       });
       return;
+    }
+
+    // Validate Mark Out strictly later than Mark In
+    if (editForm.markOutAt) {
+      const inD = parseKolkataDateTime(editForm.markInAt);
+      const outD = parseKolkataDateTime(editForm.markOutAt);
+      if (outD <= inD) {
+        setToast({ type: 'error', message: 'Mark OUT must be strictly later than Mark IN.' });
+        return;
+      }
     }
 
     setProcessing(true);
@@ -372,6 +421,22 @@ export default function ApprovalPage() {
       setToast({ type: 'success', message: 'Attendance record updated successfully.' });
       setEditModalOpen(false);
       setEditingRecord(null);
+
+      // Immediately display updated record without requiring a page refresh
+      if (data.attendance) {
+        const updated = data.attendance;
+        const targetId = updated.id || updated._id;
+        setAttendances((prev) =>
+          prev.map((item) => {
+            const itemId = item.id || item._id;
+            if (itemId === targetId || item.employeeId === updated.employeeId) {
+              return { ...item, ...updated };
+            }
+            return item;
+          })
+        );
+      }
+
       await fetchAttendances();
     } catch (err) {
       console.error('Edit error:', err);
@@ -400,8 +465,15 @@ export default function ApprovalPage() {
       }
 
       setToast({ type: 'success', message: data.message || 'Restored back to Pending Approval.' });
+      const restoredId = restoringRecord.id || restoringRecord._id;
       setRestoreModalOpen(false);
       setRestoringRecord(null);
+
+      // Optimistically remove restored record from Approved History tab immediately
+      if (activeTab === 'APPROVED') {
+        setAttendances((prev) => prev.filter((item) => (item.id || item._id) !== restoredId));
+      }
+
       await fetchAttendances();
     } catch (err) {
       console.error('Restore error:', err);
@@ -462,14 +534,7 @@ export default function ApprovalPage() {
 
   const isMultipleSelected = selectedIds.length > 1;
 
-  // --- Pagination computations ---
-  const totalRecords = filteredAttendances.length;
-  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const paginatedRecords = filteredAttendances.slice(
-    (safeCurrentPage - 1) * pageSize,
-    safeCurrentPage * pageSize
-  );
+  // (Pagination computed above)
 
   const kolkataNowLocal = toKolkataDateTimeLocal(new Date());
 
@@ -511,9 +576,9 @@ export default function ApprovalPage() {
           </div>
         </div>
 
-        {/* Navigation Tabs, Employee Search, and Mark Date Selector Bar */}
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5">
-          {/* Active Tabs: Pending Approvals – Me | Approved Attendance */}
+        {/* Navigation Tabs and Employee Search Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+          {/* Tabs: Pending Approvals | Approved History */}
           <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-slate-200/60 w-fit shrink-0">
             <button
               onClick={() => setActiveTab('PENDING')}
@@ -523,7 +588,7 @@ export default function ApprovalPage() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Pending Approvals – Me
+              Pending Approvals
             </button>
             <button
               onClick={() => setActiveTab('APPROVED')}
@@ -533,13 +598,48 @@ export default function ApprovalPage() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Approved Attendance
+              Approved History
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Date Filter Input */}
+            <div className="relative flex items-center">
+              <div className="relative">
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={getTodayDateString()}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="pl-9 pr-8 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-2xl shadow-xs focus:ring-2 focus:ring-blue-500 focus:outline-hidden transition-all cursor-pointer"
+                  title="Filter by attendance date"
+                />
+                {selectedDate && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer hover:bg-slate-100 transition-colors"
+                    title="Clear date filter (show all dates)"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {selectedDate && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate('')}
+                  className="ml-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                  title="Clear date filter and show all dates"
+                >
+                  All Dates
+                </button>
+              )}
+            </div>
+
             {/* Employee Search Input */}
-            <div className="relative min-w-[230px] sm:min-w-[270px]">
+            <div className="relative min-w-[220px] sm:min-w-[280px]">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
@@ -559,59 +659,14 @@ export default function ApprovalPage() {
                 </button>
               )}
             </div>
-
-            {/* Section 2: Mark Date Selector (Current or Past Date Only) */}
-            <div className="flex flex-wrap items-center gap-2 bg-white px-3.5 py-1.5 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                <Calendar className="w-4 h-4 text-blue-600" />
-                <span>Mark Date:</span>
-              </div>
-              <input
-                type="date"
-                value={selectedDate}
-                max={currentDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="px-2.5 py-1 text-xs font-semibold text-slate-800 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden bg-slate-50 cursor-pointer"
-                title="Select current date or past date (future dates are disabled)"
-              />
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleDateChange(currentDate)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                    selectedDate === currentDate
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDateChange(getYesterdayDateString())}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                    selectedDate === getYesterdayDateString()
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  Yesterday
-                </button>
-              </div>
-              {selectedDate !== currentDate && (
-                <span className="text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                  Past Date: {formatKolkataDate(selectedDate)}
-                </span>
-              )}
-            </div>
           </div>
         </div>
 
         {/* Multi-Selection Action Bar */}
         {activeTab === 'PENDING' && selectedIds.length > 0 && (
           <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in duration-150">
-            <div className="flex items-center gap-2 text-xs font-semibold text-blue-900">
-              <CheckCheck className="w-4 h-4 text-blue-600" />
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-blue-900">
+              <CheckCheck className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
                 <strong>{selectedIds.length}</strong> record(s) selected
               </span>
@@ -620,13 +675,39 @@ export default function ApprovalPage() {
                   (Batch approval mode: editing is disabled for multiple selections)
                 </span>
               )}
+              {selectedIds.length < eligibleIds.length ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(eligibleIds)}
+                  className="ml-2 text-xs text-blue-700 underline font-bold hover:text-blue-900 cursor-pointer"
+                >
+                  Select all {eligibleIds.length} across all pages
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  className="ml-2 text-xs text-blue-700 underline font-bold hover:text-blue-900 cursor-pointer"
+                >
+                  Clear all selections
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => setMultiApproveModalOpen(true)}
-              className="w-full sm:w-auto px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-            >
-              Approve Selected ({selectedIds.length})
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-2 rounded-xl border border-blue-300 text-blue-700 hover:bg-blue-100 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setMultiApproveModalOpen(true)}
+                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+              >
+                Approve Selected ({selectedIds.length})
+              </button>
+            </div>
           </div>
         )}
 
@@ -640,10 +721,21 @@ export default function ApprovalPage() {
                     <th className="py-3 px-4 w-10">
                       <input
                         type="checkbox"
-                        checked={eligibleIds.length > 0 && selectedIds.length === eligibleIds.length}
+                        checked={isAllCurrentPageSelected}
+                        ref={(el) => {
+                          if (el) {
+                            el.indeterminate = !isAllCurrentPageSelected && isSomeCurrentPageSelected;
+                          }
+                        }}
                         onChange={handleToggleSelectAll}
-                        disabled={eligibleIds.length === 0}
-                        title={eligibleIds.length > 0 ? "Select all eligible for approval" : "No records currently eligible for approval"}
+                        disabled={currentPageEligibleIds.length === 0}
+                        title={
+                          currentPageEligibleIds.length > 0
+                            ? isAllCurrentPageSelected
+                              ? `Deselect all ${currentPageEligibleIds.length} on this page`
+                              : `Select all ${currentPageEligibleIds.length} on this page`
+                            : "No records on this page eligible for approval"
+                        }
                         className="w-4 h-4 rounded text-blue-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                     </th>
@@ -651,10 +743,10 @@ export default function ApprovalPage() {
                   <th className="py-3 px-4">Employee ID</th>
                   <th className="py-3 px-4">Employee Name</th>
                   <th className="py-3 px-4">Designation</th>
-                  <th className="py-3 px-4">Mark Date</th>
+                  <th className="py-3 px-4">Attendance Date</th>
                   <th className="py-3 px-4">Mark In Plant</th>
-                  <th className="py-3 px-4">Mark IN</th>
-                  <th className="py-3 px-4">Mark OUT</th>
+                  <th className="py-3 px-4">Mark In</th>
+                  <th className="py-3 px-4">Mark Out</th>
                   <th className="py-3 px-4">Working Hour</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Mark Out Type</th>
@@ -671,7 +763,7 @@ export default function ApprovalPage() {
                       className="py-12 text-center text-slate-400 font-medium"
                     >
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
-                      Loading attendance records for {formatKolkataDate(selectedDate)}...
+                      Loading attendance records...
                     </td>
                   </tr>
                 ) : filteredAttendances.length === 0 ? (
@@ -680,23 +772,46 @@ export default function ApprovalPage() {
                       colSpan={activeTab === 'PENDING' ? 13 : 13}
                       className="py-12 text-center text-slate-400 font-medium"
                     >
-                      {searchTerm ? (
+                      {searchTerm || selectedDate ? (
                         <div className="flex flex-col items-center justify-center space-y-2">
                           <p className="text-slate-600 text-sm">
-                            No employees found matching &ldquo;<span className="text-slate-900 font-bold">{searchTerm}</span>&rdquo;
+                            No attendance records found
+                            {selectedDate && (
+                              <>
+                                {' '}for date <span className="text-slate-900 font-bold">{formatKolkataDate(selectedDate)}</span>
+                              </>
+                            )}
+                            {searchTerm && (
+                              <>
+                                {' '}matching &ldquo;<span className="text-slate-900 font-bold">{searchTerm}</span>&rdquo;
+                              </>
+                            )}
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => setSearchTerm('')}
-                            className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer underline"
-                          >
-                            Clear search filter
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {selectedDate && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDate('')}
+                                className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer underline"
+                              >
+                                Show all dates
+                              </button>
+                            )}
+                            {searchTerm && (
+                              <button
+                                type="button"
+                                onClick={() => setSearchTerm('')}
+                                className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer underline"
+                              >
+                                Clear search filter
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ) : activeTab === 'PENDING' ? (
-                        `No pending attendance approvals found for ${formatKolkataDate(selectedDate)}.`
+                        'No pending attendance approvals found.'
                       ) : (
-                        `No approved attendance records found for ${formatKolkataDate(selectedDate)}.`
+                        'No approved attendance records found in Approved History.'
                       )}
                     </td>
                   </tr>
@@ -748,7 +863,7 @@ export default function ApprovalPage() {
                           {record.designation || 'Staff'}
                         </td>
                         <td className="py-3 px-4 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                          {formatKolkataDate(record.attendanceDate || selectedDate)}
+                          {formatKolkataDate(record.attendanceDate || record.markInAt || record.inDate)}
                         </td>
                         <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
                           {record.markInPlantName || record.plantName || (isAbsent ? '-' : 'Plant')}
@@ -756,7 +871,7 @@ export default function ApprovalPage() {
                         <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap">
                           {record.markInAt ? (
                             <span title={formatKolkataDateTime(record.markInAt)}>
-                              {formatKolkataTime(record.markInAt)}
+                              {formatKolkataDateTime(record.markInAt)}
                             </span>
                           ) : (
                             <span className="text-slate-400 font-bold">-</span>
@@ -765,7 +880,7 @@ export default function ApprovalPage() {
                         <td className="py-3 px-4 font-mono text-slate-700 whitespace-nowrap">
                           {record.markOutAt ? (
                             <span title={formatKolkataDateTime(record.markOutAt)}>
-                              {formatKolkataTime(record.markOutAt)}
+                              {formatKolkataDateTime(record.markOutAt)}
                             </span>
                           ) : (
                             <span className="text-slate-400 font-bold">-</span>
@@ -1055,7 +1170,7 @@ export default function ApprovalPage() {
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Date:</span>
                 <span className="font-mono font-bold text-slate-900">
-                  {formatKolkataDate(absentApproveRecord?.attendanceDate || selectedDate)}
+                  {formatKolkataDate(absentApproveRecord?.attendanceDate || absentApproveRecord?.markInAt || getTodayDateString())}
                 </span>
               </div>
             </div>
@@ -1173,8 +1288,11 @@ export default function ApprovalPage() {
             <div className="pt-2 flex gap-3">
               <button
                 type="button"
-                onClick={() => setEditModalOpen(false)}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors cursor-pointer"
+                onClick={() => {
+                  setEditModalOpen(false);
+                  setEditingRecord(null);
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md shadow-red-600/20 transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -1211,7 +1329,7 @@ export default function ApprovalPage() {
           {restoringRecord && (
             <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1 text-slate-600 border border-slate-100">
               <div>Employee: <strong className="text-slate-900">{restoringRecord.employeeName}</strong></div>
-              <div>Date: <strong className="text-slate-900">{restoringRecord.markInAt ? formatKolkataDateTime(restoringRecord.markInAt) : formatKolkataDate(restoringRecord.attendanceDate || selectedDate)}</strong></div>
+              <div>Date: <strong className="text-slate-900">{restoringRecord.markInAt ? formatKolkataDateTime(restoringRecord.markInAt) : formatKolkataDate(restoringRecord.attendanceDate)}</strong></div>
             </div>
           )}
 

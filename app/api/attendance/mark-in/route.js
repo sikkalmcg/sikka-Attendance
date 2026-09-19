@@ -30,6 +30,34 @@ export async function POST(request) {
     // First, process any old sessions (>18 hours) to ensure clean state
     await processAutoMarkOut();
 
+    // Strict check: Allow Mark In only once per calendar date (IST)
+    const todayIST = formatInTimeZone(new Date(), 'Asia/Kolkata', 'yyyy-MM-dd');
+    const existingToday = await Attendance.findOne({
+      $and: [
+        {
+          $or: [
+            { employeeId: session.employeeId },
+            { employeeId: session.sub },
+            ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }] : []),
+          ],
+        },
+        {
+          $or: [
+            { attendanceDate: todayIST },
+            { inDate: todayIST },
+            { date: todayIST },
+          ],
+        },
+      ],
+    });
+
+    if (existingToday) {
+      return NextResponse.json(
+        { error: 'Mark In already completed for this date.' },
+        { status: 409 }
+      );
+    }
+
     // Transaction safety & duplicate protection: Check if employee already has an active session
     const existingActive = await Attendance.findOne({
       $and: [
@@ -37,7 +65,7 @@ export async function POST(request) {
           $or: [
             { employeeId: session.employeeId },
             { employeeId: session.sub },
-            { aadhaarNumber: session.aadhaarNumber },
+            ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }] : []),
           ],
         },
         {
@@ -123,6 +151,12 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('Mark In error:', error);
+    if (error.code === 11000) {
+      return NextResponse.json(
+        { error: 'Mark In already completed for this date.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: error.message || 'Failed to record Mark In' }, { status: 500 });
   }
 }

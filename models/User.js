@@ -37,6 +37,10 @@ const UserSchema = new mongoose.Schema(
       type: [String],
       default: ['dashboard'],
     },
+    plantIds: {
+      type: [String],
+      default: [],
+    },
     status: {
       type: String,
       enum: ['Active', 'Inactive'],

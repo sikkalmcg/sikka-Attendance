@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Employee from '@/models/Employee';
 import Plant from '@/models/Plant';
-import { authorizeSystemUser } from '@/lib/rbac';
+import { authorizeSystemUser, getScopedPlantContext } from '@/lib/rbac';
 import { normalizeEmployee, normalizeAttendance, normalizePlant } from '@/lib/normalize';
 import { formatInTimeZone } from 'date-fns-tz';
 import { parseKolkataDateTime, isFutureKolkataDateTime } from '@/lib/timezone';
@@ -36,11 +37,28 @@ export async function POST(request) {
       } catch (e) {}
 
       if (!existingRecord) {
-        existingRecord = await Attendance.findOne({ $or: [{ _id: attendanceId }, { id: attendanceId }] });
+        const queryIds = [{ _id: attendanceId }, { id: attendanceId }];
+        if (mongoose.Types.ObjectId.isValid(attendanceId)) {
+          queryIds.push({ _id: new mongoose.Types.ObjectId(attendanceId) });
+        }
+        existingRecord = await Attendance.findOne({ $or: queryIds });
       }
 
       if (!existingRecord) {
         return NextResponse.json({ error: 'Existing attendance record not found.' }, { status: 404 });
+      }
+
+      // Plant-Level Data Security: verify logged in user has access to this plant
+      const plantScope = await getScopedPlantContext(session);
+      if (!plantScope.isAllPlants) {
+        const recPlantId = existingRecord.plantId || existingRecord.markInPlantId;
+        const recPlantName = existingRecord.plantName || existingRecord.markInPlantName || existingRecord.inPlant;
+        const hasPlantAccess =
+          (recPlantId && plantScope.plantIds.includes(String(recPlantId))) ||
+          (recPlantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(recPlantName).toLowerCase()));
+        if (!hasPlantAccess) {
+          return NextResponse.json({ error: 'Access denied: You do not have permission to modify records for this plant.' }, { status: 403 });
+        }
       }
 
       if (!markOutAt) {
@@ -68,7 +86,22 @@ export async function POST(request) {
       const diffMs = inDate ? outDate.getTime() - inDate.getTime() : 0;
       const workingMinutes = diffMs > 0 ? Math.max(1, Math.round(diffMs / 60000)) : 0;
 
-      // Use $set to only touch changed fields — never overwrite manualAttendanceBy
+      // Logged-in user who performed the manual action
+      const loggedInUsername = session.username || session.fullName || 'Admin';
+      const markOutManualBy = loggedInUsername;
+      const existingInBy = existingRecord.markInManualBy;
+      let finalManualBy = loggedInUsername;
+      if (existingInBy && existingInBy === loggedInUsername) {
+        finalManualBy = loggedInUsername;
+      } else if (existingInBy) {
+        finalManualBy = existingInBy;
+      }
+
+      const defaultRemark = existingInBy
+        ? (existingInBy === loggedInUsername ? `Mark In & Mark Out Manual by ${loggedInUsername}` : `Mark In Manual by ${existingInBy}; Mark Out Manual by ${loggedInUsername}`)
+        : `Mark Out Manual by ${loggedInUsername}`;
+
+      // Use $set to update fields with separate markOutManualBy tracking
       const updated = await Attendance.findByIdAndUpdate(
         existingRecord._id,
         {
@@ -76,9 +109,11 @@ export async function POST(request) {
             markOutAt: outDate,
             workingMinutes,
             status: 'COMPLETED',
-            editedBy: session.fullName || session.username,
+            markOutManualBy,
+            manualAttendanceBy: existingRecord.manualAttendanceBy || finalManualBy,
+            editedBy: loggedInUsername,
             editedAt: new Date(),
-            ...(remarks ? { remarks } : {}),
+            remarks: remarks || existingRecord.remarks || defaultRemark,
           },
         },
         { new: true, runValidators: false }
@@ -164,6 +199,17 @@ export async function POST(request) {
       }
     }
 
+    // Plant-Level Data Security: verify logged in user has access to this plant
+    const plantScope = await getScopedPlantContext(session);
+    if (!plantScope.isAllPlants) {
+      const hasPlantAccess =
+        (resolvedPlantId && plantScope.plantIds.includes(String(resolvedPlantId))) ||
+        (plantName && plantScope.plantNames.map((n) => n.toLowerCase()).includes(String(plantName).toLowerCase()));
+      if (!hasPlantAccess) {
+        return NextResponse.json({ error: `Access denied: You do not have permission to create attendance for plant "${plantName}".` }, { status: 403 });
+      }
+    }
+
     // Attendance date = IST date of Mark IN (not Mark OUT)
     const attendanceDate = formatInTimeZone(inDate, IST, 'yyyy-MM-dd');
 
@@ -192,7 +238,14 @@ export async function POST(request) {
     }
 
     // Who performed the manual attendance
-    const manualAttendanceBy = session.fullName || session.username || 'System';
+    const loggedInUsername = session.username || session.fullName || 'Admin';
+    const markInManualBy = loggedInUsername;
+    const markOutManualBy = outDate ? loggedInUsername : null;
+    const manualAttendanceBy = loggedInUsername;
+
+    const defaultRemark = outDate
+      ? `Mark In & Mark Out Manual by ${loggedInUsername}`
+      : `Mark In Manual by ${loggedInUsername}`;
 
     const newRecord = await Attendance.create({
       employeeId: emp.employeeId,
@@ -219,9 +272,11 @@ export async function POST(request) {
       approvalStatus: 'PENDING',
       attendanceDate,
       manualAttendanceBy,
-      editedBy: manualAttendanceBy,
+      markInManualBy,
+      markOutManualBy,
+      editedBy: loggedInUsername,
       editedAt: new Date(),
-      remarks: remarks || `Manually created by ${manualAttendanceBy}`,
+      remarks: remarks || defaultRemark,
     });
 
     return NextResponse.json({

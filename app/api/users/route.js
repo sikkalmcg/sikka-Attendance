@@ -24,11 +24,11 @@ export async function POST(request) {
 
   try {
     const data = await request.json();
-    const { userId, fullName, username, password, role, status, permissions } = data;
+    const { userId: reqUserId, fullName, username, password, role, status, permissions, plantIds } = data;
 
-    if (!userId || !fullName || !username || !password) {
+    if (!fullName || !username || !password) {
       return NextResponse.json(
-        { error: 'User ID, Full Name, Username, and Password are required.' },
+        { error: 'Full Name, Username, and Password are required.' },
         { status: 400 }
       );
     }
@@ -39,17 +39,23 @@ export async function POST(request) {
 
     const existingUser = await User.findOne({ username: cleanUsername });
     if (existingUser) {
-      return NextResponse.json({ error: 'Username already in use.' }, { status: 400 });
+      return NextResponse.json({ error: 'Username already in use. Please choose another username.' }, { status: 400 });
     }
 
-    const existingUserId = await User.findOne({ userId: String(userId).trim() });
+    let finalUserId = reqUserId ? String(reqUserId).trim() : '';
+    if (!finalUserId) {
+      const userCount = await User.countDocuments();
+      finalUserId = `USR-${String(userCount + 1).padStart(3, '0')}`;
+    }
+
+    const existingUserId = await User.findOne({ userId: finalUserId });
     if (existingUserId) {
-      return NextResponse.json({ error: 'User ID already exists.' }, { status: 400 });
+      finalUserId = `USR-${Date.now().toString().slice(-4)}`;
     }
 
     const passwordHash = await hashPassword(String(password).trim());
 
-    // Section 13: User Management must reject any attempt to assign Mark Attendance permission to an Admin/User
+    // User Management must reject any attempt to assign Mark Attendance permission to an Admin/User
     if (Array.isArray(permissions) && permissions.some((p) => String(p).toLowerCase() === 'mark-attendance')) {
       return NextResponse.json(
         { error: 'Mark Attendance is strictly an Employee-only function and cannot be assigned to Admin or System Users.' },
@@ -57,18 +63,22 @@ export async function POST(request) {
       );
     }
 
-    const cleanPermissions = Array.isArray(permissions) ? permissions.filter((p) => p !== 'mark-attendance') : ['dashboard'];
+    const cleanPermissions = Array.isArray(permissions) && permissions.length > 0
+      ? permissions.filter((p) => p !== 'mark-attendance')
+      : ['dashboard'];
+
+    const cleanPlantIds = Array.isArray(plantIds) ? plantIds.filter(Boolean) : [];
 
     const user = await User.create({
-      userId: String(userId).trim(),
+      userId: finalUserId,
       fullName: String(fullName).trim(),
       username: cleanUsername,
       passwordHash,
       role: role === 'Admin' ? 'Admin' : 'User',
       status: status || 'Active',
       permissions: role === 'Admin' ? ['dashboard', 'plant', 'approval', 'report', 'employee', 'user-management'] : cleanPermissions,
+      plantIds: role === 'Admin' && cleanPlantIds.length === 0 ? ['*'] : cleanPlantIds,
     });
-
 
     const safeUser = user.toObject();
     delete safeUser.passwordHash;
