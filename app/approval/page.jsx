@@ -881,7 +881,7 @@ export default function ApprovalPage() {
                           {record.employeeName}
                         </td>
                         <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
-                          {record.designation || 'Staff'}
+                          {record.designation || '-'}
                         </td>
                         <td className="py-3 px-4 font-mono font-semibold text-slate-800 whitespace-nowrap">
                           {formatKolkataDate(record.attendanceDate || record.markInAt || record.inDate)}
@@ -1241,7 +1241,7 @@ export default function ApprovalPage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">Designation:</span>
-                <span className="text-slate-800">{editingRecord.designation || 'Staff'}</span>
+                <span className="text-slate-800">{editingRecord.designation || '-'}</span>
               </div>
             </div>
 

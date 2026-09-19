@@ -223,8 +223,26 @@ export async function POST(request) {
         rec.attendanceType = 'Absent';
       }
 
+      if (!rec.designation || rec.designation === 'Staff') {
+        const emp = await Employee.findOne({
+          $or: [
+            { employeeId: rec.employeeId },
+            { id: rec.employeeId },
+            { _id: rec.employeeId },
+            ...(rec.aadhaarNumber ? [{ aadhaarNumber: rec.aadhaarNumber }] : []),
+          ],
+        }).select('designation').lean();
+        if (emp?.designation && emp.designation !== 'Staff') {
+          rec.designation = emp.designation;
+        }
+      }
+
       await rec.save();
-      updatedRecords.push(normalizeAttendance(rec));
+      const norm = normalizeAttendance(rec);
+      if (rec.designation && rec.designation !== 'Staff') {
+        norm.designation = rec.designation;
+      }
+      updatedRecords.push(norm);
     }
 
     return NextResponse.json({

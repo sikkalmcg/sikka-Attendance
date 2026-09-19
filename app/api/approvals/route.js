@@ -14,6 +14,73 @@ import {
 const ATTENDANCE_PROJECTION =
   'employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy';
 
+async function enrichWithEmployeeDesignation(records) {
+  if (!records || records.length === 0) return records;
+
+  const empIdSet = new Set();
+  const aadhaarSet = new Set();
+  const nameSet = new Set();
+
+  for (const r of records) {
+    if (r.employeeId) empIdSet.add(String(r.employeeId).trim());
+    if (r.aadhaarNumber) aadhaarSet.add(String(r.aadhaarNumber).trim());
+    if (r.employeeName) nameSet.add(String(r.employeeName).trim());
+  }
+
+  const queryOr = [];
+  if (empIdSet.size > 0) {
+    const list = [...empIdSet];
+    queryOr.push({ employeeId: { $in: list } });
+    queryOr.push({ id: { $in: list } });
+    queryOr.push({ _id: { $in: list } });
+  }
+  if (aadhaarSet.size > 0) {
+    queryOr.push({ aadhaarNumber: { $in: [...aadhaarSet] } });
+    queryOr.push({ aadhaar: { $in: [...aadhaarSet] } });
+  }
+  if (nameSet.size > 0) {
+    queryOr.push({ fullName: { $in: [...nameSet] } });
+    queryOr.push({ name: { $in: [...nameSet] } });
+  }
+
+  if (queryOr.length === 0) return records;
+
+  const employees = await Employee.find({ $or: queryOr })
+    .select('employeeId id _id fullName name aadhaarNumber aadhaar designation')
+    .lean();
+
+  const designationMap = new Map();
+  for (const emp of employees) {
+    const desig = emp.designation;
+    if (desig && typeof desig === 'string' && desig.trim()) {
+      const cleanDesig = desig.trim();
+      if (emp.employeeId) designationMap.set(String(emp.employeeId).toUpperCase().trim(), cleanDesig);
+      if (emp.id) designationMap.set(String(emp.id).trim(), cleanDesig);
+      if (emp._id) designationMap.set(String(emp._id).trim(), cleanDesig);
+      if (emp.aadhaarNumber) designationMap.set(String(emp.aadhaarNumber).trim(), cleanDesig);
+      if (emp.aadhaar) designationMap.set(String(emp.aadhaar).trim(), cleanDesig);
+      if (emp.fullName) designationMap.set(String(emp.fullName).toLowerCase().trim(), cleanDesig);
+      if (emp.name) designationMap.set(String(emp.name).toLowerCase().trim(), cleanDesig);
+    }
+  }
+
+  for (const r of records) {
+    const empIdKey = String(r.employeeId || '').toUpperCase().trim();
+    const aadhaarKey = String(r.aadhaarNumber || '').trim();
+    const nameKey = String(r.employeeName || '').toLowerCase().trim();
+
+    if (empIdKey && designationMap.has(empIdKey)) {
+      r.designation = designationMap.get(empIdKey);
+    } else if (aadhaarKey && designationMap.has(aadhaarKey)) {
+      r.designation = designationMap.get(aadhaarKey);
+    } else if (nameKey && designationMap.has(nameKey)) {
+      r.designation = designationMap.get(nameKey);
+    }
+  }
+
+  return records;
+}
+
 export async function GET(request) {
   const auth = await authorizeSystemUser(request, 'approval');
   if (!auth.authorized) return auth.response;
@@ -81,6 +148,8 @@ export async function GET(request) {
             finalList = attendances.filter((a) => a.status === 'COMPLETED' || a.status === 'AUTO_COMPLETED');
           }
         }
+
+        await enrichWithEmployeeDesignation(finalList);
 
         return NextResponse.json({
           success: true,
@@ -188,6 +257,7 @@ export async function GET(request) {
           if (existing.approvalStatus !== 'APPROVED' && existing.approved !== true) {
             combinedList.push({
               ...existing,
+              designation: emp.designation || existing.designation || 'Staff',
               attendanceDate: existing.attendanceDate || selectedDate,
             });
           }
@@ -236,6 +306,8 @@ export async function GET(request) {
           finalList = combinedList.filter((a) => a.status === 'COMPLETED' || a.status === 'AUTO_COMPLETED');
         }
       }
+
+      await enrichWithEmployeeDesignation(finalList);
 
       return NextResponse.json({
         success: true,
@@ -302,6 +374,8 @@ export async function GET(request) {
     const attendances = rawAttendances
       .map(normalizeAttendance)
       .filter((a) => a.approvalStatus === 'APPROVED' || a.approved === true);
+
+    await enrichWithEmployeeDesignation(attendances);
 
     return NextResponse.json({
       success: true,
