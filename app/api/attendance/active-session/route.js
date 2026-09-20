@@ -78,15 +78,25 @@ export async function GET(request) {
     const activeSession = activeSessionRaw ? normalizeAttendance(activeSessionRaw) : null;
     if (activeSession) {
       const rawObj = activeSessionRaw.toObject ? activeSessionRaw.toObject() : activeSessionRaw;
-      const realPlant =
-        cleanPlant(activeSession.plantName) ||
-        cleanPlant(activeSession.markInPlantName) ||
-        cleanPlant(rawObj.inPlant) ||
-        cleanPlant(rawObj.plantName) ||
-        assignedPlant ||
-        'Authorized Plant';
+      let realPlant = activeSession.markInPlantName;
+      if (!realPlant || realPlant === '-' || realPlant === 'Authorized Plant') {
+        if (rawObj.markInLocationType === 'WORK_FROM_HOME' || rawObj.workType === 'WORK_FROM_HOME') {
+          realPlant = 'Outside Plant - WFM';
+        } else if (rawObj.markInLocationType === 'FIELD_WORK' || rawObj.workType === 'FIELD_WORK') {
+          realPlant = 'Outside Plant - Field Work';
+        } else {
+          realPlant =
+            cleanPlant(rawObj.markInPlantName) ||
+            cleanPlant(rawObj.inPlant) ||
+            cleanPlant(rawObj.plantName) ||
+            assignedPlant ||
+            'Authorized Plant';
+        }
+      }
       activeSession.plantName = realPlant;
       activeSession.markInPlantName = realPlant;
+      activeSession.markOutPlantName = 'Under Process';
+      activeSession.markOutDateTime = 'Pending';
     }
 
     const todaySession = latestTodayRaw ? normalizeAttendance(latestTodayRaw) : null;

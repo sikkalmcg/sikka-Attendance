@@ -11,6 +11,7 @@ import {
 } from '@/lib/attendanceLocation';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { normalizePlant, normalizeAttendance } from '@/lib/normalize';
+import { calculateWorkingMinutes, getRecordMarkInDateTime } from '@/lib/timezone';
 
 export async function POST(request) {
   const auth = await authorizeEmployee(request);
@@ -81,13 +82,17 @@ export async function POST(request) {
     }
 
     const locationResult = evaluateAssignedPlantLocation(lat, lng, assignedPlants);
-    const markOutPlantName = locationResult.plantName;
-    const markOutPlantId = locationResult.plantId;
+    let markOutPlantName = locationResult.plantName;
+    let markOutPlantId = locationResult.plantId;
+    if (!locationResult.withinPlantRadius) {
+      markOutPlantName = 'Outside-Out';
+      markOutPlantId = null;
+    }
+
     // Authoritative server timestamp
     const markOutAt = new Date();
-    const markInTime = activeSession.markInAt ? new Date(activeSession.markInAt).getTime() : markOutAt.getTime();
-    const diffMs = markOutAt.getTime() - markInTime;
-    const workingMinutes = Math.max(1, Math.round(diffMs / (1000 * 60)));
+    const markInDate = getRecordMarkInDateTime(activeSession) || (activeSession.markInAt ? new Date(activeSession.markInAt) : markOutAt);
+    const workingMinutes = calculateWorkingMinutes(markInDate, markOutAt);
 
     // Use findByIdAndUpdate to avoid Mongoose re-validation and to safely preserve
     // manualAttendanceBy and other existing fields untouched
@@ -95,6 +100,7 @@ export async function POST(request) {
       activeSession._id,
       {
         $set: {
+          markInAt: activeSession.markInAt || markInDate,
           markOutAt,
           markOutLatitude: lat,
           markOutLongitude: lng,
@@ -104,7 +110,7 @@ export async function POST(request) {
           markOutAllowedRadiusMeters: locationResult.allowedRadiusMeters,
           markOutPlantId,
           markOutPlantName,
-          markOutType: 'SELF',
+          markOutType: 'Manual Mark-Out',
           markOutByUserId: null,
           markOutByUserName: null,
           workingMinutes,

@@ -98,7 +98,7 @@ export default function ReportPage() {
         const manualBy = String(r.markInManualBy || r.markOutManualBy || r.manualAttendanceBy || '').toLowerCase();
         const approvedBy = String(r.approvedBy || '').toLowerCase();
         const remarks = String(r.remarks || r.remark || '').toLowerCase();
-        const workingHrs = r.workingMinutes > 0 ? formatWorkingHours(r.workingMinutes).toLowerCase() : '0:00';
+        const workingHrs = r.workingMinutes > 0 ? formatWorkingHours(r.workingMinutes).toLowerCase() : '00:00 hours';
 
         return (
           empId.includes(q) ||
@@ -382,7 +382,7 @@ export default function ReportPage() {
               {allTime ? (
                 <span>Fetching <strong className="text-blue-600 font-bold">ALL database records</strong> across the entire attendance collection</span>
               ) : (
-                <span>Showing <strong className="text-emerald-600">Approved</strong> attendance records</span>
+                <span>Showing <strong className="text-slate-700 font-bold">Attendance Records</strong> for the selected period</span>
               )}
             </p>
           </div>
@@ -578,7 +578,7 @@ export default function ReportPage() {
                   <SortHeader label="Employee ID" field="employeeId" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Employee Name" field="employeeName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Designation" field="designation" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortHeader label="Attendance Date" field="attendanceDate" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Date" field="attendanceDate" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark In Plant" field="markInPlant" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark IN Date Time" field="markInAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark Out Date Time" field="markOutAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
@@ -610,7 +610,7 @@ export default function ReportPage() {
                           </p>
                         </div>
                       ) : (
-                        'No approved attendance records found for the selected period and plants.'
+                        'No attendance records found for the selected period and plants.'
                       )}
                     </td>
                   </tr>
@@ -676,13 +676,17 @@ export default function ReportPage() {
                           {r.employeeId || '-'}
                         </td>
                         <td className="py-3.5 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                          {r.employeeName || '-'}
+                          {r.employeeName && r.employeeName !== 'Employee' ? r.employeeName : (r.employeeId || '-')}
                         </td>
                         <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
                           {r.designation || 'Staff'}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-semibold text-slate-700 whitespace-nowrap">
-                          {formatAttendanceDateWithWeek(r.attendanceDate || r.inDate || r.date || r.markInAt)}
+                          {(() => {
+                            const d = r.attendanceDate || r.inDate || r.date || r.markInAt;
+                            const formatted = formatAttendanceDateWithWeek(d);
+                            return (formatted && formatted !== '-') ? formatted : (d || '-');
+                          })()}
                         </td>
                         <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap">
                           {isAbsent ? '-' : formatPlantName(r.markInPlantName || r.plantName)}
@@ -705,12 +709,12 @@ export default function ReportPage() {
                         </td>
                         <td className="py-3.5 px-4 font-mono font-bold text-slate-800 whitespace-nowrap">
                           {isAbsent
-                            ? '0:00'
+                            ? '-'
                             : isActive
                             ? 'Running'
                             : r.workingMinutes > 0
                             ? formatWorkingHours(r.workingMinutes)
-                            : '0:00'}
+                            : '00:00 Hours'}
                         </td>
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <span

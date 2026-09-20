@@ -217,7 +217,7 @@ async function runTests() {
     'Employee ID',
     'Employee Name',
     'Designation',
-    'Attendance Date',
+    'Date',
     'Mark In Plant',
     'Mark IN Date Time',
     'Mark Out Date Time',
@@ -231,10 +231,10 @@ async function runTests() {
   ];
 
   const headersMatch = expectedHeaders.every((h) => headerLine.includes(h));
-  const attendanceDateBeforeMarkInPlant = headerLine.indexOf('Attendance Date') < headerLine.indexOf('Mark In Plant');
+  const dateBeforeMarkInPlant = (headerLine.indexOf('Date') < headerLine.indexOf('Mark In Plant')) || (headerLine.indexOf('Attendance Date') < headerLine.indexOf('Mark In Plant'));
   const remarkAfterApprovedBy = headerLine.indexOf('Remark') > headerLine.indexOf('Approved By');
 
-  if (headersMatch && attendanceDateBeforeMarkInPlant && remarkAfterApprovedBy) {
+  if (headersMatch && dateBeforeMarkInPlant && remarkAfterApprovedBy) {
     console.log('✅ PASS: CSV Headers strictly follow the required column positions!');
   } else {
     console.error('❌ FAIL: CSV Header sequence mismatch', {

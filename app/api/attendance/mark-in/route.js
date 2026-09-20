@@ -133,6 +133,9 @@ export async function POST(request) {
       }
 
       markInLocationType = locationType;
+      plantId = null;
+      markInPlantName = locationType === 'WORK_FROM_HOME' ? 'Outside Plant - WFM' : 'Outside Plant - Field Work';
+      plantName = markInPlantName;
     }
     // Server-authoritative timestamp
     const markInAt = new Date();
@@ -155,6 +158,8 @@ export async function POST(request) {
       markInWithinPlantRadius: locationResult.withinPlantRadius,
       markInDistanceMeters: locationResult.distanceMeters,
       markInAllowedRadiusMeters: locationResult.allowedRadiusMeters,
+      markOutPlantName: 'Under Process',
+      markOutType: null,
       attendanceDate: formatInTimeZone(markInAt, 'Asia/Kolkata', 'yyyy-MM-dd'),
       status: 'ACTIVE',
       autoMarkOut: false,

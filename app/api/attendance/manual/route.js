@@ -13,7 +13,7 @@ import {
 } from '@/lib/rbac';
 import { normalizeEmployee, normalizeAttendance, normalizePlant } from '@/lib/normalize';
 import { formatInTimeZone } from 'date-fns-tz';
-import { parseKolkataDateTime, isFutureKolkataDateTime } from '@/lib/timezone';
+import { parseKolkataDateTime, isFutureKolkataDateTime, calculateWorkingMinutes, getRecordMarkInDateTime } from '@/lib/timezone';
 import { getAuthoritativeUser } from '@/lib/auth';
 
 const IST = 'Asia/Kolkata';
@@ -87,14 +87,13 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Invalid Mark OUT Date/Time format.' }, { status: 400 });
       }
 
-      const inDate = existingRecord.markInAt ? new Date(existingRecord.markInAt) : null;
+      const inDate = getRecordMarkInDateTime(existingRecord) || (existingRecord.markInAt ? new Date(existingRecord.markInAt) : null);
 
       if (inDate && outDate <= inDate) {
         return NextResponse.json({ error: 'Mark OUT must be strictly later than Mark IN.' }, { status: 400 });
       }
 
-      const diffMs = inDate ? outDate.getTime() - inDate.getTime() : 0;
-      const workingMinutes = diffMs > 0 ? Math.max(1, Math.round(diffMs / 60000)) : 0;
+      const workingMinutes = inDate ? calculateWorkingMinutes(inDate, outDate) : 0;
 
       // Resolve user's authoritative Full Name and userId from database record
       const { userFullName, authUserId } = await getAuthoritativeUser(session);
@@ -261,8 +260,7 @@ export async function POST(request) {
       if (outDate <= inDate) {
         return NextResponse.json({ error: 'Mark OUT must be strictly later than Mark IN.' }, { status: 400 });
       }
-      const diffMs = outDate.getTime() - inDate.getTime();
-      workingMinutes = Math.max(1, Math.round(diffMs / 60000));
+      workingMinutes = calculateWorkingMinutes(inDate, outDate);
       status = 'COMPLETED';
     }
 

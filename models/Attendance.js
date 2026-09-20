@@ -105,8 +105,8 @@ const AttendanceSchema = new mongoose.Schema(
     },
     markOutType: {
       type: String,
-      enum: ['Self', 'Auto', 'Manual', 'SELF', 'AUTO', 'AUTO_OUT', 'MANUAL'],
-      default: 'SELF',
+      enum: ['Self', 'Auto', 'Manual', 'SELF', 'AUTO', 'AUTO_OUT', 'MANUAL', 'Manual Mark-Out', 'Auto-Out', 'Auto Mark-Out'],
+      default: 'Manual Mark-Out',
     },
     markOutByUserId: {
       type: String,

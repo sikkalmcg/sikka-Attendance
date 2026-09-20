@@ -11,6 +11,8 @@ import {
   formatKolkataTime,
   formatKolkataDateTime,
   formatHoursHHMM,
+  formatWorkingHours,
+  calculateWorkingMinutes,
   getAttendanceDateString,
 } from '@/lib/timezone';
 
@@ -77,7 +79,7 @@ export async function GET(request) {
           ],
         },
       ],
-    }).select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate remarks manualAttendanceBy markInManualBy markOutManualBy')
+    }).select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate date remarks remark manualAttendanceBy markInManualBy markOutManualBy mark_in_datetime mark_out_datetime mark_in_time mark_out_time loginTime logoutTime createdAt updatedAt')
       .lean()
       .sort({ markInAt: -1, inDate: -1, inTime: -1, inDateTime: -1, createdAt: -1 });
 
@@ -90,7 +92,7 @@ export async function GET(request) {
         { _id: session.sub },
         ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
       ],
-    }).select('plantName plantId unitIds designation fullName').lean();
+    }).select('plantName plantId unitIds designation fullName name firstName lastName').lean();
 
     const employeeAssignedPlant = empDoc?.plantName || session.plantName || '';
 
@@ -105,7 +107,9 @@ export async function GET(request) {
       }
     }
 
-    const employeeName = session.fullName || empDoc?.fullName || 'Employee';
+    const docFirstLast = `${empDoc?.firstName || ''} ${empDoc?.lastName || ''}`.trim();
+    const resolvedDocName = empDoc?.name || empDoc?.fullName || (docFirstLast || '');
+    const employeeName = session.fullName || (resolvedDocName && resolvedDocName.toLowerCase() !== 'employee' ? resolvedDocName : (session.employeeId || ''));
 
     // Section 5: Show every calendar date (newest first)
     const fullHistory = calendarDates.map(({ isoDate, formattedDate }) => {
@@ -139,7 +143,7 @@ export async function GET(request) {
             const rawOutDate = raw.outDate || raw.inDate || raw.date || existing.attendanceDate || isoDate;
             markOutDateTime = `${formatKolkataDate(rawOutDate)}, ${raw.outTime || existing.outTime}`;
           } else if (existing.status === 'ACTIVE' && !existing.markOutAt) {
-            markOutDateTime = 'Active';
+            markOutDateTime = 'Pending';
           } else if (existing.markOutAt) {
             markOutDateTime = formatKolkataDateTime(existing.markOutAt);
           } else if (raw.outTime || existing.outTime) {
@@ -151,27 +155,27 @@ export async function GET(request) {
         // Working hours calculation: (Mark Out Date & Time - Mark In Date & Time)
         let workingHour = '-';
         if (!isAbsent) {
-          if (existing.markInAt && existing.markOutAt) {
+          if (existing.status === 'ACTIVE' || !existing.markOutAt) {
+            workingHour = '-';
+          } else if (existing.markInAt && existing.markOutAt) {
             const inMs = new Date(existing.markInAt).getTime();
             const outMs = new Date(existing.markOutAt).getTime();
             if (!isNaN(inMs) && !isNaN(outMs) && outMs >= inMs) {
-              const diffMinutes = Math.round((outMs - inMs) / 60000);
-              workingHour = formatHoursHHMM(diffMinutes);
+              const diffMinutes = calculateWorkingMinutes(inMs, outMs);
+              workingHour = formatWorkingHours(diffMinutes);
             } else {
-              workingHour = '00:00';
+              workingHour = '00:00 Hours';
             }
-          } else if (existing.status === 'ACTIVE' || !existing.markOutAt) {
-            workingHour = '-';
           } else if (existing.workingMinutes > 0) {
-            workingHour = formatHoursHHMM(existing.workingMinutes);
+            workingHour = formatWorkingHours(existing.workingMinutes);
           } else if (raw.hours) {
-            workingHour = formatHoursHHMM(Math.round(Number(raw.hours) * 60));
+            workingHour = formatWorkingHours(Math.round(Number(raw.hours) * 60));
           } else {
-            workingHour = '00:00';
+            workingHour = '00:00 Hours';
           }
         }
 
-        const status = isAbsent ? 'Absent' : 'Present';
+        const status = isAbsent ? 'Absent' : (existing.status === 'ACTIVE' && !existing.markOutAt ? 'Active' : 'Present');
 
         const cleanPlant = (val) => {
           if (!val || typeof val !== 'string') return '';
@@ -181,28 +185,56 @@ export async function GET(request) {
 
         let markInPlant = '-';
         let markOutPlant = '-';
+        let markOutType = '-';
 
         if (!isAbsent) {
-          const resolvedMarkIn =
-            cleanPlant(raw.inPlant) ||
-            cleanPlant(existing.markInPlantName) ||
-            cleanPlant(existing.plantName) ||
-            cleanPlant(raw.markInPlant) ||
-            cleanPlant(raw.plantName) ||
-            cleanPlant(raw.street) ||
-            employeeAssignedPlant ||
-            'Authorized Plant';
+          if (existing.markInLocationType === 'WORK_FROM_HOME' || raw.workType === 'WORK_FROM_HOME') {
+            markInPlant = 'Outside Plant - WFM';
+          } else if (existing.markInLocationType === 'FIELD_WORK' || raw.workType === 'FIELD_WORK') {
+            markInPlant = 'Outside Plant - Field Work';
+          } else {
+            const resolvedMarkIn =
+              cleanPlant(raw.inPlant) ||
+              cleanPlant(existing.markInPlantName) ||
+              cleanPlant(existing.plantName) ||
+              cleanPlant(raw.markInPlant) ||
+              cleanPlant(raw.plantName) ||
+              cleanPlant(raw.street) ||
+              employeeAssignedPlant ||
+              'Authorized Plant';
+            markInPlant = resolvedMarkIn;
+          }
 
-          markInPlant = resolvedMarkIn;
-
-          if (existing.markOutAt) {
-            markOutPlant =
-              cleanPlant(raw.outPlant) ||
-              cleanPlant(existing.markOutPlantName) ||
-              cleanPlant(raw.markOutPlant) ||
-              resolvedMarkIn;
+          if (existing.status === 'ACTIVE' && !existing.markOutAt) {
+            markOutPlant = 'Under Process';
+            markOutType = '-';
+          } else if (existing.markOutAt) {
+            if (
+              existing.autoMarkOut ||
+              existing.markOutType === 'Auto-Out' ||
+              existing.markOutPlantName === 'Auto-Out' ||
+              String(raw.outType || '').toLowerCase().includes('auto')
+            ) {
+              markOutPlant = 'Auto-Out';
+              markOutType = 'Auto-Out';
+            } else if (
+              existing.markOutPlantName === 'Outside-Out' ||
+              raw.markOutWithinPlantRadius === false ||
+              String(raw.outPlant || '').toLowerCase() === 'outside-out'
+            ) {
+              markOutPlant = 'Outside-Out';
+              markOutType = 'Manual Mark-Out';
+            } else {
+              markOutPlant =
+                cleanPlant(raw.outPlant) ||
+                cleanPlant(existing.markOutPlantName) ||
+                cleanPlant(raw.markOutPlant) ||
+                markInPlant;
+              markOutType = 'Manual Mark-Out';
+            }
           } else {
             markOutPlant = '-';
+            markOutType = '-';
           }
         }
 
@@ -222,6 +254,7 @@ export async function GET(request) {
           status,
           markInPlant,
           markOutPlant,
+          markOutType,
           isAbsent,
           hasRecord: true,
           rawRecord: existing,

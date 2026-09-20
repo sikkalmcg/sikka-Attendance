@@ -27,6 +27,7 @@ import {
   formatKolkataDateTime,
   formatAttendanceDateWithWeek,
   formatWorkingHours,
+  calculateWorkingMinutes,
   getAttendanceDateString,
   getTodayDateString,
   isFutureKolkataDateTime,
@@ -464,14 +465,11 @@ export default function ApprovalPage() {
 
   // Live Working Hours calculation helper for ISO datetime-local strings
   const calculateLiveHours = (inStr, outStr) => {
-    if (!inStr || !outStr) return '0:00';
+    if (!inStr || !outStr) return '00:00 Hours';
     const inDate = parseKolkataDateTime(inStr);
     const outDate = parseKolkataDateTime(outStr);
-    if (!inDate || !outDate) return '0:00';
-    const inTime = inDate.getTime();
-    const outTime = outDate.getTime();
-    if (isNaN(inTime) || isNaN(outTime) || outTime <= inTime) return '0:00';
-    const minutes = Math.round((outTime - inTime) / 60000);
+    if (!inDate || !outDate) return '00:00 Hours';
+    const minutes = calculateWorkingMinutes(inDate, outDate);
     return formatWorkingHours(minutes);
   };
 
@@ -958,7 +956,7 @@ export default function ApprovalPage() {
                   <SortHeader label="Employee ID" field="employeeId" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Employee Name" field="employeeName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Designation" field="designation" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortHeader label="Attendance Date" field="attendanceDate" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Date" field="attendanceDate" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark In Plant Name" field="markInPlantName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark In Date & Time" field="markInAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Mark Out Date & Time" field="markOutAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
@@ -1092,13 +1090,13 @@ export default function ApprovalPage() {
                           {record.employeeId || '-'}
                         </td>
                         <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
-                          {record.employeeName || '-'}
+                          {record.employeeName && record.employeeName !== 'Employee' ? record.employeeName : (record.employeeId || '-')}
                         </td>
                         <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
                           {record.designation || 'Staff'}
                         </td>
                         <td className="py-3 px-4 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                          {formatAttendanceDateWithWeek(record.attendanceDate || record.markInAt || record.inDate)}
+                          {formatAttendanceDateWithWeek(record.attendanceDate || record.inDate || record.date || record.markInAt)}
                         </td>
                         <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
                           {markInPlantDisplay}
@@ -1145,7 +1143,7 @@ export default function ApprovalPage() {
                             ? 'Running'
                             : record.workingMinutes > 0
                             ? formatWorkingHours(record.workingMinutes)
-                            : '0:00'}
+                            : '00:00 Hours'}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span

@@ -455,22 +455,24 @@ export default function MarkAttendancePage() {
           {activeShift && (
             <div className="mt-4 p-4 rounded-2xl bg-blue-50/60 border border-blue-100 text-left space-y-2 text-xs">
               <div className="flex justify-between items-center text-blue-900 font-semibold">
-                <span>Location / Plant:</span>
+                <span>Mark IN Plant:</span>
                 <span className="font-bold">
-                  {(!activeShift.plantName || activeShift.plantName === 'Manufacturing Plant' || activeShift.plantName === '-')
-                    ? (employeeInfo?.plantName || activeShift.markInPlantName || 'Authorized Plant')
-                    : (activeShift.plantName || activeShift.markInPlantName)}
+                  {activeShift.markInPlantName || activeShift.plantName || employeeInfo?.plantName || 'Authorized Plant'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-600">
-                <span>Mark In Time:</span>
+                <span>Mark IN Date & Time:</span>
                 <span className="font-mono font-bold text-slate-900">
-                  {formatKolkataTime(activeShift.markInAt)}
+                  {formatKolkataDateTime(activeShift.markInAt)}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-600">
-                <span>Date:</span>
-                <span>{formatKolkataDate(activeShift.markInAt)}</span>
+                <span>Mark OUT Date Time:</span>
+                <span className="font-semibold text-amber-700">Pending</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Mark OUT Plant:</span>
+                <span className="font-semibold text-amber-700">Under Process</span>
               </div>
             </div>
           )}
@@ -623,41 +625,44 @@ export default function MarkAttendancePage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 min-w-[760px]">
+            <table className="w-full text-left text-xs text-slate-600 min-w-[850px]">
               <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-y border-slate-100">
                 <tr>
                   <th className="py-2.5 px-3">Employee Details</th>
                   <th className="py-2.5 px-3">Attendance Date</th>
-                  <th className="py-2.5 px-3">Mark In Date & Time</th>
-                  <th className="py-2.5 px-3">Mark Out Date & Time</th>
+                  <th className="py-2.5 px-3">Mark IN Date Time</th>
+                  <th className="py-2.5 px-3">Mark IN Plant</th>
+                  <th className="py-2.5 px-3">Mark OUT Date Time</th>
+                  <th className="py-2.5 px-3">Mark OUT Plant</th>
+                  <th className="py-2.5 px-3">Mark OUT Type</th>
                   <th className="py-2.5 px-3">Working Hours</th>
                   <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Mark In Plant</th>
-                  <th className="py-2.5 px-3">Mark Out Plant</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {historyLoading ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={9} className="py-8 text-center text-slate-400 font-medium">
                       <RefreshCw className="w-4 h-4 animate-spin mx-auto mb-2 text-blue-600" />
                       Loading 60-day attendance history...
                     </td>
                   </tr>
                 ) : history.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400">
+                    <td colSpan={9} className="py-8 text-center text-slate-400">
                       No attendance history found.
                     </td>
                   </tr>
                 ) : (
                   history.map((record) => {
                     const isAbsent = record.status === 'Absent';
+                    const isActive = record.status === 'Active' || record.markOutDateTime === 'Pending';
                     const markInDisplay = record.markInDateTime || record.markInTime || '-';
                     const markOutDisplay = record.markOutDateTime || record.markOutTime || '-';
                     const employeeDetailsDisplay =
-                      record.employeeDetails ||
-                      (record.employeeName ? `EMP / ${record.employeeName}` : '-');
+                      record.employeeDetails && !record.employeeDetails.endsWith('/ Employee')
+                        ? record.employeeDetails
+                        : (record.employeeName && record.employeeName !== 'Employee' ? `${record.employeeId || 'EMP'} / ${record.employeeName}` : (record.employeeId || '-'));
 
                     return (
                       <tr key={record.id} className="hover:bg-slate-50/60 transition-colors">
@@ -665,18 +670,51 @@ export default function MarkAttendancePage() {
                           {employeeDetailsDisplay}
                         </td>
                         <td className="py-3 px-3 font-semibold text-slate-900 whitespace-nowrap">
-                          {record.attendanceDate || record.date}
+                          {record.attendanceDate || record.date || '-'}
                         </td>
                         <td className="py-3 px-3 font-mono text-slate-700 whitespace-nowrap">
                           {markInDisplay}
                         </td>
+                        <td className="py-3 px-3 text-slate-700 whitespace-nowrap font-medium">
+                          {record.markInPlant || '-'}
+                        </td>
                         <td className="py-3 px-3 font-mono whitespace-nowrap">
-                          {markOutDisplay === 'Active' ? (
+                          {markOutDisplay === 'Pending' || markOutDisplay === 'Active' ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 animate-pulse">
-                              Active
+                              Pending
                             </span>
                           ) : (
                             <span className="text-slate-700">{markOutDisplay}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap font-medium">
+                          {record.markOutPlant === 'Under Process' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              Under Process
+                            </span>
+                          ) : record.markOutPlant === 'Auto-Out' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              Auto-Out
+                            </span>
+                          ) : record.markOutPlant === 'Outside-Out' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                              Outside-Out
+                            </span>
+                          ) : (
+                            <span className="text-slate-700">{record.markOutPlant || '-'}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          {record.markOutType === 'Auto-Out' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                              Auto-Out
+                            </span>
+                          ) : record.markOutType === 'Manual Mark-Out' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Manual Mark-Out
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-mono">-</span>
                           )}
                         </td>
                         <td className="py-3 px-3 font-mono font-medium text-slate-800 whitespace-nowrap">
@@ -687,21 +725,13 @@ export default function MarkAttendancePage() {
                             className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                               isAbsent
                                 ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                : isActive
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
                                 : 'bg-emerald-100 text-emerald-800'
                             }`}
                           >
-                            {record.status}
+                            {isAbsent ? 'Absent' : isActive ? 'Active' : 'Present'}
                           </span>
-                        </td>
-                        <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
-                          {(!record.markInPlant || record.markInPlant === 'Manufacturing Plant' || record.markInPlant === '-')
-                            ? (isAbsent ? '-' : (employeeInfo?.plantName || '-'))
-                            : record.markInPlant}
-                        </td>
-                        <td className="py-3 px-3 text-slate-700 whitespace-nowrap">
-                          {(!record.markOutPlant || record.markOutPlant === 'Manufacturing Plant' || record.markOutPlant === '-')
-                            ? (isAbsent || !record.markOutDateTime || record.markOutDateTime === '-' ? '-' : (employeeInfo?.plantName || '-'))
-                            : record.markOutPlant}
                         </td>
                       </tr>
                     );
