@@ -130,6 +130,10 @@ const AttendanceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    autoOutTriggerTime: {
+      type: Date,
+      default: null,
+    },
 
     // Approval Workflow
     approvalStatus: {

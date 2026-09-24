@@ -79,7 +79,7 @@ export async function GET(request) {
           ],
         },
       ],
-    }).select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate date remarks remark manualAttendanceBy markInManualBy markOutManualBy mark_in_datetime mark_out_datetime mark_in_time mark_out_time loginTime logoutTime createdAt updatedAt')
+    }).select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate date remarks remark manualAttendanceBy markInManualBy markOutManualBy mark_in_datetime mark_out_datetime mark_in_time mark_out_time loginTime logoutTime autoMarkOut autoOutTriggerTime createdAt updatedAt')
       .lean()
       .sort({ markInAt: -1, inDate: -1, inTime: -1, inDateTime: -1, createdAt: -1 });
 
@@ -139,11 +139,26 @@ export async function GET(request) {
             markInDateTime = `${formatKolkataDate(rawInDate)}, ${raw.inTime || existing.inTime}`;
           }
 
+          const isAutoOut =
+            Boolean(existing.autoMarkOut) ||
+            existing.markOutType === 'Auto-Out' ||
+            existing.markOutPlantName === 'Auto-Out' ||
+            existing.status === 'AUTO_COMPLETED' ||
+            String(raw.outType || '').toLowerCase().includes('auto') ||
+            String(existing.markOutType || '').toLowerCase().includes('auto');
+
           if (isHistoricalRange && (raw.outTime || existing.outTime)) {
             const rawOutDate = raw.outDate || raw.inDate || raw.date || existing.attendanceDate || isoDate;
             markOutDateTime = `${formatKolkataDate(rawOutDate)}, ${raw.outTime || existing.outTime}`;
           } else if (existing.status === 'ACTIVE' && !existing.markOutAt) {
             markOutDateTime = 'Pending';
+          } else if (isAutoOut) {
+            const inDate = existing.markInAt ? new Date(existing.markInAt) : null;
+            if (inDate && !isNaN(inDate.getTime())) {
+              markOutDateTime = formatKolkataDateTime(new Date(inDate.getTime() + 8 * 60 * 60 * 1000));
+            } else if (existing.markOutAt) {
+              markOutDateTime = formatKolkataDateTime(existing.markOutAt);
+            }
           } else if (existing.markOutAt) {
             markOutDateTime = formatKolkataDateTime(existing.markOutAt);
           } else if (raw.outTime || existing.outTime) {
@@ -154,9 +169,19 @@ export async function GET(request) {
 
         // Working hours calculation: (Mark Out Date & Time - Mark In Date & Time)
         let workingHour = '-';
+        const isAutoOut =
+          Boolean(existing.autoMarkOut) ||
+          existing.markOutType === 'Auto-Out' ||
+          existing.markOutPlantName === 'Auto-Out' ||
+          existing.status === 'AUTO_COMPLETED' ||
+          String(raw.outType || '').toLowerCase().includes('auto') ||
+          String(existing.markOutType || '').toLowerCase().includes('auto');
+
         if (!isAbsent) {
           if (existing.status === 'ACTIVE' || !existing.markOutAt) {
             workingHour = '-';
+          } else if (isAutoOut) {
+            workingHour = '08:00 Hours';
           } else if (existing.markInAt && existing.markOutAt) {
             const inMs = new Date(existing.markInAt).getTime();
             const outMs = new Date(existing.markOutAt).getTime();
@@ -218,19 +243,23 @@ export async function GET(request) {
               markOutPlant = 'Auto-Out';
               markOutType = 'Auto-Out';
             } else if (
-              existing.markOutPlantName === 'Outside-Out' ||
-              raw.markOutWithinPlantRadius === false ||
-              String(raw.outPlant || '').toLowerCase() === 'outside-out'
+              existing.markOutType === 'Manual' ||
+              existing.markOutType === 'MANUAL' ||
+              existing.markOutType === 'Manual Mark-Out' ||
+              Boolean(existing.markOutManualBy) ||
+              Boolean(existing.markOutByUserName)
             ) {
-              markOutPlant = 'Outside-Out';
+              markOutPlant =
+                existing.markOutPlantName === 'Outside-Out' || raw.markOutWithinPlantRadius === false || String(raw.outPlant || '').toLowerCase() === 'outside-out'
+                  ? 'Outside-Out'
+                  : (cleanPlant(raw.outPlant) || cleanPlant(existing.markOutPlantName) || cleanPlant(raw.markOutPlant) || markInPlant);
               markOutType = 'Manual Mark-Out';
             } else {
               markOutPlant =
-                cleanPlant(raw.outPlant) ||
-                cleanPlant(existing.markOutPlantName) ||
-                cleanPlant(raw.markOutPlant) ||
-                markInPlant;
-              markOutType = 'Manual Mark-Out';
+                existing.markOutPlantName === 'Outside-Out' || raw.markOutWithinPlantRadius === false || String(raw.outPlant || '').toLowerCase() === 'outside-out'
+                  ? 'Outside-Out'
+                  : (cleanPlant(raw.outPlant) || cleanPlant(existing.markOutPlantName) || cleanPlant(raw.markOutPlant) || markInPlant);
+              markOutType = 'Self';
             }
           } else {
             markOutPlant = '-';

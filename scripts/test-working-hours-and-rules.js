@@ -64,17 +64,17 @@ async function runTests() {
   assert.strictEqual(formatWorkingHours(nightMins), '08:30 Hours');
   console.log('✅ PASS: Working hours calculation across all spans verified!\n');
 
-  // TEST 3: Rule 1 & Rule 9 - 18-Hour Auto Mark-Out
-  console.log('--- TEST 3: Rule 1 & 9 - 18-Hour Auto Mark-Out ---');
+  // TEST 3: Auto Mark-Out Logic (18-Hour Trigger, MarkIn + 8 Hours Saved)
+  console.log('--- TEST 3: Auto Mark-Out Logic & Edge Cases ---');
   const testEmpId = 'EMP-TEST-AUTO18';
   await Attendance.deleteMany({ employeeId: testEmpId });
 
-  // Create an active session from 19 hours ago
-  const inTime19hAgo = new Date(Date.now() - 19 * 60 * 60 * 1000);
+  // Scenario A: Mark In at 27-Aug-2026 07:00, 19 hours have elapsed
+  const markInTime = new Date('2026-08-27T07:00:00+05:30');
   const testActive = await Attendance.create({
     employeeId: testEmpId,
     employeeName: 'Auto Out Test User',
-    markInAt: inTime19hAgo,
+    markInAt: markInTime,
     markInPlantName: 'Tea Plant',
     status: 'ACTIVE',
   });
@@ -87,16 +87,47 @@ async function runTests() {
   const refreshed = await Attendance.findById(testActive._id).lean();
   const normAuto = normalizeAttendance(refreshed);
 
-  console.log('Auto Mark Out Date Time:', formatKolkataDateTime(normAuto.markOutAt));
-  console.log('Auto Mark Out Plant:', normAuto.markOutPlantName);
-  console.log('Auto Mark Out Type in DB:', refreshed.markOutType);
-  console.log('Auto Working Hours:', formatWorkingHours(normAuto.workingMinutes));
+  console.log('Mark In Date Time:', formatKolkataDateTime(normAuto.markInAt));
+  console.log('Auto-Out Trigger Time:', formatKolkataDateTime(refreshed.autoOutTriggerTime));
+  console.log('Saved Mark Out Date Time:', formatKolkataDateTime(normAuto.markOutAt));
+  console.log('Mark Out Plant:', normAuto.markOutPlantName);
+  console.log('Mark Out Type in DB:', refreshed.markOutType);
+  console.log('Working Hours:', formatWorkingHours(normAuto.workingMinutes));
 
+  // Verification per user requirements:
+  // Trigger time: 28-Aug-2026 01:00 (+18h)
+  const expectedTriggerTime = new Date(markInTime.getTime() + 18 * 60 * 60 * 1000);
+  assert.strictEqual(new Date(refreshed.autoOutTriggerTime).getTime(), expectedTriggerTime.getTime(), 'Auto-Out Trigger Time must be Mark In + 18 hours (01:00)');
+  // Saved Mark Out Date Time: 27-Aug-2026 15:00 (+8h)
+  const expectedMarkOutTime = new Date(markInTime.getTime() + 8 * 60 * 60 * 1000);
+  assert.strictEqual(new Date(normAuto.markOutAt).getTime(), expectedMarkOutTime.getTime(), 'Saved Mark Out Date Time must be Mark In + 8 hours (15:00)');
   assert.strictEqual(normAuto.markOutPlantName, 'Auto-Out', 'Mark OUT Plant must be Auto-Out');
   assert.strictEqual(refreshed.markOutType, 'Auto-Out', 'Stored Mark OUT Type in DB must be Auto-Out');
-  assert.strictEqual(normAuto.workingMinutes, 18 * 60, 'Working minutes must be 1080 (18 hours)');
-  assert.strictEqual(formatWorkingHours(normAuto.workingMinutes), '18:00 Hours', 'Working Hours must be 18:00 Hours');
-  console.log('✅ PASS: 18-Hour Auto Mark-Out verified!\n');
+  assert.strictEqual(normAuto.workingMinutes, 8 * 60, 'Working minutes must be 480 (8 hours)');
+  assert.strictEqual(formatWorkingHours(normAuto.workingMinutes), '08:00 Hours', 'Working Hours must be 08:00 Hours (8:00)');
+
+  // Scenario B: Edge case - Employee manually marks out at 17h59m (28-Aug-2026 00:59)
+  const manualMarkIn = new Date('2026-08-27T07:00:00+05:30');
+  const manualMarkOut = new Date('2026-08-28T00:59:00+05:30');
+  const manualSession = await Attendance.create({
+    employeeId: testEmpId,
+    employeeName: 'Auto Out Test User',
+    markInAt: manualMarkIn,
+    markOutAt: manualMarkOut,
+    markOutType: 'Self',
+    status: 'COMPLETED',
+    workingMinutes: calculateWorkingMinutes(manualMarkIn, manualMarkOut),
+  });
+
+  // Run auto mark-out processor again
+  const secondRun = await processAutoMarkOut(true);
+  const refreshedManual = await Attendance.findById(manualSession._id).lean();
+
+  // Ensure manual mark out was NOT overwritten
+  assert.strictEqual(new Date(refreshedManual.markOutAt).getTime(), manualMarkOut.getTime(), 'Manual Mark Out time must not be overwritten');
+  assert.strictEqual(refreshedManual.markOutType, 'Self', 'Manual Mark Out Type must remain Self');
+  assert.strictEqual(refreshedManual.status, 'COMPLETED', 'Status must remain COMPLETED');
+  console.log('✅ PASS: Auto Mark-Out (18h limit trigger, MarkIn+8h saved) & manual edge case verified!\n');
 
   // TEST 4: Rule 4 - Mark IN Plant Display (Inside vs Outside WFM / Field Work)
   console.log('--- TEST 4: Rule 4 - Mark IN Plant Display ---');

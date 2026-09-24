@@ -110,7 +110,7 @@ export async function POST(request) {
           markOutAllowedRadiusMeters: locationResult.allowedRadiusMeters,
           markOutPlantId,
           markOutPlantName,
-          markOutType: 'Manual Mark-Out',
+          markOutType: 'Self',
           markOutByUserId: null,
           markOutByUserName: null,
           workingMinutes,

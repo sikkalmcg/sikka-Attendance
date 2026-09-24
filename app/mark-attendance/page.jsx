@@ -709,6 +709,10 @@ export default function MarkAttendancePage() {
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
                               Auto-Out
                             </span>
+                          ) : record.markOutType === 'Self' || record.markOutType === 'SELF' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              Self
+                            </span>
                           ) : record.markOutType === 'Manual Mark-Out' ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                               Manual Mark-Out
@@ -718,7 +722,9 @@ export default function MarkAttendancePage() {
                           )}
                         </td>
                         <td className="py-3 px-3 font-mono font-medium text-slate-800 whitespace-nowrap">
-                          {record.workingHours || record.workingHour || '-'}
+                          {record.markOutType === 'Auto-Out' || record.markOutPlant === 'Auto-Out' || record.autoMarkOut
+                            ? '08:00 Hours'
+                            : (record.workingHours || record.workingHour || '-')}
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <span

@@ -25,18 +25,33 @@ async function main() {
     const inDate = getRecordMarkInDateTime(r);
     const outDate = getRecordMarkOutDateTime(r);
 
-    if (inDate && outDate) {
-      const calcMinutes = calculateWorkingMinutes(inDate, outDate);
+    const isAuto =
+      Boolean(r.autoMarkOut) ||
+      r.markOutType === 'Auto-Out' ||
+      r.markOutPlantName === 'Auto-Out' ||
+      r.status === 'AUTO_COMPLETED' ||
+      String(r.markOutType || '').toLowerCase().includes('auto');
+
+    if (inDate && (outDate || isAuto)) {
+      // Auto Mark-Out rule: Mark Out Date Time = Mark In Date Time + 8 hours, working minutes = 480 (8 hours)
+      const targetOutDate = isAuto ? new Date(inDate.getTime() + 8 * 60 * 60 * 1000) : outDate;
+      const calcMinutes = isAuto ? 8 * 60 : calculateWorkingMinutes(inDate, targetOutDate);
       const isMismatch = r.workingMinutes !== calcMinutes;
       const needsMarkInAt = !r.markInAt;
-      const needsMarkOutAt = !r.markOutAt;
+      const needsMarkOutAt = !r.markOutAt || (isAuto && r.markOutAt?.getTime?.() !== targetOutDate.getTime());
 
-      if (isMismatch || needsMarkInAt || needsMarkOutAt) {
+      if (isMismatch || needsMarkInAt || needsMarkOutAt || (isAuto && r.markOutType !== 'Auto-Out')) {
         const updateFields = {
           workingMinutes: calcMinutes,
         };
         if (needsMarkInAt) updateFields.markInAt = inDate;
-        if (needsMarkOutAt) updateFields.markOutAt = outDate;
+        if (needsMarkOutAt) updateFields.markOutAt = targetOutDate;
+        if (isAuto) {
+          updateFields.markOutType = 'Auto-Out';
+          updateFields.markOutPlantName = 'Auto-Out';
+          updateFields.autoMarkOut = true;
+          updateFields.status = 'AUTO_COMPLETED';
+        }
 
         await Attendance.updateOne({ _id: r._id }, { $set: updateFields });
         updatedCount++;
