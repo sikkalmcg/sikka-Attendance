@@ -2,13 +2,8 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Plant from '@/models/Plant';
-import Employee from '@/models/Employee';
 import { authorizeEmployee } from '@/lib/rbac';
-import {
-  evaluateAssignedPlantLocation,
-  getAssignedPlantQuery,
-  getAssignedPlantReferences,
-} from '@/lib/attendanceLocation';
+import { evaluatePlantLocation } from '@/lib/attendanceLocation';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { normalizePlant, normalizeAttendance } from '@/lib/normalize';
 import { calculateWorkingMinutes, getRecordMarkInDateTime } from '@/lib/timezone';
@@ -57,34 +52,18 @@ export async function POST(request) {
       );
     }
 
-    // Evaluate this Mark OUT only against the employee's assigned plant configuration.
-    const employee = await Employee.findOne({
-      $or: [
-        { employeeId: session.employeeId },
-        { _id: session.sub },
-        ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
-      ],
-    }).select('plantId plantName unitIds').lean();
-    const assignedPlantReferences = getAssignedPlantReferences(employee, session);
-    if (assignedPlantReferences.length === 0) {
-      return NextResponse.json({ error: 'No plant is assigned to this employee.' }, { status: 400 });
-    }
-
+    // Evaluate Mark OUT against all active configured plants in the system
     const rawPlants = await Plant.find({
-      $and: [
-        { $or: [{ status: 'Active' }, { active: true }] },
-        getAssignedPlantQuery(assignedPlantReferences),
-      ],
+      $or: [{ status: 'Active' }, { active: true }],
     }).lean();
-    const assignedPlants = rawPlants.map(normalizePlant);
-    if (assignedPlants.length === 0) {
-      return NextResponse.json({ error: 'No active assigned plant is configured for this employee.' }, { status: 400 });
-    }
+    const activePlants = rawPlants.map(normalizePlant);
 
-    const locationResult = evaluateAssignedPlantLocation(lat, lng, assignedPlants);
+    const locationResult = evaluatePlantLocation(lat, lng, activePlants);
     let markOutPlantName = locationResult.plantName;
     let markOutPlantId = locationResult.plantId;
+
     if (!locationResult.withinPlantRadius) {
+      // If OUT is outside all plants -> save Outside-Out
       markOutPlantName = 'Outside-Out';
       markOutPlantId = null;
     }

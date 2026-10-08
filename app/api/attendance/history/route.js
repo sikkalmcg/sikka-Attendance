@@ -213,10 +213,10 @@ export async function GET(request) {
         let markOutType = '-';
 
         if (!isAbsent) {
-          if (existing.markInLocationType === 'WORK_FROM_HOME' || raw.workType === 'WORK_FROM_HOME') {
-            markInPlant = 'Outside Plant - WFM';
-          } else if (existing.markInLocationType === 'FIELD_WORK' || raw.workType === 'FIELD_WORK') {
-            markInPlant = 'Outside Plant - Field Work';
+          if (existing.markInLocationType === 'WORK_FROM_HOME' || raw.workType === 'WORK_FROM_HOME' || existing.markInPlantName === 'Work from Home' || existing.markInPlantName === 'Outside Plant - WFM') {
+            markInPlant = 'Work from Home';
+          } else if (existing.markInLocationType === 'FIELD_WORK' || raw.workType === 'FIELD_WORK' || existing.markInPlantName === 'Field Work' || existing.markInPlantName === 'Outside Plant - Field Work') {
+            markInPlant = 'Field Work';
           } else {
             const resolvedMarkIn =
               cleanPlant(raw.inPlant) ||

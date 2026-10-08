@@ -18,7 +18,13 @@ import {
   Home,
   Compass,
 } from 'lucide-react';
-import { formatKolkataDate, formatKolkataTime, formatKolkataDateTime, formatWorkingHours } from '@/lib/timezone';
+import {
+  formatKolkataDate,
+  formatKolkataTime,
+  formatKolkataDateTime,
+  formatWorkingHours,
+  formatHoursHHMM,
+} from '@/lib/timezone';
 
 export default function MarkAttendancePage() {
   const [activeShift, setActiveShift] = useState(null);
@@ -45,18 +51,14 @@ export default function MarkAttendancePage() {
     isOpen: false,
     type: 'IN', // 'IN' | 'OUT'
     isInsidePlant: false,
-    plantName: '',
-    locationType: 'PLANT', // 'PLANT' | 'WORK_FROM_HOME' | 'FIELD_WORK'
+    plantName: '', // Detected plant name e.g. "Salt Plant", or "Outside Plant"
+    currentLocation: '', // Readable location/address
+    dateTime: '', // India date and time: "08-Oct-2026 10:26"
+    workingHours: '', // "08:06" for Mark OUT
+    locationType: 'PLANT', // 'PLANT' | 'WORK_FROM_HOME' | 'FIELD_WORK' | 'OUTSIDE_PLANT'
     distance: 0,
     allowedRadius: 0,
     coords: null,
-  });
-
-  // Outside Plant Work Location Selection Modal (Section 2 & 3)
-  const [outsideSelectModal, setOutsideSelectModal] = useState({
-    isOpen: false,
-    coords: null,
-    selectedWorkType: '', // 'WORK_FROM_HOME' | 'FIELD_WORK'
   });
 
   // Live GPS status bar (auto-detected, not simulated)
@@ -249,6 +251,13 @@ export default function MarkAttendancePage() {
   };
 
   /**
+   * Format standard India date and time (e.g. "08-Oct-2026 10:26")
+   */
+  const formatIndiaDateTime = (date = new Date()) => {
+    return `${formatKolkataDate(date)} ${formatKolkataTime(date)}`;
+  };
+
+  /**
    * Initiate Mark IN / Mark OUT flow
    */
   const handleInitiateAttendance = async (type) => {
@@ -270,55 +279,78 @@ export default function MarkAttendancePage() {
       });
 
       const checkData = (await safeParseJson(checkRes)) || {};
+      const now = new Date();
+      const currentIndiaDateTime = formatIndiaDateTime(now);
 
       if (type === 'IN') {
         if (checkData.matched) {
-          // Employee Inside Plant Radius -> Confirm Mark IN
+          const plantName = checkData.plant?.name || 'Configured Plant';
+          const readableLocation =
+            checkData.readableLocation ||
+            (checkData.plant?.location ? `${plantName}, ${checkData.plant.location}` : plantName);
+
           setConfirmModal({
             isOpen: true,
             type: 'IN',
             isInsidePlant: true,
-            plantName: checkData.plant?.name || 'Authorized Plant',
+            plantName,
+            currentLocation: readableLocation,
+            dateTime: currentIndiaDateTime,
+            workingHours: '',
             locationType: 'PLANT',
-            distance: checkData.distance,
-            allowedRadius: checkData.allowedRadius,
+            distance: checkData.distance || 0,
+            allowedRadius: checkData.allowedRadius || 0,
             coords,
           });
         } else {
-          // Employee Outside Plant Radius -> Open Work Location selection (WFH / Field Work)
-          setOutsideSelectModal({
+          const readableLocation = checkData.readableLocation || 'Outside Plant';
+
+          setConfirmModal({
             isOpen: true,
+            type: 'IN',
+            isInsidePlant: false,
+            plantName: 'Outside Plant',
+            currentLocation: readableLocation,
+            dateTime: currentIndiaDateTime,
+            workingHours: '',
+            locationType: 'WORK_FROM_HOME',
+            distance: checkData.distance || 0,
+            allowedRadius: checkData.allowedRadius || 0,
             coords,
-            selectedWorkType: '',
           });
         }
       } else {
-        // Mark OUT: Inside or Outside
+        // Mark OUT: calculate working duration from confirmed Mark IN time
+        const markInDate = activeShift?.markInAt ? new Date(activeShift.markInAt) : now;
+        const diffMinutes = Math.max(0, Math.round((now.getTime() - markInDate.getTime()) / 60000));
+        const workingHourStr = formatHoursHHMM(diffMinutes);
+
+        let plantName = '';
+        let readableLocation = '';
+
         if (checkData.matched) {
-          // Inside plant Mark OUT
-          setConfirmModal({
-            isOpen: true,
-            type: 'OUT',
-            isInsidePlant: true,
-            plantName: checkData.plant?.name || 'Authorized Plant',
-            locationType: 'PLANT',
-            distance: checkData.distance,
-            allowedRadius: checkData.allowedRadius,
-            coords,
-          });
+          plantName = checkData.plant?.name || 'Configured Plant';
+          readableLocation =
+            checkData.readableLocation ||
+            (checkData.plant?.location ? `${plantName}, ${checkData.plant.location}` : plantName);
         } else {
-          // Outside plant Mark OUT (Allowed per Requirement 6)
-          setConfirmModal({
-            isOpen: true,
-            type: 'OUT',
-            isInsidePlant: false,
-            plantName: 'Outside Plant',
-            locationType: 'OUTSIDE_PLANT',
-            distance: checkData.distance,
-            allowedRadius: checkData.allowedRadius,
-            coords,
-          });
+          plantName = 'Outside-Out';
+          readableLocation = checkData.readableLocation || 'Outside Plant';
         }
+
+        setConfirmModal({
+          isOpen: true,
+          type: 'OUT',
+          isInsidePlant: !!checkData.matched,
+          plantName,
+          currentLocation: readableLocation,
+          dateTime: currentIndiaDateTime,
+          workingHours: workingHourStr,
+          locationType: checkData.matched ? 'PLANT' : 'OUTSIDE_PLANT',
+          distance: checkData.distance || 0,
+          allowedRadius: checkData.allowedRadius || 0,
+          coords,
+        });
       }
     } catch (error) {
       console.error('Attendance error:', error);
@@ -330,37 +362,16 @@ export default function MarkAttendancePage() {
   };
 
   /**
-   * Handle Outside Plant Selection Confirmation (Work From Home / Field Work)
-   */
-  const handleProceedOutsideSelection = () => {
-    if (!outsideSelectModal.selectedWorkType) {
-      setToast({ type: 'error', message: 'Please select either Work From Home or Field Work.' });
-      return;
-    }
-
-    const isWFH = outsideSelectModal.selectedWorkType === 'WORK_FROM_HOME';
-    const locationTitle = isWFH ? 'Work From Home' : 'Field Work';
-
-    setOutsideSelectModal({ ...outsideSelectModal, isOpen: false });
-
-    // Open confirmation modal for WFH / Field Work
-    setConfirmModal({
-      isOpen: true,
-      type: 'IN',
-      isInsidePlant: false,
-      plantName: locationTitle,
-      locationType: outsideSelectModal.selectedWorkType,
-      distance: 0,
-      allowedRadius: 0,
-      coords: outsideSelectModal.coords,
-    });
-  };
-
-  /**
    * Confirm and save attendance record
    */
   const handleConfirmAttendance = async () => {
     if (!confirmModal.coords) return;
+
+    if (confirmModal.type === 'IN' && !confirmModal.isInsidePlant && !confirmModal.locationType) {
+      setToast({ type: 'error', message: 'Please select either Work From Home or Field Work.' });
+      return;
+    }
+
     setProcessing(true);
     setProcessStep('Saving attendance...');
 
@@ -382,7 +393,7 @@ export default function MarkAttendancePage() {
 
       if (!res.ok) {
         setToast({ type: 'error', message: data.error || `Attendance submission failed (${res.status}).` });
-        setConfirmModal({ ...confirmModal, isOpen: false });
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         return;
       }
 
@@ -391,7 +402,7 @@ export default function MarkAttendancePage() {
         message: confirmModal.type === 'IN' ? 'Mark IN Successful' : 'Mark OUT Successful',
       });
 
-      setConfirmModal({ ...confirmModal, isOpen: false });
+      setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       await fetchShiftStatus();
       await fetchHistory();
     } catch (err) {
@@ -440,16 +451,21 @@ export default function MarkAttendancePage() {
           </div>
 
           {/* Current Shift Status Badge */}
-          <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-50 border border-slate-200/70 shadow-2xs">
-            <span
-              className={`w-3 h-3 rounded-full ${
-                activeShift ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
-              }`}
-            />
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              {activeShift ? 'Active Shift in Progress' : 'Off Shift / Ready to Mark In'}
-            </span>
-          </div>
+          {activeShift ? (
+            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 shadow-2xs">
+              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="text-xs sm:text-sm font-bold tracking-tight">
+                Active shift in progress from {formatKolkataDateTime(activeShift.markInAt)}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-50 border border-slate-200/70 shadow-2xs">
+              <span className="w-3 h-3 rounded-full bg-slate-400 shrink-0" />
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Off Shift / Ready to Mark In
+              </span>
+            </div>
+          )}
 
           {/* If on active shift, show details */}
           {activeShift && (
@@ -457,7 +473,7 @@ export default function MarkAttendancePage() {
               <div className="flex justify-between items-center text-blue-900 font-semibold">
                 <span>Mark IN Plant:</span>
                 <span className="font-bold">
-                  {activeShift.markInPlantName || activeShift.plantName || employeeInfo?.plantName || 'Authorized Plant'}
+                  {activeShift.markInPlantName || activeShift.plantName || employeeInfo?.plantName || 'Configured Plant'}
                 </span>
               </div>
               <div className="flex justify-between items-center text-slate-600">
@@ -805,205 +821,146 @@ export default function MarkAttendancePage() {
       </div>
 
 
-      {/* Modal 1: Outside Plant Selection (Section 2 & 3) */}
-      <Modal
-        isOpen={outsideSelectModal.isOpen}
-        onClose={() => setOutsideSelectModal({ ...outsideSelectModal, isOpen: false })}
-        title="Select Work Location"
-      >
-        <div className="space-y-4">
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-center">
-            <AlertTriangle className="w-8 h-8 text-amber-600 mx-auto mb-2" />
-            <p className="font-bold text-sm">
-              You are currently outside all authorized plant locations.
-            </p>
-            <p className="text-xs text-amber-700 mt-1">
-              Please select your current working mode to proceed with Mark IN:
-            </p>
-          </div>
-
-          <div className="space-y-2.5">
-            <label
-              onClick={() =>
-                setOutsideSelectModal({ ...outsideSelectModal, selectedWorkType: 'WORK_FROM_HOME' })
-              }
-              className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                outsideSelectModal.selectedWorkType === 'WORK_FROM_HOME'
-                  ? 'border-blue-600 bg-blue-50/70 text-blue-900 shadow-xs'
-                  : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-              }`}
-            >
-              <input
-                type="radio"
-                name="workType"
-                value="WORK_FROM_HOME"
-                checked={outsideSelectModal.selectedWorkType === 'WORK_FROM_HOME'}
-                onChange={() =>
-                  setOutsideSelectModal({ ...outsideSelectModal, selectedWorkType: 'WORK_FROM_HOME' })
-                }
-                className="w-4 h-4 text-blue-600"
-              />
-              <Home className="w-5 h-5 text-blue-600 flex-shrink-0" />
-              <div className="flex-1">
-                <span className="font-bold text-sm block">Work From Home</span>
-                <span className="text-[11px] text-slate-500">Working remotely from registered home location</span>
-              </div>
-            </label>
-
-            <label
-              onClick={() =>
-                setOutsideSelectModal({ ...outsideSelectModal, selectedWorkType: 'FIELD_WORK' })
-              }
-              className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                outsideSelectModal.selectedWorkType === 'FIELD_WORK'
-                  ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-xs'
-                  : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-              }`}
-            >
-              <input
-                type="radio"
-                name="workType"
-                value="FIELD_WORK"
-                checked={outsideSelectModal.selectedWorkType === 'FIELD_WORK'}
-                onChange={() =>
-                  setOutsideSelectModal({ ...outsideSelectModal, selectedWorkType: 'FIELD_WORK' })
-                }
-                className="w-4 h-4 text-indigo-600"
-              />
-              <Briefcase className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-              <div className="flex-1">
-                <span className="font-bold text-sm block">Field Work</span>
-                <span className="text-[11px] text-slate-500">On-duty external client visit, transit or field assignment</span>
-              </div>
-            </label>
-          </div>
-
-          <div className="pt-2 flex gap-3">
-            <button
-              onClick={() => setOutsideSelectModal({ ...outsideSelectModal, isOpen: false })}
-              className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-sm transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleProceedOutsideSelection}
-              disabled={!outsideSelectModal.selectedWorkType}
-              className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal 2: Final Confirmation Modal (Sections 1, 4, 5, 6) */}
+      {/* Mark IN / Mark OUT Confirmation Popup */}
       <Modal
         isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-        title={`Confirm Mark ${confirmModal.type === 'IN' ? 'IN' : 'OUT'}`}
+        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        title={confirmModal.type === 'IN' ? 'Mark IN Confirmation' : 'Mark OUT Confirmation'}
       >
         <div className="space-y-4">
-          {confirmModal.type === 'IN' ? (
-            confirmModal.isInsidePlant ? (
-              // Case 1: Inside Plant Mark IN
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-center">
-                <CheckCircle2 className="w-9 h-9 text-emerald-600 mx-auto mb-1.5" />
-                <p className="font-bold text-sm">Plant Attendance</p>
-                <p className="text-xs text-emerald-700 mt-0.5">
-                  You are inside the authorized plant radius zone
-                </p>
-              </div>
-            ) : (
-              // Case 2: WFH / Field Work Mark IN
-              <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-center">
-                <Building2 className="w-9 h-9 text-blue-600 mx-auto mb-1.5" />
-                <p className="font-bold text-sm">
-                  {confirmModal.locationType === 'WORK_FROM_HOME' ? 'Work From Home' : 'Field Work'}
-                </p>
-                <p className="text-xs text-blue-700 mt-0.5">
-                  Attendance recorded outside plant location
-                </p>
-              </div>
-            )
-          ) : (
-            // Mark OUT Cases
-            confirmModal.isInsidePlant ? (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-center">
-                <LogOut className="w-9 h-9 text-emerald-600 mx-auto mb-1.5" />
-                <p className="font-bold text-sm">Plant Mark OUT</p>
-                <p className="text-xs text-emerald-700 mt-0.5">
-                  Detected Plant: {confirmModal.plantName}
-                </p>
-              </div>
-            ) : (
-              // Outside from Plant Mark OUT (Section 6)
-              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-center">
-                <AlertTriangle className="w-9 h-9 text-amber-600 mx-auto mb-1.5" />
-                <p className="font-bold text-sm">
-                  You are currently outside the plant location.
-                </p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  Mark Out From: <strong>Outside Plant</strong>
-                </p>
-              </div>
-            )
-          )}
+          <div className="bg-slate-50/90 rounded-2xl p-4 sm:p-5 space-y-3.5 text-xs sm:text-sm border border-slate-200">
+            {/* Employee Name */}
+            <div className="flex justify-between items-start gap-3">
+              <span className="font-semibold text-slate-500 whitespace-nowrap">Employee Name:</span>
+              <span className="font-extrabold text-slate-900 text-right">
+                {employeeInfo?.fullName || employeeInfo?.name || employeeInfo?.employeeId || 'Employee'}
+              </span>
+            </div>
 
-          <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5 text-xs text-slate-700 border border-slate-100">
-            {confirmModal.type === 'IN' ? (
-              confirmModal.isInsidePlant ? (
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-500">Plant:</span>
-                  <span className="font-bold text-slate-900">{confirmModal.plantName}</span>
+            {/* Radius Plant Name */}
+            <div className="flex justify-between items-start gap-3">
+              <span className="font-semibold text-slate-500 whitespace-nowrap">Radius Plant Name:</span>
+              <span
+                className={`font-bold text-right ${
+                  confirmModal.isInsidePlant ? 'text-emerald-700' : 'text-slate-800'
+                }`}
+              >
+                {confirmModal.plantName}
+              </span>
+            </div>
+
+            {/* If Mark IN outside all plants: Work from Home / Field Work Selection */}
+            {confirmModal.type === 'IN' && !confirmModal.isInsidePlant && (
+              <div className="pt-2 pb-1 border-t border-slate-200/80">
+                <span className="font-bold text-slate-700 text-xs block mb-2">
+                  Select Attendance Type:
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    onClick={() =>
+                      setConfirmModal((prev) => ({ ...prev, locationType: 'WORK_FROM_HOME' }))
+                    }
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer text-xs transition-all ${
+                      confirmModal.locationType === 'WORK_FROM_HOME'
+                        ? 'border-emerald-600 bg-emerald-50/90 text-emerald-950 font-bold shadow-2xs'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="confirmWorkType"
+                      value="WORK_FROM_HOME"
+                      checked={confirmModal.locationType === 'WORK_FROM_HOME'}
+                      onChange={() =>
+                        setConfirmModal((prev) => ({ ...prev, locationType: 'WORK_FROM_HOME' }))
+                      }
+                      className="w-3.5 h-3.5 text-emerald-600"
+                    />
+                    <Home className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Work from Home</span>
+                  </label>
+
+                  <label
+                    onClick={() =>
+                      setConfirmModal((prev) => ({ ...prev, locationType: 'FIELD_WORK' }))
+                    }
+                    className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer text-xs transition-all ${
+                      confirmModal.locationType === 'FIELD_WORK'
+                        ? 'border-emerald-600 bg-emerald-50/90 text-emerald-950 font-bold shadow-2xs'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="confirmWorkType"
+                      value="FIELD_WORK"
+                      checked={confirmModal.locationType === 'FIELD_WORK'}
+                      onChange={() =>
+                        setConfirmModal((prev) => ({ ...prev, locationType: 'FIELD_WORK' }))
+                      }
+                      className="w-3.5 h-3.5 text-emerald-600"
+                    />
+                    <Briefcase className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Field Work</span>
+                  </label>
                 </div>
-              ) : (
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-slate-500">Work Location:</span>
-                  <span className="font-bold text-blue-700">
-                    {confirmModal.locationType === 'WORK_FROM_HOME' ? 'Work From Home' : 'Field Work'}
-                  </span>
-                </div>
-              )
-            ) : (
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-slate-500">Mark Out From:</span>
-                <span className="font-bold text-slate-900">{confirmModal.plantName}</span>
               </div>
             )}
 
-            <div className="flex justify-between items-center">
-              <span className="font-medium text-slate-500">Date:</span>
-              <span className="font-mono font-semibold">{currentDateFormatted}</span>
+            {/* Current Location */}
+            <div className="flex justify-between items-start gap-3">
+              <span className="font-semibold text-slate-500 whitespace-nowrap">Current Location:</span>
+              <span className="font-medium text-slate-800 text-right max-w-[280px] break-words">
+                {confirmModal.currentLocation || '---'}
+              </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="font-medium text-slate-500">Time:</span>
-              <span className="font-mono font-semibold">{currentTimeFormatted}</span>
+
+            {/* Mark IN or Mark OUT Date & Time */}
+            <div className="flex justify-between items-start gap-3">
+              <span className="font-semibold text-slate-500 whitespace-nowrap">
+                {confirmModal.type === 'IN' ? 'Mark IN:' : 'Mark OUT:'}
+              </span>
+              <span className="font-mono font-bold text-slate-900 text-right">
+                {confirmModal.dateTime}
+              </span>
             </div>
+
+            {/* Working Hour (Mark OUT only) */}
+            {confirmModal.type === 'OUT' && (
+              <div className="flex justify-between items-center gap-3 pt-2 border-t border-slate-200/80">
+                <span className="font-bold text-slate-700 whitespace-nowrap">Working Hour:</span>
+                <span className="font-mono font-extrabold text-blue-700 text-right text-base">
+                  {confirmModal.workingHours || '00:00'}
+                </span>
+              </div>
+            )}
           </div>
 
-          <p className="text-center text-xs font-semibold text-slate-700">
-            Confirm Mark {confirmModal.type === 'IN' ? 'IN' : 'OUT'}?
-          </p>
-
+          {/* Footer buttons: Cancel (Red) | Confirm (Green) */}
           <div className="pt-2 flex gap-3">
             <button
-              onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-              className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-sm transition-colors cursor-pointer"
+              onClick={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+              className="flex-1 py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-bold text-sm shadow-md shadow-red-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              Cancel
+              <span className="text-sm">🔴</span>
+              <span>Cancel</span>
             </button>
             <button
               onClick={handleConfirmAttendance}
               disabled={processing}
-              className={`flex-1 py-3 px-4 rounded-xl text-white font-bold text-sm shadow-md transition-all cursor-pointer ${
-                confirmModal.type === 'IN'
-                  ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
-                  : 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
-              }`}
+              className="flex-1 py-3 px-4 rounded-xl bg-green-600 hover:bg-green-700 active:scale-[0.98] disabled:opacity-50 text-white font-bold text-sm shadow-md shadow-green-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              {processing
-                ? 'Saving...'
-                : `Confirm Mark ${confirmModal.type === 'IN' ? 'IN' : 'Out'}`}
+              {processing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm">🟢</span>
+                  <span>Confirm</span>
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -81,20 +81,22 @@ export async function GET(request) {
       let realPlant = activeSession.markInPlantName;
       if (!realPlant || realPlant === '-' || realPlant === 'Authorized Plant') {
         if (rawObj.markInLocationType === 'WORK_FROM_HOME' || rawObj.workType === 'WORK_FROM_HOME') {
-          realPlant = 'Outside Plant - WFM';
+          realPlant = 'Work from Home';
         } else if (rawObj.markInLocationType === 'FIELD_WORK' || rawObj.workType === 'FIELD_WORK') {
-          realPlant = 'Outside Plant - Field Work';
+          realPlant = 'Field Work';
         } else {
           realPlant =
             cleanPlant(rawObj.markInPlantName) ||
             cleanPlant(rawObj.inPlant) ||
             cleanPlant(rawObj.plantName) ||
             assignedPlant ||
-            'Authorized Plant';
+            'Configured Plant';
         }
       }
       activeSession.plantName = realPlant;
       activeSession.markInPlantName = realPlant;
+      activeSession.markInLocationType = rawObj.markInLocationType || (rawObj.workType ? rawObj.workType : 'PLANT');
+      activeSession.attendanceType = rawObj.attendanceType || (activeSession.markInLocationType === 'WORK_FROM_HOME' ? 'Work from Home' : (activeSession.markInLocationType === 'FIELD_WORK' ? 'Field Work' : realPlant));
       activeSession.markOutPlantName = 'Under Process';
       activeSession.markOutDateTime = 'Pending';
     }

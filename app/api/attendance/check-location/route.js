@@ -1,11 +1,29 @@
 import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Plant from '@/models/Plant';
-import Employee from '@/models/Employee';
 import { authorizeEmployee } from '@/lib/rbac';
 import { matchPlantForLocation } from '@/lib/geolocation';
-import { getAssignedPlantQuery, getAssignedPlantReferences } from '@/lib/attendanceLocation';
 import { normalizePlant } from '@/lib/normalize';
+
+async function getReadableAddress(lat, lng) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+      headers: { 'User-Agent': 'SikkaAttendanceApp/1.0' },
+      signal: timer.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.display_name) {
+        const parts = data.display_name.split(',').map((s) => s.trim()).filter(Boolean);
+        return parts.slice(0, 4).join(', ');
+      }
+    }
+  } catch {}
+  return `Outside Plant (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+}
 
 export async function POST(request) {
   const auth = await authorizeEmployee(request);
@@ -27,26 +45,19 @@ export async function POST(request) {
 
     await connectToDatabase();
 
-    const { session } = auth;
-    const employee = await Employee.findOne({
-      $or: [
-        { employeeId: session.employeeId },
-        { _id: session.sub },
-        ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
-      ],
-    }).select('plantId plantName unitIds').lean();
-    const assignedPlantReferences = getAssignedPlantReferences(employee, session);
-    const rawPlants = assignedPlantReferences.length === 0 ? [] : await Plant.find({
-      $and: [
-        { $or: [{ status: 'Active' }, { active: true }] },
-        getAssignedPlantQuery(assignedPlantReferences),
-      ],
-    });
+    // Check against all active configured plants in the system
+    const rawPlants = await Plant.find({
+      $or: [{ status: 'Active' }, { active: true }],
+    }).lean();
+
     if (rawPlants.length === 0) {
+      const readableLocation = await getReadableAddress(lat, lng);
       return NextResponse.json({
         matched: false,
-        reason: 'NO_ASSIGNED_ACTIVE_PLANT',
-        message: 'No active plant is assigned to this employee.',
+        outside: true,
+        reason: 'NO_ACTIVE_PLANTS',
+        message: 'No active plants configured in the system.',
+        readableLocation,
       });
     }
 
@@ -54,27 +65,37 @@ export async function POST(request) {
     const matchResult = matchPlantForLocation(lat, lng, activePlants);
 
     if (matchResult.matched) {
+      const pName = matchResult.plant.plantName || matchResult.plant.name;
+      const pLoc = matchResult.plant.location;
+      const readableLocation = pLoc
+        ? (pLoc.toLowerCase().includes(pName.toLowerCase()) ? pLoc : `${pName}, ${pLoc}`)
+        : pName;
+
       return NextResponse.json({
         matched: true,
         plant: {
           id: matchResult.plant.plantId,
-          name: matchResult.plant.plantName,
-          location: matchResult.plant.location,
+          name: pName,
+          location: pLoc,
           radiusMeters: matchResult.plant.radiusMeters,
         },
+        readableLocation,
         distance: matchResult.distance,
         allowedRadius: matchResult.radiusMeters,
       });
     }
 
+    const readableLocation = await getReadableAddress(lat, lng);
+
     return NextResponse.json({
       matched: false,
       outside: true,
       reason: 'OUTSIDE_RADIUS',
-      nearestPlant: matchResult.nearestPlant ? matchResult.nearestPlant.plantName : 'Authorized Plant',
+      nearestPlant: matchResult.nearestPlant ? matchResult.nearestPlant.plantName : 'Configured Plant',
       distance: matchResult.distance,
       allowedRadius: matchResult.radiusMeters,
-      message: 'You are currently outside all authorized plant locations.',
+      readableLocation,
+      message: 'You are currently outside all configured plant locations.',
     });
   } catch (error) {
     console.error('Location check error:', error);

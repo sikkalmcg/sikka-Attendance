@@ -2,17 +2,10 @@ import { NextResponse } from 'next/server';
 import connectToDatabase from '@/lib/mongodb';
 import Attendance from '@/models/Attendance';
 import Plant from '@/models/Plant';
-import Employee from '@/models/Employee';
 import { authorizeEmployee } from '@/lib/rbac';
-import {
-  OUTSIDE_PLANT_LABEL,
-  evaluateAssignedPlantLocation,
-  getAssignedPlantQuery,
-  getAssignedPlantReferences,
-} from '@/lib/attendanceLocation';
+import { evaluatePlantLocation } from '@/lib/attendanceLocation';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { normalizePlant, normalizeAttendance } from '@/lib/normalize';
-import { getTodayDateString, getAttendanceDateString } from '@/lib/timezone';
 import { formatInTimeZone } from 'date-fns-tz';
 
 export async function POST(request) {
@@ -87,56 +80,44 @@ export async function POST(request) {
       );
     }
 
-    // Evaluate this Mark IN only against the employee's assigned plant configuration.
-    const employee = await Employee.findOne({
-      $or: [
-        { employeeId: session.employeeId },
-        { _id: session.sub },
-        ...(session.aadhaarNumber ? [{ aadhaarNumber: session.aadhaarNumber }, { aadhaar: session.aadhaarNumber }] : []),
-      ],
-    }).select('plantId plantName unitIds').lean();
-    const assignedPlantReferences = getAssignedPlantReferences(employee, session);
-    if (assignedPlantReferences.length === 0) {
-      return NextResponse.json({ error: 'No plant is assigned to this employee.' }, { status: 400 });
-    }
-
+    // Evaluate Mark IN against all configured active plants in the system
     const rawPlants = await Plant.find({
-      $and: [
-        { $or: [{ status: 'Active' }, { active: true }] },
-        getAssignedPlantQuery(assignedPlantReferences),
-      ],
+      $or: [{ status: 'Active' }, { active: true }],
     }).lean();
-    const assignedPlants = rawPlants.map(normalizePlant);
-    if (assignedPlants.length === 0) {
-      return NextResponse.json({ error: 'No active assigned plant is configured for this employee.' }, { status: 400 });
-    }
+    const activePlants = rawPlants.map(normalizePlant);
 
-    const locationResult = evaluateAssignedPlantLocation(lat, lng, assignedPlants);
+    const locationResult = evaluatePlantLocation(lat, lng, activePlants);
     let markInLocationType = 'PLANT';
     let plantId = locationResult.plantId;
     let plantName = locationResult.plantName;
     let markInPlantName = locationResult.plantName;
+    let attendanceType = locationResult.plantName;
 
     if (!locationResult.withinPlantRadius) {
-      // Outside the assigned plant: employee must provide a valid work type.
+      // Outside all configured plants: employee must select Work From Home or Field Work
       if (!locationType || !['WORK_FROM_HOME', 'FIELD_WORK'].includes(locationType)) {
         return NextResponse.json(
           {
-            error: 'You are outside your assigned plant location. Please select Work From Home or Field Work.',
+            error: 'You are outside all configured plant locations. Please select Work From Home or Field Work.',
             outside: true,
             distance: locationResult.distanceMeters,
-            nearestPlant: assignedPlants[0]?.plantName || 'Assigned Plant',
+            nearestPlant: locationResult.nearestPlant || 'Configured Plant',
             allowedRadius: locationResult.allowedRadiusMeters,
           },
           { status: 400 }
         );
       }
 
+      const isWFH = locationType === 'WORK_FROM_HOME';
+      const selectedTypeName = isWFH ? 'Work from Home' : 'Field Work';
+
       markInLocationType = locationType;
       plantId = null;
-      markInPlantName = locationType === 'WORK_FROM_HOME' ? 'Outside Plant - WFM' : 'Outside Plant - Field Work';
-      plantName = markInPlantName;
+      markInPlantName = selectedTypeName;
+      plantName = selectedTypeName;
+      attendanceType = selectedTypeName;
     }
+
     // Server-authoritative timestamp
     const markInAt = new Date();
 
@@ -151,6 +132,7 @@ export async function POST(request) {
       markInPlantId: plantId,
       markInPlantName,
       markInLocationType,
+      attendanceType,
       markInAt,
       markInLatitude: lat,
       markInLongitude: lng,
