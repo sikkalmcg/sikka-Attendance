@@ -7,6 +7,7 @@ import { evaluatePlantLocation } from '@/lib/attendanceLocation';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { normalizePlant, normalizeAttendance } from '@/lib/normalize';
 import { calculateWorkingMinutes, getRecordMarkInDateTime } from '@/lib/timezone';
+import { resolveReadableLocation } from '@/lib/locationService';
 
 export async function POST(request) {
   const auth = await authorizeEmployee(request);
@@ -15,7 +16,7 @@ export async function POST(request) {
   const { session } = auth;
 
   try {
-    const { latitude, longitude, accuracy } = await request.json();
+    const { latitude, longitude, accuracy, location } = await request.json();
 
     if (latitude === undefined || longitude === undefined) {
       return NextResponse.json({ error: 'Device coordinates are required to mark out.' }, { status: 400 });
@@ -73,6 +74,23 @@ export async function POST(request) {
     const markInDate = getRecordMarkInDateTime(activeSession) || (activeSession.markInAt ? new Date(activeSession.markInAt) : markOutAt);
     const workingMinutes = calculateWorkingMinutes(markInDate, markOutAt);
 
+    const matchedPlant = locationResult.withinPlantRadius
+      ? activePlants.find(
+          (p) =>
+            p.plantId === locationResult.plantId ||
+            p.id === locationResult.plantId ||
+            p._id === locationResult.plantId ||
+            (p.plantName && p.plantName.toLowerCase() === (locationResult.plantName || '').toLowerCase())
+        )
+      : null;
+
+    const markOutLocation = await resolveReadableLocation({
+      latitude: lat,
+      longitude: lng,
+      matchedPlant,
+      clientLocation: location,
+    });
+
     // Use findByIdAndUpdate to avoid Mongoose re-validation and to safely preserve
     // manualAttendanceBy and other existing fields untouched
     const updated = await Attendance.findByIdAndUpdate(
@@ -89,6 +107,7 @@ export async function POST(request) {
           markOutAllowedRadiusMeters: locationResult.allowedRadiusMeters,
           markOutPlantId,
           markOutPlantName,
+          markOutLocation,
           markOutType: 'Self',
           markOutByUserId: null,
           markOutByUserName: null,

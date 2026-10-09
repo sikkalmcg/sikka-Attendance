@@ -15,7 +15,7 @@ import {
 } from '@/lib/timezone';
 
 const ATTENDANCE_PROJECTION =
-  'employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt markInLatitude markInLongitude lat lng latitude longitude markInWithinPlantRadius markInDistanceMeters markInAllowedRadiusMeters inDate inTime inDateTime markOutAt markOutLatitude markOutLongitude latOut lngOut markOutPlantId markOutWithinPlantRadius markOutDistanceMeters markOutAllowedRadiusMeters outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate date remarks remark manualAttendanceBy markInManualBy markOutManualBy mark_in_datetime mark_out_datetime mark_in_time mark_out_time loginTime logoutTime createdAt updatedAt';
+  'employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocation markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt markInLatitude markInLongitude lat lng latitude longitude markInWithinPlantRadius markInDistanceMeters markInAllowedRadiusMeters inDate inTime inDateTime markOutAt markOutLatitude markOutLongitude latOut lngOut markOutPlantId markOutWithinPlantRadius markOutDistanceMeters markOutAllowedRadiusMeters outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName markOutLocation status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate date remarks remark manualAttendanceBy markInManualBy markOutManualBy mark_in_datetime mark_out_datetime mark_in_time mark_out_time loginTime logoutTime createdAt updatedAt';
 
 function hasPlantLabel(value) {
   if (typeof value !== 'string') return false;
@@ -433,6 +433,7 @@ export async function GET(request) {
             plantId: emp.plantId || null,
             plantName: emp.plantName || '',
             markInPlantName: '-',
+            markInLocation: '-',
             markInAt: null,
             markOutAt: null,
             workingMinutes: 0,
@@ -445,6 +446,7 @@ export async function GET(request) {
             date: date,
             markOutType: '-',
             markOutPlantName: '-',
+            markOutLocation: '-',
           });
         }
       }

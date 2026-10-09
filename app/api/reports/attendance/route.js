@@ -151,7 +151,7 @@ export async function GET(request) {
     const finalQuery = query.$and && query.$and.length > 0 ? query : {};
     const fetchLimit = 15000;
     const rawRecords = await Attendance.find(finalQuery)
-      .select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate date remarks remark manualAttendanceBy markInManualBy markOutManualBy mark_in_datetime mark_out_datetime mark_in_time mark_out_time loginTime logoutTime createdAt updatedAt')
+      .select('employeeId employeeName designation plantId plantName markInPlantId markInPlantName markInLocation markInLocationType inPlant outPlant street markInPlant markOutPlant markInAt inDate inTime inDateTime markOutAt outDate outTime outDateTime markOutType markOutByUserId markOutByUserName markOutPlantName markOutLocation status attendanceType workingMinutes hours approvalStatus approved approvedBy approvedAt attendanceDate date remarks remark manualAttendanceBy markInManualBy markOutManualBy mark_in_datetime mark_out_datetime mark_in_time mark_out_time loginTime logoutTime createdAt updatedAt')
       .lean()
       .sort({ markInAt: -1, createdAt: -1, _id: -1 })
       .limit(fetchLimit);
@@ -326,6 +326,8 @@ export async function GET(request) {
               rec.markInPlantName = '-';
               rec.plantName = '-';
               rec.markOutPlantName = '-';
+              rec.markInLocation = '-';
+              rec.markOutLocation = '-';
               rec.markInAt = null;
               rec.markOutAt = null;
               rec.workingMinutes = 0;
@@ -347,6 +349,8 @@ export async function GET(request) {
               date: date,
               markInPlantName: '-',
               markOutPlantName: '-',
+              markInLocation: '-',
+              markOutLocation: '-',
               plantName: '-',
               markInAt: null,
               markOutAt: null,
@@ -419,6 +423,8 @@ export async function GET(request) {
           rec.markInPlantName = '-';
           rec.plantName = '-';
           rec.markOutPlantName = '-';
+          rec.markInLocation = '-';
+          rec.markOutLocation = '-';
         }
 
         if (!rec.attendanceDate && (raw.date || raw.inDate)) {
@@ -503,17 +509,26 @@ export async function GET(request) {
 
       const formattedRows = records.map((r) => {
         const isAbsent = r.status === 'ABSENT' || String(r.status).toLowerCase() === 'absent';
+        const markInLoc = isAbsent ? '-' : (r.markInLocation || 'Location Not Available');
+        const markOutLoc = isAbsent
+          ? '-'
+          : r.status === 'ACTIVE'
+          ? 'Under Process'
+          : (r.markOutLocation || (r.markOutAt ? 'Location Not Available' : '-'));
+
         return {
           'Employee ID': r.employeeId || '-',
           'Employee Name': r.employeeName || '-',
           'Designation': r.designation || 'Staff',
           'Date': r.attendanceDate || '-',
           'Mark In Plant': isAbsent ? '-' : (r.markInPlantName || r.plantName || '-'),
+          'Mark IN Location': markInLoc,
           'Mark IN Date Time': !isAbsent && r.markInAt ? formatKolkataDateTime(r.markInAt) : '-',
           'Mark Out Date Time': !isAbsent && r.markOutAt ? formatKolkataDateTime(r.markOutAt) : '-',
           'Working Hour': !isAbsent && r.workingMinutes > 0 ? formatWorkingHours(r.workingMinutes) : '00:00 Hours',
           'Mark Out Type': isAbsent ? '-' : (r.markOutType || 'Manual Mark-Out'),
           'Mark Out Plant': isAbsent ? '-' : (r.markOutPlantName || r.plantName || '-'),
+          'Mark OUT Location': markOutLoc,
           'Status': isAbsent ? 'Absent' : 'Present',
           'Manual Attendance By': getManualAttendanceDisplay(r),
           'Approved By': r.approvedBy || '-',

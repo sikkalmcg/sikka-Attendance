@@ -281,6 +281,103 @@ export default function ApprovalPage() {
     return 'Self';
   };
 
+  // Helper to determine Mark IN Location display string per rules:
+  // - Show 'Manual' if Mark IN was entered or updated manually by an authorized user
+  // - Show employee's actual readable location if self-marked
+  // - Show 'Location Not Available' if location is unavailable
+  // - Show '-' if absent
+  const getApprovalMarkInLocation = (record) => {
+    const isAbsent = record.status === 'ABSENT' || (!record.markInAt && !record.markOutAt);
+    if (isAbsent || !record.markInAt) {
+      return '-';
+    }
+
+    const isManualIn =
+      Boolean(record.markInManualBy) ||
+      (Boolean(record.manualAttendanceBy) &&
+        !record.markOutManualBy &&
+        (record.markOutType === 'Self' || record.markOutType === 'SELF' || !record.markInLatitude || record.markInLatitude === 0));
+
+    if (isManualIn) {
+      return 'Manual';
+    }
+
+    if (record.markInLocation && record.markInLocation !== 'Location Not Available' && record.markInLocation !== '-') {
+      return record.markInLocation;
+    }
+
+    if (record.street && typeof record.street === 'string' && record.street.trim() && !/^[-+]?\d*\.?\d+,\s*[-+]?\d*\.?\d+$/.test(record.street.trim())) {
+      return record.street.trim();
+    }
+
+    if (
+      record.markInWithinPlantRadius === true ||
+      (record.markInPlantName &&
+        record.markInPlantName !== '-' &&
+        !record.markInPlantName.toLowerCase().includes('outside'))
+    ) {
+      return record.markInPlantName;
+    }
+
+    if (record.plantName && record.plantName !== '-' && !record.plantName.toLowerCase().includes('outside')) {
+      return record.plantName;
+    }
+
+    if (record.markInLocation === 'Location Not Available') {
+      return 'Location Not Available';
+    }
+
+    return 'Location Not Available';
+  };
+
+  // Helper to determine Mark Out Location display string per rules:
+  // - Show 'Manual' if Mark Out was entered or updated manually by an authorized user
+  // - Show employee's actual readable location if self-marked
+  // - Show 'Location Not Available' if location is unavailable
+  // - Show 'Under Process' if active running session
+  // - Show '-' if absent or not yet marked out
+  const getApprovalMarkOutLocation = (record) => {
+    const isAbsent = record.status === 'ABSENT' || (!record.markInAt && !record.markOutAt);
+    if (isAbsent) {
+      return '-';
+    }
+
+    if (!record.markOutAt) {
+      return record.status === 'ACTIVE' ? 'Under Process' : '-';
+    }
+
+    const rawOutType = String(record.markOutType || '').toUpperCase().trim();
+    const isManualOut =
+      Boolean(record.markOutManualBy) ||
+      rawOutType === 'MANUAL' ||
+      Boolean(record.markOutByUserName) ||
+      (Boolean(record.manualAttendanceBy) && !record.markInManualBy && (!record.markOutLatitude || record.markOutLatitude === 0));
+
+    if (isManualOut) {
+      return 'Manual';
+    }
+
+    if (record.markOutLocation && record.markOutLocation !== 'Location Not Available' && record.markOutLocation !== '-') {
+      return record.markOutLocation;
+    }
+
+    if (
+      record.markOutWithinPlantRadius === true ||
+      (record.markOutPlantName &&
+        record.markOutPlantName !== '-' &&
+        !record.markOutPlantName.toLowerCase().includes('outside') &&
+        record.markOutPlantName !== 'Auto-Out')
+    ) {
+      return record.markOutPlantName;
+    }
+
+    if (record.markOutLocation === 'Location Not Available' || record.markOutPlantName === 'Auto-Out' || record.autoMarkOut) {
+      return 'Location Not Available';
+    }
+
+    return 'Location Not Available';
+  };
+
   // Global case-insensitive search across text, digits, IDs, Names, Dates, Plants, Statuses, etc.
   const filteredAttendances = attendances.filter((record) => {
     // Strict separation: Pending Approvals shows only unapproved; Approved History shows only approved
@@ -308,7 +405,12 @@ export default function ApprovalPage() {
       record.date,
       formattedDate,
       record.markInPlantName,
+      getApprovalMarkInLocation(record),
+      record.markInLocation,
       record.markOutPlantName,
+      getApprovalMarkOutLocation(record),
+      record.markOutLocation,
+      record.street,
       record.plantName,
       record.status,
       record.approvalStatus,
@@ -349,6 +451,9 @@ export default function ApprovalPage() {
       } else if (sortField === 'markInPlantName') {
         valA = a.markInPlantName || a.plantName || '';
         valB = b.markInPlantName || b.plantName || '';
+      } else if (sortField === 'markInLocation') {
+        valA = getApprovalMarkInLocation(a);
+        valB = getApprovalMarkInLocation(b);
       } else if (sortField === 'markInAt') {
         valA = a.markInAt || a.inDateTime || '';
         valB = b.markInAt || b.inDateTime || '';
@@ -371,6 +476,9 @@ export default function ApprovalPage() {
       } else if (sortField === 'markOutPlantName') {
         valA = a.markOutPlantName || '';
         valB = b.markOutPlantName || '';
+      } else if (sortField === 'markOutLocation') {
+        valA = getApprovalMarkOutLocation(a);
+        valB = getApprovalMarkOutLocation(b);
       } else if (sortField === 'approvedBy') {
         valA = a.approvedBy || '';
         valB = b.approvedBy || '';
@@ -975,7 +1083,7 @@ export default function ApprovalPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={activeTab === 'PENDING' ? 14 : 14}
+                      colSpan={14}
                       className="py-12 text-center text-slate-400 font-medium"
                     >
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
@@ -985,7 +1093,7 @@ export default function ApprovalPage() {
                 ) : sortedAttendances.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={activeTab === 'PENDING' ? 14 : 14}
+                      colSpan={14}
                       className="py-12 text-center text-slate-400 font-medium"
                     >
                       {searchTerm || selectedDate ? (

@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Building2,
   Check,
-  Database,
   X,
 } from 'lucide-react';
 import {
@@ -51,7 +50,6 @@ export default function ReportPage() {
   const [dateFrom, setDateFrom] = useState(defaultFrom);
   const [dateTo, setDateTo] = useState(defaultTo);
   const [selectedStatus, setSelectedStatus] = useState('ALL'); // 'ALL' | 'Present' | 'Absent'
-  const [allTime, setAllTime] = useState(false); // Fetch all data from database mode
   const [exporting, setExporting] = useState(false);
 
   // Search filter
@@ -91,6 +89,8 @@ export default function ReportPage() {
         const formattedDate = formatAttendanceDateWithWeek(r.attendanceDate || r.inDate || r.date || r.markInAt).toLowerCase();
         const inPlant = String(r.markInPlantName || r.plantName || '').toLowerCase();
         const outPlant = String(r.markOutPlantName || r.plantName || '').toLowerCase();
+        const inLoc = String(r.markInLocation || '').toLowerCase();
+        const outLoc = String(r.markOutLocation || '').toLowerCase();
         const inTime = r.markInAt ? formatKolkataDateTime(r.markInAt).toLowerCase() : '';
         const outTime = r.markOutAt ? formatKolkataDateTime(r.markOutAt).toLowerCase() : '';
         const status = (r.status === 'ABSENT' || String(r.status).toLowerCase() === 'absent') ? 'absent' : 'present';
@@ -108,6 +108,8 @@ export default function ReportPage() {
           formattedDate.includes(q) ||
           inPlant.includes(q) ||
           outPlant.includes(q) ||
+          inLoc.includes(q) ||
+          outLoc.includes(q) ||
           inTime.includes(q) ||
           outTime.includes(q) ||
           status.includes(q) ||
@@ -157,6 +159,12 @@ export default function ReportPage() {
           return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
         }
 
+        if (sortField === 'markInLocation') {
+          valA = a.markInLocation || '';
+          valB = b.markInLocation || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
         if (sortField === 'markInAt') {
           valA = a.markInAt ? new Date(a.markInAt).getTime() : 0;
           valB = b.markInAt ? new Date(b.markInAt).getTime() : 0;
@@ -190,6 +198,12 @@ export default function ReportPage() {
         if (sortField === 'markOutPlant') {
           valA = a.markOutPlantName || a.plantName || '';
           valB = b.markOutPlantName || b.plantName || '';
+          return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        }
+
+        if (sortField === 'markOutLocation') {
+          valA = a.markOutLocation || '';
+          valB = b.markOutLocation || '';
           return sortDirection === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
         }
 
@@ -259,12 +273,8 @@ export default function ReportPage() {
       setLoading(true);
       const params = new URLSearchParams();
 
-      if (allTime) {
-        params.set('allData', 'true');
-      } else {
-        if (dateFrom) params.set('dateFrom', dateFrom);
-        if (dateTo) params.set('dateTo', dateTo);
-      }
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
 
       if (!selectedPlants.includes('ALL') && selectedPlants.length > 0) {
         params.set('plants', selectedPlants.join(','));
@@ -292,7 +302,7 @@ export default function ReportPage() {
 
   useEffect(() => {
     fetchReports();
-  }, [dateFrom, dateTo, selectedPlants, selectedStatus, allTime]);
+  }, [dateFrom, dateTo, selectedPlants, selectedStatus]);
 
   // Handle Plant Multi-select toggle
   const handleTogglePlant = (pName) => {
@@ -321,12 +331,8 @@ export default function ReportPage() {
       setExporting(true);
       const params = new URLSearchParams();
 
-      if (allTime) {
-        params.set('allData', 'true');
-      } else {
-        if (dateFrom) params.set('dateFrom', dateFrom);
-        if (dateTo) params.set('dateTo', dateTo);
-      }
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
 
       if (!selectedPlants.includes('ALL') && selectedPlants.length > 0) {
         params.set('plants', selectedPlants.join(','));
@@ -343,9 +349,9 @@ export default function ReportPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = allTime
-        ? `attendance_report_ALL_DATABASE_RECORDS.xlsx`
-        : `attendance_report_${dateFrom}_to_${dateTo}.xlsx`;
+      a.download = (dateFrom && dateTo)
+        ? `attendance_report_${dateFrom}_to_${dateTo}.xlsx`
+        : `attendance_report.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -379,42 +385,29 @@ export default function ReportPage() {
               Attendance Report
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              {allTime ? (
-                <span>Fetching <strong className="text-blue-600 font-bold">ALL database records</strong> across the entire attendance collection</span>
-              ) : (
-                <span>Showing <strong className="text-slate-700 font-bold">Attendance Records</strong> for the selected period</span>
-              )}
+              Showing <strong className="text-slate-700 font-bold">Attendance Records</strong> from database for the selected period
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-            {/* Fetch All Data from DB Toggle Button */}
-            <button
-              onClick={() => setAllTime(!allTime)}
-              disabled={loading}
-              className={`inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-xs flex-1 sm:flex-none ${
-                allTime
-                  ? 'bg-blue-600 text-white shadow-blue-600/20 ring-2 ring-blue-500'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Database className={`w-4 h-4 ${allTime ? 'text-white' : 'text-blue-600'}`} />
-              <span>{allTime ? 'All Data (DB)' : 'Fetch All from DB'}</span>
-            </button>
-
-            {/* Section 26: Export Excel Button */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Download Excel Icon Button */}
             <button
               onClick={handleExportExcel}
               disabled={exporting || loading}
-              className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60 shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex-1 sm:flex-none"
+              className="p-2 sm:p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white disabled:opacity-50 shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center shrink-0"
+              title={exporting ? 'Downloading Excel Report...' : 'Download Excel Report'}
+              aria-label="Download Excel Report"
             >
-              <Download className={`w-4 h-4 ${exporting ? 'animate-bounce' : ''}`} />
-              <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
+              {exporting ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
             </button>
 
             <button
               onClick={fetchReports}
-              className="p-2 sm:p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+              className="p-2 sm:p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-95 transition-colors cursor-pointer shrink-0"
               title="Refresh Report"
               aria-label="Refresh Report"
             >
@@ -442,7 +435,7 @@ export default function ReportPage() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search across Employee ID, Name, Designation, Date, Plant, Status, Working Hours, Manual By, Approved By, Remarks..."
+              placeholder="Search across Employee ID, Name, Designation, Date, Plant, Location, Status, Working Hours, Manual By, Approved By, Remarks..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -567,7 +560,7 @@ export default function ReportPage() {
               {searchTerm && <span className="ml-1 text-blue-600 font-semibold">(matching &ldquo;{searchTerm}&rdquo;)</span>}
             </span>
             <span className="text-[11px] font-mono">
-              {allTime ? 'Mode: All Time (Full Database Records)' : `Date Range: ${dateFrom} to ${dateTo}`}
+              {dateFrom && dateTo ? `Date Range: ${dateFrom} to ${dateTo}` : 'Attendance Records'}
             </span>
           </div>
 

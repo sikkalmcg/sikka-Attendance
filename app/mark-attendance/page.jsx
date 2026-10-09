@@ -386,6 +386,7 @@ export default function MarkAttendancePage() {
           longitude: confirmModal.coords.longitude,
           accuracy: confirmModal.coords.accuracy,
           locationType: confirmModal.locationType,
+          location: confirmModal.currentLocation,
         }),
       });
 

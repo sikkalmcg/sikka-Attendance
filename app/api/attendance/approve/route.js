@@ -225,6 +225,8 @@ export async function POST(request) {
           approvedBy: approverName,
           approvedAt: now,
           remarks: 'Approved Absent',
+          markInLocation: '-',
+          markOutLocation: '-',
         });
         updatedRecords.push(normalizeAttendance(created));
       }

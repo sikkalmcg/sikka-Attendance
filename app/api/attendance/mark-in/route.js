@@ -7,6 +7,7 @@ import { evaluatePlantLocation } from '@/lib/attendanceLocation';
 import { processAutoMarkOut } from '@/lib/autoMarkOut';
 import { normalizePlant, normalizeAttendance } from '@/lib/normalize';
 import { formatInTimeZone } from 'date-fns-tz';
+import { resolveReadableLocation } from '@/lib/locationService';
 
 export async function POST(request) {
   const auth = await authorizeEmployee(request);
@@ -15,7 +16,7 @@ export async function POST(request) {
   const { session } = auth;
 
   try {
-    const { latitude, longitude, accuracy, locationType } = await request.json();
+    const { latitude, longitude, accuracy, locationType, location } = await request.json();
 
     if (latitude === undefined || longitude === undefined) {
       return NextResponse.json({ error: 'Device coordinates are required to mark in.' }, { status: 400 });
@@ -121,6 +122,23 @@ export async function POST(request) {
     // Server-authoritative timestamp
     const markInAt = new Date();
 
+    const matchedPlant = locationResult.withinPlantRadius
+      ? activePlants.find(
+          (p) =>
+            p.plantId === locationResult.plantId ||
+            p.id === locationResult.plantId ||
+            p._id === locationResult.plantId ||
+            (p.plantName && p.plantName.toLowerCase() === (locationResult.plantName || '').toLowerCase())
+        )
+      : null;
+
+    const markInLocation = await resolveReadableLocation({
+      latitude: lat,
+      longitude: lng,
+      matchedPlant,
+      clientLocation: location,
+    });
+
     const attendance = await Attendance.create({
       employeeId: session.employeeId,
       employeeName: session.fullName,
@@ -131,6 +149,7 @@ export async function POST(request) {
       plantName,
       markInPlantId: plantId,
       markInPlantName,
+      markInLocation,
       markInLocationType,
       attendanceType,
       markInAt,
