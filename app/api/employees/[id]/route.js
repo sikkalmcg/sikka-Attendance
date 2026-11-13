@@ -11,6 +11,7 @@ import {
 import { hashPassword } from '@/lib/auth';
 import { normalizeEmployee } from '@/lib/normalize';
 import Plant from '@/models/Plant';
+import { parseEmployeePhoto } from '@/lib/employeePhoto';
 
 /**
  * Safely find an employee by the given id string.
@@ -41,13 +42,13 @@ async function findEmployeeById(id) {
 }
 
 export async function GET(request, { params }) {
-  let auth = await authorizeSystemUser(request, 'employee');
-  if (!auth.authorized) {
-    auth = await authorizeSystemUser(request, 'approval');
-  }
-  if (!auth.authorized) return auth.response;
-
   try {
+    let auth = await authorizeSystemUser(request, 'employee');
+    if (!auth.authorized) {
+      auth = await authorizeSystemUser(request, 'approval');
+    }
+    if (!auth.authorized) return auth.response;
+
     const { id } = await params;
     await connectToDatabase();
 
@@ -79,6 +80,9 @@ export async function PUT(request, { params }) {
 
   try {
     const { id } = await params;
+    if (Number(request.headers.get('content-length') || 0) > 3 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Employee profile request exceeds the 3 MB limit.' }, { status: 413 });
+    }
     const data = await request.json();
     await connectToDatabase();
 
@@ -132,6 +136,15 @@ export async function PUT(request, { params }) {
       employee.name = employee.fullName;
     }
     if (data.designation !== undefined) employee.designation = String(data.designation).trim();
+    if (data.photoData !== undefined) {
+      try {
+        const photo = parseEmployeePhoto(data.photoData);
+        employee.photoData = photo.dataUrl;
+        employee.photoMimeType = photo.mimeType;
+      } catch (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+    }
     if (data.attendanceAuthorized !== undefined) employee.attendanceAuthorized = Boolean(data.attendanceAuthorized);
     if (data.status !== undefined) {
       employee.status = data.status;

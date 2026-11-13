@@ -3,6 +3,7 @@ import connectToDatabase from '@/lib/mongodb';
 import Employee from '@/models/Employee';
 import { authorizeSystemUser } from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
+import { allocateEmployeeId } from '@/lib/employeeIds';
 import * as XLSX from 'xlsx';
 
 export async function POST(request) {
@@ -31,10 +32,8 @@ export async function POST(request) {
 
     // Fetch existing records for duplicate check
     const existingEmployees = await Employee.find({}, 'employeeId aadhaarNumber');
-    const existingEmpIdSet = new Set(existingEmployees.map((e) => e.employeeId));
     const existingAadhaarSet = new Set(existingEmployees.map((e) => e.aadhaarNumber));
 
-    const fileEmpIdSet = new Set();
     const fileAadhaarSet = new Set();
 
     let successfullyImported = 0;
@@ -69,13 +68,13 @@ export async function POST(request) {
       const mobile = rawMobile.replace(/\D/g, '');
 
       // Check required fields
-      if (!employeeId || !fullName || !designation || !aadhaar || !mobile) {
+      if (!fullName || !designation || !aadhaar || !mobile) {
         invalidRecords++;
         errors.push({
           row: rowNum,
           employeeId: employeeId || 'N/A',
           field: 'Mandatory Fields',
-          message: 'Missing required field(s): Employee ID, Full Name, Designation, Aadhaar or Mobile.',
+          message: 'Missing required field(s): Full Name, Designation, Aadhaar or Mobile.',
         });
         continue;
       }
@@ -103,18 +102,6 @@ export async function POST(request) {
         continue;
       }
 
-      // Duplicate checks in file
-      if (fileEmpIdSet.has(employeeId)) {
-        duplicateRecords++;
-        errors.push({
-          row: rowNum,
-          employeeId,
-          field: 'Employee ID',
-          message: `Duplicate Employee ID '${employeeId}' in upload file.`,
-        });
-        continue;
-      }
-
       if (fileAadhaarSet.has(aadhaar)) {
         duplicateRecords++;
         errors.push({
@@ -122,18 +109,6 @@ export async function POST(request) {
           employeeId,
           field: 'Aadhaar Number',
           message: `Duplicate Aadhaar '${aadhaar}' in upload file.`,
-        });
-        continue;
-      }
-
-      // Duplicate checks in DB
-      if (existingEmpIdSet.has(employeeId)) {
-        duplicateRecords++;
-        errors.push({
-          row: rowNum,
-          employeeId,
-          field: 'Employee ID',
-          message: `Employee ID '${employeeId}' already exists in the database.`,
         });
         continue;
       }
@@ -150,7 +125,6 @@ export async function POST(request) {
       }
 
       // Mark as seen in this file
-      fileEmpIdSet.add(employeeId);
       fileAadhaarSet.add(aadhaar);
 
       // Authorization & Status parsing
@@ -162,7 +136,6 @@ export async function POST(request) {
       const status = rawStatus.toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
 
       validToInsert.push({
-        employeeId,
         fullName,
         designation,
         aadhaarNumber: aadhaar,
@@ -176,8 +149,10 @@ export async function POST(request) {
     for (const item of validToInsert) {
       try {
         const passwordHash = await hashPassword(item.mobileNumber);
+        const employeeId = await allocateEmployeeId();
         await Employee.create({
           ...item,
+          employeeId,
           passwordHash,
         });
         successfullyImported++;
@@ -185,7 +160,7 @@ export async function POST(request) {
         invalidRecords++;
         errors.push({
           row: 0,
-          employeeId: item.employeeId,
+          employeeId: item.employeeId || 'Auto-assigned',
           field: 'Database',
           message: insertErr.message || 'Insert failed',
         });

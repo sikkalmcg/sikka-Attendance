@@ -7,7 +7,6 @@ export async function GET(request) {
     const format = searchParams.get('format') || 'xlsx';
 
     const headers = [
-      'Employee ID',
       'Employee Full Name',
       'Designation',
       'Aadhaar Number',
@@ -20,7 +19,6 @@ export async function GET(request) {
     
     // Set column widths
     worksheet['!cols'] = [
-      { wch: 15 },
       { wch: 22 },
       { wch: 20 },
       { wch: 18 },

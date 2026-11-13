@@ -5,6 +5,8 @@ import Plant from '@/models/Plant';
 import { authorizeSystemUser, getScopedPlantContext, hasPlantAccess } from '@/lib/rbac';
 import { hashPassword } from '@/lib/auth';
 import { normalizeEmployee } from '@/lib/normalize';
+import { allocateEmployeeId } from '@/lib/employeeIds';
+import { parseEmployeePhoto } from '@/lib/employeePhoto';
 
 export async function GET(request) {
   // Allow users with 'employee' or 'approval' permission to fetch scoped employees
@@ -69,9 +71,26 @@ export async function GET(request) {
     const query = queryParts.length > 0 ? { $and: queryParts } : {};
 
     const rawEmployees = await Employee.find(query)
-      .select('-passwordHash -avatar -photo -image -profileImage')
+      .select('-passwordHash -avatar -photo -image -profileImage -photoData -photoMimeType')
       .lean()
       .sort({ _id: -1 });
+    const employeesWithPhotos = await Employee.find({
+      $and: [
+        query,
+        {
+          $or: [
+            { photoData: { $exists: true, $ne: '' } },
+            { avatar: { $regex: /^data:image\//i } },
+            { photo: { $regex: /^data:image\//i } },
+            { image: { $regex: /^data:image\//i } },
+            { profileImage: { $regex: /^data:image\//i } },
+          ],
+        },
+      ],
+    })
+      .select('_id')
+      .lean();
+    const photoEmployeeIds = new Set(employeesWithPhotos.map((employee) => String(employee._id)));
 
     const rawPlants = await Plant.find().select('plantId plantName name').lean();
     const plantMap = new Map();
@@ -84,6 +103,7 @@ export async function GET(request) {
 
     const employees = rawEmployees.map((raw) => {
       const emp = normalizeEmployee(raw);
+      emp.hasPhoto = photoEmployeeIds.has(String(raw._id));
       if (!emp.plantName || plantMap.has(emp.plantName) || /^[0-9a-zA-Z]{15,30}$/.test(emp.plantName)) {
         const lookup = emp.plantId || (Array.isArray(raw.unitIds) ? raw.unitIds[0] : '');
         if (lookup && plantMap.has(String(lookup))) {
@@ -107,9 +127,11 @@ export async function POST(request) {
   if (!auth.authorized) return auth.response;
 
   try {
+    if (Number(request.headers.get('content-length') || 0) > 3 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Employee profile request exceeds the 3 MB limit.' }, { status: 413 });
+    }
     const data = await request.json();
     const {
-      employeeId,
       fullName,
       designation,
       aadhaarNumber,
@@ -118,19 +140,27 @@ export async function POST(request) {
       plantName,
       attendanceAuthorized,
       status,
+      photoData,
     } = data;
 
     // Mandatory validations
-    if (!employeeId || !fullName || !designation || !aadhaarNumber || !mobileNumber) {
+    if (!fullName || !designation || !aadhaarNumber || !mobileNumber) {
       return NextResponse.json(
-        { error: 'Employee ID, Full Name, Designation, Aadhaar Number, and Mobile Number are mandatory.' },
+        { error: 'Full Name, Designation, Aadhaar Number, and Mobile Number are mandatory.' },
         { status: 400 }
       );
     }
 
-    const cleanEmployeeId = String(employeeId).trim().toUpperCase();
     const cleanAadhaar = String(aadhaarNumber).trim().replace(/\s+/g, '');
     const cleanMobile = String(mobileNumber).trim();
+    let photo = null;
+    if (photoData) {
+      try {
+        photo = parseEmployeePhoto(photoData);
+      } catch (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+    }
 
     if (!/^\d{12}$/.test(cleanAadhaar)) {
       return NextResponse.json({ error: 'Aadhaar Number must be exactly 12 digits.' }, { status: 400 });
@@ -178,12 +208,6 @@ export async function POST(request) {
       }
     }
 
-    // Check duplicates
-    const duplicateEmpId = await Employee.findOne({ employeeId: cleanEmployeeId });
-    if (duplicateEmpId) {
-      return NextResponse.json({ error: `Employee ID ${cleanEmployeeId} is already registered.` }, { status: 400 });
-    }
-
     const duplicateAadhaar = await Employee.findOne({ aadhaarNumber: cleanAadhaar });
     if (duplicateAadhaar) {
       return NextResponse.json({ error: 'Aadhaar Number is already registered with another employee.' }, { status: 400 });
@@ -191,9 +215,10 @@ export async function POST(request) {
 
     // Password is set to Employee Mobile Number hashed
     const passwordHash = await hashPassword(cleanMobile);
+    const employeeId = await allocateEmployeeId();
 
     const employee = await Employee.create({
-      employeeId: cleanEmployeeId,
+      employeeId,
       fullName: String(fullName).trim(),
       designation: String(designation).trim(),
       aadhaarNumber: cleanAadhaar,
@@ -202,12 +227,14 @@ export async function POST(request) {
       plantName: resolvedPlantName,
       unitIds: resolvedPlantId ? [resolvedPlantId] : [],
       passwordHash,
+      ...(photo ? { photoData: photo.dataUrl, photoMimeType: photo.mimeType } : {}),
       attendanceAuthorized: attendanceAuthorized !== undefined ? Boolean(attendanceAuthorized) : true,
       status: status || 'Active',
     });
 
     const safeEmployee = employee.toObject();
     delete safeEmployee.passwordHash;
+    delete safeEmployee.photoData;
 
     return NextResponse.json({ success: true, employee: safeEmployee }, { status: 201 });
   } catch (error) {

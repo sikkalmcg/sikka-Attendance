@@ -18,8 +18,12 @@ import {
   RefreshCw,
   Building2,
   UserX,
+  Camera,
+  IdCard,
 } from 'lucide-react';
 import { maskAadhaar } from '@/lib/timezone';
+import EmployeeAvatar from '@/components/employee/EmployeeAvatar';
+import EmployeeIdCard from '@/components/employee/EmployeeIdCard';
 
 const DESIGNATION_OPTIONS = [
   'Warehouse Manager',
@@ -57,6 +61,11 @@ export default function EmployeePage() {
     attendanceAuthorized: true,
     status: 'Active',
   });
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [nextEmployeeId, setNextEmployeeId] = useState('');
+  const [loadingNextEmployeeId, setLoadingNextEmployeeId] = useState(false);
+  const [cardEmployeeId, setCardEmployeeId] = useState('');
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -138,9 +147,13 @@ export default function EmployeePage() {
   const openCreateModal = () => {
     setEditingEmployee(null);
     setFormErrors({});
+    setPhotoFile(null);
+    setPhotoPreview('');
+    setNextEmployeeId('');
+    setLoadingNextEmployeeId(true);
     const defaultPlant = plants.length === 1 ? plants[0] : null;
     setFormData({
-      employeeId: `EMP${String(employees.length + 1).padStart(3, '0')}`,
+      employeeId: '',
       fullName: '',
       designation: '',
       aadhaarNumber: '',
@@ -151,6 +164,17 @@ export default function EmployeePage() {
       status: 'Active',
     });
     setEmployeeModalOpen(true);
+    fetch('/api/employees/next-id', { headers: getAuthHeaders() })
+      .then(async (response) => {
+        const result = await safeParseJson(response);
+        if (!response.ok) throw new Error(result?.error || 'Could not load the next Employee ID.');
+        setNextEmployeeId(result.employeeId || '');
+      })
+      .catch((error) => {
+        console.error('Could not preview the next Employee ID:', error);
+        setToast({ type: 'error', message: error.message || 'Could not load the next Employee ID.' });
+      })
+      .finally(() => setLoadingNextEmployeeId(false));
   };
 
   const getPlantDisplayName = (emp) => {
@@ -179,6 +203,8 @@ export default function EmployeePage() {
   const openEditModal = (emp) => {
     setEditingEmployee(emp);
     setFormErrors({});
+    setPhotoFile(null);
+    setPhotoPreview('');
 
     let targetPlantId = emp.plantId || (Array.isArray(emp.unitIds) ? emp.unitIds[0] : '');
     let targetPlantName = emp.plantName || '';
@@ -207,7 +233,51 @@ export default function EmployeePage() {
       status: emp.status || (emp.active === false ? 'Inactive' : 'Active'),
     });
     setEmployeeModalOpen(true);
+    if (emp.hasPhoto && emp._id) {
+      fetch(`/api/employees/${encodeURIComponent(emp._id)}/photo`, { headers: getAuthHeaders() })
+        .then((response) => {
+          if (!response.ok) throw new Error('Employee photo could not be loaded.');
+          return response.blob();
+        })
+        .then((blob) => setPhotoPreview(URL.createObjectURL(blob)))
+        .catch((error) => console.error(error));
+    }
   };
+
+  const closeEmployeeModal = () => {
+    setEmployeeModalOpen(false);
+    setFormErrors({});
+    setPhotoFile(null);
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview('');
+  };
+
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setToast({ type: 'error', message: 'Choose a JPG, JPEG, PNG, or WEBP image.' });
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setToast({ type: 'error', message: 'Employee photo must be no larger than 2 MB.' });
+      event.target.value = '';
+      return;
+    }
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const readPhotoDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Could not read the selected employee photo.'));
+      reader.readAsDataURL(file);
+    });
 
   const handlePlantChange = (plantId) => {
     const selected = plants.find(
@@ -226,7 +296,6 @@ export default function EmployeePage() {
 
   const validateForm = () => {
     const errors = {};
-    if (!formData.employeeId.trim()) errors.employeeId = 'Employee ID is required.';
     if (!formData.fullName.trim()) errors.fullName = 'Employee Name is required.';
     if (!formData.designation) errors.designation = 'Designation is required.';
     if (!editingEmployee && !formData.aadhaarNumber) errors.aadhaarNumber = 'Aadhaar Number is required.';
@@ -246,10 +315,12 @@ export default function EmployeePage() {
         ? `/api/employees/${encodeURIComponent(lookupId)}`
         : '/api/employees';
       const method = editingEmployee ? 'PUT' : 'POST';
+      const payload = { ...formData };
+      if (photoFile) payload.photoData = await readPhotoDataUrl(photoFile);
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       const data = (await safeParseJson(res)) || {};
       if (!res.ok) {
@@ -259,10 +330,13 @@ export default function EmployeePage() {
       }
       setToast({
         type: 'success',
-        message: editingEmployee ? 'Employee profile updated successfully.' : 'Employee created successfully.',
+        message: editingEmployee
+          ? 'Employee profile updated successfully.'
+          : `Employee ${data.employee?.employeeId || ''} created successfully.`,
       });
-      setEmployeeModalOpen(false);
+      closeEmployeeModal();
       fetchEmployees();
+      if (!editingEmployee && data.employee?._id) setCardEmployeeId(data.employee._id);
     } catch (err) {
       console.error('Save error:', err);
       setToast({ type: 'error', message: 'Failed to process employee record.' });
@@ -364,6 +438,13 @@ export default function EmployeePage() {
   return (
     <AppLayout requiredPermission="employee">
       <Toast toast={toast} onClose={() => setToast(null)} />
+      {cardEmployeeId && (
+        <EmployeeIdCard
+          employeeId={cardEmployeeId}
+          onClose={() => setCardEmployeeId('')}
+          onError={(message) => setToast({ type: 'error', message })}
+        />
+      )}
 
       <div className="space-y-6">
         {/* Header */}
@@ -456,6 +537,7 @@ export default function EmployeePage() {
             <table className="w-full text-left text-sm text-slate-600 min-w-[860px]">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200/70">
                 <tr>
+                  <th className="px-6 py-4">Photo</th>
                   <th className="px-6 py-4">Employee ID</th>
                   <th className="px-6 py-4">Full Name</th>
                   <th className="px-6 py-4">Designation</th>
@@ -470,13 +552,13 @@ export default function EmployeePage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-10 text-center text-slate-400">
+                    <td colSpan={10} className="px-6 py-10 text-center text-slate-400">
                       Loading employee records...
                     </td>
                   </tr>
                 ) : employees.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-slate-400">
+                    <td colSpan={10} className="px-6 py-12 text-center text-slate-400">
                       No employees match the specified criteria.
                     </td>
                   </tr>
@@ -486,6 +568,9 @@ export default function EmployeePage() {
                       key={emp._id || emp.employeeId || `emp-${idx}`}
                       className="hover:bg-slate-50/70 transition-colors"
                     >
+                      <td className="px-6 py-3">
+                        <EmployeeAvatar employee={emp} className="h-10 w-10" />
+                      </td>
                       <td className="px-6 py-4 font-mono font-bold text-xs text-blue-600">
                         {emp.employeeId}
                       </td>
@@ -542,6 +627,14 @@ export default function EmployeePage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            onClick={() => setCardEmployeeId(emp._id || emp.employeeId)}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                            title="View and download ID Card"
+                          >
+                            <IdCard className="w-4 h-4" />
+                            <span>ID Card</span>
+                          </button>
+                          <button
                             onClick={() => openEditModal(emp)}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                             title="Edit Employee"
@@ -571,29 +664,28 @@ export default function EmployeePage() {
       {/* Add / Edit Employee Modal */}
       <Modal
         isOpen={employeeModalOpen}
-        onClose={() => { setEmployeeModalOpen(false); setFormErrors({}); }}
+        onClose={closeEmployeeModal}
         title={editingEmployee ? 'Edit Employee Profile' : 'Add New Employee'}
       >
         <form onSubmit={handleSaveEmployee} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-600 uppercase mb-1.5">
-                Employee ID *
+                Employee ID
               </label>
               <input
                 type="text"
-                value={formData.employeeId}
-                onChange={(e) => {
-                  setFormData({ ...formData, employeeId: e.target.value.toUpperCase() });
-                  if (formErrors.employeeId) setFormErrors((er) => ({ ...er, employeeId: '' }));
-                }}
-                disabled={!!editingEmployee}
-                required
+                value={editingEmployee
+                  ? formData.employeeId
+                  : loadingNextEmployeeId
+                  ? 'Loading next ID...'
+                  : nextEmployeeId || 'Unavailable'}
+                disabled
                 className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden disabled:bg-slate-100 font-mono ${
                   formErrors.employeeId ? 'border-rose-400' : 'border-slate-200'
                 }`}
               />
-              <FieldError field="employeeId" />
+              {!editingEmployee && <p className="mt-1 text-[11px] text-slate-400">Preview only; the server assigns the next available ID when saved.</p>}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 uppercase mb-1.5">
@@ -628,6 +720,30 @@ export default function EmployeePage() {
               }`}
             />
             <FieldError field="fullName" />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-600">
+              Employee Photo
+            </label>
+            <div className="flex items-center gap-4">
+              {photoPreview ? (
+                <img src={photoPreview} alt="Employee photo preview" className="h-16 w-16 rounded-full object-cover ring-2 ring-slate-200" />
+              ) : (
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                  <Camera className="h-6 w-6" />
+                </span>
+              )}
+              <div>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                  onChange={handlePhotoChange}
+                  className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">JPG, JPEG, PNG, or WEBP · maximum 2 MB</p>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -762,7 +878,7 @@ export default function EmployeePage() {
           <div className="pt-3 flex justify-end gap-3 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => { setEmployeeModalOpen(false); setFormErrors({}); }}
+              onClick={closeEmployeeModal}
               className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-semibold transition-colors cursor-pointer"
             >
               Cancel
@@ -860,7 +976,7 @@ export default function EmployeePage() {
             <div>
               <p className="text-sm font-bold text-blue-900">Download Bulk Upload Template</p>
               <p className="text-xs text-blue-700 mt-0.5">
-                Pre-formatted headers for Employee ID, Name, Designation, Aadhaar, Mobile, etc.
+                Pre-formatted headers for Name, Designation, Aadhaar, Mobile, and other employee details.
               </p>
             </div>
             <div className="flex gap-2">

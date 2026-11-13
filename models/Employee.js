@@ -12,6 +12,15 @@ const EmployeeSchema = new mongoose.Schema(
       trim: true,
       uppercase: true,
     },
+    photoData: {
+      type: String,
+      default: '',
+    },
+    photoMimeType: {
+      type: String,
+      enum: ['', 'image/jpeg', 'image/png', 'image/webp'],
+      default: '',
+    },
     fullName: {
       type: String,
       trim: true,
