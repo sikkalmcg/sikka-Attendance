@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import AppLayout from '@/components/layout/AppLayout';
 import Modal from '@/components/common/Modal';
 import Toast from '@/components/common/Toast';
+import FestivalFlash from '@/components/FestivalFlash';
 import {
   Fingerprint,
   MapPin,
@@ -421,6 +422,7 @@ export default function MarkAttendancePage() {
   return (
     <AppLayout employeeOnly={true}>
       <Toast toast={toast} onClose={() => setToast(null)} />
+      <FestivalFlash />
 
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Main Action Card */}
